@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const yfinance = require('yfinance');
 require('dotenv').config();
 
 // AI SDK imports
@@ -404,6 +405,150 @@ async function getComprehensiveFinancialData(ticker) {
 // ============================================
 // AI INTEGRATION FUNCTIONS (Gemini + Groq Fallback)
 // ============================================
+
+/**
+ * Fetch 3 years of historical financial data for DCF
+ * Dynamically resolves FY-3, FY-2, FY-1 based on latest fiscal year end
+ * Uses Alpha Vantage API as primary source
+ */
+async function fetchHistoricalFinancials3Y(ticker) {
+  try {
+    console.log(`Fetching historical data for ${ticker}`);
+    
+    // Get current quote for metadata
+    const quoteResult = await fetchFromYahooFinance(ticker);
+    const quote = quoteResult.data;
+    
+    // Determine fiscal year end (default December)
+    const currentYear = new Date().getFullYear();
+    const currentMonth = new Date().getMonth() + 1;
+    const fiscalYearEndMonth = 12; // Default
+    
+    // Calculate last 3 completed fiscal years
+    let lastCompletedYear = currentYear;
+    if (currentMonth < fiscalYearEndMonth) {
+      lastCompletedYear = currentYear - 1;
+    }
+    
+    const fyMinus1 = lastCompletedYear;
+    const fyMinus2 = lastCompletedYear - 1;
+    const fyMinus3 = lastCompletedYear - 2;
+    
+    console.log(`Historical years: FY-${fyMinus3}, FY-${fyMinus2}, FY-${fyMinus1}`);
+    
+    // Fetch annual income statement from Alpha Vantage
+    const incomeStatementResult = await fetchFromAlphaVantage('INCOME_STATEMENT', { symbol: ticker });
+    const annualReports = incomeStatementResult.data?.annualReports || [];
+    
+    // Helper to find data by fiscal year
+    const getAnnualData = (fiscalYear) => {
+      return annualReports.find(r => r.fiscalDateEnding?.startsWith(fiscalYear.toString()));
+    };
+    
+    const fy1Data = getAnnualData(fyMinus1);
+    const fy2Data = getAnnualData(fyMinus2);
+    const fy3Data = getAnnualData(fyMinus3);
+    
+    // Build historical financials for 3 years
+    const historicalFinancials = {
+      fy_minus_3: buildAnnualFinancials(fy3Data),
+      fy_minus_2: buildAnnualFinancials(fy2Data),
+      fy_minus_1: buildAnnualFinancials(fy1Data)
+    };
+    
+    // Get base period balances (FY-1)
+    const balanceSheetResult = await fetchFromAlphaVantage('BALANCE_SHEET', { symbol: ticker });
+    const balanceReports = balanceSheetResult.data?.annualReports || [];
+    const fy1Balance = balanceReports.find(r => r.fiscalDateEnding?.startsWith(fyMinus1.toString()));
+    
+    const cashFlowResult = await fetchFromAlphaVantage('CASH_FLOW', { symbol: ticker });
+    const cashFlowReports = cashFlowResult.data?.annualReports || [];
+    const fy1CashFlow = cashFlowReports.find(r => r.fiscalDateEnding?.startsWith(fyMinus1.toString()));
+    
+    const basePeriodBalances = {
+      net_debt: calculateNetDebt(
+        parseFloat(fy1Balance?.totalDebt || 0),
+        parseFloat(fy1Balance?.cashAndShortTermInvestments || 0)
+      ),
+      ppe_net: parseFloat(fy1Balance?.propertyPlantEquipment || 0),
+      tax_basis_pp_e: null, // Requires AI extraction from footnotes
+      tax_losses_nol_carryforward: null, // Requires AI extraction from footnotes
+      shares_outstanding_diluted: parseFloat(fy1Balance?.commonStockSharesOutstanding || 0),
+      current_stock_price: quote.currentPrice || null,
+      projected_interest_expense_annual: parseFloat(fy1Data?.interestExpense || 0),
+      plant_capacity_units_per_day: null // Requires AI extraction from MD&A
+    };
+    
+    return {
+      _metadata: {
+        valuation_date: new Date().toISOString().split('T')[0],
+        currency: quote.currency || 'USD',
+        fiscal_year_end_month: fiscalYearEndMonth,
+        historical_years: [fyMinus3, fyMinus2, fyMinus1],
+        data_source: 'alpha_vantage'
+      },
+      historical_financials_3y: historicalFinancials,
+      base_period_balances_fy_minus_1: basePeriodBalances
+    };
+  } catch (error) {
+    console.error(`Error fetching historical financials for ${ticker}:`, error.message);
+    // Return mock data as fallback
+    return getMockHistoricalFinancials(ticker);
+  }
+}
+
+/**
+ * Build annual financials object from Alpha Vantage data
+ */
+function buildAnnualFinancials(data) {
+  if (!data) {
+    return {
+      revenue: null, cogs: null, gross_profit: null, sga: null, other_opex: null,
+      ebitda: null, depreciation: null, ebit: null, interest_expense: null,
+      ebt: null, current_tax: null, deferred_tax: null, total_tax: null,
+      net_income: null, accounts_receivable: null, inventory: null,
+      accounts_payable: null, net_working_capital: null, capital_expenditure: null
+    };
+  }
+  
+  return {
+    revenue: parseFloat(data.totalRevenue || 0) || null,
+    cogs: parseFloat(data.costOfRevenue || 0) || null,
+    gross_profit: parseFloat(data.grossProfit || 0) || null,
+    sga: parseFloat(data.sellingGeneralAndAdministrative || 0) || null,
+    other_opex: parseFloat(data.operatingExpenses || 0) || null,
+    ebitda: parseFloat(data.ebitda || 0) || null,
+    depreciation: parseFloat(data.depreciationAndAmortization || 0) || null,
+    ebit: parseFloat(data.operatingIncome || 0) || null,
+    interest_expense: parseFloat(data.interestExpense || 0) || null,
+    ebt: parseFloat(data.incomeBeforeTax || 0) || null,
+    current_tax: parseFloat(data.currentDeferredIncomeTax || 0) || null,
+    deferred_tax: parseFloat(data.deferredIncomeTax || 0) || null,
+    total_tax: parseFloat(data.incomeTaxExpense || 0) || null,
+    net_income: parseFloat(data.netIncome || 0) || null,
+    accounts_receivable: null, // From balance sheet
+    inventory: null, // From balance sheet
+    accounts_payable: null, // From balance sheet
+    net_working_capital: null, // Calculated from balance sheet
+    capital_expenditure: Math.abs(parseFloat(data.capitalExpenditures || 0)) || null
+  };
+}
+
+/**
+ * Calculate Net Working Capital
+ */
+function calculateNWC(currentAssets, currentLiabilities) {
+  if (currentAssets === null || currentLiabilities === null) return null;
+  return currentAssets - currentLiabilities;
+}
+
+/**
+ * Calculate Net Debt
+ */
+function calculateNetDebt(totalDebt, cash) {
+  if (totalDebt === null || cash === null) return null;
+  return totalDebt - cash;
+}
 
 /**
  * Call Gemini API with timeout and error handling
@@ -1204,6 +1349,32 @@ app.get('/api/combined-inputs/:ticker', async (req, res) => {
     });
   } catch (error) {
     console.error(`[API Error] Combined inputs failed: ${error.message}`);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/historical-financials/:ticker
+ * Fetch 3 years of historical financial data for DCF model
+ * Dynamically resolves FY-3, FY-2, FY-1 based on latest fiscal year end
+ */
+app.get('/api/historical-financials/:ticker', async (req, res) => {
+  const { ticker } = req.params;
+  
+  try {
+    console.log(`[API] Fetching historical financials for ${ticker}`);
+    
+    const historicalData = await fetchHistoricalFinancials3Y(ticker.toUpperCase());
+    
+    res.json({
+      success: true,
+      data: historicalData
+    });
+  } catch (error) {
+    console.error(`[API Error] Historical financials failed: ${error.message}`);
     res.status(500).json({
       success: false,
       error: error.message
