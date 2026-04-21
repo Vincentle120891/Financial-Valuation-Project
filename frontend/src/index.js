@@ -1,0 +1,11 @@
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import './index.css';
+import ValuationFlow from './components/ValuationFlow';
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(
+  <React.StrictMode>
+    <ValuationFlow />
+  </React.StrictMode>
+);
