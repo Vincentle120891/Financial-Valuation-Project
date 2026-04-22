@@ -3092,6 +3092,283 @@ app.post('/api/dcf/validate', async (req, res) => {
 
 console.log('✅ Section 11 loaded: DCF Calculation Engine API with modular design');
 
+// ============================================================================
+// SECTION 12: DuPont Analysis API with Modular Design
+// ============================================================================
+const { 
+  performDuPontAnalysis,
+  calculateSupportingRatios,
+  calculateDuPont3Step,
+  calculateDuPont5Step,
+  calculateGrowthTrends,
+  validateInputLength
+} = require('./dupont-engine');
+
+/**
+ * Endpoint: Perform Complete DuPont Analysis
+ * Expects 6-10 years of financial data
+ */
+app.post('/api/dupont/analyze', async (req, res) => {
+  try {
+    const inputData = req.body;
+
+    // Validate input structure
+    if (!inputData || typeof inputData !== 'object') {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid input: expected JSON object with financial data arrays'
+      });
+    }
+
+    // Check that all required arrays have 6-10 values
+    const requiredFields = [
+      'revenue', 'gross_profit', 'ebitda', 'operating_income', 'net_income',
+      'total_assets', 'accounts_receivable', 'inventory', 'accounts_payable',
+      'cogs', 'total_debt', 'total_equity', 'current_assets', 'current_liabilities',
+      'interest_expense', 'ebt', 'ebit'
+    ];
+
+    const validationErrors = [];
+    requiredFields.forEach(field => {
+      if (!inputData[field]) {
+        validationErrors.push(`Missing required field: ${field}`);
+      } else if (!Array.isArray(inputData[field])) {
+        validationErrors.push(`${field} must be an array`);
+      } else if (inputData[field].length < 6 || inputData[field].length > 10) {
+        validationErrors.push(`${field} must have 6-10 values, got ${inputData[field].length}`);
+      }
+    });
+
+    if (validationErrors.length > 0) {
+      return res.status(400).json({
+        success: false,
+        errors: validationErrors
+      });
+    }
+
+    // Perform DuPont analysis
+    const result = performDuPontAnalysis(inputData);
+
+    res.json({
+      success: true,
+      data: result,
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('[DUPONT ANALYSIS ERROR]:', error);
+    res.status(500).json({
+      success: false,
+      error: 'DuPont analysis failed',
+      details: error.message
+    });
+  }
+});
+
+/**
+ * Endpoint: Get Supporting Ratios Only
+ */
+app.post('/api/dupont/supporting-ratios', async (req, res) => {
+  try {
+    const inputData = req.body;
+    
+    const ratios = calculateSupportingRatios(inputData);
+    
+    res.json({
+      success: true,
+      data: { supporting_ratios: ratios },
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('[SUPPORTING RATIOS ERROR]:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to calculate supporting ratios',
+      details: error.message
+    });
+  }
+});
+
+/**
+ * Endpoint: Get 3-Step DuPont Analysis Only
+ */
+app.post('/api/dupont/3step', async (req, res) => {
+  try {
+    const inputData = req.body;
+    
+    const result = calculateDuPont3Step(inputData);
+    
+    res.json({
+      success: true,
+      data: { dupont_3step: result },
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('[3-STEP DUPONT ERROR]:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to calculate 3-step DuPont',
+      details: error.message
+    });
+  }
+});
+
+/**
+ * Endpoint: Get 5-Step DuPont Analysis Only
+ */
+app.post('/api/dupont/5step', async (req, res) => {
+  try {
+    const inputData = req.body;
+    
+    const result = calculateDuPont5Step(inputData);
+    
+    res.json({
+      success: true,
+      data: { dupont_5step: result },
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('[5-STEP DUPONT ERROR]:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to calculate 5-step DuPont',
+      details: error.message
+    });
+  }
+});
+
+/**
+ * Endpoint: Get Growth Trends and Leverage Metrics
+ */
+app.post('/api/dupont/growth-trends', async (req, res) => {
+  try {
+    const inputData = req.body;
+    
+    const trends = calculateGrowthTrends(inputData);
+    
+    res.json({
+      success: true,
+      data: { growth_trends: trends },
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('[GROWTH TRENDS ERROR]:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to calculate growth trends',
+      details: error.message
+    });
+  }
+});
+
+/**
+ * Endpoint: Validate DuPont Input Data
+ * Checks array lengths (6-10 years) and required fields
+ */
+app.post('/api/dupont/validate', async (req, res) => {
+  try {
+    const inputData = req.body;
+    const validations = {
+      critical: [],
+      warnings: []
+    };
+
+    // Required fields for complete DuPont analysis
+    const requiredFields = [
+      'revenue', 'gross_profit', 'ebitda', 'operating_income', 'net_income',
+      'total_assets', 'accounts_receivable', 'inventory', 'accounts_payable',
+      'cogs', 'total_debt', 'total_equity', 'current_assets', 'current_liabilities',
+      'interest_expense', 'ebt', 'ebit'
+    ];
+
+    // Check required fields and array lengths
+    requiredFields.forEach(field => {
+      if (!inputData[field]) {
+        validations.critical.push({
+          field,
+          rule: 'required',
+          message: `${field} is required`
+        });
+      } else if (!Array.isArray(inputData[field])) {
+        validations.critical.push({
+          field,
+          rule: 'type',
+          message: `${field} must be an array`
+        });
+      } else if (inputData[field].length < 6 || inputData[field].length > 10) {
+        validations.critical.push({
+          field,
+          rule: 'length',
+          message: `${field} must have 6-10 values, got ${inputData[field].length}`
+        });
+      }
+    });
+
+    // Additional validation: check for negative values where inappropriate
+    if (inputData.revenue) {
+      inputData.revenue.forEach((val, idx) => {
+        if (val <= 0) {
+          validations.warnings.push({
+            field: 'revenue',
+            index: idx,
+            rule: 'positive',
+            message: `Revenue in year ${idx + 1} is not positive`
+          });
+        }
+      });
+    }
+
+    if (inputData.total_equity) {
+      inputData.total_equity.forEach((val, idx) => {
+        if (val <= 0) {
+          validations.critical.push({
+            field: 'total_equity',
+            index: idx,
+            rule: 'positive',
+            message: `Total equity in year ${idx + 1} must be positive`
+          });
+        }
+      });
+    }
+
+    if (inputData.interest_expense) {
+      inputData.interest_expense.forEach((val, idx) => {
+        if (val < 0) {
+          validations.warnings.push({
+            field: 'interest_expense',
+            index: idx,
+            rule: 'non_negative',
+            message: `Interest expense in year ${idx + 1} is negative`
+          });
+        }
+      });
+    }
+
+    const isValid = validations.critical.length === 0;
+
+    res.json({
+      success: true,
+      valid: isValid,
+      validations,
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('[DUPONT VALIDATION ERROR]:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Validation failed',
+      details: error.message
+    });
+  }
+});
+
+console.log('✅ Section 12 loaded: DuPont Analysis Engine API with modular design');
+
 app.listen(PORT, () => {
   console.log(`Backend server running on port ${PORT}`);
 });
