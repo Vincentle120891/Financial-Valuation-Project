@@ -459,50 +459,57 @@ function calculateSensitivityTables(baseInputs, scenarios) {
  * Main DCF Engine: Orchestrates all modules
  */
 function runCompleteDCF(inputs) {
+  // Support both flat structure and nested structure for flexibility
+  const hist = inputs.historical_financials?.fy_minus_1 || inputs;
+  const drivers = inputs.forecast_drivers?.[inputs.scenario || 'base_case'] || inputs;
+  
   const {
     // Base period data (FY-1 / 2022A)
-    baseRevenue,
-    baseCOGS,
-    baseSGA,
-    baseOther,
-    baseExistingPPE,
-    baseNOL,
-    baseNetDebt,
-    baseCurrentStockPrice,
-    baseSharesOutstanding,
+    baseRevenue = hist.revenue,
+    baseCOGS = hist.cogs,
+    baseSGA = hist.sga,
+    baseOther = hist.other_opex || 0,
+    baseExistingPPE = hist.ppe || hist.total_assets || 0,
+    baseNOL = hist.nol_remaining || 0,
+    baseNetDebt = hist.net_debt || (hist.total_debt - hist.cash) || 0,
+    baseCurrentStockPrice = hist.current_stock_price,
+    baseSharesOutstanding = hist.shares_outstanding,
     
     // Forecast drivers (6 values: 5 years + terminal)
-    revenueGrowthRates,      // [2023F, 2024F, 2025F, 2026F, 2027F, Term]
-    inflationRates,          // [2023F, 2024F, 2025F, 2026F, 2027F, Term]
-    opexGrowthRates,         // [2023F, 2024F, 2025F, 2026F, 2027F, Term]
-    capitalExpenditures,     // [2023F, 2024F, 2025F, 2026F, 2027F]
-    arDays,                  // [2023F, 2024F, 2025F, 2026F, 2027F, Term]
-    invDays,                 // [2023F, 2024F, 2025F, 2026F, 2027F, Term]
-    apDays,                  // [2023F, 2024F, 2025F, 2026F, 2027F, Term]
+    revenueGrowthRates = drivers.sales_volume_growth || drivers.revenue_growth,
+    inflationRates = drivers.inflation_rate,
+    opexGrowthRates = drivers.opex_growth || drivers.inflation_rate,
+    capitalExpenditures = drivers.capital_expenditure || drivers.capex,
+    arDays = drivers.ar_days,
+    invDays = drivers.inv_days || drivers.inventory_days,
+    apDays = drivers.ap_days,
     
     // Assumptions
-    usefulLifeExisting = 10,
-    usefulLifeNew = 5,
-    taxRate = 0.21,
-    nolUtilizationLimit = 0.80,
-    wacc = 0.097,
-    terminalGrowthRate = 0.02,
-    terminalMultiple = 7.0,
+    usefulLifeExisting = inputs.useful_life_existing || 10,
+    usefulLifeNew = inputs.useful_life_new || 5,
+    taxRate = hist.tax_rate || inputs.tax_rate || 0.21,
+    nolUtilizationLimit = drivers.tax_loss_utilization_limit_pct || 0.80,
+    wacc = inputs.wacc || 0.097,
+    terminalGrowthRate = inputs.terminal_growth_rate || 0.02,
+    terminalMultiple = inputs.terminal_ebitda_multiple || inputs.terminal_multiple || 7.0,
     partialPeriodAdjustment = [0.75, 1.0, 1.0, 1.0, 1.0, 1.0],
-    daysInPeriod = 365,
+    daysInPeriod = inputs.days_in_period || 365,
     
     // Metadata
-    valuationDate = new Date().toISOString().split('T')[0],
-    scenario = 'base_case'
+    valuationDate = inputs.valuation_date || new Date().toISOString().split('T')[0],
+    scenario = inputs.scenario || 'base_case'
   } = inputs;
   
-  // Validate inputs
+  // Validate inputs - support both 5 and 6 values for CapEx (6th is terminal which can be derived)
   if (revenueGrowthRates.length !== 6) {
     throw new Error(`revenueGrowthRates must have exactly 6 values (5 years + terminal), got ${revenueGrowthRates.length}`);
   }
-  if (capitalExpenditures.length !== 5) {
-    throw new Error(`capitalExpenditures must have exactly 5 values (forecast years only), got ${capitalExpenditures.length}`);
+  if (capitalExpenditures.length < 5 || capitalExpenditures.length > 6) {
+    throw new Error(`capitalExpenditures must have 5 or 6 values, got ${capitalExpenditures.length}`);
   }
+  // If CapEx has 6 values, use first 5 for forecast, 6th is terminal (used later)
+  const capexForecast = capitalExpenditures.slice(0, 5);
+  const capexTerminal = capitalExpenditures.length === 6 ? capitalExpenditures[5] : null;
   
   // Execute calculation modules
   const revenueSchedule = calculateRevenueSchedule(baseRevenue, revenueGrowthRates);
@@ -510,7 +517,7 @@ function runCompleteDCF(inputs) {
   const grossProfit = calculateGrossProfit(revenueSchedule.revenue, cogsSchedule);
   const opExSchedule = calculateOpExSchedule(baseSGA, baseOther, opexGrowthRates);
   const ebitda = calculateEBITDA(grossProfit.grossProfit, opExSchedule.sga, opExSchedule.other);
-  const depreciation = calculateDepreciationSchedule(baseExistingPPE, usefulLifeExisting, capitalExpenditures, usefulLifeNew);
+  const depreciation = calculateDepreciationSchedule(baseExistingPPE, usefulLifeExisting, capexForecast, usefulLifeNew);
   const ebit = calculateEBIT(ebitda.ebitda, depreciation.totalDepreciation);
   
   // Assume fixed interest expense (simplified model)
@@ -524,8 +531,9 @@ function runCompleteDCF(inputs) {
   // Working capital
   const workingCapital = calculateWorkingCapitalSchedule(revenueSchedule.revenue, cogsSchedule, arDays, invDays, apDays, daysInPeriod);
   
-  // UFCF
-  const ufcf = calculateUFCF(ebitda.ebitda, taxUnlevered.currentTaxUnlevered, capitalExpenditures, workingCapital.changeNWC, depreciation.terminalCapEx);
+  // UFCF - use capexForecast for first 5 years, terminal CapEx from depreciation or provided value
+  // Note: calculateUFCF already handles adding terminal CapEx internally
+  const ufcf = calculateUFCF(ebitda.ebitda, taxUnlevered.currentTaxUnlevered, capexForecast, workingCapital.changeNWC, capexTerminal || depreciation.terminalCapEx);
   
   // DCF Valuation
   const dcfPerpetuity = calculateDCFPerpetuity(ufcf, wacc, terminalGrowthRate, partialPeriodAdjustment);
