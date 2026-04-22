@@ -2470,6 +2470,628 @@ app.post('/api/save-manual-inputs', (req, res) => {
 
 console.log('✅ Section 9 loaded: Manual inputs with AI benchmark assistance');
 
+// ============================================================================
+// SECTION 10: FORECAST BENCHMARKS WITH 5Y HISTORY + PEER COMPARISON
+// ============================================================================
+
+/**
+ * Helper: Calculate median of an array
+ */
+function calculateMedian(arr) {
+  if (!arr.length) return 0;
+  const sorted = arr.slice().sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+/**
+ * Helper: Calculate percentile
+ */
+function calculatePercentile(arr, p) {
+  if (!arr.length) return 0;
+  const sorted = arr.slice().sort((a, b) => a - b);
+  const idx = Math.ceil(p * sorted.length) - 1;
+  return sorted[Math.max(0, idx)];
+}
+
+/**
+ * Helper: Mock 5-year historical data generator (Replace with real API calls)
+ */
+function generateMockHistoricalData(ticker, years) {
+  const data = [];
+  const baseRevenue = 100000 + (Math.random() * 50000);
+  const baseMargin = 0.20 + (Math.random() * 0.10);
+  
+  for (let i = 0; i < years; i++) {
+    const year = new Date().getFullYear() - (years - i);
+    const growth = 0.05 + (Math.random() * 0.10); // 5-15% growth
+    const revenue = baseRevenue * Math.pow(1 + growth, i);
+    const margin = baseMargin + (Math.random() * 0.04 - 0.02); // Fluctuate slightly
+    
+    data.push({
+      year,
+      revenue: parseFloat(revenue.toFixed(2)),
+      revenue_growth: parseFloat((growth * 100).toFixed(2)),
+      ebitda_margin: parseFloat((margin * 100).toFixed(2)),
+      operating_margin: parseFloat(((margin - 0.05) * 100).toFixed(2)),
+      capex_as_percent_revenue: parseFloat(((0.05 + Math.random() * 0.05) * 100).toFixed(2)),
+      working_capital_days: Math.floor(30 + Math.random() * 60)
+    });
+  }
+  return data;
+}
+
+/**
+ * Generates forecast suggestions based on 5-year historical trends and peer benchmarks.
+ * Returns 6 values: [Year+1, Year+2, Year+3, Year+4, Year+5, Terminal]
+ */
+async function generateForecastSuggestions(ticker, metric, historicalData, peerData) {
+  try {
+    // 1. Analyze Target History (Last 5 Years)
+    const history = historicalData.slice(-5); // Ensure last 5 years
+    if (history.length < 3) {
+      return { error: "Insufficient historical data (need min 3 years)" };
+    }
+
+    const values = history.map(h => h[metric] || 0);
+    if (values.length < 3) return { error: `Insufficient data for ${metric}` };
+
+    // Calculate Historical CAGR or Average
+    let historicalGrowthRate = 0;
+    let historicalAverage = 0;
+    
+    if (metric.includes('revenue') || metric.includes('income') || metric.includes('growth')) {
+      // CAGR for growth metrics
+      const start = values[0];
+      const end = values[values.length - 1];
+      historicalGrowthRate = start > 0 ? Math.pow(end / start, 1 / (values.length - 1)) - 1 : 0;
+    } else {
+      // Average for margins/ratios
+      historicalAverage = values.reduce((a, b) => a + b, 0) / values.length;
+    }
+
+    // 2. Analyze Peer Benchmarks
+    const peerValues = peerData.map(p => p[metric] || 0);
+    const peerMedian = peerValues.length > 0 ? calculateMedian(peerValues) : historicalAverage;
+    const peer25th = peerValues.length > 0 ? calculatePercentile(peerValues, 0.25) : historicalAverage * 0.8;
+    const peer75th = peerValues.length > 0 ? calculatePercentile(peerValues, 0.75) : historicalAverage * 1.2;
+
+    // 3. Generate 6-Year Forecast Array [FY+1 ... FY+5, Terminal]
+    const forecast = [];
+    const terminalValue = {};
+
+    if (metric.includes('revenue') || metric.includes('growth')) {
+      // Growth Rate Logic: Converge from historical trend to peer median over 5 years
+      const startRate = Math.max(-0.20, Math.min(0.50, historicalGrowthRate)); // Cap extremes
+      const endRate = Math.max(0.01, Math.min(0.15, peerMedian > 1 ? peerMedian / 100 : peerMedian)); // Terminal cap
+      
+      const step = (endRate - startRate) / 5;
+      
+      for (let i = 1; i <= 5; i++) {
+        let rate = startRate + (step * i);
+        forecast.push(parseFloat((rate * 100).toFixed(2))); // Return as %
+      }
+      
+      // Terminal Year (Year 6) -> Converge to Risk Free Rate or GDP (e.g., 2-3%)
+      const terminalRate = Math.min(forecast[4] / 100, 0.03); 
+      forecast.push(parseFloat((terminalRate * 100).toFixed(2)));
+      
+      terminalValue.type = "Converging Growth";
+      terminalValue.rationale = `Converges from hist. ${(startRate*100).toFixed(1)}% to peer ${(peerMedian).toFixed(1)}%, terminal capped at ${terminalRate*100}%`;
+
+    } else if (metric.includes('margin') || metric.includes('return')) {
+      // Margin Logic: Mean reversion towards peer median
+      const current = values[values.length - 1] / 100; // Convert from % to decimal
+      const targetPeer = peerMedian > 1 ? peerMedian / 100 : peerMedian;
+      const target = (current * 0.4) + (targetPeer * 0.6); // Weighted towards peer
+      const step = (target - current) / 5;
+
+      for (let i = 1; i <= 5; i++) {
+        let val = current + (step * i);
+        // Clamp within reasonable bounds (0-50% for margins)
+        val = Math.max(0, Math.min(0.50, val));
+        forecast.push(parseFloat((val * 100).toFixed(2))); // Return as %
+      }
+
+      // Terminal = Peer Median
+      forecast.push(parseFloat((targetPeer * 100).toFixed(2)));
+
+      terminalValue.type = "Mean Reversion";
+      terminalValue.rationale = `Reverts from current ${(current*100).toFixed(1)}% to peer median ${(targetPeer*100).toFixed(1)}%`;
+
+    } else if (metric === 'working_capital_days') {
+      // Days metrics: Average of historical and peer
+      const avg = values.reduce((a, b) => a + b, 0) / values.length;
+      const peerAvg = peerMedian;
+      const suggestion = (avg + peerAvg) / 2;
+      
+      for (let i = 0; i < 6; i++) {
+        forecast.push(parseFloat(suggestion.toFixed(2)));
+      }
+      terminalValue.type = "Steady State";
+      terminalValue.rationale = `Average of historical (${(avg*100).toFixed(1)}%) and peer (${(peerAvg*100).toFixed(1)}%)`;
+    } else {
+      // Default: flat forecast based on last year
+      const lastVal = values[values.length - 1];
+      for (let i = 0; i < 6; i++) {
+        forecast.push(parseFloat(lastVal.toFixed(2)));
+      }
+      terminalValue.type = "Flat Projection";
+      terminalValue.rationale = `Based on last year value of ${lastVal}`;
+    }
+
+    return {
+      metric,
+      suggestion: forecast,
+      historical_context: {
+        cagr: parseFloat((historicalGrowthRate * 100).toFixed(2)),
+        average: parseFloat((historicalAverage).toFixed(2)),
+        last_year: values[values.length - 1]
+      },
+      peer_context: {
+        median: parseFloat(peerMedian.toFixed(2)),
+        p25: parseFloat(peer25th.toFixed(2)),
+        p75: parseFloat(peer75th.toFixed(2))
+      },
+      terminal_assumption: terminalValue,
+      confidence: "High"
+    };
+
+  } catch (error) {
+    console.error(`Error generating forecast for ${ticker}.${metric}:`, error);
+    return { error: error.message };
+  }
+}
+
+/**
+ * Endpoint: Get comprehensive forecast benchmarks for all DCF drivers
+ * Compares ticker's 5-year history vs 5+ peers to generate 6-year forecast suggestions
+ */
+app.get('/api/forecast-benchmarks/:ticker', async (req, res) => {
+  const { ticker } = req.params;
+  const { peers } = req.query; // Comma-separated list of peer tickers
+  
+  try {
+    // 1. Get Target Historical Data (5 Years)
+    const mockHistory = generateMockHistoricalData(ticker, 5); 
+    
+    // 2. Get Peer Data (minimum 5 peers)
+    const peerTickers = peers ? peers.split(',') : ['MSFT', 'GOOGL', 'AMZN', 'META', 'NVDA'];
+    const peerData = peerTickers.map(t => generateMockHistoricalData(t, 1)[0]); // Current year snapshot
+
+    // 3. Generate Suggestions for Key DCF Drivers
+    const drivers = [
+      'revenue_growth', 
+      'ebitda_margin', 
+      'operating_margin', 
+      'capex_as_percent_revenue',
+      'working_capital_days'
+    ];
+
+    const benchmarks = {};
+    
+    for (const driver of drivers) {
+      const result = await generateForecastSuggestions(ticker, driver, mockHistory, peerData);
+      benchmarks[driver] = result;
+    }
+
+    res.json({
+      ticker,
+      valuation_date: new Date().toISOString(),
+      historical_years: 5,
+      peer_count: peerData.length,
+      peer_tickers: peerTickers,
+      forecast_horizon: "5 Years + Terminal (6 values total)",
+      benchmarks,
+      generated_at: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error("Forecast Benchmark Error:", error);
+    res.status(500).json({ error: "Failed to generate forecast benchmarks", details: error.message });
+  }
+});
+
+/**
+ * Endpoint: Get single forecast suggestion for a specific driver
+ */
+app.get('/api/forecast-suggestion/:ticker/:driver', async (req, res) => {
+  const { ticker, driver } = req.params;
+  const { peers } = req.query;
+  
+  try {
+    const mockHistory = generateMockHistoricalData(ticker, 5);
+    const peerTickers = peers ? peers.split(',') : ['MSFT', 'GOOGL', 'AMZN', 'META', 'NVDA'];
+    const peerData = peerTickers.map(t => generateMockHistoricalData(t, 1)[0]);
+    
+    const result = await generateForecastSuggestions(ticker, driver, mockHistory, peerData);
+    
+    res.json({
+      ticker,
+      driver,
+      forecast_values: result.suggestion,
+      forecast_labels: ["Year+1", "Year+2", "Year+3", "Year+4", "Year+5", "Terminal"],
+      rationale: result.terminal_assumption,
+      peer_comparison: result.peer_context,
+      historical_trend: result.historical_context
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+console.log('✅ Section 10 loaded: Forecast benchmarks with 5Y history + peer comparison');
+
+// ============================================================================
+// SECTION 11: DCF CALCULATION ENGINE API
+// Modular DCF calculations with separated inputs for safety and reusability
+// ============================================================================
+
+const dcfEngine = require('./dcf-engine');
+
+/**
+ * Endpoint: Run complete DCF valuation
+ * POST /api/dcf/calculate
+ * Body: {
+ *   ticker: string,
+ *   base_period_data: { ... },
+ *   forecast_drivers: { ... },
+ *   assumptions: { ... }
+ * }
+ */
+app.post('/api/dcf/calculate', async (req, res) => {
+  const {
+    ticker,
+    base_period_data,
+    forecast_drivers,
+    assumptions = {}
+  } = req.body;
+  
+  try {
+    // Validate required inputs
+    if (!base_period_data || !forecast_drivers) {
+      return res.status(400).json({
+        error: 'Missing required fields: base_period_data and forecast_drivers'
+      });
+    }
+    
+    // Ensure forecast drivers have exactly 6 values (5 years + terminal)
+    const drivers = ['revenue_growth', 'inflation_rate', 'opex_growth', 'ar_days', 'inv_days', 'ap_days'];
+    for (const driver of drivers) {
+      if (!forecast_drivers[driver] || forecast_drivers[driver].length !== 6) {
+        return res.status(400).json({
+          error: `${driver} must have exactly 6 values (5 forecast years + terminal year)`,
+          received: forecast_drivers[driver]?.length || 0
+        });
+      }
+    }
+    
+    // Ensure capital_expenditure has exactly 5 values (forecast years only, no terminal)
+    if (!forecast_drivers.capital_expenditure || forecast_drivers.capital_expenditure.length !== 5) {
+      return res.status(400).json({
+        error: 'capital_expenditure must have exactly 5 values (forecast years only)',
+        received: forecast_drivers.capital_expenditure?.length || 0
+      });
+    }
+    
+    // Map input schema to engine schema
+    const engineInputs = {
+      // Base period data (FY-1 / 2022A)
+      baseRevenue: base_period_data.revenue,
+      baseCOGS: base_period_data.cogs,
+      baseSGA: base_period_data.sga,
+      baseOther: base_period_data.other_opex || 0,
+      baseExistingPPE: base_period_data.ppe_gross || 0,
+      baseNOL: base_period_data.nol_remaining || 0,
+      baseNetDebt: base_period_data.net_debt || 0,
+      baseCurrentStockPrice: base_period_data.current_stock_price,
+      baseSharesOutstanding: base_period_data.shares_outstanding,
+      
+      // Forecast drivers (6 values each)
+      revenueGrowthRates: forecast_drivers.revenue_growth.map(g => g / 100), // Convert % to decimal
+      inflationRates: forecast_drivers.inflation_rate.map(g => g / 100),
+      opexGrowthRates: forecast_drivers.opex_growth.map(g => g / 100),
+      capitalExpenditures: forecast_drivers.capital_expenditure,
+      arDays: forecast_drivers.ar_days,
+      invDays: forecast_drivers.inv_days,
+      apDays: forecast_drivers.ap_days,
+      
+      // Assumptions
+      usefulLifeExisting: assumptions.useful_life_existing || 10,
+      usefulLifeNew: assumptions.useful_life_new || 5,
+      taxRate: assumptions.tax_rate || 0.21,
+      nolUtilizationLimit: assumptions.nol_utilization_limit || 0.80,
+      wacc: assumptions.wacc || 0.097,
+      terminalGrowthRate: assumptions.terminal_growth_rate || 0.02,
+      terminalMultiple: assumptions.terminal_multiple || 7.0,
+      
+      // Metadata
+      valuationDate: assumptions.valuation_date || new Date().toISOString().split('T')[0],
+      scenario: assumptions.scenario || 'base_case'
+    };
+    
+    // Run DCF calculation
+    const result = dcfEngine.runCompleteDCF(engineInputs);
+    
+    // Add ticker and additional metadata
+    result.metadata.ticker = ticker || 'UNKNOWN';
+    result.calculation_id = crypto.randomUUID();
+    
+    res.json({
+      success: true,
+      data: result,
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    console.error('[DCF CALCULATION ERROR]:', error);
+    res.status(500).json({
+      error: 'DCF calculation failed',
+      details: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+});
+
+/**
+ * Endpoint: Run DCF with multiple scenarios
+ * POST /api/dcf/calculate-scenarios
+ */
+app.post('/api/dcf/calculate-scenarios', async (req, res) => {
+  const {
+    ticker,
+    base_period_data,
+    forecast_drivers,
+    assumptions = {}
+  } = req.body;
+  
+  try {
+    // Reuse validation from single calculation
+    const singleReq = { body: { ticker, base_period_data, forecast_drivers, assumptions } };
+    const mockRes = {
+      status: (code) => ({
+        json: (data) => { throw new Error(data.error || 'Validation failed'); }
+      }),
+      json: () => {}
+    };
+    
+    // Map inputs
+    const engineInputs = {
+      baseRevenue: base_period_data.revenue,
+      baseCOGS: base_period_data.cogs,
+      baseSGA: base_period_data.sga,
+      baseOther: base_period_data.other_opex || 0,
+      baseExistingPPE: base_period_data.ppe_gross || 0,
+      baseNOL: base_period_data.nol_remaining || 0,
+      baseNetDebt: base_period_data.net_debt || 0,
+      baseCurrentStockPrice: base_period_data.current_stock_price,
+      baseSharesOutstanding: base_period_data.shares_outstanding,
+      revenueGrowthRates: forecast_drivers.revenue_growth.map(g => g / 100),
+      inflationRates: forecast_drivers.inflation_rate.map(g => g / 100),
+      opexGrowthRates: forecast_drivers.opex_growth.map(g => g / 100),
+      capitalExpenditures: forecast_drivers.capital_expenditure,
+      arDays: forecast_drivers.ar_days,
+      invDays: forecast_drivers.inv_days,
+      apDays: forecast_drivers.ap_days,
+      usefulLifeExisting: assumptions.useful_life_existing || 10,
+      usefulLifeNew: assumptions.useful_life_new || 5,
+      taxRate: assumptions.tax_rate || 0.21,
+      nolUtilizationLimit: assumptions.nol_utilization_limit || 0.80,
+      wacc: assumptions.wacc || 0.097,
+      terminalGrowthRate: assumptions.terminal_growth_rate || 0.02,
+      terminalMultiple: assumptions.terminal_multiple || 7.0
+    };
+    
+    // Run scenarios
+    const scenarios = assumptions.scenarios || ['best_case', 'base_case', 'worst_case'];
+    const results = dcfEngine.runDCFWithScenarios(engineInputs, scenarios);
+    
+    res.json({
+      success: true,
+      data: {
+        ticker: ticker || 'UNKNOWN',
+        scenarios: results,
+        comparison: {
+          enterprise_values: {
+            best_case: results.best_case?.main_outputs?.enterprise_value_perpetuity || null,
+            base_case: results.base_case?.main_outputs?.enterprise_value_perpetuity || null,
+            worst_case: results.worst_case?.main_outputs?.enterprise_value_perpetuity || null
+          },
+          equity_per_share: {
+            best_case: results.best_case?.main_outputs?.equity_value_per_share_perpetuity || null,
+            base_case: results.base_case?.main_outputs?.equity_value_per_share_perpetuity || null,
+            worst_case: results.worst_case?.main_outputs?.equity_value_per_share_perpetuity || null
+          }
+        }
+      },
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    console.error('[DCF SCENARIOS ERROR]:', error);
+    res.status(500).json({
+      error: 'Scenario calculation failed',
+      details: error.message
+    });
+  }
+});
+
+/**
+ * Endpoint: Generate sensitivity tables
+ * POST /api/dcf/sensitivity
+ */
+app.post('/api/dcf/sensitivity', async (req, res) => {
+  const {
+    ticker,
+    base_period_data,
+    forecast_drivers,
+    assumptions = {}
+  } = req.body;
+  
+  try {
+    // Map inputs
+    const engineInputs = {
+      baseRevenue: base_period_data.revenue,
+      baseCOGS: base_period_data.cogs,
+      baseSGA: base_period_data.sga,
+      baseOther: base_period_data.other_opex || 0,
+      baseExistingPPE: base_period_data.ppe_gross || 0,
+      baseNOL: base_period_data.nol_remaining || 0,
+      baseNetDebt: base_period_data.net_debt || 0,
+      baseCurrentStockPrice: base_period_data.current_stock_price,
+      baseSharesOutstanding: base_period_data.shares_outstanding,
+      revenueGrowthRates: forecast_drivers.revenue_growth.map(g => g / 100),
+      inflationRates: forecast_drivers.inflation_rate.map(g => g / 100),
+      opexGrowthRates: forecast_drivers.opex_growth.map(g => g / 100),
+      capitalExpenditures: forecast_drivers.capital_expenditure,
+      arDays: forecast_drivers.ar_days,
+      invDays: forecast_drivers.inv_days,
+      apDays: forecast_drivers.ap_days,
+      usefulLifeExisting: assumptions.useful_life_existing || 10,
+      usefulLifeNew: assumptions.useful_life_new || 5,
+      taxRate: assumptions.tax_rate || 0.21,
+      nolUtilizationLimit: assumptions.nol_utilization_limit || 0.80,
+      wacc: assumptions.wacc || 0.097,
+      terminalGrowthRate: assumptions.terminal_growth_rate || 0.02,
+      terminalMultiple: assumptions.terminal_multiple || 7.0
+    };
+    
+    // Generate sensitivity tables
+    const sensitivityTables = dcfEngine.calculateSensitivityTables(engineInputs);
+    
+    res.json({
+      success: true,
+      data: {
+        ticker: ticker || 'UNKNOWN',
+        base_wacc: assumptions.wacc || 0.097,
+        base_terminal_growth: assumptions.terminal_growth_rate || 0.02,
+        base_terminal_multiple: assumptions.terminal_multiple || 7.0,
+        perpetuity_method: sensitivityTables.perpetuityMethod,
+        multiple_method: sensitivityTables.multipleMethod
+      },
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    console.error('[DCF SENSITIVITY ERROR]:', error);
+    res.status(500).json({
+      error: 'Sensitivity analysis failed',
+      details: error.message
+    });
+  }
+});
+
+/**
+ * Endpoint: Validate DCF inputs
+ * POST /api/dcf/validate
+ */
+app.post('/api/dcf/validate', async (req, res) => {
+  const { base_period_data, forecast_drivers, assumptions = {} } = req.body;
+  
+  const validations = {
+    critical: [],
+    warnings: []
+  };
+  
+  try {
+    // Check forecast driver lengths
+    const drivers = ['revenue_growth', 'inflation_rate', 'opex_growth', 'ar_days', 'inv_days', 'ap_days'];
+    for (const driver of drivers) {
+      if (!forecast_drivers[driver]) {
+        validations.critical.push({
+          field: driver,
+          rule: 'required',
+          message: `${driver} is required`
+        });
+      } else if (forecast_drivers[driver].length !== 6) {
+        validations.critical.push({
+          field: driver,
+          rule: 'length',
+          message: `${driver} must have exactly 6 values (5 years + terminal), got ${forecast_drivers[driver].length}`
+        });
+      }
+    }
+    
+    // Check capital expenditure length
+    if (!forecast_drivers.capital_expenditure) {
+      validations.critical.push({
+        field: 'capital_expenditure',
+        rule: 'required',
+        message: 'capital_expenditure is required'
+      });
+    } else if (forecast_drivers.capital_expenditure.length !== 5) {
+      validations.critical.push({
+        field: 'capital_expenditure',
+        rule: 'length',
+        message: `capital_expenditure must have exactly 5 values, got ${forecast_drivers.capital_expenditure.length}`
+      });
+    }
+    
+    // Check WACC and terminal growth relationship
+    const wacc = assumptions.wacc || 0.097;
+    const terminalGrowth = assumptions.terminal_growth_rate || 0.02;
+    if (terminalGrowth >= wacc) {
+      validations.critical.push({
+        field: 'terminal_growth_rate',
+        rule: 'terminal_growth_less_than_wacc',
+        message: `Terminal growth rate (${terminalGrowth}) must be less than WACC (${wacc})`
+      });
+    }
+    
+    // Check base period data
+    if (!base_period_data) {
+      validations.critical.push({
+        field: 'base_period_data',
+        rule: 'required',
+        message: 'base_period_data is required'
+      });
+    } else {
+      if (base_period_data.shares_outstanding <= 0) {
+        validations.critical.push({
+          field: 'shares_outstanding',
+          rule: 'positive',
+          message: 'shares_outstanding must be positive'
+        });
+      }
+      if (base_period_data.revenue <= 0) {
+        validations.warnings.push({
+          field: 'revenue',
+          rule: 'positive',
+          message: 'Revenue is not positive'
+        });
+      }
+    }
+    
+    // Check terminal multiple range
+    const terminalMultiple = assumptions.terminal_multiple || 7.0;
+    if (terminalMultiple < 5.0 || terminalMultiple > 15.0) {
+      validations.warnings.push({
+        field: 'terminal_multiple',
+        rule: 'reasonable_range',
+        message: `Terminal multiple (${terminalMultiple}) is outside typical range [5.0, 15.0]`
+      });
+    }
+    
+    const isValid = validations.critical.length === 0;
+    
+    res.json({
+      success: true,
+      valid: isValid,
+      validations,
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    console.error('[DCF VALIDATION ERROR]:', error);
+    res.status(500).json({
+      error: 'Validation failed',
+      details: error.message
+    });
+  }
+});
+
+console.log('✅ Section 11 loaded: DCF Calculation Engine API with modular design');
+
 app.listen(PORT, () => {
   console.log(`Backend server running on port ${PORT}`);
 });
