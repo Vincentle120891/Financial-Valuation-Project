@@ -3369,6 +3369,273 @@ app.post('/api/dupont/validate', async (req, res) => {
 
 console.log('✅ Section 12 loaded: DuPont Analysis Engine API with modular design');
 
+// ============================================================================
+// SECTION 13: Vietnam Stock Market Integration
+// ============================================================================
+// Dedicated endpoints for Vietnamese stock market data retrieval
+// Uses separate vietnam-data-provider.js module to avoid breaking existing code
+// ============================================================================
+
+const vietnamProvider = require('./vietnam-data-provider');
+
+/**
+ * GET /api/vietnam/search
+ * Search for Vietnam stocks by name or ticker symbol
+ */
+app.get('/api/vietnam/search', async (req, res) => {
+  try {
+    const { q } = req.query;
+    
+    if (!q || q.length < 2) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Search query must be at least 2 characters' 
+      });
+    }
+    
+    const results = await vietnamProvider.searchVietnamStocks(q);
+    
+    res.json({
+      success: true,
+      query: q,
+      count: results.length,
+      stocks: results
+    });
+    
+  } catch (error) {
+    console.error('[VIETNAM SEARCH ERROR]:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Search failed', 
+      details: error.message 
+    });
+  }
+});
+
+/**
+ * GET /api/vietnam/stock/:ticker
+ * Fetch comprehensive financial data for a single Vietnam stock
+ */
+app.get('/api/vietnam/stock/:ticker', async (req, res) => {
+  try {
+    const { ticker } = req.params;
+    const { source, useCache } = req.query;
+    
+    const options = {
+      source: source || null,
+      useCache: useCache !== 'false'
+    };
+    
+    const data = await vietnamProvider.fetchVietnamStockData(ticker, options);
+    
+    res.json({
+      success: true,
+      data,
+      metadata: {
+        years_of_data: data.years.length,
+        data_source: data.data_source,
+        last_updated: data.last_updated,
+        validation: {
+          has_minimum_years: data.years.length >= 6,
+          has_revenue: data.revenue.length > 0,
+          has_net_income: data.net_income.length > 0
+        }
+      }
+    });
+    
+  } catch (error) {
+    console.error('[VIETNAM STOCK ERROR]:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to fetch stock data', 
+      details: error.message 
+    });
+  }
+});
+
+/**
+ * POST /api/vietnam/stocks/batch
+ * Fetch financial data for multiple Vietnam stocks
+ */
+app.post('/api/vietnam/stocks/batch', async (req, res) => {
+  try {
+    const { tickers, options = {} } = req.body;
+    
+    if (!Array.isArray(tickers) || tickers.length === 0) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'tickers must be a non-empty array' 
+      });
+    }
+    
+    const results = await vietnamProvider.fetchMultipleVietnamStocks(tickers, options);
+    
+    res.json(results);
+    
+  } catch (error) {
+    console.error('[VIETNAM BATCH ERROR]:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Batch fetch failed', 
+      details: error.message 
+    });
+  }
+});
+
+/**
+ * POST /api/vietnam/upload-csv
+ * Upload CSV file with financial data for Vietnam stock
+ */
+app.post('/api/vietnam/upload-csv', async (req, res) => {
+  try {
+    const { ticker, csvData } = req.body;
+    
+    if (!ticker || !csvData) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'ticker and csvData are required' 
+      });
+    }
+    
+    // Create temporary file
+    const tempPath = path.join(__dirname, 'temp', `${ticker}_${Date.now()}.csv`);
+    await fs.mkdir(path.join(__dirname, 'temp'), { recursive: true });
+    await fs.writeFile(tempPath, csvData, 'utf-8');
+    
+    try {
+      const data = await vietnamProvider._fetchFromCSV(ticker, tempPath);
+      const normalized = vietnamProvider._normalizeFinancialData(data, ticker);
+      
+      // Clean up temp file
+      await fs.unlink(tempPath).catch(() => {});
+      
+      res.json({
+        success: true,
+        data: normalized,
+        source: 'csv-upload'
+      });
+      
+    } catch (error) {
+      // Clean up temp file on error
+      await fs.unlink(tempPath).catch(() => {});
+      throw error;
+    }
+    
+  } catch (error) {
+    console.error('[VIETNAM CSV UPLOAD ERROR]:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'CSV upload failed', 
+      details: error.message 
+    });
+  }
+});
+
+/**
+ * GET /api/vietnam/validate/:ticker
+ * Validate ticker format and check data availability
+ */
+app.get('/api/vietnam/validate/:ticker', async (req, res) => {
+  try {
+    const { ticker } = req.params;
+    
+    const validation = vietnamProvider.validateVietnamTicker(ticker);
+    
+    if (!validation.valid) {
+      return res.json({
+        success: false,
+        valid: false,
+        error: validation.error
+      });
+    }
+    
+    // Try to fetch with mock data to verify format
+    try {
+      const testData = await vietnamProvider.fetchVietnamStockData(validation.normalized, { 
+        source: 'mock',
+        useCache: false 
+      });
+      
+      res.json({
+        success: true,
+        valid: true,
+        ticker: validation.normalized,
+        available: true,
+        sample_data: {
+          years: testData.years,
+          company_name: testData.company_name,
+          exchange: testData.exchange
+        }
+      });
+      
+    } catch (error) {
+      res.json({
+        success: true,
+        valid: true,
+        ticker: validation.normalized,
+        available: false,
+        warning: 'Ticker format is valid but data retrieval failed',
+        error: error.message
+      });
+    }
+    
+  } catch (error) {
+    console.error('[VIETNAM VALIDATE ERROR]:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Validation failed', 
+      details: error.message 
+    });
+  }
+});
+
+/**
+ * GET /api/vietnam/cache/stats
+ * Get cache statistics
+ */
+app.get('/api/vietnam/cache/stats', (req, res) => {
+  const stats = vietnamProvider.getVietnamCacheStats();
+  res.json({
+    success: true,
+    cache: stats
+  });
+});
+
+/**
+ * DELETE /api/vietnam/cache/:ticker?
+ * Clear cache for specific ticker or all
+ */
+app.delete('/api/vietnam/cache/:ticker?', (req, res) => {
+  const { ticker } = req.params;
+  vietnamProvider.clearVietnamCache(ticker || null);
+  
+  res.json({
+    success: true,
+    message: ticker ? `Cache cleared for ${ticker}` : 'All cache cleared'
+  });
+});
+
+/**
+ * GET /api/vietnam/config
+ * Get Vietnam provider configuration
+ */
+app.get('/api/vietnam/config', (req, res) => {
+  res.json({
+    success: true,
+    config: {
+      exchanges: vietnamProvider.VIETNAM_CONFIG.EXCHANGES,
+      min_history_years: vietnamProvider.VIETNAM_CONFIG.MIN_HISTORY_YEARS,
+      max_history_years: vietnamProvider.VIETNAM_CONFIG.MAX_HISTORY_YEARS,
+      primary_source_configured: !!vietnamProvider.VIETNAM_CONFIG.FIINTRADE_API_KEY,
+      cache_ttl_minutes: vietnamProvider.VIETNAM_CONFIG.CACHE_TTL_MS / 60000
+    }
+  });
+});
+
+console.log('✅ Section 13 loaded: Vietnam Stock Market Integration');
+console.log('   Endpoints: /api/vietnam/*');
+console.log(`   Data range: ${vietnamProvider.VIETNAM_CONFIG.MIN_HISTORY_YEARS}-${vietnamProvider.VIETNAM_CONFIG.MAX_HISTORY_YEARS} years`);
+
 app.listen(PORT, () => {
   console.log(`Backend server running on port ${PORT}`);
 });
