@@ -7,6 +7,10 @@ dist/
 build/
 *.js.map
 
+# Logs and temp files
+*.log
+*.tmp
+
 # Environment
 .env
 .env.local
@@ -16,42 +20,22 @@ build/
 .vscode/
 .idea/
 
-# Logs and temp files
-*.log
-*.tmp
-*.swp
-
 # Python
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 
-# Compiled
+# Compiled files
 *.o
 *.obj
-*.exe
-*.dll
 *.so
 *.a
+*.dll
+*.exe
 *.out
 
-# System
-.DS_Store
-Thumbs.db
-
-# Testing
-.coverage
-coverage/
-htmlcov/
-.pytest_cache/
-.mypy_cache/
-
-# Java/Maven/Gradle
-target/
-.gradle/
-
-# Compressed
+# Compression
 *.zip
 *.gz
 *.tar
@@ -70,8 +54,13 @@ target/
 *.Z
 *.lz
 *.lzo
-*.tar.gz
-*.tar.bz2
-*.tar.xz
-*.tar.zst
+
+# Coverage
+coverage/
+htmlcov/
+.coverage
+
+# Testing
+.mypy_cache/
+.pytest_cache/
 ```
