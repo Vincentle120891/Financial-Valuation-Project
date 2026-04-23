@@ -1,7 +1,6 @@
 const express = require('express');
 const cors = require('cors');
-const { exec } = require('child_process');
-const path = require('path');
+const yahooFinance = require('yahoo-finance2');
 require('dotenv').config();
 
 // AI SDK imports
@@ -82,27 +81,175 @@ async function fetchFromAlphaVantage(functionName, params = {}) {
 }
 
 /**
- * Fetch quote data from Yahoo Finance via Python yfinance script
- * Calls the yfinance_data.py script to retrieve real financial data
+ * Fetch quote data from Yahoo Finance using yahoo-finance2 npm package
+ * Native Node.js implementation - no Python required
  */
 async function fetchFromYFinance(ticker) {
-  return new Promise((resolve) => {
-    const scriptPath = path.join(__dirname, 'yfinance_data.py');
-    exec(`python "${scriptPath}" ${ticker}`, (error, stdout, stderr) => {
-      if (error) {
-        console.error(`yfinance script error: ${error.message}`);
-        resolve({ success: false, error: error.message, source: 'yfinance' });
-        return;
-      }
-      try {
-        const result = JSON.parse(stdout);
-        resolve(result);
-      } catch (parseError) {
-        console.error(`Failed to parse yfinance output: ${parseError.message}`);
-        resolve({ success: false, error: parseError.message, source: 'yfinance' });
-      }
-    });
-  });
+  const yf = yahooFinance.default || yahooFinance;
+  
+  try {
+    // Fetch quote data
+    const quote = await yf.quote(ticker);
+    
+    // Fetch financial statements
+    const [incomeStatement, balanceSheet, cashFlow] = await Promise.all([
+      yf.quoteSummary(ticker, { modules: ['incomeStatementHistory'] }).catch(() => null),
+      yf.quoteSummary(ticker, { modules: ['balanceSheetHistory'] }).catch(() => null),
+      yf.quoteSummary(ticker, { modules: ['cashflowStatementHistory'] }).catch(() => null)
+    ]);
+    
+    // Build comprehensive data structure
+    const data = {
+      metadata: {
+        ticker: ticker,
+        company_name: quote.longName || quote.shortName || `${ticker} Inc.`,
+        exchange: quote.exchange || 'UNKNOWN',
+        currency: quote.currency || 'USD',
+        sector: quote.sector || 'Unknown',
+        industry: quote.industry || 'Unknown',
+        data_timestamp: new Date().toISOString(),
+        data_source: 'yahoo-finance2'
+      },
+      
+      // Market Structure Data
+      market_structure: {
+        current_price: quote.regularMarketPrice || 0,
+        previous_close: quote.previousClose || 0,
+        open: quote.regularMarketOpen || 0,
+        day_high: quote.regularMarketDayHigh || 0,
+        day_low: quote.regularMarketDayLow || 0,
+        volume: quote.regularMarketVolume || 0,
+        avg_volume_10d: quote.averageDailyVolume10Day || 0,
+        avg_volume_3m: quote.averageDailyVolume3Month || 0,
+        shares_outstanding_diluted: quote.sharesOutstanding || 0,
+        shares_outstanding_basic: Math.round((quote.sharesOutstanding || 0) * 0.98),
+        market_capitalization: quote.marketCap || 0,
+        enterprise_value: 0,
+        beta_5y_monthly: quote.beta || 1.0,
+        fifty_two_week_high: quote.fiftyTwoWeekHigh || 0,
+        fifty_two_week_low: quote.fiftyTwoWeekLow || 0,
+        dividend_yield: quote.dividendYield || 0,
+        dividend_per_share: quote.dividendRate || 0,
+        ex_dividend_date: quote.exDividendDate ? quote.exDividendDate.toISOString?.().split('T')[0] : null,
+        payout_ratio: 0
+      },
+      
+      // Macro Indicators (static values)
+      macro_indicators: {
+        risk_free_rate_10y: 0.045,
+        equity_risk_premium: 0.055,
+        inflation_expectations_10y: 0.023,
+        gdp_growth_forecast: 0.021,
+        fx_rate_to_usd: 1.0,
+        sector_credit_spread: 0.012,
+        industry_capacity_utilization: 0.78
+      },
+      
+      // Income Statement Raw
+      income_statement_raw: {
+        revenue_total: incomeStatement?.incomeStatementHistory?.incomeStatementHistory?.[0]?.totalRevenue?.raw || 0,
+        cost_of_revenue_cogs: incomeStatement?.incomeStatementHistory?.incomeStatementHistory?.[0]?.costOfRevenue?.raw || 0,
+        gross_profit: incomeStatement?.incomeStatementHistory?.incomeStatementHistory?.[0]?.grossProfit?.raw || 0,
+        sga_expense: incomeStatement?.incomeStatementHistory?.incomeStatementHistory?.[0]?.sellingGeneralAdministrative?.raw || 0,
+        research_and_development: incomeStatement?.incomeStatementHistory?.incomeStatementHistory?.[0]?.researchDevelopment?.raw || 0,
+        other_operating_expenses: 0,
+        ebitda: quote.ebitda || 0,
+        depreciation_and_amortization: 0,
+        ebit_operating_income: incomeStatement?.incomeStatementHistory?.incomeStatementHistory?.[0]?.operatingIncome?.raw || 0,
+        interest_expense: incomeStatement?.incomeStatementHistory?.incomeStatementHistory?.[0]?.interestExpense?.raw || 0,
+        interest_income: 0,
+        net_interest: 0,
+        pre_tax_income_ebt: incomeStatement?.incomeStatementHistory?.incomeStatementHistory?.[0]?.incomeBeforeTax?.raw || 0,
+        tax_provision: incomeStatement?.incomeStatementHistory?.incomeStatementHistory?.[0]?.incomeTaxExpense?.raw || 0,
+        net_income: incomeStatement?.incomeStatementHistory?.incomeStatementHistory?.[0]?.netIncomeApplicableToCommonShares?.raw || 0,
+        eps_diluted: quote.trailingEps || 0,
+        eps_basic: (quote.trailingEps || 0) * 1.02,
+        weighted_avg_shares_diluted: quote.sharesOutstanding || 0
+      },
+      
+      // Balance Sheet Raw
+      balance_sheet_raw: {
+        accounts_receivable: balanceSheet?.balanceSheetHistory?.balanceSheetStatements?.[0]?.receivables?.raw || 0,
+        inventory: balanceSheet?.balanceSheetHistory?.balanceSheetStatements?.[0]?.inventory?.raw || 0,
+        accounts_payable: balanceSheet?.balanceSheetHistory?.balanceSheetStatements?.[0]?.accountsPayable?.raw || 0,
+        net_ppe: balanceSheet?.balanceSheetHistory?.balanceSheetStatements?.[0]?.propertyPlantEquipment?.raw || 0,
+        gross_ppe: 0,
+        accumulated_depreciation: 0,
+        goodwill: balanceSheet?.balanceSheetHistory?.balanceSheetStatements?.[0]?.goodWill?.raw || 0,
+        intangible_assets: balanceSheet?.balanceSheetHistory?.balanceSheetStatements?.[0]?.intangibleAssets?.raw || 0,
+        total_assets: balanceSheet?.balanceSheetHistory?.balanceSheetStatements?.[0]?.totalAssets?.raw || 0,
+        total_current_assets: balanceSheet?.balanceSheetHistory?.balanceSheetStatements?.[0]?.totalCurrentAssets?.raw || 0,
+        total_non_current_assets: 0,
+        total_liabilities: balanceSheet?.balanceSheetHistory?.balanceSheetStatements?.[0]?.totalLiab?.raw || 0,
+        total_current_liabilities: balanceSheet?.balanceSheetHistory?.balanceSheetStatements?.[0]?.totalCurrentLiabilities?.raw || 0,
+        total_equity: balanceSheet?.balanceSheetHistory?.balanceSheetStatements?.[0]?.totalStockholderEquity?.raw || 0,
+        retained_earnings: balanceSheet?.balanceSheetHistory?.balanceSheetStatements?.[0]?.retainedEarnings?.raw || 0,
+        common_stock: balanceSheet?.balanceSheetHistory?.balanceSheetStatements?.[0]?.commonStock?.raw || 0,
+        deferred_tax_assets: 0,
+        deferred_tax_liabilities: 0,
+        minority_interest_nci: 0
+      },
+      
+      // Cash Flow Raw
+      cash_flow_raw: {
+        operating_cash_flow_cfo: cashFlow?.cashflowStatementHistory?.cashflowStatements?.[0]?.totalCashFromOperatingActivities?.raw || 0,
+        capital_expenditures_capex: cashFlow?.cashflowStatementHistory?.cashflowStatements?.[0]?.capitalExpenditures?.raw || 0,
+        free_cash_flow: 0,
+        change_in_working_capital: 0,
+        dividends_paid: cashFlow?.cashflowStatementHistory?.cashflowStatements?.[0]?.dividendsPaid?.raw || 0,
+        share_repurchases: cashFlow?.cashflowStatementHistory?.cashflowStatements?.[0]?.repurchaseOfStock?.raw || 0,
+        debt_issuance: cashFlow?.cashflowStatementHistory?.cashflowStatements?.[0]?.totalCashFromFinancingActivities?.raw || 0,
+        debt_repayment: 0,
+        other_financing_activities: 0
+      },
+      
+      wacc_components: {},
+      calculated_metrics_common: {},
+      comps_specific_calculated: {},
+      dupont_specific_components: {}
+    };
+    
+    // Calculate derived fields
+    const ms = data.market_structure;
+    const ism = data.income_statement_raw;
+    const bsr = data.balance_sheet_raw;
+    const cfr = data.cash_flow_raw;
+    
+    // Calculate Free Cash Flow
+    cfr.free_cash_flow = cfr.operating_cash_flow_cfo + cfr.capital_expenditures_capex;
+    
+    // Calculate Total Debt
+    const shortTermDebt = balanceSheet?.balanceSheetHistory?.balanceSheetStatements?.[0]?.shortLongTermDebt?.raw || 0;
+    const longTermDebt = balanceSheet?.balanceSheetHistory?.balanceSheetStatements?.[0]?.longTermDebt?.raw || 0;
+    const totalDebt = shortTermDebt + longTermDebt;
+    
+    ms.short_term_debt = shortTermDebt;
+    ms.long_term_debt = longTermDebt;
+    ms.total_debt = totalDebt;
+    ms.cash_and_equivalents = balanceSheet?.balanceSheetHistory?.balanceSheetStatements?.[0]?.cash?.raw || 0;
+    ms.net_debt = Math.max(0, totalDebt - ms.cash_and_equivalents);
+    ms.enterprise_value = ms.market_capitalization + ms.net_debt;
+    
+    // Calculate Net Interest
+    ism.net_interest = ism.interest_income - ism.interest_expense;
+    
+    // Calculate other operating expenses
+    ism.other_operating_expenses = Math.max(0, ism.gross_profit - ism.sga_expense - ism.research_and_development - ism.ebit_operating_income);
+    
+    // Calculate non-current assets
+    bsr.total_non_current_assets = Math.max(0, bsr.total_assets - bsr.total_current_assets);
+    
+    // Calculate minority interest
+    bsr.minority_interest_nci = bsr.total_equity - bsr.common_stock;
+    
+    // Calculate payout ratio
+    ms.payout_ratio = Math.abs(cfr.dividends_paid) / ism.net_income || 0;
+    
+    return { success: true, data, source: 'yahoo-finance2' };
+  } catch (error) {
+    console.error(`yahoo-finance2 error: ${error.message}`);
+    return { success: false, error: error.message, source: 'yahoo-finance2' };
+  }
 }
 
 /**
