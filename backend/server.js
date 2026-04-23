@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const path = require('path');
 const yahooFinance = require('yahoo-finance2').default;
 require('dotenv').config();
 

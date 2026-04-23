@@ -41,19 +41,36 @@
         <div id="tab-home" class="tab-content active">
             <div class="card">
                 <h2 class="text-lg font-semibold mb-4">Find a Company</h2>
+                
+                <!-- Market Selector -->
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Select Market</label>
+                    <select id="market-select" onchange="updateTickerSuggestions()" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white">
+                        <option value="vietnam">Vietnam Stock Market (HOSE/HNX/UPCOM)</option>
+                        <option value="international">International Markets (US, EU, Asia)</option>
+                    </select>
+                </div>
+                
+                <!-- Ticker Suggestions -->
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Popular Tickers</label>
+                    <div id="ticker-suggestions" class="flex gap-2 overflow-x-auto pb-2">
+                        <!-- Vietnam tickers (default) -->
+                        <button onclick="fillSearch('VNM')" class="px-3 py-1 bg-gray-200 rounded-full text-sm whitespace-nowrap">VNM</button>
+                        <button onclick="fillSearch('VIC')" class="px-3 py-1 bg-gray-200 rounded-full text-sm whitespace-nowrap">VIC</button>
+                        <button onclick="fillSearch('HPG')" class="px-3 py-1 bg-gray-200 rounded-full text-sm whitespace-nowrap">HPG</button>
+                        <button onclick="fillSearch('VCB')" class="px-3 py-1 bg-gray-200 rounded-full text-sm whitespace-nowrap">VCB</button>
+                        <button onclick="fillSearch('FPT')" class="px-3 py-1 bg-gray-200 rounded-full text-sm whitespace-nowrap">FPT</button>
+                    </div>
+                </div>
+                
+                <!-- Search Input -->
                 <div class="flex gap-2 mb-4">
-                    <input type="text" id="search-input" placeholder="Ticker (e.g., VNM, AAPL)" 
+                    <input type="text" id="search-input" placeholder="Enter ticker symbol..." 
                         class="flex-1 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
                     <button onclick="searchStock()" class="bg-blue-600 text-white px-6 rounded-lg font-bold">
                         <i class="fas fa-search"></i>
                     </button>
-                </div>
-                <div class="flex gap-2 overflow-x-auto pb-2">
-                    <button onclick="fillSearch('VNM')" class="px-3 py-1 bg-gray-200 rounded-full text-sm whitespace-nowrap">VNM</button>
-                    <button onclick="fillSearch('VIC')" class="px-3 py-1 bg-gray-200 rounded-full text-sm whitespace-nowrap">VIC</button>
-                    <button onclick="fillSearch('HPG')" class="px-3 py-1 bg-gray-200 rounded-full text-sm whitespace-nowrap">HPG</button>
-                    <button onclick="fillSearch('AAPL')" class="px-3 py-1 bg-gray-200 rounded-full text-sm whitespace-nowrap">AAPL</button>
-                    <button onclick="fillSearch('TSLA')" class="px-3 py-1 bg-gray-200 rounded-full text-sm whitespace-nowrap">TSLA</button>
                 </div>
             </div>
 
@@ -203,6 +220,40 @@
     <script>
         let currentTicker = null;
         let roeChartInstance = null;
+        
+        // Ticker suggestions by market
+        const tickerSuggestions = {
+            vietnam: [
+                { symbol: 'VNM', name: 'Vinamilk' },
+                { symbol: 'VIC', name: 'Vingroup' },
+                { symbol: 'HPG', name: 'Hoa Phat Group' },
+                { symbol: 'VCB', name: 'Vietcombank' },
+                { symbol: 'FPT', name: 'FPT Corporation' },
+                { symbol: 'VHM', name: 'Vinhomes' },
+                { symbol: 'MSN', name: 'Masan Group' },
+                { symbol: 'TCB', name: 'Techcombank' }
+            ],
+            international: [
+                { symbol: 'AAPL', name: 'Apple Inc.' },
+                { symbol: 'TSLA', name: 'Tesla, Inc.' },
+                { symbol: 'MSFT', name: 'Microsoft' },
+                { symbol: 'GOOGL', name: 'Alphabet' },
+                { symbol: 'AMZN', name: 'Amazon' },
+                { symbol: 'NVDA', name: 'NVIDIA' },
+                { symbol: 'META', name: 'Meta Platforms' },
+                { symbol: 'JPM', name: 'JPMorgan Chase' }
+            ]
+        };
+
+        function updateTickerSuggestions() {
+            const market = document.getElementById('market-select').value;
+            const container = document.getElementById('ticker-suggestions');
+            const tickers = tickerSuggestions[market] || tickerSuggestions.vietnam;
+            
+            container.innerHTML = tickers.map(t => 
+                `<button onclick="fillSearch('${t.symbol}')" class="px-3 py-1 bg-gray-200 rounded-full text-sm whitespace-nowrap hover:bg-gray-300 transition">${t.symbol}</button>`
+            ).join('');
+        }
 
         function switchTab(tabId) {
             document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
@@ -231,9 +282,10 @@
             
             showLoader(true);
             try {
-                // Auto-detect: Try Vietnam first for 3-letter, else global
-                const isVietnam = /^[VHGSF][A-Z]{2}$/.test(ticker);
-                const url = isVietnam ? `/api/vietnam/stock/${ticker}` : `/api/stock/${ticker}`;
+                // Use market selector to determine endpoint
+                const market = document.getElementById('market-select').value;
+                const isVietnam = market === 'vietnam';
+                const url = isVietnam ? `/api/vietnam/stock/${ticker}` : `/api/financial-data/${ticker}`;
                 
                 const res = await fetch(url);
                 if(!res.ok) throw new Error('Stock not found');
@@ -243,8 +295,8 @@
 
                 document.getElementById('res-name').innerText = data.company_name || ticker;
                 document.getElementById('res-ticker').innerText = `${ticker} (${data.exchange || 'Global'})`;
-                document.getElementById('res-market').innerText = data.is_vietnam ? 'Vietnam' : 'Global';
-                document.getElementById('res-years').innerText = data.years_of_data || 'N/A';
+                document.getElementById('res-market').innerText = isVietnam ? 'Vietnam' : 'International';
+                document.getElementById('res-years').innerText = data.years_of_data || data.years?.length || 'N/A';
                 
                 document.getElementById('stock-result').classList.remove('hidden');
             } catch (err) {
