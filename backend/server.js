@@ -1,7 +1,6 @@
 const express = require('express');
 const cors = require('cors');
-const YahooFinance = require('yahoo-finance2').default;
-const yahooFinance = new YahooFinance();
+const yahooFinance = require('yahoo-finance2').default;
 require('dotenv').config();
 
 // AI SDK imports
