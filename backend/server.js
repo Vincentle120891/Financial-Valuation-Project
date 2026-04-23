@@ -3379,6 +3379,47 @@ console.log('✅ Section 12 loaded: DuPont Analysis Engine API with modular desi
 const vietnamProvider = require('./vietnam-data-provider');
 
 /**
+ * Helper: Detect if ticker is Vietnam-specific
+ * Vietnam tickers: 3 uppercase letters, listed on HOSE/HNX/UPCOM
+ * Common patterns: VNM, VIC, VHM, HPG, FPT, MWG, SAB, etc.
+ */
+function isVietnamTicker(ticker) {
+  if (!ticker || typeof ticker !== 'string') return false;
+  
+  const upperTicker = ticker.toUpperCase().trim();
+  
+  // Vietnam tickers are exactly 3 uppercase letters
+  const vietnamPattern = /^[A-Z]{3}$/;
+  
+  // List of known Vietnam stock prefixes (optional enhancement)
+  const vietnamPrefixes = ['V', 'H', 'G', 'S', 'D', 'N', 'P', 'T', 'M', 'F', 'K'];
+  
+  if (vietnamPattern.test(upperTicker)) {
+    // Additional check: first letter is common Vietnam prefix
+    // This helps distinguish from some US 3-letter tickers
+    const firstLetter = upperTicker[0];
+    
+    // Known US 3-letter tickers to exclude (major ones)
+    const usTickers = ['V', 'MA', 'WMT', 'DIS', 'NFLX', 'AMD', 'INTC', 'IBM', 'CRM', 'ORCL', 'BA', 'CAT', 'GE', 'GM', 'T', 'VZ', 'KO', 'PEP', 'MCD', 'SBUX', 'NKE', 'HD', 'LOW', 'TGT', 'COST', 'CVS', 'WBA', 'MRK', 'PFE', 'JNJ', 'UNH', 'ABBV', 'LLY', 'BMY', 'AMGN', 'GILD', 'XOM', 'CVX', 'COP', 'SLB', 'EOG', 'MPC', 'VLO', 'PSX', 'NEE', 'DUK', 'SO', 'D', 'EXC', 'SRE', 'AEP', 'XEL', 'ED', 'ES', 'FE', 'ETR', 'WEC', 'PEG', 'SYY', 'ADM', 'BG', 'TSN', 'HRL', 'GIS', 'CAG', 'SJM', 'CPB', 'HSY', 'MKC', 'CL', 'PG', 'EL', 'AVP', 'CHD', 'CLX', 'TAP', 'STZ', 'SAM', 'BREW', 'COKE', 'MNST', 'F', 'K'];
+    
+    // If it's a known US ticker, not Vietnam
+    if (usTickers.includes(upperTicker)) {
+      return false;
+    }
+    
+    // If first letter matches Vietnam prefixes, likely Vietnam
+    if (vietnamPrefixes.includes(firstLetter)) {
+      return true;
+    }
+    
+    // Default: 3-letter tickers not in US list are treated as potential Vietnam
+    return true;
+  }
+  
+  return false;
+}
+
+/**
  * GET /api/vietnam/search
  * Search for Vietnam stocks by name or ticker symbol
  */
@@ -3415,11 +3456,23 @@ app.get('/api/vietnam/search', async (req, res) => {
 /**
  * GET /api/vietnam/stock/:ticker
  * Fetch comprehensive financial data for a single Vietnam stock
+ * Automatically detects if ticker is Vietnam-specific
  */
 app.get('/api/vietnam/stock/:ticker', async (req, res) => {
   try {
     const { ticker } = req.params;
-    const { source, useCache } = req.query;
+    const { source, useCache, autoDetect } = req.query;
+    
+    // Auto-detect if this is a Vietnam ticker (unless explicitly disabled)
+    if (autoDetect !== 'false' && !isVietnamTicker(ticker)) {
+      return res.status(400).json({
+        success: false,
+        error: `Ticker '${ticker}' does not appear to be a Vietnam stock`,
+        suggestion: 'Use global stock endpoints for non-Vietnam tickers, or set autoDetect=false to force Vietnam lookup',
+        is_vietnam_ticker: isVietnamTicker(ticker),
+        detected_market: 'Global/US'
+      });
+    }
     
     const options = {
       source: source || null,
@@ -3439,6 +3492,10 @@ app.get('/api/vietnam/stock/:ticker', async (req, res) => {
           has_minimum_years: data.years.length >= 6,
           has_revenue: data.revenue.length > 0,
           has_net_income: data.net_income.length > 0
+        },
+        ticker_detection: {
+          is_vietnam: isVietnamTicker(ticker),
+          auto_detect_enabled: autoDetect !== 'false'
         }
       }
     });
