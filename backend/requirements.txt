@@ -1,0 +1,26 @@
+# Financial Valuation Backend - Python Dependencies
+# Migrated from Node.js to Python/FastAPI
+
+# Web Framework
+fastapi>=0.116.0
+uvicorn[standard]>=0.35.0
+
+# HTTP Client (for Alpha Vantage API)
+aiohttp>=3.9.0
+
+# Financial Data
+yfinance>=1.0.0
+
+# AI/LLM SDKs (optional)
+# google-generativeai>=0.8.0  # Uncomment if using Gemini
+groq>=0.11.0  # For Groq LLM
+
+# Data Validation
+pydantic>=2.0.0
+
+# Environment Variables
+python-dotenv>=1.0.0
+
+# Testing (optional)
+# pytest>=8.0.0
+# httpx>=0.27.0  # For async testing
