@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const { exec } = require('child_process');
 const yahooFinance = require('yahoo-finance2').default;
 require('dotenv').config();
 
