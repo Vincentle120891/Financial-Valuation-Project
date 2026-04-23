@@ -1,6 +1,6 @@
 const express = require('express');
 const cors = require('cors');
-const yfinance = require('yfinance');
+const { exec } = require('child_process');
 const path = require('path');
 require('dotenv').config();
 
@@ -82,11 +82,63 @@ async function fetchFromAlphaVantage(functionName, params = {}) {
 }
 
 /**
- * Fetch quote data from Yahoo Finance via rapidapi or public endpoint
- * Note: In production, use a proper Yahoo Finance API wrapper or RapidAPI
+ * Fetch quote data from Yahoo Finance via Python yfinance script
+ * Calls the yfinance_data.py script to retrieve real financial data
+ */
+async function fetchFromYFinance(ticker) {
+  return new Promise((resolve) => {
+    const scriptPath = path.join(__dirname, 'yfinance_data.py');
+    exec(`python "${scriptPath}" ${ticker}`, (error, stdout, stderr) => {
+      if (error) {
+        console.error(`yfinance script error: ${error.message}`);
+        resolve({ success: false, error: error.message, source: 'yfinance' });
+        return;
+      }
+      try {
+        const result = JSON.parse(stdout);
+        resolve(result);
+      } catch (parseError) {
+        console.error(`Failed to parse yfinance output: ${parseError.message}`);
+        resolve({ success: false, error: parseError.message, source: 'yfinance' });
+      }
+    });
+  });
+}
+
+/**
+ * Legacy function - kept for backward compatibility
+ * Now delegates to fetchFromYFinance
  */
 async function fetchFromYahooFinance(ticker) {
-  // Mock implementation - in production use proper API
+  // Try to fetch from yfinance Python script first
+  const yfResult = await fetchFromYFinance(ticker);
+  
+  if (yfResult.success && yfResult.data) {
+    // Convert yfinance data structure to legacy format
+    const ms = yfResult.data.market_structure || {};
+    return { 
+      success: true, 
+      data: {
+        currentPrice: ms.current_price || 0,
+        previousClose: ms.previous_close || 0,
+        open: ms.open || 0,
+        dayHigh: ms.day_high || 0,
+        dayLow: ms.day_low || 0,
+        volume: ms.volume || 0,
+        marketCap: ms.market_capitalization || 0,
+        beta: ms.beta_5y_monthly || 1.0,
+        peRatio: 0,
+        eps: yfResult.data.income_statement_raw?.eps_diluted || 0,
+        dividendYield: ms.dividend_yield || 0,
+        exDividendDate: ms.ex_dividend_date || null,
+        fiftyTwoWeekHigh: ms.fifty_two_week_high || 0,
+        fiftyTwoWeekLow: ms.fifty_two_week_low || 0
+      },
+      source: 'yfinance'
+    };
+  }
+  
+  // Fallback to mock data if yfinance fails
   const mockYahooData = {
     'AAPL': {
       currentPrice: 189.84,
@@ -171,7 +223,7 @@ async function fetchFromYahooFinance(ticker) {
   };
   
   const data = mockYahooData[ticker] || mockYahooData['AAPL'];
-  return { success: true, data, source: 'yfinance' };
+  return { success: true, data, source: 'mock' };
 }
 
 /**
@@ -1657,18 +1709,24 @@ app.get('/api/required-fields', (req, res) => {
 
 // Step 6: Retrieve live data - now returns ALL API data (read-only) + AI-generatable fields
 app.post('/api/retrieve-data', async (req, res) => {
-  const { modelType } = req.body;
-  const ticker = valuationState.ticker || 'AAPL';
+  const { modelType, ticker } = req.body;
+  const requestTicker = ticker || valuationState.ticker || 'AAPL';
   
   // Simulate API retrieval delay
-  await new Promise(resolve => setTimeout(resolve, 1500));
+  await new Promise(resolve => setTimeout(resolve, 500));
   
   try {
-    // Get comprehensive financial data from API
-    const financialData = await getComprehensiveFinancialData(ticker);
+    // Get comprehensive financial data from yfinance Python script
+    const yfResult = await fetchFromYFinance(requestTicker);
+    
+    if (!yfResult.success || !yfResult.data) {
+      throw new Error(yfResult.error || 'Failed to fetch data from yfinance');
+    }
+    
+    const financialData = yfResult.data;
     
     // Get AI-generated inputs
-    const aiInputs = await getAIInputsForModel(ticker, modelType, financialData);
+    const aiInputs = await getAIInputsForModel(requestTicker, modelType, financialData);
     
     // Structure response: API data (read-only) + AI data (can be generated/edited)
     const retrievedData = {
