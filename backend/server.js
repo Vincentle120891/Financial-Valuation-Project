@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const yfinance = require('yfinance');
+const path = require('path');
 require('dotenv').config();
 
 // AI SDK imports
@@ -3693,6 +3694,21 @@ console.log('✅ Section 13 loaded: Vietnam Stock Market Integration');
 console.log('   Endpoints: /api/vietnam/*');
 console.log(`   Data range: ${vietnamProvider.VIETNAM_CONFIG.MIN_HISTORY_YEARS}-${vietnamProvider.VIETNAM_CONFIG.MAX_HISTORY_YEARS} years`);
 
+// ============================================
+// SECTION 14: WEB FRONTEND SERVING
+// ============================================
+// Serve static files from public directory (mobile web app)
+app.use(express.static(path.join(__dirname, 'public')));
+
+// Root route serves the mobile web app
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+console.log('✅ Section 14 loaded: Web Frontend (Mobile-Optimized)');
+console.log('   URL: http://localhost:' + PORT);
+
 app.listen(PORT, () => {
   console.log(`Backend server running on port ${PORT}`);
+  console.log(`📱 Open http://localhost:${PORT} in your browser or phone`);
 });
