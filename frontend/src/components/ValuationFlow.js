@@ -8,6 +8,8 @@ const ValuationFlow = () => {
   const [selectedModel, setSelectedModel] = useState(null);
   const [requiredFields, setRequiredFields] = useState([]);
   const [retrievedData, setRetrievedData] = useState(null);
+  const [apiData, setApiData] = useState({});
+  const [aiData, setAiData] = useState({});
   const [confirmedValues, setConfirmedValues] = useState({});
   const [selectedScenario, setSelectedScenario] = useState(null);
   const [valuationResults, setValuationResults] = useState(null);
@@ -76,7 +78,7 @@ const ValuationFlow = () => {
     }
   }, [selectedModel, currentStep]);
 
-  // Step 6: Retrieve data
+  // Step 6: Retrieve data - now separates API data (read-only) from AI data (generatable)
   const handleRetrieveData = async () => {
     setLoading(true);
     try {
@@ -88,6 +90,8 @@ const ValuationFlow = () => {
       const data = await response.json();
       if (data.success) {
         setRetrievedData(data.data);
+        setApiData(data.data.apiData || {});
+        setAiData(data.data.aiData || {});
         setCurrentStep(7);
       }
     } catch (err) {
@@ -95,6 +99,66 @@ const ValuationFlow = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Generate AI data for a specific field
+  const handleGenerateAI = (field, category) => {
+    const aiFields = retrievedData?.[category] || {};
+    if (aiFields[field]) {
+      setConfirmedValues(prev => ({
+        ...prev,
+        [field]: { value: aiFields[field].value, source: 'ai', confidence: aiFields[field].confidence }
+      }));
+    }
+  };
+
+  // Generate all AI data at once
+  const handleGenerateAllAI = () => {
+    const newConfirmed = { ...confirmedValues };
+    
+    // Add all AI data
+    Object.entries(aiData).forEach(([key, data]) => {
+      if (data.editable && data.value !== undefined) {
+        newConfirmed[key] = { value: data.value, source: 'ai', confidence: data.confidence };
+      }
+    });
+    
+    // Add COMPS-specific AI data
+    if (retrievedData?.compsData) {
+      Object.entries(retrievedData.compsData).forEach(([key, data]) => {
+        if (data.editable && data.value !== undefined) {
+          newConfirmed[key] = { value: data.value, source: 'ai', confidence: data.confidence };
+        }
+      });
+    }
+    
+    // Add DuPont-specific AI data
+    if (retrievedData?.dupontData) {
+      Object.entries(retrievedData.dupontData).forEach(([key, data]) => {
+        if (data.editable && data.value !== undefined) {
+          newConfirmed[key] = { value: data.value, source: 'ai', confidence: data.confidence };
+        }
+      });
+    }
+    
+    // Add Real Estate-specific AI data
+    if (retrievedData?.realEstateData) {
+      Object.entries(retrievedData.realEstateData).forEach(([key, data]) => {
+        if (data.editable && data.value !== undefined) {
+          newConfirmed[key] = { value: data.value, source: 'ai', confidence: data.confidence };
+        }
+      });
+    }
+    
+    setConfirmedValues(newConfirmed);
+  };
+
+  // Manual input for a field
+  const handleManualInput = (field, value) => {
+    setConfirmedValues(prev => ({
+      ...prev,
+      [field]: { value: parseFloat(value) || value, source: 'manual' }
+    }));
   };
 
   // Step 7: Handle value confirmation
@@ -114,7 +178,14 @@ const ValuationFlow = () => {
   // Step 9: Run valuation
   const handleRunValuation = async () => {
     setLoading(true);
+    setError(null);
     try {
+      console.log('Running valuation with:', {
+        modelType: selectedModel,
+        confirmedValues,
+        scenario: selectedScenario
+      });
+      
       const response = await fetch('http://localhost:5000/api/run-valuation', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -124,13 +195,19 @@ const ValuationFlow = () => {
           scenario: selectedScenario
         })
       });
+      
       const data = await response.json();
+      console.log('Valuation response:', data);
+      
       if (data.success) {
         setValuationResults(data.data);
         setCurrentStep(10);
+      } else {
+        setError(data.error || 'Failed to run valuation');
       }
     } catch (err) {
-      setError('Failed to run valuation');
+      console.error('Valuation error:', err);
+      setError('Failed to run valuation. Please ensure the backend server is running on port 5000.');
     } finally {
       setLoading(false);
     }
@@ -230,17 +307,22 @@ const ValuationFlow = () => {
         return (
           <div className="step-container">
             <h2>Step 5: Required Inputs Checklist</h2>
+            <p className="step-description">Below are all the required inputs for the {selectedModel} model. Fields marked with ⚙️ require AI generation or manual input.</p>
             <table className="data-table">
               <thead>
                 <tr>
+                  <th>Category</th>
                   <th>Field Name</th>
+                  <th>Type</th>
                   <th>Status</th>
                 </tr>
               </thead>
               <tbody>
                 {requiredFields.map((field, idx) => (
                   <tr key={idx}>
+                    <td>{field.category || 'General'}</td>
                     <td>{field.name}</td>
+                    <td>{field.requiresInput ? '⚙️ AI/Manual' : '📊 API Only'}</td>
                     <td className="status-pending">⏳ Pending Retrieval</td>
                   </tr>
                 ))}
@@ -263,37 +345,197 @@ const ValuationFlow = () => {
       case 7:
         return (
           <div className="step-container">
-            <h2>Step 7: Review Data + AI Suggestions + Benchmark Ranges</h2>
+            <h2>Step 7: Review Data + AI Suggestions</h2>
+            <p className="step-description">
+              <strong>📊 API Data:</strong> Read-only data pulled from financial APIs (Yahoo Finance, Alpha Vantage, etc.)<br/>
+              <strong>🤖 AI Data:</strong> AI-generated forecasts and assumptions that can be auto-filled or manually edited
+            </p>
+            
+            {/* Button to generate all AI data at once */}
+            <button onClick={handleGenerateAllAI} className="btn-primary" style={{ marginBottom: '20px' }}>
+              🤖 Generate All AI Data
+            </button>
+            
+            {/* API Data Section - Read Only */}
+            <h3>📊 API Data (Read-Only)</h3>
             <table className="data-table enhanced">
               <thead>
                 <tr>
                   <th>Field</th>
-                  <th>API Value</th>
-                  <th>AI Suggestion</th>
-                  <th>Benchmark Range</th>
-                  <th>Action</th>
+                  <th>Value</th>
+                  <th>Source</th>
+                  <th>Status</th>
                 </tr>
               </thead>
               <tbody>
-                {retrievedData && Object.entries(retrievedData).map(([key, data]) => (
+                {apiData && Object.entries(apiData).slice(0, 15).map(([key, data]) => (
                   <tr key={key}>
                     <td>{key}</td>
-                    <td>{data.status === 'found' ? `✓ ${data.value}` : '✗ Missing'}</td>
-                    <td>AI suggestion available</td>
-                    <td>Benchmark available</td>
-                    <td>
-                      <button onClick={() => handleConfirmValue(key, data.value, 'api')} className="btn-small">Use API</button>
-                      <button onClick={() => handleConfirmValue(key, 'ai-value', 'ai')} className="btn-small">🤖 Use AI</button>
-                      <button onClick={() => handleConfirmValue(key, 'benchmark-value', 'benchmark')} className="btn-small">📊 Use Benchmark</button>
-                    </td>
+                    <td>{typeof data.value === 'number' ? data.value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 }) : data.value}</td>
+                    <td>{data.source}</td>
+                    <td>{data.status === 'found' ? '✓ Found' : '✗ Missing'}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
+            {Object.keys(apiData).length > 15 && (
+              <p className="note">...and {Object.keys(apiData).length - 15} more API fields</p>
+            )}
+            
+            {/* AI Data Section - Can be generated/edited */}
+            <h3>🤖 AI-Generated Data (Editable)</h3>
+            <table className="data-table enhanced">
+              <thead>
+                <tr>
+                  <th>Field</th>
+                  <th>AI Value</th>
+                  <th>Confidence</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {aiData && Object.entries(aiData).map(([key, data]) => {
+                  const isConfirmed = confirmedValues[key];
+                  return (
+                    <tr key={key}>
+                      <td>{key}</td>
+                      <td>{typeof data.value === 'number' ? (data.value * 100).toFixed(2) + '%' : data.value}</td>
+                      <td>{data.confidence ? (data.confidence * 100).toFixed(0) + '%' : 'N/A'}</td>
+                      <td>
+                        {!isConfirmed ? (
+                          <>
+                            <button onClick={() => handleGenerateAI(key, 'aiData')} className="btn-small">🤖 Use AI</button>
+                            <input 
+                              type="number" 
+                              placeholder="Manual input" 
+                              onChange={(e) => handleManualInput(key, e.target.value)}
+                              className="manual-input"
+                              style={{ width: '100px', marginLeft: '5px' }}
+                            />
+                          </>
+                        ) : (
+                          <span className="status-confirmed">✓ Confirmed ({isConfirmed.source})</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            
+            {/* Model-specific AI data sections */}
+            {retrievedData?.compsData && (
+              <>
+                <h3>📈 COMPS-Specific AI Data</h3>
+                <table className="data-table enhanced">
+                  <thead>
+                    <tr>
+                      <th>Field</th>
+                      <th>AI Value</th>
+                      <th>Confidence</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Object.entries(retrievedData.compsData).map(([key, data]) => {
+                      const isConfirmed = confirmedValues[key];
+                      return (
+                        <tr key={key}>
+                          <td>{key}</td>
+                          <td>{typeof data.value === 'number' ? data.value.toFixed(2) : data.value}</td>
+                          <td>{data.confidence ? (data.confidence * 100).toFixed(0) + '%' : 'N/A'}</td>
+                          <td>
+                            {!isConfirmed ? (
+                              <button onClick={() => handleGenerateAI(key, 'compsData')} className="btn-small">🤖 Use AI</button>
+                            ) : (
+                              <span className="status-confirmed">✓ Confirmed ({isConfirmed.source})</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </>
+            )}
+            
+            {retrievedData?.dupontData && (
+              <>
+                <h3>📊 DuPont-Specific AI Data</h3>
+                <table className="data-table enhanced">
+                  <thead>
+                    <tr>
+                      <th>Field</th>
+                      <th>AI Value</th>
+                      <th>Confidence</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Object.entries(retrievedData.dupontData).map(([key, data]) => {
+                      const isConfirmed = confirmedValues[key];
+                      return (
+                        <tr key={key}>
+                          <td>{key}</td>
+                          <td>{typeof data.value === 'number' ? data.value.toFixed(2) : data.value}</td>
+                          <td>{data.confidence ? (data.confidence * 100).toFixed(0) + '%' : 'N/A'}</td>
+                          <td>
+                            {!isConfirmed ? (
+                              <button onClick={() => handleGenerateAI(key, 'dupontData')} className="btn-small">🤖 Use AI</button>
+                            ) : (
+                              <span className="status-confirmed">✓ Confirmed ({isConfirmed.source})</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </>
+            )}
+            
+            {retrievedData?.realEstateData && (
+              <>
+                <h3>🏢 Real Estate-Specific Data</h3>
+                <table className="data-table enhanced">
+                  <thead>
+                    <tr>
+                      <th>Field</th>
+                      <th>Value</th>
+                      <th>Editable</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Object.entries(retrievedData.realEstateData).map(([key, data]) => {
+                      const isConfirmed = confirmedValues[key];
+                      return (
+                        <tr key={key}>
+                          <td>{key}</td>
+                          <td>{typeof data.value === 'number' ? data.value.toLocaleString() : data.value}</td>
+                          <td>{data.editable ? '✏️ Yes' : '🔒 No'}</td>
+                          <td>
+                            {data.editable && !isConfirmed ? (
+                              <button onClick={() => handleGenerateAI(key, 'realEstateData')} className="btn-small">🤖 Use AI</button>
+                            ) : isConfirmed ? (
+                              <span className="status-confirmed">✓ Confirmed ({isConfirmed.source})</span>
+                            ) : (
+                              <span className="status-readonly">Read-only</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </>
+            )}
+            
             <button 
               onClick={() => setCurrentStep(8)} 
               className="btn-primary"
               disabled={Object.keys(confirmedValues).length === 0}
+              style={{ marginTop: '20px' }}
             >
               Review Assumptions →
             </button>
@@ -332,8 +574,39 @@ const ValuationFlow = () => {
               <p><strong>Scenario:</strong> {selectedScenario}</p>
               <p><strong>Confirmed Values:</strong> {Object.keys(confirmedValues).length} fields</p>
             </div>
-            <button onClick={handleRunValuation} disabled={loading} className="btn-primary btn-large">
-              {loading ? 'Running Model...' : 'Run Model →'}
+            
+            {/* Display confirmed values summary */}
+            {Object.keys(confirmedValues).length > 0 && (
+              <div className="confirmed-values-summary">
+                <h4>Confirmed Inputs</h4>
+                <table className="data-table small">
+                  <thead>
+                    <tr>
+                      <th>Field</th>
+                      <th>Value</th>
+                      <th>Source</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Object.entries(confirmedValues).slice(0, 10).map(([key, data]) => (
+                      <tr key={key}>
+                        <td>{key}</td>
+                        <td>{typeof data.value === 'number' ? data.value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 }) : data.value}</td>
+                        <td>{data.source === 'ai' ? '🤖 AI' : data.source === 'manual' ? '✏️ Manual' : '📊 API'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {Object.keys(confirmedValues).length > 10 && (
+                  <p className="note">...and {Object.keys(confirmedValues).length - 10} more fields</p>
+                )}
+              </div>
+            )}
+            
+            {error && <div className="error-message">{error}</div>}
+            
+            <button onClick={handleRunValuation} disabled={loading || Object.keys(confirmedValues).length === 0} className="btn-primary btn-large">
+              {loading ? 'Running Model...' : '🚀 Run Valuation Model →'}
             </button>
           </div>
         );

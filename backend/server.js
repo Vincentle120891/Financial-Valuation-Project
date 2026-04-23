@@ -1115,37 +1115,170 @@ function getMockTranscriptText(ticker) {
 
 const modelRequiredFields = {
   DCF: [
-    { name: 'revenue', status: 'pending' },
-    { name: 'operatingMargin', status: 'pending' },
-    { name: 'taxRate', status: 'pending' },
-    { name: 'capex', status: 'pending' },
-    { name: 'depreciation', status: 'pending' },
-    { name: 'workingCapitalChange', status: 'pending' },
-    { name: 'wacc', status: 'pending' },
-    { name: 'terminalGrowthRate', status: 'pending' },
-    { name: 'sharesOutstanding', status: 'pending' }
+    // Market Structure
+    { name: 'current_price', category: 'Market Data', status: 'pending' },
+    { name: 'shares_outstanding_diluted', category: 'Market Data', status: 'pending' },
+    { name: 'market_capitalization', category: 'Market Data', status: 'pending' },
+    { name: 'enterprise_value', category: 'Market Data', status: 'pending' },
+    { name: 'total_debt', category: 'Market Data', status: 'pending' },
+    { name: 'cash_and_equivalents', category: 'Market Data', status: 'pending' },
+    { name: 'net_debt', category: 'Market Data', status: 'pending' },
+    { name: 'beta_5y_monthly', category: 'Market Data', status: 'pending' },
+    { name: 'dividend_yield', category: 'Market Data', status: 'pending' },
+    // Income Statement
+    { name: 'revenue_total', category: 'Income Statement', status: 'pending' },
+    { name: 'cost_of_revenue_cogs', category: 'Income Statement', status: 'pending' },
+    { name: 'gross_profit', category: 'Income Statement', status: 'pending' },
+    { name: 'sga_expense', category: 'Income Statement', status: 'pending' },
+    { name: 'research_and_development', category: 'Income Statement', status: 'pending' },
+    { name: 'ebitda', category: 'Income Statement', status: 'pending' },
+    { name: 'depreciation_and_amortization', category: 'Income Statement', status: 'pending' },
+    { name: 'ebit_operating_income', category: 'Income Statement', status: 'pending' },
+    { name: 'interest_expense', category: 'Income Statement', status: 'pending' },
+    { name: 'net_income', category: 'Income Statement', status: 'pending' },
+    { name: 'eps_diluted', category: 'Income Statement', status: 'pending' },
+    // Balance Sheet
+    { name: 'accounts_receivable', category: 'Balance Sheet', status: 'pending' },
+    { name: 'inventory', category: 'Balance Sheet', status: 'pending' },
+    { name: 'accounts_payable', category: 'Balance Sheet', status: 'pending' },
+    { name: 'net_ppe', category: 'Balance Sheet', status: 'pending' },
+    { name: 'total_assets', category: 'Balance Sheet', status: 'pending' },
+    { name: 'total_liabilities', category: 'Balance Sheet', status: 'pending' },
+    { name: 'total_equity', category: 'Balance Sheet', status: 'pending' },
+    // Cash Flow
+    { name: 'operating_cash_flow_cfo', category: 'Cash Flow', status: 'pending' },
+    { name: 'capital_expenditures_capex', category: 'Cash Flow', status: 'pending' },
+    { name: 'free_cash_flow', category: 'Cash Flow', status: 'pending' },
+    { name: 'change_in_working_capital', category: 'Cash Flow', status: 'pending' },
+    { name: 'dividends_paid', category: 'Cash Flow', status: 'pending' },
+    { name: 'share_repurchases', category: 'Cash Flow', status: 'pending' },
+    // Calculated Metrics
+    { name: 'gross_margin', category: 'Calculated Metrics', status: 'pending' },
+    { name: 'ebitda_margin', category: 'Calculated Metrics', status: 'pending' },
+    { name: 'operating_margin', category: 'Calculated Metrics', status: 'pending' },
+    { name: 'net_profit_margin', category: 'Calculated Metrics', status: 'pending' },
+    { name: 'effective_tax_rate', category: 'Calculated Metrics', status: 'pending' },
+    { name: 'asset_turnover', category: 'Calculated Metrics', status: 'pending' },
+    { name: 'roe', category: 'Calculated Metrics', status: 'pending' },
+    { name: 'roic', category: 'Calculated Metrics', status: 'pending' },
+    { name: 'debt_to_equity', category: 'Calculated Metrics', status: 'pending' },
+    { name: 'interest_coverage', category: 'Calculated Metrics', status: 'pending' },
+    { name: 'revenue_growth_yoy', category: 'Calculated Metrics', status: 'pending' },
+    { name: 'fcf_margin', category: 'Calculated Metrics', status: 'pending' },
+    // WACC Components
+    { name: 'risk_free_rate_10y', category: 'WACC Inputs', status: 'pending' },
+    { name: 'equity_risk_premium', category: 'WACC Inputs', status: 'pending' },
+    { name: 'cost_of_equity_re', category: 'WACC Inputs', status: 'pending' },
+    { name: 'cost_of_debt_pre_tax', category: 'WACC Inputs', status: 'pending' },
+    { name: 'cost_of_debt_after_tax', category: 'WACC Inputs', status: 'pending' },
+    { name: 'wacc_calc_base', category: 'WACC Inputs', status: 'pending' },
+    // Forecast Assumptions (AI/Manual)
+    { name: 'terminal_growth_rate', category: 'Forecast Assumptions', status: 'pending', requiresInput: true },
+    { name: 'forecast_revenue_growth_y1', category: 'Forecast Assumptions', status: 'pending', requiresInput: true },
+    { name: 'forecast_revenue_growth_y2', category: 'Forecast Assumptions', status: 'pending', requiresInput: true },
+    { name: 'forecast_revenue_growth_y3', category: 'Forecast Assumptions', status: 'pending', requiresInput: true },
+    { name: 'forecast_revenue_growth_y4', category: 'Forecast Assumptions', status: 'pending', requiresInput: true },
+    { name: 'forecast_revenue_growth_y5', category: 'Forecast Assumptions', status: 'pending', requiresInput: true },
+    { name: 'forecast_capex_percent', category: 'Forecast Assumptions', status: 'pending', requiresInput: true },
+    { name: 'forecast_depreciation_percent', category: 'Forecast Assumptions', status: 'pending', requiresInput: true },
+    { name: 'forecast_wc_change_percent', category: 'Forecast Assumptions', status: 'pending', requiresInput: true }
   ],
   COMPS: [
-    { name: 'peRatio', status: 'pending' },
-    { name: 'evEbitda', status: 'pending' },
-    { name: 'priceToBook', status: 'pending' },
-    { name: 'evSales', status: 'pending' },
-    { name: 'peerMultiples', status: 'pending' }
+    // Market Structure
+    { name: 'current_price', category: 'Market Data', status: 'pending' },
+    { name: 'market_capitalization', category: 'Market Data', status: 'pending' },
+    { name: 'enterprise_value', category: 'Market Data', status: 'pending' },
+    { name: 'total_debt', category: 'Market Data', status: 'pending' },
+    { name: 'cash_and_equivalents', category: 'Market Data', status: 'pending' },
+    // Income Statement
+    { name: 'revenue_total', category: 'Income Statement', status: 'pending' },
+    { name: 'ebitda', category: 'Income Statement', status: 'pending' },
+    { name: 'ebit_operating_income', category: 'Income Statement', status: 'pending' },
+    { name: 'net_income', category: 'Income Statement', status: 'pending' },
+    { name: 'eps_diluted', category: 'Income Statement', status: 'pending' },
+    // Balance Sheet
+    { name: 'total_assets', category: 'Balance Sheet', status: 'pending' },
+    { name: 'total_equity', category: 'Balance Sheet', status: 'pending' },
+    // Cash Flow
+    { name: 'free_cash_flow', category: 'Cash Flow', status: 'pending' },
+    // Valuation Multiples (Calculated)
+    { name: 'pe_ratio', category: 'Valuation Multiples', status: 'pending' },
+    { name: 'ev_ebitda', category: 'Valuation Multiples', status: 'pending' },
+    { name: 'ev_sales', category: 'Valuation Multiples', status: 'pending' },
+    { name: 'ev_ebit', category: 'Valuation Multiples', status: 'pending' },
+    { name: 'price_to_book', category: 'Valuation Multiples', status: 'pending' },
+    { name: 'price_to_fcf', category: 'Valuation Multiples', status: 'pending' },
+    { name: 'ev_to_fcf', category: 'Valuation Multiples', status: 'pending' },
+    // Peer Comparison (AI/Manual)
+    { name: 'peer_ev_ebitda_median', category: 'Peer Analysis', status: 'pending', requiresInput: true },
+    { name: 'peer_ev_sales_median', category: 'Peer Analysis', status: 'pending', requiresInput: true },
+    { name: 'peer_pe_median', category: 'Peer Analysis', status: 'pending', requiresInput: true },
+    { name: 'peer_pb_median', category: 'Peer Analysis', status: 'pending', requiresInput: true },
+    { name: 'selected_peer_multiple', category: 'Peer Analysis', status: 'pending', requiresInput: true },
+    { name: 'discount_premium_percent', category: 'Peer Analysis', status: 'pending', requiresInput: true }
   ],
   DUPONT: [
-    { name: 'netIncome', status: 'pending' },
-    { name: 'revenue', status: 'pending' },
-    { name: 'totalAssets', status: 'pending' },
-    { name: 'shareholderEquity', status: 'pending' },
-    { name: 'profitMargin', status: 'pending' },
-    { name: 'assetTurnover', status: 'pending' },
-    { name: 'equityMultiplier', status: 'pending' }
+    // Income Statement
+    { name: 'revenue_total', category: 'Income Statement', status: 'pending' },
+    { name: 'net_income', category: 'Income Statement', status: 'pending' },
+    { name: 'ebit_operating_income', category: 'Income Statement', status: 'pending' },
+    { name: 'pre_tax_income_ebt', category: 'Income Statement', status: 'pending' },
+    { name: 'tax_provision', category: 'Income Statement', status: 'pending' },
+    { name: 'interest_expense', category: 'Income Statement', status: 'pending' },
+    // Balance Sheet
+    { name: 'total_assets', category: 'Balance Sheet', status: 'pending' },
+    { name: 'total_equity', category: 'Balance Sheet', status: 'pending' },
+    { name: 'total_liabilities', category: 'Balance Sheet', status: 'pending' },
+    { name: 'goodwill', category: 'Balance Sheet', status: 'pending' },
+    { name: 'intangible_assets', category: 'Balance Sheet', status: 'pending' },
+    // DuPont Components (Calculated)
+    { name: 'net_profit_margin', category: 'DuPont Components', status: 'pending' },
+    { name: 'asset_turnover', category: 'DuPont Components', status: 'pending' },
+    { name: 'equity_multiplier', category: 'DuPont Components', status: 'pending' },
+    { name: 'tax_burden', category: 'DuPont Components', status: 'pending' },
+    { name: 'interest_burden', category: 'DuPont Components', status: 'pending' },
+    { name: 'roe_3step', category: 'DuPont Components', status: 'pending' },
+    { name: 'roe_5step', category: 'DuPont Components', status: 'pending' },
+    // Liquidity Ratios
+    { name: 'current_ratio', category: 'Liquidity Ratios', status: 'pending' },
+    { name: 'quick_ratio', category: 'Liquidity Ratios', status: 'pending' },
+    // Efficiency Ratios (AI/Manual)
+    { name: 'ar_days', category: 'Efficiency Ratios', status: 'pending' },
+    { name: 'inventory_days', category: 'Efficiency Ratios', status: 'pending' },
+    { name: 'ap_days', category: 'Efficiency Ratios', status: 'pending' },
+    { name: 'cash_conversion_cycle', category: 'Efficiency Ratios', status: 'pending' },
+    // Trend Analysis (AI/Manual)
+    { name: 'roe_trend_3y', category: 'Trend Analysis', status: 'pending', requiresInput: true },
+    { name: 'margin_trend_3y', category: 'Trend Analysis', status: 'pending', requiresInput: true },
+    { name: 'turnover_trend_3y', category: 'Trend Analysis', status: 'pending', requiresInput: true }
   ],
   REALESTATE: [
-    { name: 'noi', status: 'pending' },
-    { name: 'capRate', status: 'pending' },
-    { name: 'propertyValue', status: 'pending' },
-    { name: 'occupancyRate', status: 'pending' }
+    // Property Data
+    { name: 'property_type', category: 'Property Data', status: 'pending' },
+    { name: 'total_square_feet', category: 'Property Data', status: 'pending' },
+    { name: 'occupancy_rate', category: 'Property Data', status: 'pending' },
+    { name: 'rental_income_annual', category: 'Property Data', status: 'pending' },
+    // Operating Expenses
+    { name: 'property_taxes', category: 'Operating Expenses', status: 'pending' },
+    { name: 'insurance_costs', category: 'Operating Expenses', status: 'pending' },
+    { name: 'maintenance_costs', category: 'Operating Expenses', status: 'pending' },
+    { name: 'management_fees', category: 'Operating Expenses', status: 'pending' },
+    { name: 'utilities', category: 'Operating Expenses', status: 'pending' },
+    { name: 'other_operating_expenses', category: 'Operating Expenses', status: 'pending' },
+    // NOI Calculation
+    { name: 'gross_operating_income', category: 'NOI Calculation', status: 'pending' },
+    { name: 'total_operating_expenses', category: 'NOI Calculation', status: 'pending' },
+    { name: 'noi_net_operating_income', category: 'NOI Calculation', status: 'pending' },
+    // Cap Rate & Valuation (AI/Manual)
+    { name: 'market_cap_rate', category: 'Cap Rate & Valuation', status: 'pending', requiresInput: true },
+    { name: 'property_value_estimate', category: 'Cap Rate & Valuation', status: 'pending', requiresInput: true },
+    { name: 'price_per_sqft', category: 'Cap Rate & Valuation', status: 'pending', requiresInput: true },
+    { name: 'comparable_cap_rates', category: 'Cap Rate & Valuation', status: 'pending', requiresInput: true },
+    // Financing
+    { name: 'loan_amount', category: 'Financing', status: 'pending' },
+    { name: 'interest_rate', category: 'Financing', status: 'pending' },
+    { name: 'debt_service_coverage_ratio', category: 'Financing', status: 'pending' },
+    { name: 'cash_on_cash_return', category: 'Financing', status: 'pending' }
   ]
 };
 
@@ -1522,38 +1655,157 @@ app.get('/api/required-fields', (req, res) => {
   });
 });
 
-// Step 6: Retrieve live data (simulated)
+// Step 6: Retrieve live data - now returns ALL API data (read-only) + AI-generatable fields
 app.post('/api/retrieve-data', async (req, res) => {
   const { modelType } = req.body;
+  const ticker = valuationState.ticker || 'AAPL';
   
   // Simulate API retrieval delay
   await new Promise(resolve => setTimeout(resolve, 1500));
   
-  // Mock retrieved data
-  const retrievedData = {
-    revenue: { value: 394328000000, source: 'yfinance', status: 'found' },
-    operatingMargin: { value: 0.297, source: 'yfinance', status: 'found' },
-    taxRate: { value: 0.145, source: 'calculated', status: 'found' },
-    capex: { value: -10959000000, source: 'yfinance', status: 'found' },
-    depreciation: { value: 11519000000, source: 'yfinance', status: 'found' },
-    workingCapitalChange: { value: -1688000000, source: 'calculated', status: 'found' },
-    wacc: { value: 0.089, source: 'calculated', status: 'found' },
-    terminalGrowthRate: { value: 0.025, source: 'default', status: 'estimated' },
-    sharesOutstanding: { value: 15552752000, source: 'yfinance', status: 'found' },
-    currentPrice: { value: 189.84, source: 'yfinance', status: 'found' }
-  };
-  
-  valuationState = {
-    ...valuationState,
-    apiData: retrievedData,
-    dataRetrievedAt: new Date().toISOString()
-  };
-  
-  res.json({ 
-    success: true, 
-    data: retrievedData,
-    message: 'Data retrieved successfully'
-  });
+  try {
+    // Get comprehensive financial data from API
+    const financialData = await getComprehensiveFinancialData(ticker);
+    
+    // Get AI-generated inputs
+    const aiInputs = await getAIInputsForModel(ticker, modelType, financialData);
+    
+    // Structure response: API data (read-only) + AI data (can be generated/edited)
+    const retrievedData = {
+      apiData: {
+        // Market Structure
+        current_price: { value: financialData.market_structure.current_price, source: 'yfinance', status: 'found', editable: false },
+        shares_outstanding_diluted: { value: financialData.market_structure.shares_outstanding_diluted, source: 'yfinance', status: 'found', editable: false },
+        market_capitalization: { value: financialData.market_structure.market_capitalization, source: 'yfinance', status: 'found', editable: false },
+        enterprise_value: { value: financialData.market_structure.enterprise_value, source: 'calculated', status: 'found', editable: false },
+        total_debt: { value: financialData.market_structure.total_debt, source: 'calculated', status: 'found', editable: false },
+        cash_and_equivalents: { value: financialData.market_structure.cash_and_equivalents, source: 'calculated', status: 'found', editable: false },
+        net_debt: { value: financialData.market_structure.net_debt, source: 'calculated', status: 'found', editable: false },
+        beta_5y_monthly: { value: financialData.market_structure.beta_5y_monthly, source: 'yfinance', status: 'found', editable: false },
+        dividend_yield: { value: financialData.market_structure.dividend_yield, source: 'yfinance', status: 'found', editable: false },
+        // Income Statement
+        revenue_total: { value: financialData.income_statement_raw.revenue_total, source: 'yfinance', status: 'found', editable: false },
+        cost_of_revenue_cogs: { value: financialData.income_statement_raw.cost_of_revenue_cogs, source: 'calculated', status: 'found', editable: false },
+        gross_profit: { value: financialData.income_statement_raw.gross_profit, source: 'yfinance', status: 'found', editable: false },
+        sga_expense: { value: financialData.income_statement_raw.sga_expense, source: 'alphavantage', status: 'found', editable: false },
+        research_and_development: { value: financialData.income_statement_raw.research_and_development, source: 'alphavantage', status: 'found', editable: false },
+        ebitda: { value: financialData.income_statement_raw.ebitda, source: 'yfinance', status: 'found', editable: false },
+        depreciation_and_amortization: { value: financialData.income_statement_raw.depreciation_and_amortization, source: 'yfinance', status: 'found', editable: false },
+        ebit_operating_income: { value: financialData.income_statement_raw.ebit_operating_income, source: 'calculated', status: 'found', editable: false },
+        interest_expense: { value: financialData.income_statement_raw.interest_expense, source: 'alphavantage', status: 'found', editable: false },
+        net_income: { value: financialData.income_statement_raw.net_income, source: 'yfinance', status: 'found', editable: false },
+        eps_diluted: { value: financialData.income_statement_raw.eps_diluted, source: 'yfinance', status: 'found', editable: false },
+        // Balance Sheet
+        accounts_receivable: { value: financialData.balance_sheet_raw.accounts_receivable, source: 'alphavantage', status: 'found', editable: false },
+        inventory: { value: financialData.balance_sheet_raw.inventory, source: 'alphavantage', status: 'found', editable: false },
+        accounts_payable: { value: financialData.balance_sheet_raw.accounts_payable, source: 'alphavantage', status: 'found', editable: false },
+        net_ppe: { value: financialData.balance_sheet_raw.net_ppe, source: 'alphavantage', status: 'found', editable: false },
+        total_assets: { value: financialData.balance_sheet_raw.total_assets, source: 'alphavantage', status: 'found', editable: false },
+        total_liabilities: { value: financialData.balance_sheet_raw.total_liabilities, source: 'alphavantage', status: 'found', editable: false },
+        total_equity: { value: financialData.balance_sheet_raw.total_equity, source: 'alphavantage', status: 'found', editable: false },
+        // Cash Flow
+        operating_cash_flow_cfo: { value: financialData.cash_flow_raw.operating_cash_flow_cfo, source: 'alphavantage', status: 'found', editable: false },
+        capital_expenditures_capex: { value: financialData.cash_flow_raw.capital_expenditures_capex, source: 'alphavantage', status: 'found', editable: false },
+        free_cash_flow: { value: financialData.cash_flow_raw.free_cash_flow, source: 'calculated', status: 'found', editable: false },
+        change_in_working_capital: { value: financialData.cash_flow_raw.change_in_working_capital, source: 'alphavantage', status: 'found', editable: false },
+        dividends_paid: { value: financialData.cash_flow_raw.dividends_paid, source: 'alphavantage', status: 'found', editable: false },
+        share_repurchases: { value: financialData.cash_flow_raw.share_repurchases, source: 'alphavantage', status: 'found', editable: false },
+        // Calculated Metrics
+        gross_margin: { value: financialData.calculated_metrics_common.gross_margin, source: 'calculated', status: 'found', editable: false },
+        ebitda_margin: { value: financialData.calculated_metrics_common.ebitda_margin, source: 'calculated', status: 'found', editable: false },
+        operating_margin: { value: financialData.calculated_metrics_common.operating_margin, source: 'calculated', status: 'found', editable: false },
+        net_profit_margin: { value: financialData.calculated_metrics_common.net_profit_margin, source: 'calculated', status: 'found', editable: false },
+        effective_tax_rate: { value: financialData.calculated_metrics_common.effective_tax_rate, source: 'calculated', status: 'found', editable: false },
+        asset_turnover: { value: financialData.calculated_metrics_common.asset_turnover, source: 'calculated', status: 'found', editable: false },
+        roe: { value: financialData.calculated_metrics_common.roe, source: 'calculated', status: 'found', editable: false },
+        roic: { value: financialData.calculated_metrics_common.roic, source: 'calculated', status: 'found', editable: false },
+        debt_to_equity: { value: financialData.calculated_metrics_common.debt_to_equity, source: 'calculated', status: 'found', editable: false },
+        interest_coverage: { value: financialData.calculated_metrics_common.interest_coverage, source: 'calculated', status: 'found', editable: false },
+        revenue_growth_yoy: { value: financialData.calculated_metrics_common.revenue_growth_yoy, source: 'calculated', status: 'found', editable: false },
+        fcf_margin: { value: financialData.calculated_metrics_common.fcf_margin, source: 'calculated', status: 'found', editable: false },
+        // WACC Components
+        risk_free_rate_10y: { value: financialData.macro_indicators.risk_free_rate_10y, source: 'fred', status: 'found', editable: false },
+        equity_risk_premium: { value: financialData.macro_indicators.equity_risk_premium, source: 'damodaran', status: 'found', editable: false },
+        cost_of_equity_re: { value: financialData.wacc_components.cost_of_equity_re, source: 'calculated', status: 'found', editable: false },
+        cost_of_debt_pre_tax: { value: financialData.wacc_components.cost_of_debt_pre_tax, source: 'calculated', status: 'found', editable: false },
+        cost_of_debt_after_tax: { value: financialData.wacc_components.cost_of_debt_after_tax, source: 'calculated', status: 'found', editable: false },
+        wacc_calc_base: { value: financialData.wacc_components.wacc_calc_base, source: 'calculated', status: 'found', editable: false }
+      },
+      aiData: {
+        // Forecast Assumptions (AI-generated, can be edited)
+        terminal_growth_rate: { value: aiInputs.ai_contextual_forward_guidance?.long_term_growth_rate?.value || 0.025, source: 'ai', status: 'generated', editable: true, confidence: 0.85 },
+        forecast_revenue_growth_y1: { value: aiInputs.ai_contextual_forward_guidance?.revenue_growth_forecast?.y1 || 0.05, source: 'ai', status: 'generated', editable: true, confidence: 0.82 },
+        forecast_revenue_growth_y2: { value: aiInputs.ai_contextual_forward_guidance?.revenue_growth_forecast?.y2 || 0.06, source: 'ai', status: 'generated', editable: true, confidence: 0.78 },
+        forecast_revenue_growth_y3: { value: aiInputs.ai_contextual_forward_guidance?.revenue_growth_forecast?.y3 || 0.05, source: 'ai', status: 'generated', editable: true, confidence: 0.75 },
+        forecast_revenue_growth_y4: { value: aiInputs.ai_contextual_forward_guidance?.revenue_growth_forecast?.y4 || 0.045, source: 'ai', status: 'generated', editable: true, confidence: 0.72 },
+        forecast_revenue_growth_y5: { value: aiInputs.ai_contextual_forward_guidance?.revenue_growth_forecast?.y5 || 0.04, source: 'ai', status: 'generated', editable: true, confidence: 0.70 },
+        forecast_capex_percent: { value: aiInputs.ai_footnote_extractions?.capex_commitments?.percent_of_revenue || 0.035, source: 'ai', status: 'generated', editable: true, confidence: 0.80 },
+        forecast_depreciation_percent: { value: aiInputs.ai_footnote_extractions?.depreciation_schedule?.percent_of_gross_ppe || 0.029, source: 'ai', status: 'generated', editable: true, confidence: 0.78 },
+        forecast_wc_change_percent: { value: aiInputs.ai_api_hybrid_adjustments?.working_capital_projection?.annual_change_percent || -0.02, source: 'ai', status: 'generated', editable: true, confidence: 0.75 }
+      },
+      compsData: modelType === 'COMPS' ? {
+        peer_ev_ebitda_median: { value: aiInputs.ai_peer_matching_analysis?.peer_ev_ebitda_median || 13.1, source: 'ai', status: 'generated', editable: true, confidence: 0.88 },
+        peer_ev_sales_median: { value: aiInputs.ai_peer_matching_analysis?.peer_ev_sales_median || 4.6, source: 'ai', status: 'generated', editable: true, confidence: 0.85 },
+        peer_pe_median: { value: aiInputs.ai_peer_matching_analysis?.peer_pe_median || 26.8, source: 'ai', status: 'generated', editable: true, confidence: 0.87 },
+        peer_pb_median: { value: aiInputs.ai_peer_matching_analysis?.peer_pb_median || 9.4, source: 'ai', status: 'generated', editable: true, confidence: 0.84 },
+        selected_peer_multiple: { value: 'ev_ebitda', source: 'ai', status: 'suggested', editable: true, confidence: 0.90 },
+        discount_premium_percent: { value: aiInputs.ai_hybrid_valuation_suggestions?.peer_adjustment?.discount_premium || 0.05, source: 'ai', status: 'generated', editable: true, confidence: 0.75 }
+      } : {},
+      dupontData: modelType === 'DUPONT' ? {
+        ar_days: { value: financialData.calculated_metrics_common.ar_days, source: 'calculated', status: 'found', editable: false },
+        inventory_days: { value: financialData.calculated_metrics_common.inventory_days, source: 'calculated', status: 'found', editable: false },
+        ap_days: { value: financialData.calculated_metrics_common.ap_days, source: 'calculated', status: 'found', editable: false },
+        cash_conversion_cycle: { value: financialData.calculated_metrics_common.cash_conversion_cycle, source: 'calculated', status: 'found', editable: false },
+        roe_trend_3y: { value: aiInputs.ai_api_hybrid_adjustments?.roe_trend || 0.08, source: 'ai', status: 'generated', editable: true, confidence: 0.80 },
+        margin_trend_3y: { value: aiInputs.ai_api_hybrid_adjustments?.margin_trend || 0.02, source: 'ai', status: 'generated', editable: true, confidence: 0.78 },
+        turnover_trend_3y: { value: aiInputs.ai_api_hybrid_adjustments?.turnover_trend || -0.01, source: 'ai', status: 'generated', editable: true, confidence: 0.75 }
+      } : {},
+      realEstateData: modelType === 'REALESTATE' ? {
+        property_type: { value: 'Office', source: 'manual', status: 'pending', editable: true },
+        total_square_feet: { value: 500000, source: 'manual', status: 'pending', editable: true },
+        occupancy_rate: { value: aiInputs.ai_api_hybrid_adjustments?.occupancy_estimate || 0.92, source: 'ai', status: 'generated', editable: true, confidence: 0.75 },
+        rental_income_annual: { value: 25000000, source: 'manual', status: 'pending', editable: true },
+        property_taxes: { value: 2500000, source: 'manual', status: 'pending', editable: true },
+        insurance_costs: { value: 500000, source: 'manual', status: 'pending', editable: true },
+        maintenance_costs: { value: 1000000, source: 'manual', status: 'pending', editable: true },
+        management_fees: { value: 750000, source: 'manual', status: 'pending', editable: true },
+        utilities: { value: 600000, source: 'manual', status: 'pending', editable: true },
+        other_operating_expenses: { value: 400000, source: 'manual', status: 'pending', editable: true },
+        gross_operating_income: { value: 25000000, source: 'calculated', status: 'found', editable: false },
+        total_operating_expenses: { value: 5750000, source: 'calculated', status: 'found', editable: false },
+        noi_net_operating_income: { value: 19250000, source: 'calculated', status: 'found', editable: false },
+        market_cap_rate: { value: aiInputs.ai_hybrid_valuation_suggestions?.cap_rate_suggestion || 0.065, source: 'ai', status: 'generated', editable: true, confidence: 0.82 },
+        property_value_estimate: { value: 296153846, source: 'calculated', status: 'found', editable: false },
+        price_per_sqft: { value: 592.31, source: 'calculated', status: 'found', editable: false },
+        comparable_cap_rates: { value: [0.06, 0.065, 0.07], source: 'ai', status: 'generated', editable: true, confidence: 0.80 },
+        loan_amount: { value: 200000000, source: 'manual', status: 'pending', editable: true },
+        interest_rate: { value: 0.055, source: 'manual', status: 'pending', editable: true },
+        debt_service_coverage_ratio: { value: 1.45, source: 'calculated', status: 'found', editable: false },
+        cash_on_cash_return: { value: 0.085, source: 'calculated', status: 'found', editable: false }
+      } : {}
+    };
+    
+    valuationState = {
+      ...valuationState,
+      apiData: retrievedData.apiData,
+      aiData: retrievedData.aiData,
+      financialData,
+      aiInputs,
+      dataRetrievedAt: new Date().toISOString()
+    };
+    
+    res.json({ 
+      success: true, 
+      data: retrievedData,
+      message: 'Data retrieved successfully - API data is read-only, AI data can be generated or manually edited'
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      message: 'Failed to retrieve data'
+    });
+  }
 });
 
 // ============================================
