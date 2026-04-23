@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
-const yahooFinance = require('yahoo-finance2');
+const YahooFinance = require('yahoo-finance2').default;
+const yahooFinance = new YahooFinance();
 require('dotenv').config();
 
 // AI SDK imports
@@ -85,17 +86,15 @@ async function fetchFromAlphaVantage(functionName, params = {}) {
  * Native Node.js implementation - no Python required
  */
 async function fetchFromYFinance(ticker) {
-  const yf = yahooFinance.default || yahooFinance;
-  
   try {
     // Fetch quote data
-    const quote = await yf.quote(ticker);
+    const quote = await yahooFinance.quote(ticker);
     
     // Fetch financial statements
     const [incomeStatement, balanceSheet, cashFlow] = await Promise.all([
-      yf.quoteSummary(ticker, { modules: ['incomeStatementHistory'] }).catch(() => null),
-      yf.quoteSummary(ticker, { modules: ['balanceSheetHistory'] }).catch(() => null),
-      yf.quoteSummary(ticker, { modules: ['cashflowStatementHistory'] }).catch(() => null)
+      yahooFinance.quoteSummary(ticker, { modules: ['incomeStatementHistory'] }).catch(() => null),
+      yahooFinance.quoteSummary(ticker, { modules: ['balanceSheetHistory'] }).catch(() => null),
+      yahooFinance.quoteSummary(ticker, { modules: ['cashflowStatementHistory'] }).catch(() => null)
     ]);
     
     // Build comprehensive data structure
