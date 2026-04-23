@@ -26,7 +26,7 @@ const AI_CONFIG = {
   primary: 'gemini',
   fallback: 'groq',
   geminiModel: 'gemini-1.5-flash',
-  groqModel: 'llama-3.1-70b-versatile',
+  groqModel: 'llama-3.2-90b-vision-preview',
   maxRetries: 2,
   timeoutMs: 30000,
   confidenceThreshold: 0.7
@@ -627,8 +627,7 @@ async function callGeminiAI(prompt, systemInstruction = '') {
         topK: 40,
         topP: 0.95,
         maxOutputTokens: 4096,
-      },
-      signal: controller.signal
+      }
     });
     
     clearTimeout(timeoutId);
@@ -660,8 +659,8 @@ async function callGroqAI(prompt, systemInstruction = '') {
       model: AI_CONFIG.groqModel,
       temperature: 0.3,
       max_tokens: 4096,
-      top_p: 0.95,
-    }, { signal: controller.signal });
+      top_p: 0.95
+    });
     
     clearTimeout(timeoutId);
     return { success: true, data: completion.choices[0]?.message?.content || '', source: 'groq' };
