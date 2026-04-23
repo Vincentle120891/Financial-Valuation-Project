@@ -1,88 +1,51 @@
+# Compiled and build artifacts
+*.pyc
+__pycache__/
+*.o
+*.obj
+*.class
+*.exe
+*.dll
+*.so
+*.a
+*.out
+
 # Dependencies
 node_modules/
+venv/
+.venv/
+.env
+.env.local
+.env.*
 
 # Logs and temp files
 *.log
 *.tmp
-
-# Environment
-.env
-.env.local
-*.env.*
+*.swp
+*.swo
 
 # Editors
 .vscode/
 .idea/
 
-# Build artifacts
-dist/
-build/
-target/
-
-# Python
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-.Python
-env/
-venv/
-.venv/
-.venv.bak/
-pip-log.txt
-pip-delete-this-directory.txt
-.tox/
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-*.log
-.git/
-.mypy_cache/
-.pytest_cache/
-.hypothesis/
-
-# Node.js
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-node_modules/
-jspm_packages/
-web_modules/
-*.min.js
-*.min.css
-
-# Compiled and binary files
-*.exe
-*.dll
-*.so
-*.dylib
-*.class
-*.o
-*.obj
-*.a
-*.lib
-*.out
-*.swp
-*.swo
-
 # System files
 .DS_Store
 Thumbs.db
-.directory
-*.nib
-*~
-.DS_Store?
-ehthumbs.db
-Icon?
-*/Icon?
-.dir-locals.el
-*.un~
-Session.vim
-.netrwhist
-*~
+
+# Coverage
+coverage/
+htmlcov/
+.coverage
+
+# Distribution
+dist/
+build/
+target/
+.gradle/
+
+# Python cache
+.mypy_cache/
+.pytest_cache/
 
 # Compressed files
 *.zip
@@ -107,56 +70,3 @@ Session.vim
 *.tar.bz2
 *.tar.xz
 *.tar.zst
-
-# Coverage reports
-coverage/
-htmlcov/
-.coverage*
-
-# Testing
-.junit-cache/
-.nyc_output/
-istanbul*
-.nyc_output/
-
-# IDE specific
-.vs/
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# OS generated files
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
-*.nupkg
-*.gem
-*.tar.gz
-*.egg-info
-*.egg
-*.pyc
-*.pyo
-*.pyd
-*.so
-*.dylib
-*.dll
-*.class
-*.o
-*.obj
-*.a
-*.lib
-*.out
-*.swp
-*.swo
-*.log
-*.tmp
-*.bak
-*.backup
-*.swp
-*.swo
-*~
