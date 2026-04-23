@@ -34,8 +34,8 @@ export const getRequiredFields = async (modelType) => {
   return response.data;
 };
 
-export const retrieveData = async (modelType) => {
-  const response = await api.post('/retrieve-data', { modelType });
+export const retrieveData = async (modelType, ticker) => {
+  const response = await api.post('/retrieve-data', { modelType, ticker });
   return response.data;
 };
 

@@ -85,7 +85,10 @@ const ValuationFlow = () => {
       const response = await fetch('http://localhost:5000/api/retrieve-data', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ modelType: selectedModel })
+        body: JSON.stringify({ 
+          modelType: selectedModel,
+          ticker: selectedCompany?.ticker
+        })
       });
       const data = await response.json();
       if (data.success) {
