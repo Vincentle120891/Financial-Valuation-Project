@@ -1344,22 +1344,51 @@ const benchmarkRanges = {
 // API Routes
 
 // Step 2: Search tickers
-app.get('/api/search', (req, res) => {
+app.get('/api/search', async (req, res) => {
   const query = req.query.q?.toUpperCase() || '';
-  
-  // Simulate API search
-  const results = Object.values(mockTickerSearch)
-    .filter(item => 
-      item.ticker.includes(query) || 
+
+  if (!query) {
+    return res.json({ success: true, data: [], message: 'No query provided' });
+  }
+
+  // First check mock data
+  const mockResults = Object.values(mockTickerSearch)
+    .filter(item =>
+      item.ticker.includes(query) ||
       item.name.toUpperCase().includes(query)
     )
     .slice(0, 5);
-  
-  if (results.length === 0) {
-    return res.json({ success: true, data: [], message: 'No results found' });
+
+  if (mockResults.length > 0) {
+    return res.json({ success: true, data: mockResults });
   }
+
+  // If not found in mock data, try to fetch from yfinance
+  const scriptPath = path.join(__dirname, 'yfinance_data.py');
   
-  res.json({ success: true, data: results });
+  exec(`python "${scriptPath}" ${query}`, (error, stdout, stderr) => {
+    if (error) {
+      return res.json({ success: true, data: [], message: 'No results found' });
+    }
+    try {
+      const result = JSON.parse(stdout);
+      if (result.success && result.data) {
+        const metadata = result.data.metadata || {};
+        return res.json({ 
+          success: true, 
+          data: [{
+            ticker: query,
+            name: metadata.company_name || `${query} Inc.`,
+            exchange: metadata.exchange || 'UNKNOWN'
+          }] 
+        });
+      } else {
+        return res.json({ success: true, data: [], message: 'No results found' });
+      }
+    } catch (parseError) {
+      return res.json({ success: true, data: [], message: 'No results found' });
+    }
+  });
 });
 
 // Step 3: Select company
