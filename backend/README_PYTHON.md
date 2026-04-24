@@ -1,50 +1,125 @@
 # Financial Valuation Backend - Python/FastAPI
 
-This is the Python migration of the financial valuation backend, originally built with Node.js/Express. The migration was done to resolve issues with the yahoo-finance2 npm package by using the more reliable yfinance Python library.
+Complete 12-step financial valuation workflow with DCF, DuPont Analysis, and COMPS models. Powered by yfinance, Alpha Vantage, and AI (Gemini/Groq) for intelligent assumptions.
 
-## Features
+## 🚀 Quick Start
 
-- **FastAPI Framework**: Modern, fast (high-performance), easy-to-use API framework
-- **yfinance Integration**: Reliable Yahoo Finance data fetching
-- **DCF Valuation Engine**: Complete discounted cash flow analysis
+```bash
+cd backend
+pip install -r requirements.txt
+python main.py
+```
+
+Access the API at `http://localhost:8000` and interactive docs at `http://localhost:8000/docs`.
+
+## 📋 Table of Contents
+
+- [Features](#features)
+- [12-Step Workflow](#12-step-workflow)
+- [Installation](#installation)
+- [Configuration](#configuration)
+- [Running the Server](#running-the-server)
+- [API Endpoints](#api-endpoints)
+- [Data Flow](#data-flow)
+- [Project Structure](#project-structure)
+- [Frontend Integration](#frontend-integration)
+- [Testing](#testing)
+- [Troubleshooting](#troubleshooting)
+
+## ✨ Features
+
+- **FastAPI Framework**: High-performance, async-ready API with automatic OpenAPI documentation
+- **yfinance Integration**: Reliable Yahoo Finance data for global markets (US, Vietnam, etc.)
+- **Alpha Vantage API**: Supplemental financial statements and company overview
+- **DCF Valuation Engine**: Complete discounted cash flow analysis with sensitivity & scenario analysis
 - **DuPont Analysis**: 3-step and 5-step ROE decomposition
-- **AI-Powered Suggestions**: Integration with Gemini and Groq for intelligent input suggestions
-- **Alpha Vantage Integration**: Additional financial data source
+- **COMPS Model**: Comparable company analysis with peer multiples
+- **AI-Powered Assumptions**: Intelligent WACC, growth rates, and forecasts via Gemini/Groq
+- **12-Step Guided Workflow**: Structured user journey from search to final valuation
+- **Market Toggle**: Support for Vietnamese (`.VN`) and international markets
 
-## Installation
+## 🔄 12-Step Workflow
+
+| Step | Action | Endpoint | Description |
+|------|--------|----------|-------------|
+| 1 | **Search** | `POST /api/step-1-search` | User inputs ticker/company name + market toggle (VN/International) |
+| 2 | **Show Results** | (Response from Step 1) | Display up to 10 related tickers |
+| 3 | **Select Ticker** | `POST /api/step-3-select-ticker` | User chooses specific ticker, creates session |
+| 4 | **Choose Models** | `POST /api/step-4-select-models` | Select valuation models (DCF, DuPont, COMPS) |
+| 5 | **Review Inputs** | (Response from Step 4) | Show auto-retrieved vs. required manual inputs |
+| 6 | **Confirm** | `POST /api/step-6-confirm-inputs` | User confirms to proceed with data fetch |
+| 7 | **Fetch Data** | `POST /api/step-7-8-fetch-data` | yFinance & Alpha Vantage retrieve financial data |
+| 8 | **Display Data** | (Response from Step 7) | Show fetched numbers with error handling |
+| 9 | **AI Generation** | `POST /api/step-9-generate-ai` | AI generates WACC, growth rates, benchmarks, trends, explanations |
+| 10 | **User Review** | `POST /api/step-10-confirm-assumptions` | User accepts/edits AI suggestions with peer comparisons |
+| 11 | **Valuation** | `POST /api/step-11-12-valuate` | Run valuation engine |
+| 12 | **Results** | (Response from Step 11) | Show valuation with sensitivity & scenario analysis |
+
+## 🛠️ Installation
 
 ### Prerequisites
 
-- Python 3.9 or higher
-- pip (Python package manager)
+- **Python 3.9+** (recommended: 3.11 or 3.12)
+- **pip** (Python package manager)
+- **Virtual environment** (recommended: `venv` or `conda`)
 
-### Setup
+### Setup Steps
 
-1. Navigate to the backend directory:
-```bash
-cd backend
-```
+1. **Navigate to backend directory:**
+   ```bash
+   cd /workspace/backend
+   ```
 
-2. Install dependencies:
-```bash
-pip install -r requirements.txt
-```
+2. **Create virtual environment (recommended):**
+   ```bash
+   python -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   ```
 
-3. Set up environment variables (optional):
-```bash
-cp .env.example .env
-# Edit .env with your API keys
-```
+3. **Install dependencies:**
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-Required environment variables:
-- `ALPHA_VANTAGE_KEY`: Your Alpha Vantage API key (default: 'demo')
-- `GEMINI_API_KEY`: Google Gemini API key (optional, for AI features)
-- `GROQ_API_KEY`: Groq API key (optional, for AI fallback)
-- `PORT`: Server port (default: 8000)
+4. **Set up environment variables:**
+   ```bash
+   cp .env.example .env
+   # Edit .env with your API keys
+   ```
 
-## Running the Server
+## 🔐 Configuration
+
+### Environment Variables (.env)
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `ALPHA_VANTAGE_KEY` | ✅ Yes | `demo` | Alpha Vantage API key for financial statements |
+| `GEMINI_API_KEY` | ⚠️ Recommended | - | Google Gemini API key for AI suggestions |
+| `GROQ_API_KEY` | ⚠️ Optional | - | Groq API key (fallback for AI) |
+| `PORT` | No | `8000` | Server port |
+| `HOST` | No | `0.0.0.0` | Server host |
+| `DEBUG` | No | `true` | Enable debug mode |
+
+### AI Model Configuration
+
+| Model | Provider | Use Case |
+|-------|----------|----------|
+| `gemini-3.1-flash-lite-preview` | Google Gemini | Primary AI for forecasts & benchmarks |
+| `qwen/qwen3-32b` | Groq | Fallback AI model |
+
+### Security Notice
+
+⚠️ **Never commit `.env` to version control.** The file is included in `.gitignore` by default.
+
+If you accidentally exposed API keys:
+1. Revoke them immediately in the respective provider dashboards
+2. Generate new keys
+3. Update your `.env` file
+
+## 🖥️ Running the Server
 
 ### Development Mode (with auto-reload)
+
 ```bash
 python main.py
 ```
@@ -55,79 +130,162 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 ### Production Mode
+
 ```bash
 uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4
 ```
 
-The API will be available at `http://localhost:8000`
+### With Gunicorn (recommended for production)
 
-## API Documentation
+```bash
+gunicorn main:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000
+```
 
-Once the server is running, you can access:
+## 📡 API Endpoints
 
-- **Interactive API Docs (Swagger UI)**: http://localhost:8000/docs
-- **Alternative API Docs (ReDoc)**: http://localhost:8000/redoc
-- **Health Check**: http://localhost:8000/api/health
+### Core Workflow Endpoints
 
-## Key Endpoints
+| Method | Endpoint | Step | Description |
+|--------|----------|------|-------------|
+| `POST` | `/api/step-1-search` | 1 | Search tickers (body: `{query, market}`) |
+| `POST` | `/api/step-3-select-ticker` | 3 | Select ticker, create session |
+| `POST` | `/api/step-4-select-models` | 4 | Choose models (DCF, DuPont, COMPS) |
+| `POST` | `/api/step-6-confirm-inputs` | 6 | Confirm before data fetch |
+| `POST` | `/api/step-7-8-fetch-data` | 7-8 | Retrieve financial data |
+| `POST` | `/api/step-9-generate-ai` | 9 | Generate AI assumptions |
+| `POST` | `/api/step-10-confirm-assumptions` | 10 | User confirms/edits assumptions |
+| `POST` | `/api/step-11-12-valuate` | 11-12 | Run valuation & get results |
+
+### Utility Endpoints
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/search?q=AAPL` | Search for tickers |
-| POST | `/api/select-company` | Select a company for analysis |
-| GET | `/api/models` | Get available valuation models |
-| POST | `/api/select-model` | Select a valuation model |
-| GET | `/api/required-fields?model=DCF` | Get required input fields |
-| POST | `/api/retrieve-data` | Fetch financial data for a ticker |
-| GET | `/api/financial-data/{ticker}` | Get comprehensive financial data |
-| GET | `/api/ai-inputs/{ticker}` | Get AI-suggested inputs |
-| POST | `/api/confirm-values` | Confirm input values |
-| GET | `/api/scenarios` | Get scenario templates |
-| POST | `/api/select-scenario` | Select a scenario |
-| POST | `/api/run-valuation` | Run valuation calculation |
-| GET | `/api/results` | Get valuation results |
-| POST | `/api/reset` | Reset state |
+| `GET` | `/api/health` | Health check |
+| `GET` | `/api/models` | List available models |
+| `GET` | `/api/scenarios` | Get scenario templates |
+| `POST` | `/api/reset` | Reset session state |
 
-## Project Structure
+### Interactive Documentation
+
+- **Swagger UI**: http://localhost:8000/docs
+- **ReDoc**: http://localhost:8000/redoc
+- **OpenAPI JSON**: http://localhost:8000/openapi.json
+
+## 📊 Data Flow
+
+```
+┌──────────────┐
+│ 1. User Input│ → Ticker + Market (VN/Intl)
+└──────┬───────┘
+       ↓
+┌──────────────┐
+│ 2. Search    │ → Up to 10 tickers
+└──────┬───────┘
+       ↓
+┌──────────────┐
+│ 3. Select    │ → Create session
+└──────┬───────┘
+       ↓
+┌──────────────┐
+│ 4. Models    │ → DCF/DuPont/COMPS
+└──────┬───────┘
+       ↓
+┌──────────────┐
+│ 5-6. Review  │ → Confirm inputs
+└──────┬───────┘
+       ↓
+┌──────────────┐
+│ 7-8. Fetch   │ → yFinance + Alpha Vantage
+└──────┬───────┘
+       ↓
+┌──────────────┐
+│ 9. AI Engine │ → WACC, growth, benchmarks
+└──────┬───────┘
+       ↓
+┌──────────────┐
+│ 10. Review   │ → User edits assumptions
+└──────┬───────┘
+       ↓
+┌──────────────┐
+│ 11. Valuation│ → DCF/DuPont/COMPS calculation
+└──────┬───────┘
+       ↓
+┌──────────────┐
+│ 12. Results  │ → Value + Sensitivity + Scenarios
+└──────────────┘
+```
+
+## 📁 Project Structure
 
 ```
 backend/
-├── main.py                 # FastAPI application (main entry point)
-├── yfinance_data.py        # Yahoo Finance data fetching
-├── dcf_engine.py           # DCF valuation calculations
-├── dupont_engine.py        # DuPont analysis calculations
-├── requirements.txt        # Python dependencies
-├── .env                    # Environment variables (create from .env.example)
-└── README_PYTHON.md       # This file
+├── main.py                     # FastAPI application (entry point)
+├── yfinance_data.py            # Yahoo Finance data fetching
+├── dcf_engine.py               # DCF valuation calculations
+├── dupont_engine.py            # DuPont analysis calculations
+├── comps_engine.py             # COMPS valuation (if exists)
+├── ai_engine.py                # AI integration (Gemini/Groq)
+├── requirements.txt            # Python dependencies
+├── .env                        # Environment variables (gitignored)
+├── .env.example                # Example environment file
+├── README.md                   # This file
+├── FLOW_IMPLEMENTATION.md      # Detailed workflow documentation
+├── draft/                      # Archived Node.js code
+│   ├── server.js
+│   └── ...
+└── public/                     # Static files (if any)
 ```
 
-## Migration Notes
+## 🌐 Frontend Integration
 
-### From Node.js to Python
-
-The following components were migrated:
-
-1. **Server**: Express.js → FastAPI
-2. **Yahoo Finance**: yahoo-finance2 npm → yfinance Python
-3. **DCF Engine**: JavaScript → Python
-4. **DuPont Engine**: JavaScript → Python
-
-### API Compatibility
-
-The Python backend maintains API compatibility with the original Node.js version where possible. However, some endpoints may have slight differences in response structure.
-
-### Frontend Configuration
-
-Update your frontend's API base URL to point to the Python backend:
+### Update API Base URL
 
 ```javascript
 // frontend/src/services/api.js
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api';
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 ```
 
-Note: The default port changed from 5000 (Node.js) to 8000 (FastAPI).
+### Example API Calls
 
-## Testing
+```javascript
+// Step 1: Search
+const searchResponse = await fetch(`${API_BASE_URL}/api/step-1-search`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ query: 'AAPL', market: 'international' })
+});
+
+// Step 3: Select Ticker
+const selectResponse = await fetch(`${API_BASE_URL}/api/step-3-select-ticker`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ ticker: 'AAPL' })
+});
+
+// Step 9: Generate AI Assumptions
+const aiResponse = await fetch(`${API_BASE_URL}/api/step-9-generate-ai`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ models: ['DCF', 'DuPont'] })
+});
+```
+
+### CORS Configuration
+
+The backend is configured to accept requests from common frontend ports. To customize:
+
+```python
+# In main.py
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://localhost:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+```
+
+## 🧪 Testing
 
 ### Test Individual Modules
 
@@ -142,48 +300,126 @@ python dcf_engine.py
 python dupont_engine.py
 ```
 
-### Test API Endpoints
+### Test API Endpoints (curl)
 
-Using curl:
 ```bash
 # Health check
 curl http://localhost:8000/api/health
 
-# Search for a ticker
-curl "http://localhost:8000/api/search?q=AAPL"
+# Step 1: Search
+curl -X POST http://localhost:8000/api/step-1-search \
+  -H "Content-Type: application/json" \
+  -d '{"query": "Apple", "market": "international"}'
 
-# Get financial data
-curl http://localhost:8000/api/financial-data/AAPL
+# Step 7-8: Fetch data (after selecting ticker)
+curl -X POST http://localhost:8000/api/step-7-8-fetch-data \
+  -H "Content-Type: application/json" \
+  -d '{"ticker": "AAPL"}'
 ```
 
-## Troubleshooting
+### Pytest (if installed)
+
+```bash
+pip install pytest httpx pytest-asyncio
+pytest tests/
+```
+
+## 🔧 Troubleshooting
 
 ### Port Already in Use
 
-If port 8000 is already in use, change it:
 ```bash
+# Find process using port 8000
+lsof -i :8000
+
+# Kill the process
+kill -9 <PID>
+
+# Or use a different port
 export PORT=8001
 python main.py
 ```
 
-### yfinance Issues
+### yfinance Data Issues
 
-If yfinance fails to fetch data:
-1. Check your internet connection
-2. Verify the ticker symbol is correct
-3. Some international tickers may require exchange suffix (e.g., `VNM.HM` for Vietnam)
+1. **Check internet connection**
+2. **Verify ticker symbol**: Some tickers require exchange suffix (e.g., `VNM.HM` for Vietnam)
+3. **Rate limiting**: Wait a few seconds between requests
+4. **Try Alpha Vantage fallback**: Ensure `ALPHA_VANTAGE_KEY` is set
 
 ### AI Features Not Working
 
-AI features are optional. If API keys are not provided, the system will use heuristic-based suggestions instead.
+1. **Check API keys**: Verify `GEMINI_API_KEY` and/or `GROQ_API_KEY` in `.env`
+2. **Network issues**: Ensure outbound HTTPS access
+3. **Fallback mode**: System uses heuristics if AI is unavailable
 
-## Performance Considerations
+### Dependencies Issues
 
-- The Python backend uses async/await for I/O operations
-- For production, consider using gunicorn with uvicorn workers
-- Implement caching for frequently accessed data
-- Consider using a database instead of in-memory state storage
+```bash
+# Upgrade pip
+pip install --upgrade pip
 
-## License
+# Reinstall dependencies
+pip install -r requirements.txt --force-reinstall
+
+# Check Python version
+python --version  # Should be 3.9+
+```
+
+### Virtual Environment Issues
+
+```bash
+# Deactivate and reactivate
+deactivate
+source venv/bin/activate  # Windows: venv\Scripts\activate
+
+# Verify activation
+which python  # Should point to venv
+```
+
+## 📦 Dependencies
+
+### Core Dependencies
+
+| Package | Version | Purpose |
+|---------|---------|---------|
+| `fastapi` | ≥0.116.0 | Web framework |
+| `uvicorn[standard]` | ≥0.35.0 | ASGI server |
+| `aiohttp` | ≥3.9.0 | Async HTTP client |
+| `yfinance` | ≥1.0.0 | Yahoo Finance data |
+| `pydantic` | ≥2.0.0 | Data validation |
+| `python-dotenv` | ≥1.0.0 | Environment variables |
+
+### Optional Dependencies
+
+| Package | Version | Purpose |
+|---------|---------|---------|
+| `groq` | ≥0.11.0 | Groq LLM client |
+| `google-generativeai` | ≥0.8.0 | Google Gemini SDK |
+| `pytest` | ≥8.0.0 | Testing framework |
+| `httpx` | ≥0.27.0 | Async testing client |
+
+### Install All (including optional)
+
+```bash
+pip install fastapi uvicorn[standard] aiohttp yfinance pydantic python-dotenv groq google-generativeai pytest httpx
+```
+
+## 📝 License
 
 Same as the original project.
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Run tests
+5. Submit a pull request
+
+## 📞 Support
+
+For issues or questions:
+1. Check the [FLOW_IMPLEMENTATION.md](./FLOW_IMPLEMENTATION.md) for detailed workflow docs
+2. Review the interactive API docs at `/docs`
+3. Check the troubleshooting section above

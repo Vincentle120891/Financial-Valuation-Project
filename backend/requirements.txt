@@ -1,26 +1,49 @@
 # Financial Valuation Backend - Python Dependencies
-# Migrated from Node.js to Python/FastAPI
+# Complete 12-step workflow with DCF, DuPont, COMPS models
 
-# Web Framework
+# =============================================================================
+# WEB FRAMEWORK
+# =============================================================================
 fastapi>=0.116.0
 uvicorn[standard]>=0.35.0
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
 
-# HTTP Client (for Alpha Vantage API)
+# =============================================================================
+# HTTP CLIENTS (for Alpha Vantage API and external requests)
+# =============================================================================
 aiohttp>=3.9.0
+httpx>=0.27.0
 
-# Financial Data
+# =============================================================================
+# FINANCIAL DATA
+# =============================================================================
 yfinance>=1.0.0
 
-# AI/LLM SDKs (optional)
-# google-generativeai>=0.8.0  # Uncomment if using Gemini
-groq>=0.11.0  # For Groq LLM
+# =============================================================================
+# AI/LLM SDKs
+# =============================================================================
+groq>=0.11.0
+# google-generativeai>=0.8.0  # Uncomment if using Gemini directly
 
-# Data Validation
-pydantic>=2.0.0
-
-# Environment Variables
+# =============================================================================
+# ENVIRONMENT VARIABLES
+# =============================================================================
 python-dotenv>=1.0.0
 
-# Testing (optional)
+# =============================================================================
+# PRODUCTION SERVER (optional but recommended)
+# =============================================================================
+gunicorn>=21.0.0
+
+# =============================================================================
+# TESTING (optional)
+# =============================================================================
 # pytest>=8.0.0
-# httpx>=0.27.0  # For async testing
+# pytest-asyncio>=0.23.0
+
+# =============================================================================
+# UTILITIES (optional)
+# =============================================================================
+# python-multipart>=0.0.6  # For form data handling
+# fastapi-cors>=0.0.6  # Enhanced CORS support
