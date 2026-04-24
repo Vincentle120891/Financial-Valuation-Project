@@ -72,42 +72,89 @@ def get_session(session_id: str) -> Dict:
     return sessions[session_id]
 
 def search_tickers_yahoo(query: str, market: str) -> List[Dict]:
-    """Search tickers using yfinance"""
+    """Search tickers by symbol or company name"""
     results = []
+    
+    # Predefined mappings for company name search
+    international_companies = {
+        "APPLE": {"symbol": "AAPL", "name": "Apple Inc.", "exchange": "NASDAQ"},
+        "MICROSOFT": {"symbol": "MSFT", "name": "Microsoft Corporation", "exchange": "NASDAQ"},
+        "ALPHABET": {"symbol": "GOOGL", "name": "Alphabet Inc.", "exchange": "NASDAQ"},
+        "GOOGLE": {"symbol": "GOOGL", "name": "Alphabet Inc.", "exchange": "NASDAQ"},
+        "AMAZON": {"symbol": "AMZN", "name": "Amazon.com Inc.", "exchange": "NASDAQ"},
+        "NVIDIA": {"symbol": "NVDA", "name": "NVIDIA Corporation", "exchange": "NASDAQ"},
+        "META": {"symbol": "META", "name": "Meta Platforms Inc.", "exchange": "NASDAQ"},
+        "FACEBOOK": {"symbol": "META", "name": "Meta Platforms Inc.", "exchange": "NASDAQ"},
+        "TESLA": {"symbol": "TSLA", "name": "Tesla Inc.", "exchange": "NASDAQ"},
+        "JPMORGAN": {"symbol": "JPM", "name": "JPMorgan Chase & Co.", "exchange": "NYSE"},
+        "JPM": {"symbol": "JPM", "name": "JPMorgan Chase & Co.", "exchange": "NYSE"},
+        "VISA": {"symbol": "V", "name": "Visa Inc.", "exchange": "NYSE"},
+        "BERKSHIRE": {"symbol": "BRK.B", "name": "Berkshire Hathaway Inc.", "exchange": "NYSE"},
+        "BRK": {"symbol": "BRK.B", "name": "Berkshire Hathaway Inc.", "exchange": "NYSE"},
+    }
+    
+    vietnamese_companies = {
+        "VNM": {"symbol": "VNM.VN", "name": "Vietnam Dairy Products JSC", "exchange": "HOSE"},
+        "VINAMILK": {"symbol": "VNM.VN", "name": "Vietnam Dairy Products JSC", "exchange": "HOSE"},
+        "VCB": {"symbol": "VCB.VN", "name": "Joint Stock Commercial Bank for Foreign Trade of Vietnam", "exchange": "HOSE"},
+        "VIETCOMBANK": {"symbol": "VCB.VN", "name": "Joint Stock Commercial Bank for Foreign Trade of Vietnam", "exchange": "HOSE"},
+        "HPG": {"symbol": "HPG.VN", "name": "Hoa Phat Group JSC", "exchange": "HOSE"},
+        "VIC": {"symbol": "VIC.VN", "name": "Vingroup JSC", "exchange": "HOSE"},
+        "VINGROUP": {"symbol": "VIC.VN", "name": "Vingroup JSC", "exchange": "HOSE"},
+        "VRE": {"symbol": "VRE.VN", "name": "Vincom Retail JSC", "exchange": "HOSE"},
+        "MSN": {"symbol": "MSN.VN", "name": "Masan Group Corporation", "exchange": "HOSE"},
+        "MWG": {"symbol": "MWG.VN", "name": "Mobile World Investment Corporation", "exchange": "HOSE"},
+        "FPT": {"symbol": "FPT.VN", "name": "FPT Corporation", "exchange": "HOSE"},
+        "SAB": {"symbol": "SAB.VN", "name": "Sabeco - Saigon Beer Alcohol Beverage Corporation", "exchange": "HOSE"},
+        "GAS": {"symbol": "GAS.VN", "name": "PetroVietnam Gas JSC", "exchange": "HOSE"},
+    }
+    
+    query_upper = query.upper().strip()
+    
     try:
-        # Note: yfinance search is limited. For robust VN market support, 
-        # a dedicated API like FiinTrade or CafeF scraper might be needed later.
-        # Here we simulate broad search.
         if market == "vietnamese":
-            # Append .VN for yahoo if not present
-            search_term = query if ".VN" in query else f"{query}.VN"
-            ticker = yf.Ticker(search_term)
-            # Quick validation
-            if ticker.info and ticker.info.get('symbol'):
+            # Check if query matches a Vietnamese company name or ticker
+            if query_upper in vietnamese_companies:
+                company = vietnamese_companies[query_upper]
                 results.append({
-                    "symbol": ticker.info.get('symbol'),
-                    "name": ticker.info.get('longName', ticker.info.get('shortName', 'N/A')),
-                    "exchange": ticker.info.get('exchange', 'HOSE/HNX'),
+                    "symbol": company["symbol"],
+                    "name": company["name"],
+                    "exchange": company["exchange"],
                     "market": "vietnamese"
                 })
+            else:
+                # Try direct ticker lookup with .VN suffix
+                search_term = query if ".VN" in query else f"{query}.VN"
+                ticker = yf.Ticker(search_term)
+                if ticker.info and ticker.info.get('symbol'):
+                    results.append({
+                        "symbol": ticker.info.get('symbol'),
+                        "name": ticker.info.get('longName', ticker.info.get('shortName', 'N/A')),
+                        "exchange": ticker.info.get('exchange', 'HOSE/HNX'),
+                        "market": "vietnamese"
+                    })
         else:
-            # International search simulation (yfinance doesn't have a direct search API v2 stable)
-            # We assume user types valid ticker or we use a placeholder logic
-            ticker = yf.Ticker(query)
-            if ticker.info and ticker.info.get('symbol'):
+            # International market
+            # Check if query matches a company name
+            if query_upper in international_companies:
+                company = international_companies[query_upper]
                 results.append({
-                    "symbol": ticker.info.get('symbol'),
-                    "name": ticker.info.get('longName', ticker.info.get('shortName', 'N/A')),
-                    "exchange": ticker.info.get('exchange', 'US'),
+                    "symbol": company["symbol"],
+                    "name": company["name"],
+                    "exchange": company["exchange"],
                     "market": "international"
                 })
+            else:
+                # Try direct ticker lookup
+                ticker = yf.Ticker(query)
+                if ticker.info and ticker.info.get('symbol'):
+                    results.append({
+                        "symbol": ticker.info.get('symbol'),
+                        "name": ticker.info.get('longName', ticker.info.get('shortName', 'N/A')),
+                        "exchange": ticker.info.get('exchange', 'US'),
+                        "market": "international"
+                    })
         
-        # In a real app, integrate a proper search API (e.g., Alpha Vantage Symbol Search)
-        # For now, returning mock expanded results if exact match found to satisfy "up to 10" requirement
-        if len(results) == 1:
-            # Simulate related tickers (peers) for demo purposes if only 1 found
-            pass 
-            
     except Exception as e:
         print(f"Search error: {e}")
         
