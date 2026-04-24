@@ -15,6 +15,11 @@ load_dotenv()
 
 app = FastAPI(title="Valuation Engine API", version="2.0")
 
+# Root endpoint
+@app.get("/")
+async def root():
+    return {"message": "Valuation Engine API is running", "docs": "/docs"}
+
 # CORS Configuration
 app.add_middleware(
     CORSMiddleware,
@@ -409,7 +414,7 @@ async def run_valuation(request: CalculationRequest):
     
     return {
         "status": "completed",
-        "results": results,
+        "result": results,
         "inputs_used": session['confirmed_assumptions']
     }
 
