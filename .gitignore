@@ -4,6 +4,39 @@ node_modules/
 
 # Build artifacts
 frontend/build/
+# Virtual Environment
+venv/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+.venv/
+venv/
+ENV/
+.ENV/
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.log
+.git/modules/
+.pytest_cache/
+.hypothesis/
+
+# Dependencies
+node_modules/
+
+# Logs
+*.log
 
 # Environment variables
 .env
@@ -14,8 +47,19 @@ frontend/build/
 .vscode/
 .idea/
 
-# OS
+# Build artifacts
+dist/
+build/
+*.egg-info/
+*.so
+
+# OS generated files
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
 
 # Logs
