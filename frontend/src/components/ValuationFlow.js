@@ -84,6 +84,16 @@ const ValuationFlow = () => {
       console.log('Select model response:', data);
       if (data.message) {
         setCurrentStep(5);
+        // Immediately fetch required inputs after moving to step 5
+        const inputsResponse = await fetch(API_BASE_URL + '/step-5-6-prepare-inputs', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ session_id: sessionId })
+        });
+        const inputsData = await inputsResponse.json();
+        if (inputsData.status) {
+          setRequiredFields([{ category: 'General', name: 'Ticker Confirmation', requiresInput: true }]);
+        }
       }
     } catch (err) {
       console.error('Select model error:', err);

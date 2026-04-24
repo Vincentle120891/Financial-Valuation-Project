@@ -290,18 +290,34 @@ def run_valuation_engine(session_data: Dict) -> Dict:
     
     # Simple DCF Mock Calculation
     fcf = list(financials.get('free_cash_flow', {}).values())[0] if financials.get('free_cash_flow') else 1000000
-    wacc = assumptions['wacc']
-    tg = assumptions['terminal_growth']
-    growth_rates = assumptions['revenue_growth_forecast']
+    
+    # Handle None or invalid FCF (NaN check)
+    if fcf is None or (isinstance(fcf, float) and (fcf != fcf)):
+        fcf = 1000000
+    
+    wacc = assumptions.get('wacc', 0.08)
+    tg = assumptions.get('terminal_growth', 0.02)
+    growth_rates = assumptions.get('revenue_growth_forecast', [0.05, 0.05, 0.04, 0.04, 0.03])
+    
+    # Ensure wacc and tg are valid numbers
+    if wacc is None or (isinstance(wacc, float) and (wacc != wacc)):
+        wacc = 0.08
+    if tg is None or (isinstance(tg, float) and (tg != tg)):
+        tg = 0.02
     
     # Project FCF (Simplified: FCF grows at revenue rate)
     projected_fcf = []
     current_fcf = fcf
     for r in growth_rates:
+        if r is None or (isinstance(r, float) and (r != r)):
+            r = 0.05
         current_fcf *= (1 + r)
         projected_fcf.append(current_fcf)
     
-    # Terminal Value
+    # Terminal Value - protect against division by zero or invalid values
+    if wacc <= tg:
+        wacc = tg + 0.01  # Ensure wacc > tg
+    
     terminal_value = projected_fcf[-1] * (1 + tg) / (wacc - tg)
     
     # Discounting
@@ -309,8 +325,30 @@ def run_valuation_engine(session_data: Dict) -> Dict:
     pv_tv = terminal_value / ((1 + wacc) ** len(projected_fcf))
     
     enterprise_value = pv_fcf + pv_tv
-    equity_value = enterprise_value - session_data['financial_data']['profile'].get('net_debt', 0) # Simplified net debt
-    share_price = equity_value / (session_data['financial_data']['profile'].get('sharesOutstanding', 1000000) or 1)
+    
+    # Get net debt safely
+    profile = session_data['financial_data']['profile']
+    net_debt = profile.get('total_debt', 0) - profile.get('cash', 0)
+    if net_debt is None or (isinstance(net_debt, float) and (net_debt != net_debt)):
+        net_debt = 0
+    
+    equity_value = enterprise_value - net_debt
+    
+    shares_outstanding = profile.get('sharesOutstanding', 1000000)
+    if shares_outstanding is None or shares_outstanding == 0 or (isinstance(shares_outstanding, float) and (shares_outstanding != shares_outstanding)):
+        shares_outstanding = 1000000
+    
+    share_price = equity_value / shares_outstanding
+    
+    # Current price safe retrieval
+    current_price = profile.get('currentPrice', 1)
+    if current_price is None or (isinstance(current_price, float) and (current_price != current_price)) or current_price == 0:
+        current_price = 1
+    
+    # Calculate upside/downside safely
+    upside_downside = ((share_price - current_price) / current_price) * 100
+    if upside_downside is None or (isinstance(upside_downside, float) and (upside_downside != upside_downside)):
+        upside_downside = 0.0
     
     # Sensitivity Analysis (WACC vs Terminal Growth)
     sensitivity = []
@@ -324,24 +362,28 @@ def run_valuation_engine(session_data: Dict) -> Dict:
                 continue
             tv = projected_fcf[-1] * (1 + adj_tg) / (adj_wacc - adj_tg)
             ev = pv_fcf + (tv / ((1 + adj_wacc) ** len(projected_fcf)))
-            row.append(round(ev, 2))
+            # Ensure no NaN values
+            if ev is None or (isinstance(ev, float) and (ev != ev)):
+                row.append(None)
+            else:
+                row.append(round(ev, 2))
         sensitivity.append(row)
 
     return {
-        "enterprise_value": round(enterprise_value, 2),
-        "equity_value": round(equity_value, 2),
-        "implied_share_price": round(share_price, 2),
-        "current_price": session_data['financial_data']['profile'].get('currentPrice'),
-        "upside_downside": f"{((share_price - session_data['financial_data']['profile'].get('currentPrice', 1)) / session_data['financial_data']['profile'].get('currentPrice', 1)) * 100:.2f}%",
+        "enterprise_value": round(enterprise_value, 2) if enterprise_value and not (isinstance(enterprise_value, float) and (enterprise_value != enterprise_value)) else 0,
+        "equity_value": round(equity_value, 2) if equity_value and not (isinstance(equity_value, float) and (equity_value != equity_value)) else 0,
+        "implied_share_price": round(share_price, 2) if share_price and not (isinstance(share_price, float) and (share_price != share_price)) else 0,
+        "current_price": round(current_price, 2) if current_price and not (isinstance(current_price, float) and (current_price != current_price)) else 0,
+        "upside_downside": f"{upside_downside:.2f}%",
         "sensitivity_matrix": {
             "wacc_range": [round(wacc-0.01, 3), round(wacc, 3), round(wacc+0.01, 3)],
             "tg_range": [round(tg-0.005, 3), round(tg, 3), round(tg+0.005, 3)],
             "values": sensitivity
         },
         "scenario_analysis": {
-            "bull_case": round(share_price * 1.2, 2),
-            "base_case": round(share_price, 2),
-            "bear_case": round(share_price * 0.8, 2)
+            "bull_case": round(share_price * 1.2, 2) if share_price and not (isinstance(share_price, float) and (share_price != share_price)) else 0,
+            "base_case": round(share_price, 2) if share_price and not (isinstance(share_price, float) and (share_price != share_price)) else 0,
+            "bear_case": round(share_price * 0.8, 2) if share_price and not (isinstance(share_price, float) and (share_price != share_price)) else 0
         }
     }
 
