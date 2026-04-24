@@ -33,11 +33,11 @@ app.add_middleware(
 sessions: Dict[str, Dict[str, Any]] = {}
 
 # --- Configuration ---
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+GEMINI_API_KEY = os.getenv("GOOGLE_GEMINI_API_KEY")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-ALPHA_VANTAGE_KEY = os.getenv("ALPHA_VANTAGE_KEY")
+ALPHA_VANTAGE_KEY = os.getenv("ALPHA_VANTAGE_API_KEY")
 
-if not all([GEMINI_API_KEY, GROQ_API_KEY]):
+if not all([GEMINI_API_KEY, GROQ_API_KEY, ALPHA_VANTAGE_KEY]):
     raise RuntimeError("Missing API Keys in .env file")
 
 # --- Pydantic Models ---
