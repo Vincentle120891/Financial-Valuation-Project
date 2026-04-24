@@ -175,30 +175,43 @@ def fetch_financial_data(ticker_symbol: str, market: str) -> Dict:
             # Fallback or error handling for delisted/private companies
             raise ValueError("Could not retrieve basic info. Ticker might be invalid.")
 
+        # Helper function to sanitize values (handle NaN/None)
+        def sanitize_value(val):
+            if val is None:
+                return None
+            if isinstance(val, float) and (val != val):  # NaN check
+                return None
+            return val
+        
+        def sanitize_dict(d):
+            if not d:
+                return {}
+            return {k: sanitize_value(v) for k, v in d.items()}
+        
         # Get Financials
         income_stmt = ticker.financials
         balance_sheet = ticker.balance_sheet
         cashflow = ticker.cashflow
         
-        # Format for frontend
+        # Format for frontend with NaN protection
         data = {
             "profile": {
                 "symbol": ticker_symbol,
                 "name": info.get('longName'),
                 "sector": info.get('sector'),
                 "industry": info.get('industry'),
-                "current_price": info.get('currentPrice'),
+                "current_price": sanitize_value(info.get('currentPrice')),
                 "currency": info.get('currency', 'USD'),
-                "market_cap": info.get('marketCap'),
-                "beta": info.get('beta', 1.0)
+                "market_cap": sanitize_value(info.get('marketCap')),
+                "beta": sanitize_value(info.get('beta', 1.0))
             },
             "financials": {
-                "revenue": income_stmt.loc['Total Revenue'].to_dict() if 'Total Revenue' in income_stmt.index else {},
-                "ebitda": income_stmt.loc['EBITDA'].to_dict() if 'EBITDA' in income_stmt.index else {},
-                "net_income": income_stmt.loc['Net Income'].to_dict() if 'Net Income' in income_stmt.index else {},
-                "total_assets": balance_sheet.loc['Total Assets'].to_dict() if 'Total Assets' in balance_sheet.index else {},
-                "total_debt": balance_sheet.loc['Total Debt'].to_dict() if 'Total Debt' in balance_sheet.index else {},
-                "free_cash_flow": cashflow.loc['Free Cash Flow'].to_dict() if 'Free Cash Flow' in cashflow.index else {},
+                "revenue": sanitize_dict(income_stmt.loc['Total Revenue'].to_dict() if 'Total Revenue' in income_stmt.index else {}),
+                "ebitda": sanitize_dict(income_stmt.loc['EBITDA'].to_dict() if 'EBITDA' in income_stmt.index else {}),
+                "net_income": sanitize_dict(income_stmt.loc['Net Income'].to_dict() if 'Net Income' in income_stmt.index else {}),
+                "total_assets": sanitize_dict(balance_sheet.loc['Total Assets'].to_dict() if 'Total Assets' in balance_sheet.index else {}),
+                "total_debt": sanitize_dict(balance_sheet.loc['Total Debt'].to_dict() if 'Total Debt' in balance_sheet.index else {}),
+                "free_cash_flow": sanitize_dict(cashflow.loc['Free Cash Flow'].to_dict() if 'Free Cash Flow' in cashflow.index else {}),
             },
             "raw_info": info # Keep raw for AI context
         }
