@@ -16,6 +16,7 @@ const ValuationFlow = () => {
   const [valuationResults, setValuationResults] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [market, setMarket] = useState('international'); // 'international' or 'vietnamese'
 
   const API_BASE_URL = 'http://localhost:8000/api';
 
@@ -27,7 +28,7 @@ const ValuationFlow = () => {
       const response = await fetch(API_BASE_URL + '/step-1-search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: searchQuery, market: 'international' })
+        body: JSON.stringify({ query: searchQuery, market: market })
       });
       const data = await response.json();
       console.log('Search response:', data);
@@ -224,6 +225,7 @@ const ValuationFlow = () => {
     setSelectedScenario(null);
     setValuationResults(null);
     setError(null);
+    setMarket('international');
   };
 
   const renderStep = () => {
@@ -232,10 +234,30 @@ const ValuationFlow = () => {
         return (
           <div className="step-container">
             <h2>Step 1: Input Company Name or Ticker</h2>
+            <div className="market-toggle" style={{ marginBottom: '20px' }}>
+              <label style={{ marginRight: '20px' }}>
+                <input
+                  type="radio"
+                  value="international"
+                  checked={market === 'international'}
+                  onChange={(e) => setMarket(e.target.value)}
+                />
+                International Company
+              </label>
+              <label>
+                <input
+                  type="radio"
+                  value="vietnamese"
+                  checked={market === 'vietnamese'}
+                  onChange={(e) => setMarket(e.target.value)}
+                />
+                Vietnamese Company
+              </label>
+            </div>
             <div className="input-group">
               <input
                 type="text"
-                placeholder="Enter ticker (e.g., AAPL) or company name"
+                placeholder={market === 'vietnamese' ? "Enter ticker (e.g., VNM) or company name" : "Enter ticker (e.g., AAPL) or company name"}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
