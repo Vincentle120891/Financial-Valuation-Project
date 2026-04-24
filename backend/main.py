@@ -4,6 +4,7 @@ import json
 from datetime import datetime
 from typing import Optional, Dict, Any, List
 from fastapi import FastAPI, HTTPException, Body
+from starlette.requests import Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import yfinance as yf
@@ -174,30 +175,43 @@ def fetch_financial_data(ticker_symbol: str, market: str) -> Dict:
             # Fallback or error handling for delisted/private companies
             raise ValueError("Could not retrieve basic info. Ticker might be invalid.")
 
+        # Helper function to sanitize values (handle NaN/None)
+        def sanitize_value(val):
+            if val is None:
+                return None
+            if isinstance(val, float) and (val != val):  # NaN check
+                return None
+            return val
+        
+        def sanitize_dict(d):
+            if not d:
+                return {}
+            return {k: sanitize_value(v) for k, v in d.items()}
+        
         # Get Financials
         income_stmt = ticker.financials
         balance_sheet = ticker.balance_sheet
         cashflow = ticker.cashflow
         
-        # Format for frontend
+        # Format for frontend with NaN protection
         data = {
             "profile": {
                 "symbol": ticker_symbol,
                 "name": info.get('longName'),
                 "sector": info.get('sector'),
                 "industry": info.get('industry'),
-                "current_price": info.get('currentPrice'),
+                "current_price": sanitize_value(info.get('currentPrice')),
                 "currency": info.get('currency', 'USD'),
-                "market_cap": info.get('marketCap'),
-                "beta": info.get('beta', 1.0)
+                "market_cap": sanitize_value(info.get('marketCap')),
+                "beta": sanitize_value(info.get('beta', 1.0))
             },
             "financials": {
-                "revenue": income_stmt.loc['Total Revenue'].to_dict() if 'Total Revenue' in income_stmt.index else {},
-                "ebitda": income_stmt.loc['EBITDA'].to_dict() if 'EBITDA' in income_stmt.index else {},
-                "net_income": income_stmt.loc['Net Income'].to_dict() if 'Net Income' in income_stmt.index else {},
-                "total_assets": balance_sheet.loc['Total Assets'].to_dict() if 'Total Assets' in balance_sheet.index else {},
-                "total_debt": balance_sheet.loc['Total Debt'].to_dict() if 'Total Debt' in balance_sheet.index else {},
-                "free_cash_flow": cashflow.loc['Free Cash Flow'].to_dict() if 'Free Cash Flow' in cashflow.index else {},
+                "revenue": sanitize_dict(income_stmt.loc['Total Revenue'].to_dict() if 'Total Revenue' in income_stmt.index else {}),
+                "ebitda": sanitize_dict(income_stmt.loc['EBITDA'].to_dict() if 'EBITDA' in income_stmt.index else {}),
+                "net_income": sanitize_dict(income_stmt.loc['Net Income'].to_dict() if 'Net Income' in income_stmt.index else {}),
+                "total_assets": sanitize_dict(balance_sheet.loc['Total Assets'].to_dict() if 'Total Assets' in balance_sheet.index else {}),
+                "total_debt": sanitize_dict(balance_sheet.loc['Total Debt'].to_dict() if 'Total Debt' in balance_sheet.index else {}),
+                "free_cash_flow": sanitize_dict(cashflow.loc['Free Cash Flow'].to_dict() if 'Free Cash Flow' in cashflow.index else {}),
             },
             "raw_info": info # Keep raw for AI context
         }
@@ -429,10 +443,39 @@ async def prepare_inputs(request: dict):
     session_id = request.get('session_id')
     session = get_session(session_id)
     
-    if not session['selected_models']:
+    if not session or not session.get('selected_models'):
         raise HTTPException(status_code=400, detail="No models selected")
-        
-    return {"status": "ready_to_fetch", "required_inputs": ["Ticker Confirmation"]}
+    
+    # Build required inputs based on selected models
+    selected_models = session['selected_models']
+    required_inputs = []
+    
+    # Always require ticker confirmation
+    required_inputs.append({
+        "category": "General",
+        "name": "Ticker Confirmation",
+        "requiresInput": False
+    })
+    
+    # Add model-specific inputs
+    if 'dcf' in [m.lower() for m in selected_models]:
+        required_inputs.extend([
+            {"category": "DCF", "name": "WACC", "requiresInput": True},
+            {"category": "DCF", "name": "Terminal Growth Rate", "requiresInput": True},
+            {"category": "DCF", "name": "Forecast Period (years)", "requiresInput": True}
+        ])
+    
+    if 'comparable' in [m.lower() for m in selected_models]:
+        required_inputs.extend([
+            {"category": "Comparable Companies", "name": "Peer Group Selection", "requiresInput": True},
+            {"category": "Comparable Companies", "name": "Multiples (EV/EBITDA, P/E)", "requiresInput": True}
+        ])
+    
+    return {
+        "status": "ready_to_fetch",
+        "required_inputs": required_inputs,
+        "message": f"Found {len(required_inputs)} required inputs for your selected models"
+    }
 
 @app.post("/api/step-7-8-fetch-data")
 async def fetch_data(request: dict):
@@ -452,7 +495,7 @@ async def fetch_data(request: dict):
     }
 
 @app.post("/api/step-9-generate-ai")
-async def generate_ai(request: BaseModel):
+async def generate_ai(request: Request):
     """Step 9: AI Engine generates WACC, forecasts, benchmarks, trends"""
     data = await request.json()
     session_id = data.get('session_id')
