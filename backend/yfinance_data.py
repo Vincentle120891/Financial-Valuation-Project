@@ -15,8 +15,20 @@ Example:
 
 import sys
 import json
+import math
 from datetime import datetime
 import yfinance as yf
+
+
+def clean_nan_values(obj):
+    """Recursively clean NaN and Inf values from nested data structures."""
+    if isinstance(obj, dict):
+        return {k: clean_nan_values(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [clean_nan_values(i) for i in obj]
+    elif isinstance(obj, float) and (math.isnan(obj) or math.isinf(obj)):
+        return None
+    return obj
 
 
 def fetch_yfinance_data(ticker_symbol):
@@ -312,6 +324,9 @@ def fetch_yfinance_data(ticker_symbol):
             "current_ratio": current_ratio,
             "quick_ratio": quick_ratio
         }
+        
+        # Clean NaN values before returning
+        data = clean_nan_values(data)
         
         return {"success": True, "data": data, "source": "yfinance"}
         

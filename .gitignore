@@ -1,38 +1,4 @@
 ```
-# Python
 __pycache__/
 *.pyc
-*.pyo
-*.pyd
-.Python
-env/
-venv/
-.venv/
-.eggs/
-.egg-info/
-dist/
-build/
-*.egg-info/
-
-# Dependencies
-requirements.txt.bak
-
-# Logs
-*.log
-
-# Environment
-.env
-.env.local
-*.env*
-
-# Editors
-.vscode/
-.idea/
-*.swp
-*.swo
-*.tmp
-
-# OS
-.DS_Store
-Thumbs.db
 ```
