@@ -22,9 +22,14 @@ from yfinance_data import fetch_yfinance_data
 from dcf_engine import run_complete_dcf as calculate_dcf_valuation
 from dupont_engine import perform_dupont_analysis as calculate_dupont_analysis
 
+# Load environment variables from .env file
+from dotenv import load_dotenv
+load_dotenv()
+
 # AI SDK imports
 try:
-    from google.genai import Client as GoogleGenAIClient
+    from google import genai
+    from google.genai import types
     GOOGLE_AI_AVAILABLE = True
 except ImportError:
     GOOGLE_AI_AVAILABLE = False
@@ -41,15 +46,24 @@ GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', '')
 GROQ_API_KEY = os.getenv('GROQ_API_KEY', '')
 PORT = int(os.getenv('PORT', 8000))
 
-# Initialize AI clients
+# AI Model configuration from environment
+GEMINI_MODEL = os.getenv('GEMINI_MODEL', 'gemini-2.0-flash-lite')
+GROQ_MODEL = os.getenv('GROQ_MODEL', 'qwen/qwen3-32b')
+
+# Set Groq as primary since Gemini key has quota issues
+AI_CONFIG = {
+    'primary': 'groq',  # Changed to groq as default due to Gemini quota limits
+    'fallback': 'gemini',
+    'gemini_model': GEMINI_MODEL,
+    'groq_model': GROQ_MODEL,
+    'max_retries': 2,
+    'timeout_ms': 30000,
+    'confidence_threshold': 0.7
+}
+
+# Initialize AI clients (needed for health check and fallback)
 gemini_client = None
 groq_client = None
-
-if GOOGLE_AI_AVAILABLE and GEMINI_API_KEY:
-    try:
-        gemini_client = GoogleGenAIClient(api_key=GEMINI_API_KEY)
-    except Exception:
-        pass
 
 if GROQ_AVAILABLE and GROQ_API_KEY:
     try:
@@ -57,21 +71,15 @@ if GROQ_AVAILABLE and GROQ_API_KEY:
     except Exception:
         pass
 
-# AI Model configuration
-AI_CONFIG = {
-    'primary': 'gemini',
-    'fallback': 'groq',
-    'gemini_model': 'gemini-1.5-flash',
-    'groq_model': 'llama-3.2-90b-vision-preview',
-    'max_retries': 2,
-    'timeout_ms': 30000,
-    'confidence_threshold': 0.7
-}
+if GOOGLE_AI_AVAILABLE and GEMINI_API_KEY:
+    try:
+        gemini_client = genai.Client(api_key=GEMINI_API_KEY)
+    except Exception:
+        pass
 
 # In-memory state storage (in production, use a database)
 valuation_state = {}
 
-# Mock data for demonstration
 MOCK_TICKER_SEARCH = {
     'AAPL': {'ticker': 'AAPL', 'name': 'Apple Inc.', 'exchange': 'NASDAQ'},
     'TSLA': {'ticker': 'TSLA', 'name': 'Tesla, Inc.', 'exchange': 'NASDAQ'},
@@ -231,8 +239,15 @@ async def generate_ai_suggestion(field: str, context: Dict = None) -> Dict:
                 model=AI_CONFIG['gemini_model'],
                 contents=prompt
             )
-            return {'success': True, 'suggestion': response.text, 'source': 'gemini'}
-        except Exception:
+            # Handle different response formats
+            if hasattr(response, 'text'):
+                return {'success': True, 'suggestion': response.text, 'source': 'gemini'}
+            elif hasattr(response, 'candidates') and response.candidates:
+                content = response.candidates[0].content.parts[0].text
+                return {'success': True, 'suggestion': content, 'source': 'gemini'}
+            else:
+                return {'success': False, 'error': 'Unexpected response format', 'source': 'gemini'}
+        except Exception as e:
             pass
     
     # Fallback to Groq
