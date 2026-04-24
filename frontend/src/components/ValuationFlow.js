@@ -4,11 +4,15 @@ const ValuationFlow = () => {
   const [currentStep, setCurrentStep] = useState(1);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
+  const [selectedCompany, setSelectedCompany] = useState(null);
   const [selectedModel, setSelectedModel] = useState(null);
   const [sessionId, setSessionId] = useState(null);
   const [requiredFields, setRequiredFields] = useState([]);
+  const [retrievedData, setRetrievedData] = useState(null);
+  const [apiData, setApiData] = useState({});
   const [aiData, setAiData] = useState({});
   const [confirmedValues, setConfirmedValues] = useState({});
+  const [selectedScenario, setSelectedScenario] = useState(null);
   const [valuationResults, setValuationResults] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
