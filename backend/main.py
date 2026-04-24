@@ -834,23 +834,289 @@ async def get_combined_inputs(ticker: str):
     }
 
 
-@app.get("/api/required-inputs-checklist")
-async def get_required_inputs_checklist(model: str = None):
-    """Get checklist of required inputs for current model"""
-    model_type = (model or 'DCF').upper()
-    
-    response = await get_required_fields(model_type)
-    
-    return {
-        'success': True,
-        'model': model_type,
-        'checklist': response.get('fields', []),
-        'completion_status': {
-            'total': len(response.get('fields', [])),
-            'completed': 0,
-            'pending': len(response.get('fields', []))
+@app.post("/api/dcf/calculate")
+async def calculate_dcf(dcf_request: dict):
+    """Run DCF calculation with detailed inputs"""
+    try:
+        base_period_data = dcf_request.get('base_period_data', {})
+        forecast_drivers = dcf_request.get('forecast_drivers', {})
+        assumptions = dcf_request.get('assumptions', {})
+        ticker = dcf_request.get('ticker', 'UNKNOWN')
+        
+        # Validate required inputs
+        if not base_period_data or not forecast_drivers:
+            return {
+                'success': False,
+                'error': 'Missing required fields: base_period_data and forecast_drivers'
+            }
+        
+        # Ensure forecast drivers have exactly 6 values (5 years + terminal)
+        drivers = ['revenue_growth', 'inflation_rate', 'opex_growth', 'ar_days', 'inv_days', 'ap_days']
+        for driver in drivers:
+            if driver not in forecast_drivers or len(forecast_drivers[driver]) != 6:
+                return {
+                    'success': False,
+                    'error': f'{driver} must have exactly 6 values (5 forecast years + terminal year)',
+                    'received': len(forecast_drivers.get(driver, []))
+                }
+        
+        # Ensure capital_expenditure has exactly 5 values (forecast years only)
+        if 'capital_expenditure' not in forecast_drivers or len(forecast_drivers['capital_expenditure']) != 5:
+            return {
+                'success': False,
+                'error': 'capital_expenditure must have exactly 5 values (forecast years only)',
+                'received': len(forecast_drivers.get('capital_expenditure', []))
+            }
+        
+        # Map input schema to engine schema
+        engine_inputs = {
+            # Base period data (FY-1 / 2022A)
+            'base_revenue': base_period_data.get('revenue', 0),
+            'base_cogs': base_period_data.get('cogs', 0),
+            'base_sga': base_period_data.get('sga', 0),
+            'base_other': base_period_data.get('other_opex', 0),
+            'base_existing_ppe': base_period_data.get('ppe_gross', 0),
+            'base_nol': base_period_data.get('nol_remaining', 0),
+            'base_net_debt': base_period_data.get('net_debt', 0),
+            'base_current_stock_price': base_period_data.get('current_stock_price', 0),
+            'base_shares_outstanding': base_period_data.get('shares_outstanding', 0),
+            
+            # Forecast drivers (6 values each)
+            'revenue_growth_rates': [g / 100 for g in forecast_drivers['revenue_growth']],
+            'inflation_rates': [g / 100 for g in forecast_drivers['inflation_rate']],
+            'opex_growth_rates': [g / 100 for g in forecast_drivers['opex_growth']],
+            'capital_expenditures': forecast_drivers['capital_expenditure'],
+            'ar_days': forecast_drivers['ar_days'],
+            'inv_days': forecast_drivers['inv_days'],
+            'ap_days': forecast_drivers['ap_days'],
+            
+            # Assumptions
+            'useful_life_existing': assumptions.get('useful_life_existing', 10),
+            'useful_life_new': assumptions.get('useful_life_new', 5),
+            'tax_rate': assumptions.get('tax_rate', 0.21),
+            'nol_utilization_limit': assumptions.get('nol_utilization_limit', 0.80),
+            'wacc': assumptions.get('wacc', 0.097),
+            'terminal_growth_rate': assumptions.get('terminal_growth_rate', 0.02),
+            'terminal_multiple': assumptions.get('terminal_multiple', 7.0),
+            
+            # Metadata
+            'valuation_date': assumptions.get('valuation_date', datetime.now().isoformat().split('T')[0]),
+            'scenario': assumptions.get('scenario', 'base_case')
         }
-    }
+        
+        # Run DCF calculation
+        result = calculate_dcf_valuation(engine_inputs, {})
+        
+        # Add ticker and additional metadata
+        if result:
+            result['metadata']['ticker'] = ticker
+        
+        return {
+            'success': True,
+            'data': result,
+            'timestamp': datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        return {
+            'success': False,
+            'error': 'DCF calculation failed',
+            'details': str(e)
+        }
+
+
+@app.post("/api/dcf/calculate-scenarios")
+async def calculate_dcf_scenarios(request_data: dict):
+    """Run DCF with multiple scenarios"""
+    try:
+        base_period_data = request_data.get('base_period_data', {})
+        forecast_drivers = request_data.get('forecast_drivers', {})
+        scenarios = request_data.get('scenarios', ['base_case', 'bull_case', 'bear_case'])
+        ticker = request_data.get('ticker', 'UNKNOWN')
+        
+        results = {}
+        for scenario_name in scenarios:
+            scenario_drivers = forecast_drivers.get(scenario_name, forecast_drivers.get('base_case', {}))
+            
+            engine_inputs = {
+                'base_revenue': base_period_data.get('revenue', 0),
+                'base_cogs': base_period_data.get('cogs', 0),
+                'base_sga': base_period_data.get('sga', 0),
+                'base_other': base_period_data.get('other_opex', 0),
+                'base_existing_ppe': base_period_data.get('ppe_gross', 0),
+                'base_net_debt': base_period_data.get('net_debt', 0),
+                'base_current_stock_price': base_period_data.get('current_stock_price', 0),
+                'base_shares_outstanding': base_period_data.get('shares_outstanding', 0),
+                'revenue_growth_rates': [g / 100 for g in scenario_drivers.get('revenue_growth', [0.05] * 6)],
+                'inflation_rates': [g / 100 for g in scenario_drivers.get('inflation_rate', [0.02] * 6)],
+                'opex_growth_rates': [g / 100 for g in scenario_drivers.get('opex_growth', [0.02] * 6)],
+                'capital_expenditures': scenario_drivers.get('capital_expenditure', [5000] * 5),
+                'ar_days': scenario_drivers.get('ar_days', 45),
+                'inv_days': scenario_drivers.get('inv_days', 30),
+                'ap_days': scenario_drivers.get('ap_days', 60),
+                'wacc': scenario_drivers.get('wacc', 0.097),
+                'terminal_growth_rate': scenario_drivers.get('terminal_growth_rate', 0.02),
+                'terminal_multiple': scenario_drivers.get('terminal_multiple', 7.0),
+                'scenario': scenario_name
+            }
+            
+            result = calculate_dcf_valuation(engine_inputs, {})
+            if result:
+                results[scenario_name] = result
+        
+        return {
+            'success': True,
+            'data': results,
+            'ticker': ticker,
+            'timestamp': datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        return {
+            'success': False,
+            'error': 'DCF scenario calculation failed',
+            'details': str(e)
+        }
+
+
+@app.post("/api/dcf/sensitivity")
+async def calculate_dcf_sensitivity(request_data: dict):
+    """Calculate DCF sensitivity analysis"""
+    try:
+        base_values = request_data.get('base_values', {})
+        wacc_range = request_data.get('wacc_range', [0.06, 0.08, 0.10, 0.12, 0.14])
+        terminal_growth_range = request_data.get('terminal_growth_range', [0.01, 0.02, 0.03, 0.04])
+        
+        sensitivity_matrix = []
+        
+        for wacc in wacc_range:
+            row = {'wacc': wacc}
+            for terminal_growth in terminal_growth_range:
+                engine_inputs = {
+                    'base_revenue': base_values.get('base_revenue', 100000),
+                    'base_cogs': base_values.get('base_cogs', 60000),
+                    'base_sga': base_values.get('base_sga', 20000),
+                    'base_other': base_values.get('base_other', 5000),
+                    'base_existing_ppe': base_values.get('base_existing_ppe', 50000),
+                    'base_net_debt': base_values.get('base_net_debt', 0),
+                    'base_current_stock_price': base_values.get('base_current_stock_price', 100),
+                    'base_shares_outstanding': base_values.get('base_shares_outstanding', 1000),
+                    'revenue_growth_rates': base_values.get('revenue_growth_rates', [0.05] * 6),
+                    'inflation_rates': base_values.get('inflation_rates', [0.02] * 6),
+                    'opex_growth_rates': base_values.get('opex_growth_rates', [0.02] * 6),
+                    'capital_expenditures': base_values.get('capital_expenditures', [5000] * 5),
+                    'ar_days': base_values.get('ar_days', 45),
+                    'inv_days': base_values.get('inv_days', 30),
+                    'ap_days': base_values.get('ap_days', 60),
+                    'wacc': wacc,
+                    'terminal_growth_rate': terminal_growth,
+                    'terminal_multiple': base_values.get('terminal_multiple', 7.0),
+                    'scenario': 'sensitivity'
+                }
+                
+                result = calculate_dcf_valuation(engine_inputs, {})
+                if result:
+                    row[f'tg_{int(terminal_growth*100)}'] = result['main_outputs'].get('enterprise_value_perpetuity', 0)
+            
+            sensitivity_matrix.append(row)
+        
+        return {
+            'success': True,
+            'data': {
+                'sensitivity_matrix': sensitivity_matrix,
+                'wacc_range': wacc_range,
+                'terminal_growth_range': terminal_growth_range
+            },
+            'timestamp': datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        return {
+            'success': False,
+            'error': 'DCF sensitivity calculation failed',
+            'details': str(e)
+        }
+
+
+@app.post("/api/dcf/validate")
+async def validate_dcf_inputs(request_data: dict):
+    """Validate DCF input data"""
+    try:
+        validations = {'critical': [], 'warnings': []}
+        
+        base_period_data = request_data.get('base_period_data', {})
+        forecast_drivers = request_data.get('forecast_drivers', {})
+        assumptions = request_data.get('assumptions', {})
+        
+        # Check required base period fields
+        required_base_fields = ['revenue', 'cogs', 'sga']
+        for field in required_base_fields:
+            if field not in base_period_data:
+                validations['critical'].append({
+                    'field': field,
+                    'rule': 'required',
+                    'message': f'{field} is required in base_period_data'
+                })
+            elif base_period_data[field] <= 0:
+                validations['warnings'].append({
+                    'field': field,
+                    'rule': 'positive',
+                    'message': f'{field} should be positive'
+                })
+        
+        # Check forecast driver array lengths
+        array_drivers = ['revenue_growth', 'inflation_rate', 'opex_growth', 'ar_days', 'inv_days', 'ap_days']
+        for driver in array_drivers:
+            if driver in forecast_drivers:
+                if len(forecast_drivers[driver]) != 6:
+                    validations['critical'].append({
+                        'field': driver,
+                        'rule': 'length',
+                        'message': f'{driver} must have exactly 6 values, got {len(forecast_drivers[driver])}'
+                    })
+        
+        # Check CapEx array length
+        if 'capital_expenditure' in forecast_drivers:
+            if len(forecast_drivers['capital_expenditure']) != 5:
+                validations['critical'].append({
+                    'field': 'capital_expenditure',
+                    'rule': 'length',
+                    'message': f'capital_expenditure must have exactly 5 values, got {len(forecast_drivers["capital_expenditure"])}'
+                })
+        
+        # Check WACC range
+        wacc = assumptions.get('wacc', 0.097)
+        if wacc < 0.03 or wacc > 0.25:
+            validations['warnings'].append({
+                'field': 'wacc',
+                'rule': 'range',
+                'message': f'WACC ({wacc:.2%}) is outside typical range (3%-25%)'
+            })
+        
+        # Check terminal growth rate
+        terminal_growth = assumptions.get('terminal_growth_rate', 0.02)
+        if terminal_growth < -0.02 or terminal_growth > 0.05:
+            validations['warnings'].append({
+                'field': 'terminal_growth_rate',
+                'rule': 'range',
+                'message': f'Terminal growth rate ({terminal_growth:.2%}) is outside typical range (-2%-5%)'
+            })
+        
+        is_valid = len(validations['critical']) == 0
+        
+        return {
+            'success': True,
+            'valid': is_valid,
+            'validations': validations,
+            'timestamp': datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        return {
+            'success': False,
+            'error': 'Validation failed',
+            'details': str(e)
+        }
 
 
 @app.post("/api/auto-populate-inputs")
@@ -1147,6 +1413,229 @@ async def get_manual_input_benchmark(ticker: str, model: str, field: str):
         'model': model,
         'field': field,
         'benchmark': benchmark
+    }
+
+
+@app.post("/api/dupont/analyze")
+async def analyze_dupont(request_data: dict):
+    """Perform complete DuPont analysis"""
+    try:
+        input_data = request_data
+        
+        # Validate input structure
+        if not input_data or not isinstance(input_data, dict):
+            return {
+                'success': False,
+                'error': 'Invalid input: expected JSON object with financial data arrays'
+            }
+        
+        # Check that all required arrays have 6-10 values
+        required_fields = [
+            'revenue', 'gross_profit', 'ebitda', 'operating_income', 'net_income',
+            'total_assets', 'accounts_receivable', 'inventory', 'accounts_payable',
+            'cogs', 'total_debt', 'total_equity', 'current_assets', 'current_liabilities',
+            'interest_expense', 'ebt', 'ebit'
+        ]
+        
+        validation_errors = []
+        for field in required_fields:
+            if field not in input_data:
+                validation_errors.append(f'Missing required field: {field}')
+            elif not isinstance(input_data[field], list):
+                validation_errors.append(f'{field} must be an array')
+            elif len(input_data[field]) < 6 or len(input_data[field]) > 10:
+                validation_errors.append(f'{field} must have 6-10 values, got {len(input_data[field])}')
+        
+        if validation_errors:
+            return {
+                'success': False,
+                'errors': validation_errors
+            }
+        
+        # Perform DuPont analysis
+        result = calculate_dupont_analysis(input_data)
+        
+        return {
+            'success': True,
+            'data': result,
+            'timestamp': datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        return {
+            'success': False,
+            'error': 'DuPont analysis failed',
+            'details': str(e)
+        }
+
+
+@app.post("/api/dupont/supporting-ratios")
+async def get_dupont_supporting_ratios(request_data: dict):
+    """Get supporting ratios only"""
+    try:
+        from dupont_engine import calculate_supporting_ratios
+        
+        ratios = calculate_supporting_ratios(request_data)
+        
+        return {
+            'success': True,
+            'data': {'supporting_ratios': ratios},
+            'timestamp': datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        return {
+            'success': False,
+            'error': 'Failed to calculate supporting ratios',
+            'details': str(e)
+        }
+
+
+@app.post("/api/dupont/3step")
+async def get_dupont_3step(request_data: dict):
+    """Get 3-Step DuPont Analysis only"""
+    try:
+        from dupont_engine import calculate_dupont_3step
+        
+        result = calculate_dupont_3step(request_data)
+        
+        return {
+            'success': True,
+            'data': {'dupont_3step': result},
+            'timestamp': datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        return {
+            'success': False,
+            'error': 'Failed to calculate 3-step DuPont',
+            'details': str(e)
+        }
+
+
+@app.post("/api/dupont/5step")
+async def get_dupont_5step(request_data: dict):
+    """Get 5-Step DuPont Analysis only"""
+    try:
+        from dupont_engine import calculate_dupont_5step
+        
+        result = calculate_dupont_5step(request_data)
+        
+        return {
+            'success': True,
+            'data': {'dupont_5step': result},
+            'timestamp': datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        return {
+            'success': False,
+            'error': 'Failed to calculate 5-step DuPont',
+            'details': str(e)
+        }
+
+
+@app.post("/api/dupont/growth-trends")
+async def get_dupont_growth_trends(request_data: dict):
+    """Get growth trends and leverage metrics"""
+    try:
+        from dupont_engine import calculate_growth_trends
+        
+        trends = calculate_growth_trends(request_data)
+        
+        return {
+            'success': True,
+            'data': {'growth_trends': trends},
+            'timestamp': datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        return {
+            'success': False,
+            'error': 'Failed to calculate growth trends',
+            'details': str(e)
+        }
+
+
+@app.post("/api/dupont/validate")
+async def validate_dupont_inputs(request_data: dict):
+    """Validate DuPont input data"""
+    try:
+        validations = {'critical': [], 'warnings': []}
+        
+        # Required fields for complete DuPont analysis
+        required_fields = [
+            'revenue', 'gross_profit', 'ebitda', 'operating_income', 'net_income',
+            'total_assets', 'accounts_receivable', 'inventory', 'accounts_payable',
+            'cogs', 'total_debt', 'total_equity', 'current_assets', 'current_liabilities',
+            'interest_expense', 'ebt', 'ebit'
+        ]
+        
+        # Check required fields and array lengths
+        for field in required_fields:
+            if field not in request_data:
+                validations['critical'].append({
+                    'field': field,
+                    'rule': 'required',
+                    'message': f'{field} is required'
+                })
+            elif not isinstance(request_data[field], list):
+                validations['critical'].append({
+                    'field': field,
+                    'rule': 'type',
+                    'message': f'{field} must be an array'
+                })
+            elif len(request_data[field]) < 6 or len(request_data[field]) > 10:
+                validations['critical'].append({
+                    'field': field,
+                    'rule': 'length',
+                    'message': f'{field} must have 6-10 values, got {len(request_data[field])}'
+                })
+        
+        # Additional validation: check for negative values where inappropriate
+        if 'revenue' in request_data:
+            for idx, val in enumerate(request_data['revenue']):
+                if val <= 0:
+                    validations['warnings'].append({
+                        'field': 'revenue',
+                        'year_index': idx,
+                        'rule': 'positive',
+                        'message': f'Revenue in year {idx} is non-positive ({val})'
+                    })
+        
+        is_valid = len(validations['critical']) == 0
+        
+        return {
+            'success': True,
+            'valid': is_valid,
+            'validations': validations,
+            'timestamp': datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        return {
+            'success': False,
+            'error': 'Validation failed',
+            'details': str(e)
+        }
+
+
+@app.get("/api/required-inputs-checklist")
+async def get_required_inputs_checklist(model: str = None):
+    """Get checklist of required inputs for current model"""
+    model_type = (model or 'DCF').upper()
+    
+    response = await get_required_fields(model_type)
+    
+    return {
+        'success': True,
+        'model': model_type,
+        'checklist': response.get('fields', []),
+        'completion_status': {
+            'total': len(response.get('fields', [])),
+            'completed': 0,
+            'pending': len(response.get('fields', []))
+        }
     }
 
 
