@@ -1,8 +1,1 @@
-```
-# Compiled Python files
-__pycache__/
-*.pyc
-
-# Backup and draft files
-draft/
-```
+Nothing should be ignored based on the provided file changes, as they only include source/config files (.md, .txt) and no build artifacts, dependencies, or temporary files.
