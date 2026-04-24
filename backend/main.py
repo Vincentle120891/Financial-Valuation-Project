@@ -61,8 +61,8 @@ if GROQ_AVAILABLE and GROQ_API_KEY:
 AI_CONFIG = {
     'primary': 'gemini',
     'fallback': 'groq',
-    'gemini_model': 'gemini-1.5-flash',
-    'groq_model': 'llama-3.2-90b-vision-preview',
+    'gemini_model': 'gemini-3.1-flash-lite-preview',
+    'groq_model': 'qwen/qwen3-32b',
     'max_retries': 2,
     'timeout_ms': 30000,
     'confidence_threshold': 0.7

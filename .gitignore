@@ -1,4 +1,30 @@
 ```
+# Dependencies
+node_modules/
+
+# Python cache
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+
+# Environment
+.env
+.env.local
+*.env.*
+
+# Logs
+*.log
+
+# IDE
+.vscode/
+.idea/
+
+# Build artifacts
+dist/
+build/
+target/
+
+# OS generated
+.DS_Store
+Thumbs.db
 ```
