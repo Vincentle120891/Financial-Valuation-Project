@@ -91,8 +91,9 @@ const ValuationFlow = () => {
           body: JSON.stringify({ session_id: sessionId })
         });
         const inputsData = await inputsResponse.json();
-        if (inputsData.status) {
-          setRequiredFields([{ category: 'General', name: 'Ticker Confirmation', requiresInput: true }]);
+        console.log('Required inputs response:', inputsData);
+        if (inputsData.status && inputsData.required_inputs) {
+          setRequiredFields(inputsData.required_inputs);
         }
       }
     } catch (err) {
@@ -112,8 +113,9 @@ const ValuationFlow = () => {
       })
         .then(res => res.json())
         .then(data => {
-          if (data.status) {
-            setRequiredFields([{ category: 'General', name: 'Ticker Confirmation', requiresInput: true }]);
+          console.log('UseEffect required inputs response:', data);
+          if (data.status && data.required_inputs) {
+            setRequiredFields(data.required_inputs);
           }
         })
         .catch(err => console.error('Prepare inputs error:', err));

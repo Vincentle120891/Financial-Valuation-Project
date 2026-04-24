@@ -443,10 +443,39 @@ async def prepare_inputs(request: dict):
     session_id = request.get('session_id')
     session = get_session(session_id)
     
-    if not session['selected_models']:
+    if not session or not session.get('selected_models'):
         raise HTTPException(status_code=400, detail="No models selected")
-        
-    return {"status": "ready_to_fetch", "required_inputs": ["Ticker Confirmation"]}
+    
+    # Build required inputs based on selected models
+    selected_models = session['selected_models']
+    required_inputs = []
+    
+    # Always require ticker confirmation
+    required_inputs.append({
+        "category": "General",
+        "name": "Ticker Confirmation",
+        "requiresInput": False
+    })
+    
+    # Add model-specific inputs
+    if 'dcf' in [m.lower() for m in selected_models]:
+        required_inputs.extend([
+            {"category": "DCF", "name": "WACC", "requiresInput": True},
+            {"category": "DCF", "name": "Terminal Growth Rate", "requiresInput": True},
+            {"category": "DCF", "name": "Forecast Period (years)", "requiresInput": True}
+        ])
+    
+    if 'comparable' in [m.lower() for m in selected_models]:
+        required_inputs.extend([
+            {"category": "Comparable Companies", "name": "Peer Group Selection", "requiresInput": True},
+            {"category": "Comparable Companies", "name": "Multiples (EV/EBITDA, P/E)", "requiresInput": True}
+        ])
+    
+    return {
+        "status": "ready_to_fetch",
+        "required_inputs": required_inputs,
+        "message": f"Found {len(required_inputs)} required inputs for your selected models"
+    }
 
 @app.post("/api/step-7-8-fetch-data")
 async def fetch_data(request: dict):
