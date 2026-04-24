@@ -333,12 +333,11 @@ async def select_models(request: ModelSelectRequest):
     return {"message": "Models selected", "next_step": "fetch_data"}
 
 @app.post("/api/step-5-6-prepare-inputs")
-async def prepare_inputs(request: BaseModel):
+async def prepare_inputs(request: dict):
     """Step 5 & 6: Show required inputs & User Confirms to Fetch"""
     # This step is mostly UI driven, backend just acknowledges readiness
     # Expecting session_id in body
-    data = await request.json()
-    session_id = data.get('session_id')
+    session_id = request.get('session_id')
     session = get_session(session_id)
     
     if not session['selected_models']:
@@ -347,10 +346,9 @@ async def prepare_inputs(request: BaseModel):
     return {"status": "ready_to_fetch", "required_inputs": ["Ticker Confirmation"]}
 
 @app.post("/api/step-7-8-fetch-data")
-async def fetch_data(request: BaseModel):
+async def fetch_data(request: dict):
     """Step 7 & 8: Retrieve Data via APIs and Show Numbers"""
-    data = await request.json()
-    session_id = data.get('session_id')
+    session_id = request.get('session_id')
     session = get_session(session_id)
     
     # Fetch
