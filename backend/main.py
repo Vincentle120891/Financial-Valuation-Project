@@ -3,7 +3,7 @@ import uuid
 import json
 from datetime import datetime
 from typing import Optional, Dict, Any, List
-from fastapi import FastAPI, HTTPException, Body
+from fastapi import FastAPI, HTTPException, Body, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import yfinance as yf
@@ -452,7 +452,7 @@ async def fetch_data(request: dict):
     }
 
 @app.post("/api/step-9-generate-ai")
-async def generate_ai(request: BaseModel):
+async def generate_ai(request: Request):
     """Step 9: AI Engine generates WACC, forecasts, benchmarks, trends"""
     data = await request.json()
     session_id = data.get('session_id')
