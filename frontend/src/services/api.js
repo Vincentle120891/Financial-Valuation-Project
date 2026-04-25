@@ -9,68 +9,83 @@ const api = axios.create({
   },
 });
 
-export const searchTickers = async (query) => {
-  const response = await api.get('/search', { params: { q: query } });
+// Step 1: Search Company
+export const searchCompanies = async (query, market = 'international') => {
+  const response = await api.post('/step-1-search', { query, market });
   return response.data;
 };
 
-export const selectCompany = async (ticker, companyName, exchange) => {
-  const response = await api.post('/select-company', { ticker, companyName, exchange });
+// Step 3: Select Company
+export const selectCompany = async (sessionId, ticker, market = 'international') => {
+  const response = await api.post('/step-3-select-ticker', { session_id: sessionId, ticker, market });
   return response.data;
 };
 
-export const getModels = async () => {
-  const response = await api.get('/models');
+// Step 4: Select Models
+export const selectModels = async (sessionId, models) => {
+  const response = await api.post('/step-4-select-models', { session_id: sessionId, models });
   return response.data;
 };
 
-export const selectModel = async (modelType) => {
-  const response = await api.post('/select-model', { modelType });
+// Step 5-6: Prepare Inputs
+export const prepareInputs = async (sessionId) => {
+  const response = await api.post('/step-5-6-prepare-inputs', { session_id: sessionId });
   return response.data;
 };
 
-export const getRequiredFields = async (modelType) => {
-  const response = await api.get('/required-fields', { params: { model: modelType } });
+// Step 7-8: Fetch Data
+export const fetchData = async (sessionId) => {
+  const response = await api.post('/step-7-8-fetch-data', { session_id: sessionId });
   return response.data;
 };
 
-export const retrieveData = async (modelType, ticker) => {
-  const response = await api.post('/retrieve-data', { modelType, ticker });
+// Step 9: Generate AI Suggestions
+export const generateAI = async (sessionId) => {
+  const response = await api.post('/step-9-generate-ai', { session_id: sessionId });
   return response.data;
 };
 
-export const getAISuggestions = async (field) => {
-  const response = await api.get('/ai-suggestions', { params: { field } });
+// Step 10: Confirm Assumptions
+export const confirmAssumptions = async (sessionId, assumptions, scenario = 'base_case') => {
+  const response = await api.post('/step-10-confirm-assumptions', { 
+    session_id: sessionId, 
+    assumptions, 
+    scenario 
+  });
   return response.data;
 };
 
-export const confirmValues = async (confirmedValues, auditLog) => {
-  const response = await api.post('/confirm-values', { confirmedValues, auditLog });
+// Step 11-12: Run Valuation
+export const runValuation = async (sessionId, model, scenario = 'base_case') => {
+  const response = await api.post('/step-11-12-valuate', { 
+    session_id: sessionId, 
+    model, 
+    scenario 
+  });
   return response.data;
 };
 
-export const getScenarios = async () => {
-  const response = await api.get('/scenarios');
+// Get DCF Inputs with historical data
+export const getDcfInputs = async (sessionId) => {
+  const response = await api.post('/dcf/inputs', { session_id: sessionId });
   return response.data;
 };
 
-export const selectScenario = async (scenarioType, customOverrides) => {
-  const response = await api.post('/select-scenario', { scenarioType, customOverrides });
+// Get Peer Data for Comps
+export const getPeerData = async (sessionId, minPeers = 5) => {
+  const response = await api.post('/comps/peers', { session_id: sessionId, min_peers: minPeers });
   return response.data;
 };
 
-export const runValuation = async (modelType, confirmedValues, scenario) => {
-  const response = await api.post('/run-valuation', { modelType, confirmedValues, scenario });
+// Get DuPont Analysis
+export const getDupontAnalysis = async (sessionId, years = 5) => {
+  const response = await api.post('/dupont/analyze', { session_id: sessionId, years });
   return response.data;
 };
 
-export const getResults = async () => {
-  const response = await api.get('/results');
-  return response.data;
-};
-
-export const resetState = async () => {
-  const response = await api.post('/reset');
+// Get Forecast Benchmarks
+export const getForecastBenchmarks = async (sessionId) => {
+  const response = await api.post('/forecast/benchmarks', { session_id: sessionId });
   return response.data;
 };
 
