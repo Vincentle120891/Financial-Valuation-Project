@@ -95,7 +95,7 @@ const ValuationFlow = () => {
       const response = await fetch(`${API_BASE_URL}/step-4-select-models`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id: sessionId, models: [modelType] })
+        body: JSON.stringify({ session_id: sessionId, model: modelType })
       });
       const data = await response.json();
       console.log('Select model response:', data);

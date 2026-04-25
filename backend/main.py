@@ -52,8 +52,7 @@ class TickerSelectRequest(BaseModel):
     market: str
 
 class ModelSelectRequest(BaseModel):
-    session_id: str
-    models: List[str]  # ["DCF", "DuPont", "COMPS"]
+    model: str  # "DCF", "DuPont", or "COMPS" (single selection)
 
 class AssumptionConfirmRequest(BaseModel):
     session_id: str
@@ -419,7 +418,7 @@ async def select_ticker(request: TickerSelectRequest):
         "status": "ticker_selected",
         "ticker": request.ticker,
         "market": request.market,
-        "selected_models": [],
+        "selected_model": None,  # Single model string
         "financial_data": None,
         "ai_suggestions": None,
         "confirmed_assumptions": None,
@@ -429,11 +428,11 @@ async def select_ticker(request: TickerSelectRequest):
 
 @app.post("/api/step-4-select-models")
 async def select_models(request: ModelSelectRequest):
-    """Step 4: User chooses models"""
+    """Step 4: User chooses model (single selection)"""
     session = get_session(request.session_id)
-    session['selected_models'] = request.models
-    session['status'] = "models_selected"
-    return {"message": "Models selected", "next_step": "fetch_data"}
+    session['selected_model'] = request.model  # Single model string
+    session['status'] = "model_selected"
+    return {"message": "Model selected", "next_step": "fetch_data", "selected_model": request.model}
 
 @app.post("/api/step-5-6-prepare-inputs")
 async def prepare_inputs(request: dict):
@@ -443,11 +442,11 @@ async def prepare_inputs(request: dict):
     session_id = request.get('session_id')
     session = get_session(session_id)
     
-    if not session or not session.get('selected_models'):
-        raise HTTPException(status_code=400, detail="No models selected")
+    if not session or not session.get('selected_model'):
+        raise HTTPException(status_code=400, detail="No model selected")
     
-    # Build required inputs based on selected models
-    selected_models = session['selected_models']
+    # Build required inputs based on selected model
+    selected_model = session['selected_model'].lower()
     required_inputs = []
     
     # Always require ticker confirmation
@@ -458,14 +457,14 @@ async def prepare_inputs(request: dict):
     })
     
     # Add model-specific inputs
-    if 'dcf' in [m.lower() for m in selected_models]:
+    if selected_model == 'dcf':
         required_inputs.extend([
             {"category": "DCF", "name": "WACC", "requiresInput": True},
             {"category": "DCF", "name": "Terminal Growth Rate", "requiresInput": True},
             {"category": "DCF", "name": "Forecast Period (years)", "requiresInput": True}
         ])
     
-    if 'comparable' in [m.lower() for m in selected_models]:
+    if selected_model == 'comparable' or selected_model == 'comps':
         required_inputs.extend([
             {"category": "Comparable Companies", "name": "Peer Group Selection", "requiresInput": True},
             {"category": "Comparable Companies", "name": "Multiples (EV/EBITDA, P/E)", "requiresInput": True}
@@ -474,7 +473,7 @@ async def prepare_inputs(request: dict):
     return {
         "status": "ready_to_fetch",
         "required_inputs": required_inputs,
-        "message": f"Found {len(required_inputs)} required inputs for your selected models"
+        "message": f"Found {len(required_inputs)} required inputs for your selected model"
     }
 
 @app.post("/api/step-7-8-fetch-data")
@@ -504,7 +503,8 @@ async def generate_ai(request: Request):
     if not session['financial_data']:
         raise HTTPException(status_code=400, detail="Financial data missing")
         
-    ai_results = await generate_ai_assumptions(session['financial_data'], session['selected_models'])
+    # Pass single model as a list for backward compatibility with generate_ai_assumptions
+    ai_results = await generate_ai_assumptions(session['financial_data'], [session['selected_model']])
     session['ai_suggestions'] = ai_results
     session['status'] = "ai_generated"
     
