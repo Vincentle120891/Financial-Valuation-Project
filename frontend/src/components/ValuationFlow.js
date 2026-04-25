@@ -9,9 +9,6 @@ const ValuationFlow = () => {
   const [selectedModel, setSelectedModel] = useState(null);
   const [sessionId, setSessionId] = useState(null);
   const [requiredFields, setRequiredFields] = useState([]);
-  const [retrievedData, setRetrievedData] = useState(null);
-  const [apiData, setApiData] = useState({});
-  const [aiData, setAiData] = useState({});
   const [confirmedValues, setConfirmedValues] = useState({});
   const [selectedScenario, setSelectedScenario] = useState('base_case');
   const [valuationResults, setValuationResults] = useState(null);
@@ -21,9 +18,13 @@ const ValuationFlow = () => {
   
   // New states for enhanced data
   const [historicalData, setHistoricalData] = useState(null);
-  const [forecastDrivers, setForecastDrivers] = useState(null);
+  const [forecastDrivers, setForecastDrivers] = useState({
+    best_case: { sales_volume_growth: [], inflation_rate: [], opex_growth: [], capital_expenditure: [], ar_days: [], inv_days: [], ap_days: [], tax_rate: [] },
+    base_case: { sales_volume_growth: [], inflation_rate: [], opex_growth: [], capital_expenditure: [], ar_days: [], inv_days: [], ap_days: [], tax_rate: [] },
+    worst_case: { sales_volume_growth: [], inflation_rate: [], opex_growth: [], capital_expenditure: [], ar_days: [], inv_days: [], ap_days: [], tax_rate: [] }
+  });
   const [peerData, setPeerData] = useState([]);
-  const [dupontRatios, setDupontRatios] = useState(null);
+  const [dupontResults, setDupontResults] = useState(null);
   const [compsResults, setCompsResults] = useState(null);
   const [dcfInputs, setDcfInputs] = useState(null);
   
@@ -133,7 +134,7 @@ const ValuationFlow = () => {
     if (selectedModel && currentStep === 5 && sessionId) {
       fetchRequiredInputs();
     }
-  }, [selectedModel, currentStep, sessionId]);
+  }, [selectedModel, currentStep, sessionId, fetchRequiredInputs]);
 
   // Step 7-8: Retrieve Data (API + AI)
   const handleRetrieveData = async () => {
@@ -158,9 +159,7 @@ const ValuationFlow = () => {
       console.log('AI response:', aiData_response);
       
       if (fetchData.data && aiData_response.suggestions) {
-        setApiData(fetchData.data.profile || {});
         setAiData(aiData_response.suggestions);
-        setRetrievedData(fetchData.data);
         
         // Extract model-specific data
         if (fetchData.data.historical_financials) {
@@ -171,6 +170,15 @@ const ValuationFlow = () => {
         }
         if (fetchData.data.peers) {
           setPeerData(fetchData.data.peers);
+        }
+        if (fetchData.data.dcf_inputs) {
+          setDcfInputs(fetchData.data.dcf_inputs);
+        }
+        if (fetchData.data.dupont_ratios) {
+          setDupontResults(fetchData.data.dupont_ratios);
+        }
+        if (fetchData.data.comps_results) {
+          setCompsResults(fetchData.data.comps_results);
         }
         
         setCurrentStep(8);
@@ -323,8 +331,6 @@ const ValuationFlow = () => {
     setSelectedModel(null);
     setSessionId(null);
     setRequiredFields([]);
-    setRetrievedData(null);
-    setApiData({});
     setAiData({});
     setConfirmedValues({});
     setSelectedScenario('base_case');
@@ -332,9 +338,13 @@ const ValuationFlow = () => {
     setError(null);
     setMarket('international');
     setHistoricalData(null);
-    setForecastDrivers(null);
+    setForecastDrivers({
+      best_case: { sales_volume_growth: [], inflation_rate: [], opex_growth: [], capital_expenditure: [], ar_days: [], inv_days: [], ap_days: [], tax_rate: [] },
+      base_case: { sales_volume_growth: [], inflation_rate: [], opex_growth: [], capital_expenditure: [], ar_days: [], inv_days: [], ap_days: [], tax_rate: [] },
+      worst_case: { sales_volume_growth: [], inflation_rate: [], opex_growth: [], capital_expenditure: [], ar_days: [], inv_days: [], ap_days: [], tax_rate: [] }
+    });
     setPeerData([]);
-    setDupontRatios(null);
+    setDupontResults(null);
     setCompsResults(null);
     setDcfInputs(null);
   };
