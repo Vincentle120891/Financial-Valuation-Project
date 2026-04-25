@@ -1,304 +1,462 @@
-# Financial Valuation Project - 12-Step Valuation Flow (Python Backend)
+# 📊 Financial Valuation Platform
 
-## Overview
+> **Professional-grade company valuation platform** implementing a comprehensive 12-step guided workflow for DCF, DuPont Analysis, Trading Comps, and Real Estate valuations.
 
-This project implements a comprehensive **12-Step Valuation Flow** for financial analysis, supporting multiple valuation methodologies including:
+![Python](https://img.shields.io/badge/Python-3.9+-blue.svg)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.116+-green.svg)
+![React](https://img.shields.io/badge/React-18-blue.svg)
+![License](https://img.shields.io/badge/License-MIT-yellow.svg)
 
-- **DCF (Discounted Cash Flow)**: Intrinsic value based on projected free cash flows with sensitivity & scenario analysis
-- **Trading Comps**: Relative valuation using peer company multiples
-- **DuPont Analysis**: ROE decomposition into profit margin, asset turnover, and leverage
-- **Real Estate**: Property valuation using NOI and cap rates
+---
 
-### 🐍 Python Backend Migration
+## 🎯 Overview
 
-The backend has been migrated from Node.js/Express to **Python/FastAPI** for improved performance, better yfinance integration, and enhanced AI capabilities. The original Node.js code is archived in `backend/draft/`.
+This platform enables financial analysts, investors, and students to perform institutional-quality company valuations through an intuitive, step-by-step guided workflow. It combines **live market data**, **AI-powered assumptions**, and **industry-standard valuation methodologies** to deliver comprehensive valuation analysis with full audit trails.
 
-## Architecture
+### Core Valuation Models
 
-### Backend (Python/FastAPI)
-- High-performance async API server
-- In-memory state management
-- **yfinance** integration for reliable financial data
-- **Alpha Vantage API** for supplemental data
-- **AI integration** (Gemini/Groq) for intelligent assumptions
-- 12-step guided workflow
+| Model | Description | Key Output |
+|-------|-------------|------------|
+| **DCF** | Discounted Cash Flow - Intrinsic value based on projected free cash flows | Implied Share Price, Enterprise Value |
+| **DuPont Analysis** | ROE decomposition into profit margin, asset turnover, and leverage | ROE Drivers, Financial Efficiency Metrics |
+| **Trading Comps** | Relative valuation using peer company multiples | Comparable Valuation Multiples |
+| **Real Estate** | Property valuation using NOI and cap rates | Property Value, Cap Rate Analysis |
 
-### Frontend (React)
-- Modern React 18 with hooks
-- Responsive CSS design
-- Interactive step-by-step wizard
-- Real-time data visualization
+---
 
-## The 12-Step Flow
+## 🏗️ Architecture
 
-| Step | Action | Description |
-|------|--------|-------------|
-| **1** | **Search** | User inputs ticker/company name + market toggle (Vietnamese/International) |
-| **2** | **Show Results** | Display up to 10 related tickers with exchange info |
-| **3** | **Select Ticker** | User chooses specific ticker, creates session |
-| **4** | **Choose Models** | Select valuation models (DCF, DuPont, COMPS) |
-| **5** | **Review Inputs** | Show auto-retrieved vs. required manual inputs |
-| **6** | **Confirm** | User confirms to proceed with data fetch |
-| **7** | **Fetch Data** | yFinance & Alpha Vantage retrieve financial data |
-| **8** | **Display Data** | Show fetched numbers with error handling |
-| **9** | **AI Generation** | AI generates WACC, growth rates, benchmarks, trends, explanations |
-| **10** | **User Review** | User accepts/edits AI suggestions with peer comparisons |
-| **11** | **Valuation** | Run valuation engine |
-| **12** | **Results** | Show valuation with sensitivity & scenario analysis |
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     Frontend (React 18)                      │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │  12-Step Guided Wizard Interface                     │   │
+│  │  • Market Toggle (VN/International)                  │   │
+│  │  • Interactive Data Visualization                    │   │
+│  │  • AI Assumption Review & Editing                    │   │
+│  │  • Sensitivity & Scenario Analysis Charts            │   │
+│  └──────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────┘
+                            ↕ HTTP/REST API
+┌─────────────────────────────────────────────────────────────┐
+│                 Backend (Python/FastAPI)                     │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
+│  │  DCF Engine  │  │ DuPont Engine│  │ Comps Engine │      │
+│  └──────────────┘  └──────────────┘  └──────────────┘      │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │              Data Integration Layer                   │   │
+│  │  • yfinance (Yahoo Finance)                          │   │
+│  │  • Alpha Vantage API                                 │   │
+│  │  • AI Providers (Gemini/Groq)                        │   │
+│  │  • Damodaran Benchmarks                              │   │
+│  └──────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────┘
+```
 
-### Detailed Steps
+### Technology Stack
 
-#### Step 1: Input Company Name or Ticker + Market Toggle
-- User enters company name or ticker symbol
-- Toggle between Vietnamese market (`.VN`) and International markets
-- UI: Text input with market selector radio buttons
+**Backend (Python)**
+- **FastAPI** ≥0.116.0 - Modern async web framework with auto-generated OpenAPI docs
+- **uvicorn** ≥0.35.0 - High-performance ASGI server
+- **pydantic** ≥2.0.0 - Data validation and settings management
+- **yfinance** ≥1.0.0 - Yahoo Finance data retrieval
+- **aiohttp** ≥3.9.0 - Async HTTP client for Alpha Vantage API
+- **groq** ≥0.11.0 - Groq LLM client (Llama 3) for AI assumptions
+- **python-dotenv** ≥1.0.0 - Environment variable management
+- **gunicorn** ≥21.0.0 - Production WSGI server
 
-#### Step 2: Search & Display Matching Results
-- Query yfinance/Alpha Vantage API for ticker matches
-- Ranked list of up to 10 tickers + company names + exchanges
-- UI: Radio-button list with "Next →" button; "No results" fallback
+**Frontend (React)**
+- **React 18** - Component-based UI with hooks
+- **Axios** - HTTP client for API communication
+- **Recharts** - Data visualization library
+- **CSS3** - Responsive design with animations
 
-#### Step 3: Select Company & Ticker
-- User confirms selection
-- State encoded with ticker, company_name, market
-- UI: Confirmation screen: "✅ Selected: [Company] ([Ticker])" + "Continue →"
+---
 
-#### Step 4: Select Valuation Model
-- User chooses one or more: DCF | Trading Comps | DuPont Analysis
-- model_type added to state
-- UI: Multi-select checkboxes with model descriptions; "View Requirements →"
+## 🔄 The 12-Step Workflow
 
-#### Step 5: Show Required Inputs Checklist
-- Display model-specific field list from Schema definitions
-- All fields marked ⏳ Pending Retrieval
-- UI: Table with "Field Name" + "Status" columns; "Retrieve Data →" button
+### Phase 1: Company Selection (Steps 1-3)
 
-#### Step 6: Confirm Before Fetch
-- Final confirmation before API calls
-- UI: Summary of selected models and required fields
+| Step | Action | User Interface | Backend Process |
+|------|--------|----------------|-----------------|
+| **1** | Search | Text input + market toggle (VN/International) | Query yfinance for ticker matches |
+| **2** | Results | Radio list of up to 10 tickers with exchange info | Return ranked search results |
+| **3** | Select | Confirmation screen: "✅ Selected: [Company]" | Create session with UUID |
 
-#### Step 7: Retrieve Live Data from APIs
-- Fetch market data, financial statements, macro/FX indicators via yfinance & Alpha Vantage
-- Populated API-retrieved data object
-- UI: Loading indicator → auto-advance to Step 8 on success
+### Phase 2: Model Configuration (Steps 4-6)
 
-#### Step 8: Review Fetched Data
-- Display all retrieved financial metrics
-- Highlight missing or incomplete data
-- UI: Data table with ✓ Found / ✗ Missing indicators
+| Step | Action | User Interface | Backend Process |
+|------|--------|----------------|-----------------|
+| **4** | Choose Models | Multi-select checkboxes (DCF, DuPont, COMPS) | Validate model compatibility |
+| **5** | Review Inputs | Table showing required fields per model | Load schema definitions |
+| **6** | Confirm | Summary of models and required fields | Prepare for data fetch |
 
-#### Step 9: AI Suggestions + Benchmark Ranges ⭐ Enhanced
-Side-by-side comparison for each required field:
-- **API Value**: Auto-fetched from yfinance/Alpha Vantage
-- **AI Suggestion**: Pre-filled value from Gemini/Groq with explanation
-- **Benchmark Range**: 25th–75th percentile from peers or Damodaran
-- **Source Citation**: Transparent reference (e.g., "Damodaran Sector WACC")
-- **Trend Analysis**: Historical pattern insights
+### Phase 3: Data Acquisition (Steps 7-8)
 
-User Controls:
-- ✏️ Manual Entry: Type custom value
-- 🤖 Use AI: One-click fill with AI-suggested value
-- 📊 Use Benchmark: One-click fill with benchmark median
+| Step | Action | User Interface | Backend Process |
+|------|--------|----------------|-----------------|
+| **7** | Fetch Data | Loading indicator | Call yfinance + Alpha Vantage APIs |
+| **8** | Display Data | Data table with ✓ Found / ✗ Missing indicators | Parse and validate retrieved data |
 
-#### Step 10: Select or Customize Assumptions
-- Best / Base / Worst scenario presets
-- AI-suggested ranges with confidence scores
-- Peer comparison tables
-- UI: Toggle between presets; expandable "Custom" section
+### Phase 4: AI-Powered Assumptions (Steps 9-10)
 
-#### Step 11: Confirm & Run Valuation Model
-- Final review screen showing all inputs, sources, and assumptions
-- Complete configuration object routed to selected engine
-- UI: Summary table with source tags (✅ API / 🤖 AI / 📊 Bench / ✏️ Manual)
+| Step | Action | User Interface | Backend Process |
+|------|--------|----------------|-----------------|
+| **9** | AI Generation | Side-by-side: API Value | AI Suggestion | Benchmark Range | Generate WACC, growth rates, trends via Gemini/Groq |
+| **10** | Review | Toggle presets (Bull/Base/Bear), manual edits | Store confirmed assumptions with source tags |
 
-#### Step 12: Display Results + Audit Trail
-Output includes:
-- Primary result (Implied Share Price, EV, ROE, etc.)
-- Upside/(Downside) vs. current market price
-- Scenario comparison (Bull/Base/Bear)
-- Sensitivity analysis tables
-- Full audit trail: field-level sourcing, AI confidence scores, user overrides
+### Phase 5: Valuation & Results (Steps 11-12)
 
-## Installation
+| Step | Action | User Interface | Backend Process |
+|------|--------|----------------|-----------------|
+| **11** | Run Valuation | Summary table with source tags | Execute valuation engines |
+| **12** | Results | Implied price, upside/downside, sensitivity matrix, scenario analysis | Return comprehensive valuation output |
 
-### Backend Setup (Python)
+---
 
-**Prerequisites**: Python 3.9+
+## 🚀 Quick Start
+
+### Prerequisites
+
+- **Python** 3.9 or higher
+- **Node.js** 16 or higher
+- **npm** or **yarn**
+
+### Backend Setup
 
 ```bash
 cd backend
+
+# Create virtual environment
 python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
+
+# Activate virtual environment
+# macOS/Linux:
+source venv/bin/activate
+# Windows:
+venv\Scripts\activate
+
+# Install dependencies
 pip install -r requirements.txt
+
+# Configure environment variables
 cp .env.example .env
-# Edit .env with your API keys
+# Edit .env with your API keys (see Configuration section)
+
+# Start the server
 python main.py
 ```
 
-The backend server will run on `http://localhost:8000`
+The backend will run on **http://localhost:8000**
 
-### Frontend Setup (React)
+Interactive API documentation available at:
+- **Swagger UI**: http://localhost:8000/docs
+- **ReDoc**: http://localhost:8000/redoc
+
+### Frontend Setup
 
 ```bash
 cd frontend
+
+# Install dependencies
 npm install
+
+# Start development server
 npm start
 ```
 
-The frontend will run on `http://localhost:3000`
+The frontend will run on **http://localhost:3000**
 
-**Note**: Update the frontend API base URL to `http://localhost:8000` (was 5000 for Node.js)
+> **Note**: Ensure the backend is running before starting the frontend. The frontend API base URL should point to `http://localhost:8000`.
 
-## API Endpoints
+---
+
+## ⚙️ Configuration
+
+### Environment Variables (.env)
+
+Create a `.env` file in the `backend/` directory:
+
+```bash
+# Server Configuration
+PORT=8000
+DEBUG=true
+
+# Financial Data APIs (Required)
+ALPHA_VANTAGE_KEY=your_key_here
+# Get your free key at: https://www.alphavantage.co/support/#api-key
+
+# AI APIs (Optional - falls back to mock data if not provided)
+# Google Gemini API - Primary AI provider
+GEMINI_API_KEY=your_key_here
+# Get your free key at: https://makersuite.google.com/app/apikey
+
+# Groq API - Fallback AI provider (Llama 3)
+GROQ_API_KEY=your_key_here
+# Get your free key at: https://console.groq.com/keys
+
+# AI Configuration (optional, uses defaults if not set)
+AI_PRIMARY_MODEL=gemini
+AI_FALLBACK_MODEL=groq
+AI_CONFIDENCE_THRESHOLD=0.7
+```
+
+> ⚠️ **Security Notice**: Never commit `.env` to version control. Revoke and regenerate any exposed API keys immediately.
+
+---
+
+## 📡 API Endpoints
 
 ### Core Workflow Endpoints
 
-| Method | Endpoint | Step | Description |
-|--------|----------|------|-------------|
-| `POST` | `/api/step-1-search` | 1 | Search tickers (body: `{query, market}`) |
-| `POST` | `/api/step-3-select-ticker` | 3 | Select ticker, create session |
-| `POST` | `/api/step-4-select-models` | 4 | Choose models (DCF, DuPont, COMPS) |
-| `POST` | `/api/step-6-confirm-inputs` | 6 | Confirm before data fetch |
-| `POST` | `/api/step-7-8-fetch-data` | 7-8 | Retrieve financial data |
-| `POST` | `/api/step-9-generate-ai` | 9 | Generate AI assumptions |
-| `POST` | `/api/step-10-confirm-assumptions` | 10 | User confirms/edits assumptions |
-| `POST` | `/api/step-11-12-valuate` | 11-12 | Run valuation & get results |
+| Method | Endpoint | Step | Description | Request Body | Response |
+|--------|----------|------|-------------|--------------|----------|
+| `POST` | `/api/step-1-search` | 1 | Search tickers | `{query, market}` | `{results: [...]}` |
+| `POST` | `/api/step-3-select-ticker` | 3 | Select ticker, create session | `{ticker, market}` | `{session_id, status}` |
+| `POST` | `/api/step-4-select-models` | 4 | Choose valuation models | `{session_id, models}` | `{status}` |
+| `POST` | `/api/step-6-confirm-inputs` | 6 | Confirm before data fetch | `{session_id}` | `{status}` |
+| `POST` | `/api/step-7-8-fetch-data` | 7-8 | Retrieve financial data | `{session_id}` | `{data: {...}}` |
+| `POST` | `/api/step-9-generate-ai` | 9 | Generate AI assumptions | `{session_id}` | `{suggestions: {...}}` |
+| `POST` | `/api/step-10-confirm-assumptions` | 10 | Confirm/edit assumptions | `{session_id, assumptions}` | `{status}` |
+| `POST` | `/api/step-11-12-valuate` | 11-12 | Run valuation | `{session_id}` | `{result: {...}}` |
 
 ### Utility Endpoints
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `GET` | `/api/health` | Health check |
-| `GET` | `/api/models` | List available models |
-| `GET` | `/api/scenarios` | Get scenario templates |
+| `GET` | `/api/health` | Health check endpoint |
+| `GET` | `/api/models` | List available valuation models |
+| `GET` | `/api/scenarios` | Get scenario templates (Bull/Base/Bear) |
 | `POST` | `/api/reset` | Reset session state |
 
-### Interactive Documentation
+---
 
-Once running, access:
-- **Swagger UI**: http://localhost:8000/docs
-- **ReDoc**: http://localhost:8000/redoc
-
-## Project Structure
+## 📁 Project Structure
 
 ```
 /workspace
-├── backend/
-│   ├── main.py                     # FastAPI application (entry point)
-│   ├── yfinance_data.py            # Yahoo Finance data fetching
-│   ├── dcf_engine.py               # DCF valuation calculations
-│   ├── dupont_engine.py            # DuPont analysis calculations
-│   ├── requirements.txt            # Python dependencies
-│   ├── .env                        # Environment variables (gitignored)
-│   ├── .env.example                # Example environment file
-│   ├── README_PYTHON.md            # Python backend documentation
-│   ├── FLOW_IMPLEMENTATION.md      # Detailed workflow docs
-│   └── draft/                      # Archived Node.js code
-│       ├── server.js
-│       └── ...
-├── frontend/
-│   ├── package.json
+├── backend/                          # Python/FastAPI Backend
+│   ├── main.py                       # FastAPI application (entry point)
+│   ├── dcf_engine.py                 # DCF valuation calculations
+│   ├── dcf_engine_full.py            # Advanced DCF with full forecasting
+│   ├── dcf_forecast_config.py        # DCF forecast configuration schemas
+│   ├── dupont_engine.py              # DuPont analysis calculations
+│   ├── dupont_module.py              # Extended DuPont module
+│   ├── comps_engine.py               # Trading comparables engine
+│   ├── input.py                      # Input validation & schemas
+│   ├── input_ai.py                   # AI input generation logic
+│   ├── input_dcf.py                  # DCF-specific input handlers
+│   ├── requirements.txt              # Python dependencies
+│   ├── .env                          # Environment variables (gitignored)
+│   ├── .env.example                  # Template for environment setup
+│   ├── README_PYTHON.md              # Detailed backend documentation
+│   ├── FLOW_IMPLEMENTATION.md        # 12-step workflow API reference
+│   └── COMPLETE_MODEL_REFERENCE.md   # Comprehensive model documentation
+│
+├── frontend/                         # React 18 Frontend
+│   ├── package.json                  # Dependencies (React, Axios, Recharts)
 │   ├── public/
-│   │   └── index.html
+│   │   └── index.html                # HTML entry point
 │   └── src/
-│       ├── index.js
-│       ├── index.css
+│       ├── index.js                  # React entry point
 │       ├── components/
-│       │   └── ValuationFlow.js
-│       ├── services/
-│       │   └── api.js
-│       └── hooks/
-├── README.md                       # This file
-└── README_PYTHON_SETUP.md          # Quick Python setup guide
+│       │   └── ValuationFlow.js      # Main 12-step wizard component
+│       └── services/
+│           └── api.js                # API service layer
+│
+├── README.md                         # This file - Main project documentation
+└── README_PYTHON_SETUP.md            # Quick Python setup guide
 ```
 
-## Features
+---
 
-- ✅ **12-Step Guided Workflow**: Structured user journey from search to valuation
-- ✅ **Multiple Valuation Models**: DCF, Trading Comps, DuPont Analysis
+## ✨ Key Features
+
+- ✅ **12-Step Guided Workflow**: Structured user journey from company search to valuation results
+- ✅ **Multiple Valuation Models**: DCF, Trading Comps, DuPont Analysis, Real Estate
 - ✅ **Market Toggle**: Support for Vietnamese (.VN) and international markets
-- ✅ **Live Data Integration**: yfinance + Alpha Vantage API retrieval
-- ✅ **AI-Powered Assumptions**: Gemini/Groq for WACC, growth rates, benchmarks
-- ✅ **Benchmark Comparisons**: Industry-standard reference ranges from Damodaran
-- ✅ **Scenario Analysis**: Best/Base/Worst case modeling
-- ✅ **Sensitivity Analysis**: Tornado charts and data tables
-- ✅ **Audit Trail**: Complete transparency on data sources
-- ✅ **Responsive Design**: Works on desktop and mobile
-- ✅ **Modern UI/UX**: Clean, professional interface
+- ✅ **Live Data Integration**: Real-time financial data via yfinance + Alpha Vantage API
+- ✅ **AI-Powered Assumptions**: Intelligent WACC, growth rates, and benchmark suggestions via Gemini/Groq
+- ✅ **Benchmark Comparisons**: Industry-standard reference ranges from Damodaran data
+- ✅ **Scenario Analysis**: Bull/Base/Bear case modeling with confidence scores
+- ✅ **Sensitivity Analysis**: WACC vs Terminal Growth matrices and tornado charts
+- ✅ **Audit Trail**: Complete transparency with field-level sourcing (API/AI/Benchmark/Manual)
+- ✅ **Responsive Design**: Optimized for desktop and mobile devices
+- ✅ **Modern UI/UX**: Clean, professional interface with smooth animations
 - ✅ **Interactive API Docs**: Auto-generated Swagger/ReDoc documentation
 
-## Technologies Used
+---
 
-### Backend (Python)
-- **FastAPI**: Modern async web framework
-- **uvicorn**: ASGI server
-- **yfinance**: Yahoo Finance data library
-- **aiohttp**: Async HTTP client for Alpha Vantage
-- **groq**: Groq LLM client
-- **pydantic**: Data validation
-- **python-dotenv**: Environment variable management
-- **gunicorn**: Production WSGI server
+## 📊 Sample Valuation Output
 
-### Frontend (React)
-- React 18
-- Axios (HTTP client)
-- CSS3 (with animations)
-- Fetch API
-
-## Configuration
-
-### Environment Variables (.env)
-
-```bash
-ALPHA_VANTAGE_KEY=your_key_here        # Required for financial statements
-GEMINI_API_KEY=your_key_here           # Recommended for AI features
-GROQ_API_KEY=your_key_here             # Optional fallback AI
-PORT=8000                              # Server port
-DEBUG=true                             # Enable debug mode
+```json
+{
+  "enterprise_value": 2850000000000,
+  "equity_value": 2750000000000,
+  "implied_share_price": 185.50,
+  "current_market_price": 178.75,
+  "upside_downside": "3.79%",
+  "recommendation": "BUY",
+  "scenario_analysis": {
+    "bull_case": {"price": 210.00, "probability": 0.25},
+    "base_case": {"price": 185.50, "probability": 0.50},
+    "bear_case": {"price": 155.00, "probability": 0.25}
+  },
+  "sensitivity_matrix": {
+    "wacc_range": [0.07, 0.08, 0.09, 0.10],
+    "terminal_growth_range": [0.015, 0.02, 0.025, 0.03],
+    "values": [[...], [...], [...], [...]]
+  },
+  "audit_trail": {
+    "wacc": {"value": 0.085, "source": "AI", "confidence": 0.92},
+    "terminal_growth": {"value": 0.025, "source": "Benchmark", "peer_median": 0.023}
+  }
+}
 ```
 
-⚠️ **Security Notice**: Never commit `.env` to version control. Revoke and regenerate any exposed API keys immediately.
+---
 
-## Quick Start
+## 🔍 How It Works
+
+### 1. Data Collection
+The platform retrieves live financial data from multiple sources:
+- **yfinance**: Stock prices, historical data, company profile
+- **Alpha Vantage API**: Income statements, balance sheets, cash flow statements
+- **Damodaran Database**: Industry benchmarks and sector WACC data
+
+### 2. AI-Assisted Assumptions
+When manual inputs are required, the AI engine:
+- Analyzes historical trends and peer comparisons
+- Generates reasonable assumption ranges with confidence scores
+- Provides transparent explanations for each suggestion
+- Allows users to accept, edit, or override AI recommendations
+
+### 3. Valuation Execution
+Each valuation model runs independently:
+- **DCF**: Projects free cash flows, calculates terminal value, discounts to present
+- **DuPont**: Decomposes ROE into margin, turnover, and leverage components
+- **Comps**: Calculates trading multiples and applies to target company
+- **Real Estate**: Capitalizes NOI using appropriate cap rates
+
+### 4. Results Synthesis
+Final output includes:
+- Primary valuation metric (implied share price, EV, etc.)
+- Upside/downside analysis vs. current market price
+- Scenario comparison (Bull/Base/Bear)
+- Sensitivity analysis tables
+- Complete audit trail with source citations
+
+---
+
+## 🛠️ Development
+
+### Running Tests
 
 ```bash
-# Backend
+# Backend tests (if implemented)
 cd backend
-pip install -r requirements.txt
-python main.py
+pytest
 
-# Frontend (in new terminal)
+# Frontend tests
 cd frontend
-npm install
-npm start
+npm test
 ```
 
-Access the app at http://localhost:3000
+### Code Style
 
-## Future Enhancements
+```bash
+# Backend linting (if configured)
+flake8 backend/
 
-1. ✅ **Python Migration**: Completed - Better yfinance integration
-2. ✅ **12-Step Workflow**: Enhanced from 10 steps
-3. ✅ **AI Integration**: Gemini/Groq for intelligent assumptions
-4. 🔄 **Database Persistence**: Replace in-memory state with PostgreSQL/MongoDB
-5. 🔄 **Authentication**: User accounts and saved valuations
-6. 🔄 **Export Functionality**: PDF/Excel report generation
-7. 🔄 **Advanced Charts**: Interactive sensitivity analysis visualizations
-8. 🔄 **Multi-Currency Support**: FX conversion for international companies
-9. 🔄 **SEC Filings Parser**: Extract guidance from 10-K/10-Q documents
-10. 🔄 **Peer Group Automation**: Intelligent peer selection algorithm
+# Frontend linting
+cd frontend
+npm run lint
+```
 
-## License
+---
 
-MIT License
+## 📈 Roadmap
 
-## Contributing
+### Completed ✅
+- [x] Python backend migration from Node.js
+- [x] 12-step workflow implementation
+- [x] AI integration (Gemini/Groq)
+- [x] yfinance and Alpha Vantage integration
+- [x] DCF, DuPont, and Comps engines
+- [x] Interactive API documentation
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+### In Progress 🔄
+- [ ] Database persistence (PostgreSQL/MongoDB)
+- [ ] User authentication and saved valuations
+- [ ] PDF/Excel report export functionality
 
-## Support
+### Planned 📋
+- [ ] Interactive sensitivity analysis charts
+- [ ] Multi-currency FX conversion
+- [ ] SEC filings parser (10-K/10-Q)
+- [ ] Automated peer group selection algorithm
+- [ ] Real-time collaboration features
+- [ ] Mobile app (React Native)
 
-For issues or questions:
-1. Check the [backend/README_PYTHON.md](./backend/README_PYTHON.md) for detailed Python backend docs
-2. Review the interactive API docs at http://localhost:8000/docs
-3. Check the [FLOW_IMPLEMENTATION.md](./backend/FLOW_IMPLEMENTATION.md) for workflow details
+---
+
+## 🤝 Contributing
+
+Contributions are welcome! Please follow these steps:
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+### Contribution Guidelines
+- Follow existing code style and conventions
+- Write clear commit messages
+- Include tests for new features
+- Update documentation as needed
+- Ensure all tests pass before submitting PR
+
+---
+
+## 📄 License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+---
+
+## 🆘 Support
+
+For issues, questions, or feedback:
+
+1. **Documentation**: Check the detailed guides:
+   - [Backend Documentation](./backend/README_PYTHON.md)
+   - [Workflow Implementation](./backend/FLOW_IMPLEMENTATION.md)
+   - [Model Reference](./backend/COMPLETE_MODEL_REFERENCE.md)
+   - [Python Setup Guide](./README_PYTHON_SETUP.md)
+
+2. **API Docs**: Access interactive documentation at http://localhost:8000/docs
+
+3. **GitHub Issues**: Report bugs or request features via GitHub Issues
+
+4. **Email**: Contact the maintainers for direct support
+
+---
+
+## 🙏 Acknowledgments
+
+- **Yahoo Finance** and **yfinance** library for market data
+- **Alpha Vantage** for financial statement APIs
+- **Aswath Damodaran** for benchmark data and valuation methodologies
+- **Google Gemini** and **Groq** for AI capabilities
+- **FastAPI** and **React** communities for excellent frameworks
+
+---
+
+## 📞 Contact
+
+For business inquiries or partnerships, please contact the project maintainers through GitHub.
+
+---
+
+*Built with ❤️ for the finance community*
