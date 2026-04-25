@@ -6,6 +6,10 @@ import os
 import json
 import logging
 from typing import Dict, Any, Optional, List
+from dotenv import load_dotenv
+
+# Load .env file explicitly
+load_dotenv()
 
 logger = logging.getLogger(__name__)
 
