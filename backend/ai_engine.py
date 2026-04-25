@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 # --- Configuration ---
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+GEMINI_API_KEY = os.getenv("GOOGLE_GEMINI_API_KEY")  # Match .env variable name
 QWEN_API_KEY = os.getenv("DASHSCOPE_API_KEY")  # Alibaba Cloud DashScope key
 
 class AIFallbackEngine:
