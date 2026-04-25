@@ -232,8 +232,8 @@ async def generate_ai_assumptions(data: Dict, model: str) -> Dict:
     """Step 9: AI Engine - Generate comprehensive assumptions with full transparency using 3-tier fallback"""
     
     # Prepare company data for AI engine
-    profile = data['profile']
-    financials = data['financials']
+    profile = data.get('profile', {})
+    financials = data.get('financials', {})
     
     # Extract historical data
     revenue_history = list(financials.get('revenue', {}).values())
