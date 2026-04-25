@@ -16,6 +16,9 @@ from dcf_engine_full import DCFEngine, DCFInputs, ForecastDrivers
 from dupont_engine import perform_dupont_analysis
 from comps_engine import TradingCompsAnalyzer, TargetCompanyData, PeerCompanyData
 
+# Import Resilient AI Engine with 3-Tier Fallback
+from ai_engine import ai_engine
+
 # Load environment variables
 load_dotenv()
 
@@ -226,8 +229,9 @@ def fetch_financial_data(ticker_symbol: str, market: str) -> Dict:
         raise HTTPException(status_code=500, detail=f"Data retrieval failed: {str(e)}")
 
 async def generate_ai_assumptions(data: Dict, model: str) -> Dict:
-    """Step 9: AI Engine - Generate comprehensive assumptions with full transparency (Value + Explanation + Source Data)"""
+    """Step 9: AI Engine - Generate comprehensive assumptions with full transparency using 3-tier fallback"""
     
+    # Prepare company data for AI engine
     profile = data['profile']
     financials = data['financials']
     
@@ -236,7 +240,7 @@ async def generate_ai_assumptions(data: Dict, model: str) -> Dict:
     ebitda_history = list(financials.get('ebitda', {}).values())
     net_income_history = list(financials.get('net_income', {}).values())
     
-    # Calculate historical growth rates
+    # Calculate historical metrics
     rev_growth_rates = []
     for i in range(min(3, len(revenue_history) - 1)):
         if revenue_history[i] and revenue_history[i+1] and revenue_history[i+1] > 0:
@@ -245,212 +249,74 @@ async def generate_ai_assumptions(data: Dict, model: str) -> Dict:
     
     avg_hist_growth = sum(rev_growth_rates) / len(rev_growth_rates) if rev_growth_rates else 0.05
     
-    # Model-specific assumption generation
-    if model.lower() == 'dcf':
-        # Generate comprehensive DCF assumptions
-        beta = profile.get('beta', 1.0)
-        risk_free_rate = 0.045
-        equity_risk_premium = 0.055
-        cost_of_equity = risk_free_rate + (beta * equity_risk_premium)
-        
-        # Estimate cost of debt (simplified)
-        cost_of_debt = 0.05
-        tax_rate = 0.21
-        
-        # Assume 60/40 equity/debt capital structure
-        wacc = (0.6 * cost_of_equity) + (0.4 * cost_of_debt * (1 - tax_rate))
-        
-        # Generate 6-period forecast drivers (5 years + terminal)
-        base_growth = max(0.02, min(0.15, avg_hist_growth))
-        revenue_growth_forecast = [
-            {"year": 1, "value": round(base_growth * 0.95, 3), "rationale": "Slight moderation from historical average", "sources": f"Historical Avg: {round(avg_hist_growth, 3)}"},
-            {"year": 2, "value": round(base_growth * 0.90, 3), "rationale": "Continued deceleration as company matures", "sources": "Trend extrapolation"},
-            {"year": 3, "value": round(base_growth * 0.85, 3), "rationale": "Stabilization phase begins", "sources": "Mean reversion"},
-            {"year": 4, "value": round(base_growth * 0.80, 3), "rationale": "Convergence to long-term growth", "sources": "Macro alignment"},
-            {"year": 5, "value": round(base_growth * 0.75, 3), "rationale": "Near-terminal stabilization", "sources": "Macro alignment"},
-            {"year": 6, "value": 0.02, "rationale": "Terminal growth rate aligned with inflation", "sources": "Long-term GDP/inflation expectation"}
-        ]
-        
-        # Operating assumptions
-        gross_margin = ebitda_history[0] / revenue_history[0] if revenue_history[0] and ebitda_history[0] else 0.30
-        opex_pct = 1 - gross_margin - 0.15  # Assume 15% EBITDA margin
-        
-        return {
-            "model": "DCF",
-            "wacc": {
-                "value": round(wacc, 4),
-                "rationale": f"Calculated via CAPM blended with cost of debt",
-                "sources": f"Formula: (0.6 × {round(cost_of_equity, 3)}) + (0.4 × {cost_of_debt} × (1-{tax_rate})) = {round(wacc, 4)}"
-            },
-            "risk_free_rate": {
-                "value": risk_free_rate,
-                "rationale": "Current 10-Year US Treasury yield",
-                "sources": "Market Data: US10Y"
-            },
-            "equity_risk_premium": {
-                "value": equity_risk_premium,
-                "rationale": "Historical equity risk premium for developed markets",
-                "sources": "Academic consensus (Damodaran)"
-            },
-            "beta": {
-                "value": beta,
-                "rationale": "Company's systematic risk relative to market",
-                "sources": f"yfinance 5-year monthly beta for {profile.get('ticker', 'N/A')}"
-            },
-            "cost_of_debt": {
-                "value": cost_of_debt,
-                "rationale": "Estimated borrowing rate based on credit profile",
-                "sources": "Corporate bond yield curve + credit spread"
-            },
-            "tax_rate": {
-                "value": tax_rate,
-                "rationale": "Effective corporate tax rate",
-                "sources": "US Federal + State statutory rate"
-            },
-            "terminal_growth_rate": {
-                "value": 0.023,
-                "rationale": "Conservative long-term growth aligned with inflation expectations",
-                "sources": "Fed inflation target (2%) + real GDP growth (0.3%)"
-            },
-            "terminal_ebitda_multiple": {
-                "value": 8.0,
-                "rationale": "Exit multiple based on mature company valuation",
-                "sources": "Sector median EV/EBITDA for mature firms"
-            },
-            "revenue_growth_forecast": revenue_growth_forecast,
-            "inflation_rate": [
-                {"year": i, "value": 0.02, "rationale": "Expected inflation rate", "sources": "Fed target"} 
-                for i in range(6)
-            ],
-            "opex_growth": [
-                {"year": i, "value": 0.02, "rationale": "Operating expenses grow with inflation", "sources": "Inflation linkage"} 
-                for i in range(6)
-            ],
-            "gross_margin_target": {
-                "value": round(gross_margin, 3),
-                "rationale": "Projected to maintain historical efficiency",
-                "sources": f"Latest fiscal year: {round(gross_margin, 3)}"
-            },
-            "opex_pct_of_revenue": {
-                "value": round(opex_pct, 3),
-                "rationale": "Operating expense ratio to sustain target margins",
-                "sources": f"Derived from gross margin {round(gross_margin, 3)} - target EBITDA 15%"
-            },
-            "capex_pct_of_revenue": {
-                "value": 0.05,
-                "rationale": "Maintenance CapEx required to sustain operations",
-                "sources": "Industry standard: 4-6% of revenue"
-            },
-            "depreciation_pct_of_revenue": {
-                "value": 0.03,
-                "rationale": "Depreciation aligned with asset base",
-                "sources": "Historical depreciation/revenue ratio"
-            },
-            "ar_days": {
-                "value": 45,
-                "rationale": "Days Sales Outstanding - collection period",
-                "sources": "Industry average for sector"
-            },
-            "inv_days": {
-                "value": 60,
-                "rationale": "Days Inventory Outstanding - stock turnover",
-                "sources": "Industry average for sector"
-            },
-            "ap_days": {
-                "value": 30,
-                "rationale": "Days Payable Outstanding - supplier terms",
-                "sources": "Industry average for sector"
-            },
-            "useful_life_existing": {
-                "value": 10.0,
-                "rationale": "Average useful life of existing PP&E",
-                "sources": "Depreciation schedule analysis"
-            },
-            "useful_life_new": {
-                "value": 10.0,
-                "rationale": "Useful life assumption for new CapEx",
-                "sources": "Asset class standards"
-            },
-            "tax_loss_utilization_limit_pct": {
-                "value": 0.80,
-                "rationale": "Percentage of NOLs expected to be utilized",
-                "sources": "Tax code limitations (Section 382)"
-            },
-            "benchmarks": {
-                "peer_ev_ebitda": {"value": 12.5, "rationale": "Peer group median multiple", "sources": "Comparable company analysis"},
-                "sector_operating_margin": {"value": 0.15, "rationale": "Sector average profitability", "sources": "Industry report"}
-            },
-            "trend_analysis": f"Revenue growing at {avg_hist_growth:.1%} historically. Forecast assumes gradual deceleration to terminal rate.",
-            "risk_factors": ["Interest rate sensitivity", "Market competition", "Economic cyclicality"],
-            "explanation": f"WACC of {wacc:.2%} calculated using CAPM with beta {beta}. Growth rates taper from historical {avg_hist_growth:.1%} to 2% terminal."
-        }
+    # Calculate average margins
+    ebitda_margins = []
+    net_margins = []
+    for i in range(min(3, len(revenue_history))):
+        if revenue_history[i] and ebitda_history[i]:
+            ebitda_margins.append(ebitda_history[i] / revenue_history[i])
+        if revenue_history[i] and net_income_history[i]:
+            net_margins.append(net_income_history[i] / revenue_history[i])
     
-    elif model.lower() in ['dupont', 'dupont analysis']:
-        return {
-            "model": "DuPont",
-            "target_roe": {
-                "value": 0.15,
-                "rationale": "Target Return on Equity based on industry benchmarks",
-                "sources": "Sector average ROE + management guidance"
-            },
-            "target_net_margin": {
-                "value": 0.10,
-                "rationale": "Sustainable net profit margin target",
-                "sources": "Historical 5-year average"
-            },
-            "target_asset_turnover": {
-                "value": 1.2,
-                "rationale": "Asset efficiency ratio target",
-                "sources": "Revenue / Total Assets trend analysis"
-            },
-            "target_equity_multiplier": {
-                "value": 1.5,
-                "rationale": "Financial leverage factor",
-                "sources": "Total Assets / Shareholders Equity"
-            },
-            "benchmarks": {
-                "industry_roe": {"value": 0.12, "rationale": "Industry median ROE", "sources": "Sector report"},
-                "industry_net_margin": {"value": 0.08, "rationale": "Industry median net margin", "sources": "Sector report"}
-            },
-            "trend_analysis": "DuPont analysis will decompose ROE into profitability, efficiency, and leverage components.",
-            "explanation": "DuPont framework identifies key drivers of shareholder returns."
+    company_data = {
+        "ticker": profile.get('ticker', 'UNKNOWN'),
+        "sector": profile.get('sector', 'General'),
+        "financials": {
+            "revenue_ttm": revenue_history[0] if revenue_history else 0,
+            "ebitda_margin_avg": round(sum(ebitda_margins)/len(ebitda_margins)*100, 1) if ebitda_margins else 15.0,
+            "net_margin_avg": round(sum(net_margins)/len(net_margins)*100, 1) if net_margins else 10.0,
+            "revenue_growth_avg": round(avg_hist_growth * 100, 1)
+        },
+        "market_data": {
+            "beta": profile.get('beta', 1.0),
+            "risk_free_rate": 4.5
         }
-    
-    elif model.lower() in ['comps', 'comparable', 'trading comps']:
-        return {
-            "model": "Comps",
-            "primary_multiple": {
-                "value": "ev_ebitda",
-                "rationale": "Most relevant multiple for this sector",
-                "sources": "Investment banking standard for industry"
-            },
-            "peer_multiples_to_use": [
-                {"multiple": "ev_ebitda", "rationale": "Enterprise value to operating earnings", "sources": "Primary valuation metric"},
-                {"multiple": "ev_sales", "rationale": "Revenue-based valuation", "sources": "Growth company benchmark"},
-                {"multiple": "pe", "rationale": "Price to earnings for equity holders", "sources": "Public market standard"}
-            ],
-            "suggested_peers": [],  # Will be populated based on sector
-            "benchmarks": {
-                "sector_ev_ebitda_median": {"value": 10.5, "rationale": "Median EV/EBITDA for sector", "sources": "Comparable company set"},
-                "sector_ev_sales_median": {"value": 2.5, "rationale": "Median EV/Sales for sector", "sources": "Comparable company set"},
-                "sector_pe_median": {"value": 18.0, "rationale": "Median P/E for sector", "sources": "Comparable company set"}
-            },
-            "trend_analysis": "Trading comps will value company relative to peer group multiples.",
-            "explanation": "Relative valuation using comparable company trading multiples."
-        }
-    
-    # Default fallback
-    return {
-        "wacc": 0.08,
-        "terminal_growth": 0.02,
-        "revenue_growth_forecast": [0.05, 0.05, 0.04, 0.04, 0.03, 0.02],
-        "benchmarks": {"peer_ev_ebitda": 10.0},
-        "trend_analysis": "Using conservative default assumptions.",
-        "risk_factors": ["General Market Risk"],
-        "explanation": "Default assumptions applied."
     }
+    
+    # Use resilient AI engine with 3-tier fallback (Groq -> Gemini -> Qwen -> Deterministic)
+    ai_results = ai_engine.generate_assumptions(company_data, model)
+    
+    # Transform AI results to match expected format
+    formatted_results = {"model": model.upper()}
+    
+    for key, item in ai_results.items():
+        if isinstance(item, dict) and 'value' in item:
+            formatted_results[key] = item
+        elif isinstance(item, list):
+            # Handle list items like revenue_growth_forecast
+            formatted_list = []
+            for idx, val in enumerate(item):
+                if isinstance(val, dict) and 'value' in val:
+                    formatted_list.append({
+                        "year": idx + 1,
+                        **val
+                    })
+                else:
+                    formatted_list.append({
+                        "year": idx + 1,
+                        "value": val,
+                        "rationale": "AI Forecast",
+                        "sources": "Trend Extrapolation"
+                    })
+            formatted_results[key] = formatted_list
+    
+    # Add any missing fields with defaults
+    if 'wacc_percent' in formatted_results and 'wacc' not in formatted_results:
+        wacc_item = formatted_results['wacc_percent']
+        formatted_results['wacc'] = wacc_item
+        formatted_results['wacc']['rationale'] = wacc_item.get('rationale', 'Calculated via CAPM')
+        
+    if 'terminal_growth_rate_percent' in formatted_results and 'terminal_growth_rate' not in formatted_results:
+        tg_item = formatted_results['terminal_growth_rate_percent']
+        formatted_results['terminal_growth_rate'] = {
+            "value": tg_item['value'] / 100 if tg_item['value'] > 1 else tg_item['value'],
+            "rationale": tg_item.get('rationale', 'Long-term growth assumption'),
+            "sources": tg_item.get('sources', 'AI Analysis')
+        }
+    
+    return formatted_results
 
-def run_valuation_engine(session_data: Dict) -> Dict:
+async def run_valuation_engine(session_data: Dict) -> Dict:
     """Step 11: Run DCF/DuPont/COMPS calculations using full engines"""
     model = session_data.get('selected_model', 'DCF')
     assumptions = session_data['confirmed_assumptions']
