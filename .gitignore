@@ -1,1 +1,39 @@
-(frontend/src/components/ValuationFlow.js and frontend/src/index.css are source files, no build artifacts, dependencies, or temp files detected in the changes)
+```
+# Environment variables
+.env
+.env.local
+.env.*
+
+# Dependencies
+node_modules/
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Logs and temporary files
+*.log
+*.tmp
+*.swp
+*.swo
+
+# Build artifacts
+dist/
+build/
+target/
+
+# Editors
+.vscode/
+.idea/
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Coverage reports
+coverage/
+htmlcov/
+.coverage
+```
