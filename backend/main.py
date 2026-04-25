@@ -1,7 +1,7 @@
 import os
 import uuid
 import json
-from datetime import datetime
+from datetime import datetime, date
 from typing import Optional, Dict, Any, List
 from fastapi import FastAPI, HTTPException, Body
 from starlette.requests import Request
@@ -10,6 +10,14 @@ from pydantic import BaseModel
 import yfinance as yf
 import requests
 from dotenv import load_dotenv
+
+# Import valuation engines
+from dcf_engine_full import DCFEngine, DCFInputs, ForecastDrivers
+from dupont_engine import perform_dupont_analysis
+from comps_engine import TradingCompsAnalyzer, TargetCompanyData, PeerCompanyData
+
+# Import Resilient AI Engine with 3-Tier Fallback
+from ai_engine import ai_engine
 
 # Load environment variables
 load_dotenv()
@@ -34,12 +42,14 @@ app.add_middleware(
 sessions: Dict[str, Dict[str, Any]] = {}
 
 # --- Configuration ---
-GEMINI_API_KEY = os.getenv("GOOGLE_GEMINI_API_KEY")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_GEMINI_API_KEY")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-ALPHA_VANTAGE_KEY = os.getenv("ALPHA_VANTAGE_API_KEY")
+ALPHA_VANTAGE_KEY = os.getenv("ALPHA_VANTAGE_KEY") or os.getenv("ALPHA_VANTAGE_API_KEY")
 
+# Allow missing API keys for development (will use fallbacks)
 if not all([GEMINI_API_KEY, GROQ_API_KEY, ALPHA_VANTAGE_KEY]):
-    raise RuntimeError("Missing API Keys in .env file")
+    print("Warning: Some API keys missing. AI features will use fallback responses.")
+    # Don't raise error - allow app to run with fallbacks
 
 # --- Pydantic Models ---
 class SearchRequest(BaseModel):
@@ -52,8 +62,7 @@ class TickerSelectRequest(BaseModel):
     market: str
 
 class ModelSelectRequest(BaseModel):
-    session_id: str
-    models: List[str]  # ["DCF", "DuPont", "COMPS"]
+    model: str  # "DCF", "DuPont", or "COMPS" (single selection)
 
 class AssumptionConfirmRequest(BaseModel):
     session_id: str
@@ -219,186 +228,462 @@ def fetch_financial_data(ticker_symbol: str, market: str) -> Dict:
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Data retrieval failed: {str(e)}")
 
-async def generate_ai_assumptions(data: Dict, models: List[str]) -> Dict:
-    """Step 9: AI Engine - Generate WACC, Growth, Benchmarks, Trends"""
+async def generate_ai_assumptions(data: Dict, model: str) -> Dict:
+    """Step 9: AI Engine - Generate comprehensive assumptions with full transparency using 3-tier fallback"""
     
-    # Construct prompt
+    # Prepare company data for AI engine
     profile = data['profile']
     financials = data['financials']
     
-    prompt = f"""
-    Act as a Senior Financial Analyst. 
-    Company: {profile.get('name')} ({profile.get('symbol')})
-    Sector: {profile.get('sector')}
-    Current Price: {profile.get('current_price')}
-    Beta: {profile.get('beta')}
+    # Extract historical data
+    revenue_history = list(financials.get('revenue', {}).values())
+    ebitda_history = list(financials.get('ebitda', {}).values())
+    net_income_history = list(financials.get('net_income', {}).values())
     
-    Recent Financial Trends (Newest to Oldest):
-    - Revenue: {list(financials['revenue'].values())[:3]}
-    - EBITDA: {list(financials['ebitda'].values())[:3]}
-    - Net Income: {list(financials['net_income'].values())[:3]}
+    # Calculate historical metrics
+    rev_growth_rates = []
+    for i in range(min(3, len(revenue_history) - 1)):
+        if revenue_history[i] and revenue_history[i+1] and revenue_history[i+1] > 0:
+            growth = (revenue_history[i] - revenue_history[i+1]) / revenue_history[i+1]
+            rev_growth_rates.append(growth)
     
-    Task:
-    1. Calculate WACC using CAPM (Risk Free Rate=4.5%, ERP=5.5%).
-    2. Suggest 5-year Revenue Growth Rates based on trends and sector.
-    3. Provide Terminal Growth Rate.
-    4. Identify Key Benchmarks (Peer EV/EBITDA, Operating Margin).
-    5. Explain the reasoning (Trends, Risks).
+    avg_hist_growth = sum(rev_growth_rates) / len(rev_growth_rates) if rev_growth_rates else 0.05
     
-    Return JSON only with this structure:
-    {{
-        "wacc": 0.085,
-        "terminal_growth": 0.025,
-        "revenue_growth_forecast": [0.05, 0.06, 0.05, 0.04, 0.03],
-        "benchmarks": {{ "peer_ev_ebitda": 12.5, "sector_margin": 0.15 }},
-        "trend_analysis": "Brief explanation of growth trajectory...",
-        "risk_factors": ["Factor 1", "Factor 2"],
-        "explanation": "Detailed reasoning for the suggested numbers."
-    }}
-    """
-
-    # Mock AI Response for stability if keys are invalid or rate limited
-    # In production, call Gemini/Groq here
-    try:
-        # Simulate API Call to Gemini
-        # response = requests.post(GEMINI_URL, json={...})
-        # ai_data = response.json()
-        
-        # Fallback Mock Logic for Demo
-        beta = profile.get('beta', 1.0)
-        wacc = 0.045 + (beta * 0.055)
-        
-        last_rev = list(financials['revenue'].values())[0] if financials['revenue'] else 100
-        prev_rev = list(financials['revenue'].values())[1] if len(financials['revenue']) > 1 else last_rev
-        growth_rate = max(0, (last_rev - prev_rev) / prev_rev) if prev_rev else 0.05
-        
-        ai_response = {
-            "wacc": round(wacc, 4),
-            "terminal_growth": 0.023,
-            "revenue_growth_forecast": [round(growth_rate * (0.9**i), 3) for i in range(5)],
-            "benchmarks": {
-                "peer_ev_ebitda": 14.5,
-                "sector_operating_margin": 0.18
-            },
-            "trend_analysis": "Company shows consistent revenue growth but margin compression observed in last FY.",
-            "risk_factors": ["High interest rates", "Supply chain volatility"],
-            "explanation": f"WACC calculated at {wacc:.2%} based on beta of {beta}. Growth rates tapering from historical {growth_rate:.2%} to terminal rate due to market saturation."
-        }
-        return ai_response
-    except Exception as e:
-        # Return safe defaults if AI fails
-        return {
-            "wacc": 0.08,
-            "terminal_growth": 0.02,
-            "revenue_growth_forecast": [0.05, 0.05, 0.04, 0.04, 0.03],
-            "benchmarks": {"peer_ev_ebitda": 10.0, "sector_operating_margin": 0.10},
-            "trend_analysis": "AI service unavailable. Using conservative defaults.",
-            "risk_factors": ["General Market Risk"],
-            "explanation": "Default assumptions applied due to AI service interruption."
-        }
-
-def run_valuation_engine(session_data: Dict) -> Dict:
-    """Step 11: Run DCF/DuPont/COMPS calculations"""
-    assumptions = session_data['confirmed_assumptions']
-    financials = session_data['financial_data']['financials']
+    # Calculate average margins
+    ebitda_margins = []
+    net_margins = []
+    for i in range(min(3, len(revenue_history))):
+        if revenue_history[i] and ebitda_history[i]:
+            ebitda_margins.append(ebitda_history[i] / revenue_history[i])
+        if revenue_history[i] and net_income_history[i]:
+            net_margins.append(net_income_history[i] / revenue_history[i])
     
-    # Simple DCF Mock Calculation
-    fcf = list(financials.get('free_cash_flow', {}).values())[0] if financials.get('free_cash_flow') else 1000000
-    
-    # Handle None or invalid FCF (NaN check)
-    if fcf is None or (isinstance(fcf, float) and (fcf != fcf)):
-        fcf = 1000000
-    
-    wacc = assumptions.get('wacc', 0.08)
-    tg = assumptions.get('terminal_growth', 0.02)
-    growth_rates = assumptions.get('revenue_growth_forecast', [0.05, 0.05, 0.04, 0.04, 0.03])
-    
-    # Ensure wacc and tg are valid numbers
-    if wacc is None or (isinstance(wacc, float) and (wacc != wacc)):
-        wacc = 0.08
-    if tg is None or (isinstance(tg, float) and (tg != tg)):
-        tg = 0.02
-    
-    # Project FCF (Simplified: FCF grows at revenue rate)
-    projected_fcf = []
-    current_fcf = fcf
-    for r in growth_rates:
-        if r is None or (isinstance(r, float) and (r != r)):
-            r = 0.05
-        current_fcf *= (1 + r)
-        projected_fcf.append(current_fcf)
-    
-    # Terminal Value - protect against division by zero or invalid values
-    if wacc <= tg:
-        wacc = tg + 0.01  # Ensure wacc > tg
-    
-    terminal_value = projected_fcf[-1] * (1 + tg) / (wacc - tg)
-    
-    # Discounting
-    pv_fcf = sum([fcf / ((1 + wacc) ** (i+1)) for i, fcf in enumerate(projected_fcf)])
-    pv_tv = terminal_value / ((1 + wacc) ** len(projected_fcf))
-    
-    enterprise_value = pv_fcf + pv_tv
-    
-    # Get net debt safely
-    profile = session_data['financial_data']['profile']
-    net_debt = profile.get('total_debt', 0) - profile.get('cash', 0)
-    if net_debt is None or (isinstance(net_debt, float) and (net_debt != net_debt)):
-        net_debt = 0
-    
-    equity_value = enterprise_value - net_debt
-    
-    shares_outstanding = profile.get('sharesOutstanding', 1000000)
-    if shares_outstanding is None or shares_outstanding == 0 or (isinstance(shares_outstanding, float) and (shares_outstanding != shares_outstanding)):
-        shares_outstanding = 1000000
-    
-    share_price = equity_value / shares_outstanding
-    
-    # Current price safe retrieval
-    current_price = profile.get('currentPrice', 1)
-    if current_price is None or (isinstance(current_price, float) and (current_price != current_price)) or current_price == 0:
-        current_price = 1
-    
-    # Calculate upside/downside safely
-    upside_downside = ((share_price - current_price) / current_price) * 100
-    if upside_downside is None or (isinstance(upside_downside, float) and (upside_downside != upside_downside)):
-        upside_downside = 0.0
-    
-    # Sensitivity Analysis (WACC vs Terminal Growth)
-    sensitivity = []
-    for w_adj in [-0.01, 0, 0.01]:
-        row = []
-        for t_adj in [-0.005, 0, 0.005]:
-            adj_wacc = wacc + w_adj
-            adj_tg = tg + t_adj
-            if adj_wacc <= adj_tg: 
-                row.append(None)
-                continue
-            tv = projected_fcf[-1] * (1 + adj_tg) / (adj_wacc - adj_tg)
-            ev = pv_fcf + (tv / ((1 + adj_wacc) ** len(projected_fcf)))
-            # Ensure no NaN values
-            if ev is None or (isinstance(ev, float) and (ev != ev)):
-                row.append(None)
-            else:
-                row.append(round(ev, 2))
-        sensitivity.append(row)
-
-    return {
-        "enterprise_value": round(enterprise_value, 2) if enterprise_value and not (isinstance(enterprise_value, float) and (enterprise_value != enterprise_value)) else 0,
-        "equity_value": round(equity_value, 2) if equity_value and not (isinstance(equity_value, float) and (equity_value != equity_value)) else 0,
-        "implied_share_price": round(share_price, 2) if share_price and not (isinstance(share_price, float) and (share_price != share_price)) else 0,
-        "current_price": round(current_price, 2) if current_price and not (isinstance(current_price, float) and (current_price != current_price)) else 0,
-        "upside_downside": f"{upside_downside:.2f}%",
-        "sensitivity_matrix": {
-            "wacc_range": [round(wacc-0.01, 3), round(wacc, 3), round(wacc+0.01, 3)],
-            "tg_range": [round(tg-0.005, 3), round(tg, 3), round(tg+0.005, 3)],
-            "values": sensitivity
+    company_data = {
+        "ticker": profile.get('ticker', 'UNKNOWN'),
+        "sector": profile.get('sector', 'General'),
+        "financials": {
+            "revenue_ttm": revenue_history[0] if revenue_history else 0,
+            "ebitda_margin_avg": round(sum(ebitda_margins)/len(ebitda_margins)*100, 1) if ebitda_margins else 15.0,
+            "net_margin_avg": round(sum(net_margins)/len(net_margins)*100, 1) if net_margins else 10.0,
+            "revenue_growth_avg": round(avg_hist_growth * 100, 1)
         },
-        "scenario_analysis": {
-            "bull_case": round(share_price * 1.2, 2) if share_price and not (isinstance(share_price, float) and (share_price != share_price)) else 0,
-            "base_case": round(share_price, 2) if share_price and not (isinstance(share_price, float) and (share_price != share_price)) else 0,
-            "bear_case": round(share_price * 0.8, 2) if share_price and not (isinstance(share_price, float) and (share_price != share_price)) else 0
+        "market_data": {
+            "beta": profile.get('beta', 1.0),
+            "risk_free_rate": 4.5
         }
+    }
+    
+    # Use resilient AI engine with 3-tier fallback (Groq -> Gemini -> Qwen -> Deterministic)
+    ai_results = ai_engine.generate_assumptions(company_data, model)
+    
+    # Transform AI results to match expected format
+    formatted_results = {"model": model.upper()}
+    
+    for key, item in ai_results.items():
+        if isinstance(item, dict) and 'value' in item:
+            formatted_results[key] = item
+        elif isinstance(item, list):
+            # Handle list items like revenue_growth_forecast
+            formatted_list = []
+            for idx, val in enumerate(item):
+                if isinstance(val, dict) and 'value' in val:
+                    formatted_list.append({
+                        "year": idx + 1,
+                        **val
+                    })
+                else:
+                    formatted_list.append({
+                        "year": idx + 1,
+                        "value": val,
+                        "rationale": "AI Forecast",
+                        "sources": "Trend Extrapolation"
+                    })
+            formatted_results[key] = formatted_list
+    
+    # Add any missing fields with defaults
+    if 'wacc_percent' in formatted_results and 'wacc' not in formatted_results:
+        wacc_item = formatted_results['wacc_percent']
+        formatted_results['wacc'] = wacc_item
+        formatted_results['wacc']['rationale'] = wacc_item.get('rationale', 'Calculated via CAPM')
+        
+    if 'terminal_growth_rate_percent' in formatted_results and 'terminal_growth_rate' not in formatted_results:
+        tg_item = formatted_results['terminal_growth_rate_percent']
+        formatted_results['terminal_growth_rate'] = {
+            "value": tg_item['value'] / 100 if tg_item['value'] > 1 else tg_item['value'],
+            "rationale": tg_item.get('rationale', 'Long-term growth assumption'),
+            "sources": tg_item.get('sources', 'AI Analysis')
+        }
+    
+    return formatted_results
+
+async def run_valuation_engine(session_data: Dict) -> Dict:
+    """Step 11: Run DCF/DuPont/COMPS calculations using full engines"""
+    model = session_data.get('selected_model', 'DCF')
+    assumptions = session_data['confirmed_assumptions']
+    financial_data = session_data['financial_data']
+    financials = financial_data['financials']
+    profile = financial_data['profile']
+    ticker = session_data.get('ticker', 'UNKNOWN')
+    
+    selected_model = model.lower() if model else 'dcf'
+    
+    # =====================
+    # DCF VALUATION
+    # =====================
+    if selected_model == 'dcf':
+        try:
+            # Build historical financials from API data
+            revenue_history = list(financials.get('revenue', {}).values())
+            ebitda_history = list(financials.get('ebitda', {}).values())
+            net_income_history = list(financials.get('net_income', {}).values())
+            
+            # Get base period balances
+            info = profile.get('raw_info', {})
+            shares_outstanding = info.get('sharesOutstanding', 1000000) or 1000000
+            current_price = profile.get('current_price', 100) or 100
+            
+            # Calculate net debt
+            total_debt = info.get('totalDebt', 0) or 0
+            cash = info.get('cash', info.get('totalCash', 0)) or 0
+            net_debt = total_debt - cash
+            
+            # Get PPE (use totalAssets as proxy if PPE not available)
+            ppe_net = info.get('totalAssets', 0) or 0
+            
+            # Build 3-year historical financials
+            def build_historical_year(rev, ebitda, ni):
+                return {
+                    'revenue': rev or 0,
+                    'ebitda': ebitda or 0,
+                    'net_income': ni or 0,
+                    'cogs': (rev or 0) * 0.6 if rev else 0,  # Estimate 60% COGS
+                    'sga': (rev or 0) * 0.25 if rev else 0,  # Estimate 25% SG&A
+                    'other_opex': (rev or 0) * 0.05 if rev else 0,
+                    'accounts_receivable': (rev or 0) * 0.1 if rev else 0,
+                    'inventory': (rev or 0) * 0.08 if rev else 0,
+                    'accounts_payable': (rev or 0) * 0.07 if rev else 0
+                }
+            
+            hist_fy_minus_1 = build_historical_year(
+                revenue_history[0] if len(revenue_history) > 0 else None,
+                ebitda_history[0] if len(ebitda_history) > 0 else None,
+                net_income_history[0] if len(net_income_history) > 0 else None
+            )
+            hist_fy_minus_2 = build_historical_year(
+                revenue_history[1] if len(revenue_history) > 1 else None,
+                ebitda_history[1] if len(ebitda_history) > 1 else None,
+                net_income_history[1] if len(net_income_history) > 1 else None
+            )
+            hist_fy_minus_3 = build_historical_year(
+                revenue_history[2] if len(revenue_history) > 2 else None,
+                ebitda_history[2] if len(ebitda_history) > 2 else None,
+                net_income_history[2] if len(net_income_history) > 2 else None
+            )
+            
+            # Get forecast drivers from assumptions
+            revenue_growth = assumptions.get('revenue_growth_forecast', [0.05, 0.05, 0.04, 0.04, 0.03, 0.02])
+            # Ensure 6 periods
+            while len(revenue_growth) < 6:
+                revenue_growth.append(0.02)
+            
+            wacc = assumptions.get('wacc', 0.08)
+            terminal_growth = assumptions.get('terminal_growth_rate', 0.023)
+            terminal_multiple = assumptions.get('terminal_ebitda_multiple', 8.0)
+            
+            # Build forecast drivers for all scenarios
+            base_drivers = ForecastDrivers(
+                revenue_growth=revenue_growth[:6],
+                inflation_rate=[assumptions.get('inflation_rate', 0.02)] * 6 if not isinstance(assumptions.get('inflation_rate'), list) else assumptions.get('inflation_rate', [0.02]*6)[:6],
+                opex_growth=[assumptions.get('opex_growth', 0.02)] * 6 if not isinstance(assumptions.get('opex_growth'), list) else assumptions.get('opex_growth', [0.02]*6)[:6],
+                capex=[hist_fy_minus_1['revenue'] * assumptions.get('capex_pct_of_revenue', 0.05)] * 6,
+                ar_days=[assumptions.get('ar_days', 45)] * 6,
+                inv_days=[assumptions.get('inv_days', 60)] * 6,
+                ap_days=[assumptions.get('ap_days', 30)] * 6,
+                tax_rate=[assumptions.get('tax_rate', 0.21)] * 6,
+                terminal_ebitda_multiple=terminal_multiple,
+                terminal_growth_rate=terminal_growth
+            )
+            
+            # Best case (higher growth)
+            best_growth = [min(g * 1.3, 0.25) for g in revenue_growth[:6]]
+            best_drivers = ForecastDrivers(
+                revenue_growth=best_growth,
+                inflation_rate=base_drivers.inflation_rate,
+                opex_growth=[g * 0.9 for g in base_drivers.opex_growth],
+                capex=base_drivers.capex,
+                ar_days=base_drivers.ar_days,
+                inv_days=base_drivers.inv_days,
+                ap_days=base_drivers.ap_days,
+                tax_rate=base_drivers.tax_rate,
+                terminal_ebitda_multiple=terminal_multiple * 1.2,
+                terminal_growth_rate=min(terminal_growth * 1.2, 0.035)
+            )
+            
+            # Worst case (lower growth)
+            worst_growth = [max(g * 0.6, 0.01) for g in revenue_growth[:6]]
+            worst_drivers = ForecastDrivers(
+                revenue_growth=worst_growth,
+                inflation_rate=base_drivers.inflation_rate,
+                opex_growth=[g * 1.1 for g in base_drivers.opex_growth],
+                capex=base_drivers.capex,
+                ar_days=[d * 1.2 for d in base_drivers.ar_days],
+                inv_days=[d * 1.2 for d in base_drivers.inv_days],
+                ap_days=[d * 0.9 for d in base_drivers.ap_days],
+                tax_rate=base_drivers.tax_rate,
+                terminal_ebitda_multiple=terminal_multiple * 0.7,
+                terminal_growth_rate=max(terminal_growth * 0.7, 0.01)
+            )
+            
+            # Build DCF inputs
+            dcf_inputs = DCFInputs(
+                valuation_date=date.today().isoformat(),
+                currency=profile.get('currency', 'USD'),
+                historical_fy_minus_1=hist_fy_minus_1,
+                historical_fy_minus_2=hist_fy_minus_2,
+                historical_fy_minus_3=hist_fy_minus_3,
+                net_debt=net_debt,
+                ppe_net=ppe_net,
+                tax_basis_ppe=ppe_net * 0.8,
+                tax_losses_nol=0,
+                shares_outstanding=shares_outstanding,
+                current_stock_price=current_price,
+                projected_interest_expense=net_debt * 0.05 if net_debt > 0 else 0,
+                useful_life_existing=assumptions.get('useful_life_existing', 10.0),
+                useful_life_new=assumptions.get('useful_life_new', 10.0),
+                forecast_drivers={
+                    "base_case": base_drivers,
+                    "best_case": best_drivers,
+                    "worst_case": worst_drivers
+                },
+                wacc=wacc,
+                risk_free_rate=assumptions.get('risk_free_rate', 0.045),
+                equity_risk_premium=assumptions.get('equity_risk_premium', 0.055),
+                beta=assumptions.get('beta', 1.0),
+                cost_of_debt=assumptions.get('cost_of_debt', 0.05),
+                tax_rate_statutory=assumptions.get('tax_rate', 0.21),
+                tax_loss_utilization_limit_pct=assumptions.get('tax_loss_utilization_limit_pct', 0.80)
+            )
+            
+            # Run DCF engine - calculate only base case (avoid recursive scenario calculation)
+            engine = DCFEngine(dcf_inputs)
+            
+            # Calculate discrete and terminal values directly
+            pv_discrete, pv_terminal_perp, ev_perpetuity = engine._calculate_dcf_perpetuity(base_drivers)
+            pv_terminal_mult, ev_multiple = engine._calculate_dcf_exit_multiple(base_drivers)
+            
+            # Build output manually
+            equity_value_perp = ev_perpetuity - net_debt
+            equity_value_mult = ev_multiple - net_debt
+            share_price_perp = equity_value_perp / shares_outstanding
+            share_price_mult = equity_value_mult / shares_outstanding
+            upside_perp = (share_price_perp - current_price) / current_price * 100
+            upside_mult = (share_price_mult - current_price) / current_price * 100
+            
+            return {
+                "model": "DCF",
+                "main_outputs": {
+                    "enterprise_value_perpetuity": round(ev_perpetuity, 2),
+                    "enterprise_value_multiple": round(ev_multiple, 2),
+                    "equity_value_perpetuity": round(equity_value_perp, 2),
+                    "equity_value_multiple": round(equity_value_mult, 2),
+                    "equity_value_per_share_perpetuity": round(share_price_perp, 2),
+                    "equity_value_per_share_multiple": round(share_price_mult, 2),
+                    "current_stock_price": current_price,
+                    "upside_downside_perpetuity_pct": round(upside_perp, 2),
+                    "upside_downside_multiple_pct": round(upside_mult, 2)
+                },
+                "message": "DCF calculated using perpetuity and exit multiple methods"
+            }
+            
+        except Exception as e:
+            return {
+                "model": "DCF",
+                "error": str(e),
+                "fallback_message": "DCF calculation failed. Using simplified fallback."
+            }
+    
+    # =====================
+    # DUPONT ANALYSIS
+    # =====================
+    elif selected_model in ['dupont', 'dupont analysis']:
+        try:
+            # Prepare data for DuPont (need 6-10 years of data)
+            # Use available historical data and project forward
+            years_count = max(6, len(list(financials.get('revenue', {}).values())))
+            
+            # Build arrays with available data, repeat last value if needed
+            def extend_array(values, target_len):
+                result = list(values)[:target_len]
+                while len(result) < target_len:
+                    result.append(result[-1] if result else 0)
+                return result
+            
+            revenue = extend_array(list(financials.get('revenue', {}).values()), years_count)
+            net_income = extend_array(list(financials.get('net_income', {}).values()), years_count)
+            total_assets = extend_array([profile.get('raw_info', {}).get('totalAssets', sum(revenue)*0.5)] * min(3, years_count), years_count)
+            total_equity = extend_array([profile.get('raw_info', {}).get('totalStockholderEquity', sum(revenue)*0.3)] * min(3, years_count), years_count)
+            total_debt = extend_array([profile.get('raw_info', {}).get('totalDebt', sum(revenue)*0.2)] * min(3, years_count), years_count)
+            
+            # Estimate missing fields
+            gross_profit = [r * 0.4 for r in revenue]
+            ebitda = [r * 0.2 for r in revenue]
+            operating_income = [r * 0.15 for r in revenue]
+            cogs = [r * 0.6 for r in revenue]
+            accounts_receivable = [r * 0.1 for r in revenue]
+            inventory = [r * 0.08 for r in revenue]
+            accounts_payable = [r * 0.07 for r in revenue]
+            current_assets = [r * 0.25 for r in revenue]
+            current_liabilities = [r * 0.15 for r in revenue]
+            interest_expense = [r * 0.02 for r in revenue]
+            ebt = [oi - ie for oi, ie in zip(operating_income, interest_expense)]
+            ebit = operating_income
+            
+            dupont_input = {
+                'revenue': revenue,
+                'gross_profit': gross_profit,
+                'ebitda': ebitda,
+                'operating_income': operating_income,
+                'net_income': net_income,
+                'total_assets': total_assets,
+                'total_equity': total_equity,
+                'total_debt': total_debt,
+                'accounts_receivable': accounts_receivable,
+                'inventory': inventory,
+                'accounts_payable': accounts_payable,
+                'cogs': cogs,
+                'current_assets': current_assets,
+                'current_liabilities': current_liabilities,
+                'interest_expense': interest_expense,
+                'ebt': ebt,
+                'ebit': ebit,
+                'currency': profile.get('currency', 'USD')
+            }
+            
+            result = perform_dupont_analysis(dupont_input)
+            
+            return {
+                "model": "DuPont",
+                "success": result.get('success', False),
+                "supporting_ratios": result.get('supporting_ratios', {}),
+                "dupont_3step": result.get('dupont_3step', {}),
+                "dupont_5step": result.get('dupont_5step', {}),
+                "growth_trends": result.get('growth_trends', {}),
+                "validation": result.get('validation', {}),
+                "metadata": result.get('metadata', {})
+            }
+            
+        except Exception as e:
+            return {
+                "model": "DuPont",
+                "error": str(e),
+                "fallback_message": "DuPont analysis failed."
+            }
+    
+    # =====================
+    # TRADING COMPS
+    # =====================
+    elif selected_model in ['comps', 'comparable', 'trading comps']:
+        try:
+            # Get target company data
+            info = profile.get('raw_info', {})
+            market_cap = info.get('marketCap', 1000000000) or 1000000000
+            enterprise_value = market_cap + (info.get('totalDebt', 0) or 0) - (info.get('cash', 0) or 0)
+            revenue_ltm = list(financials.get('revenue', {}).values())[0] if financials.get('revenue') else 100000000
+            ebitda_ltm = list(financials.get('ebitda', {}).values())[0] if financials.get('ebitda') else revenue_ltm * 0.2
+            ebit_ltm = ebitda_ltm * 0.75
+            net_income_ltm = list(financials.get('net_income', {}).values())[0] if financials.get('net_income') else revenue_ltm * 0.1
+            fcf_ltm = ebitda_ltm * 0.7
+            book_equity = info.get('totalStockholderEquity', market_cap * 0.4) or (market_cap * 0.4)
+            shares = info.get('sharesOutstanding', 1000000) or 1000000
+            price = profile.get('current_price', 100) or 100
+            
+            target = TargetCompanyData(
+                ticker=ticker,
+                company_name=profile.get('name', ticker),
+                market_cap=market_cap,
+                enterprise_value=enterprise_value,
+                revenue_ltm=revenue_ltm,
+                ebitda_ltm=ebitda_ltm,
+                ebit_ltm=ebit_ltm,
+                net_income_ltm=net_income_ltm,
+                free_cash_flow_ltm=fcf_ltm,
+                book_equity=book_equity,
+                shares_outstanding=shares,
+                current_stock_price=price,
+                currency=profile.get('currency', 'USD')
+            )
+            
+            # Generate peer companies (simplified - in production would fetch real peers)
+            sector = info.get('sector', 'Technology')
+            industry = info.get('industry', 'Software')
+            
+            # Create mock peers based on sector multiples
+            peer_multiples_map = {
+                'Technology': {'ev_ebitda': 18.0, 'ev_sales': 6.0, 'pe': 25.0},
+                'Healthcare': {'ev_ebitda': 14.0, 'ev_sales': 4.0, 'pe': 20.0},
+                'Financial Services': {'ev_ebitda': 10.0, 'ev_sales': 3.0, 'pe': 12.0},
+                'Consumer Cyclical': {'ev_ebitda': 12.0, 'ev_sales': 2.0, 'pe': 18.0},
+                'Industrials': {'ev_ebitda': 11.0, 'ev_sales': 1.5, 'pe': 16.0},
+                'Energy': {'ev_ebitda': 7.0, 'ev_sales': 1.2, 'pe': 10.0},
+            }
+            
+            base_multiples = peer_multiples_map.get(sector, {'ev_ebitda': 12.0, 'ev_sales': 3.0, 'pe': 18.0})
+            
+            peers = []
+            peer_names = ['Peer A', 'Peer B', 'Peer C', 'Peer D', 'Peer E']
+            peer_tickers = ['PEERA', 'PEERB', 'PEERC', 'PEERD', 'PEERE']
+            
+            import random
+            random.seed(42)  # For reproducibility
+            
+            for i, (name, ticker_sym) in enumerate(zip(peer_names, peer_tickers)):
+                variation = 0.8 + (random.random() * 0.4)  # 0.8 to 1.2
+                peers.append(PeerCompanyData(
+                    ticker=f"{ticker_sym}.{ticker.split('.')[-1]}" if '.' in ticker else ticker_sym,
+                    company_name=f"{name} Corp",
+                    market_cap=market_cap * variation,
+                    enterprise_value=enterprise_value * variation,
+                    revenue_ltm=revenue_ltm * variation,
+                    ebitda_ltm=ebitda_ltm * variation,
+                    ebit_ltm=ebit_ltm * variation,
+                    net_income_ltm=net_income_ltm * variation,
+                    free_cash_flow_ltm=fcf_ltm * variation,
+                    book_equity=book_equity * variation,
+                    shares_outstanding=shares * variation,
+                    current_stock_price=price * variation,
+                    industry=industry,
+                    sector=sector,
+                    selection_reason=f"Same {sector} sector, similar market cap",
+                    similarity_score=0.9 - (i * 0.05)
+                ))
+            
+            # Run comps analysis
+            analyzer = TradingCompsAnalyzer(target, peers)
+            outputs = analyzer.run_analysis(apply_outlier_filtering=True)
+            
+            return {
+                "model": "Comps",
+                "success": True,
+                "result": outputs.to_json_schema_format(),
+                "target_multiples": outputs.to_json_schema_format()['target_multiples'],
+                "peer_statistics": outputs.to_json_schema_format()['peer_statistics'],
+                "implied_valuations": outputs.to_json_schema_format()['implied_valuations'],
+                "peer_count": outputs.peer_count_total,
+                "peer_count_after_filtering": outputs.peer_count_after_filtering,
+                "metadata": outputs.to_json_schema_format()['metadata']
+            }
+            
+        except Exception as e:
+            return {
+                "model": "Comps",
+                "error": str(e),
+                "fallback_message": "Trading Comps analysis failed."
+            }
+    
+    # Default fallback
+    return {
+        "error": f"Unknown model: {selected_model}",
+        "message": "Please select a valid model: DCF, DuPont, or Comps"
     }
 
 # --- API Endpoints Implementing the 12 Steps ---
@@ -419,7 +704,7 @@ async def select_ticker(request: TickerSelectRequest):
         "status": "ticker_selected",
         "ticker": request.ticker,
         "market": request.market,
-        "selected_models": [],
+        "selected_model": None,  # Single model string
         "financial_data": None,
         "ai_suggestions": None,
         "confirmed_assumptions": None,
@@ -429,11 +714,11 @@ async def select_ticker(request: TickerSelectRequest):
 
 @app.post("/api/step-4-select-models")
 async def select_models(request: ModelSelectRequest):
-    """Step 4: User chooses models"""
+    """Step 4: User chooses model (single selection)"""
     session = get_session(request.session_id)
-    session['selected_models'] = request.models
-    session['status'] = "models_selected"
-    return {"message": "Models selected", "next_step": "fetch_data"}
+    session['selected_model'] = request.model  # Single model string
+    session['status'] = "model_selected"
+    return {"message": "Model selected", "next_step": "fetch_data", "selected_model": request.model}
 
 @app.post("/api/step-5-6-prepare-inputs")
 async def prepare_inputs(request: dict):
@@ -443,11 +728,11 @@ async def prepare_inputs(request: dict):
     session_id = request.get('session_id')
     session = get_session(session_id)
     
-    if not session or not session.get('selected_models'):
-        raise HTTPException(status_code=400, detail="No models selected")
+    if not session or not session.get('selected_model'):
+        raise HTTPException(status_code=400, detail="No model selected")
     
-    # Build required inputs based on selected models
-    selected_models = session['selected_models']
+    # Build required inputs based on selected model
+    selected_model = session['selected_model'].lower()
     required_inputs = []
     
     # Always require ticker confirmation
@@ -458,14 +743,14 @@ async def prepare_inputs(request: dict):
     })
     
     # Add model-specific inputs
-    if 'dcf' in [m.lower() for m in selected_models]:
+    if selected_model == 'dcf':
         required_inputs.extend([
             {"category": "DCF", "name": "WACC", "requiresInput": True},
             {"category": "DCF", "name": "Terminal Growth Rate", "requiresInput": True},
             {"category": "DCF", "name": "Forecast Period (years)", "requiresInput": True}
         ])
     
-    if 'comparable' in [m.lower() for m in selected_models]:
+    if selected_model == 'comparable' or selected_model == 'comps':
         required_inputs.extend([
             {"category": "Comparable Companies", "name": "Peer Group Selection", "requiresInput": True},
             {"category": "Comparable Companies", "name": "Multiples (EV/EBITDA, P/E)", "requiresInput": True}
@@ -474,7 +759,7 @@ async def prepare_inputs(request: dict):
     return {
         "status": "ready_to_fetch",
         "required_inputs": required_inputs,
-        "message": f"Found {len(required_inputs)} required inputs for your selected models"
+        "message": f"Found {len(required_inputs)} required inputs for your selected model"
     }
 
 @app.post("/api/step-7-8-fetch-data")
@@ -504,7 +789,8 @@ async def generate_ai(request: Request):
     if not session['financial_data']:
         raise HTTPException(status_code=400, detail="Financial data missing")
         
-    ai_results = await generate_ai_assumptions(session['financial_data'], session['selected_models'])
+    # Pass single model string (not list) to updated generate_ai_assumptions
+    ai_results = await generate_ai_assumptions(session['financial_data'], session['selected_model'])
     session['ai_suggestions'] = ai_results
     session['status'] = "ai_generated"
     

@@ -27,6 +27,7 @@ const ValuationFlow = () => {
   const [dupontResults, setDupontResults] = useState(null);
   const [compsResults, setCompsResults] = useState(null);
   const [dcfInputs, setDcfInputs] = useState(null);
+  const [aiData, setAiData] = useState({});
   
   const API_BASE_URL = 'http://localhost:8000/api';
 
@@ -95,7 +96,7 @@ const ValuationFlow = () => {
       const response = await fetch(`${API_BASE_URL}/step-4-select-models`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id: sessionId, models: [modelType] })
+        body: JSON.stringify({ session_id: sessionId, model: modelType })
       });
       const data = await response.json();
       console.log('Select model response:', data);
@@ -525,6 +526,7 @@ const ValuationFlow = () => {
           <tr>
             <th>Field</th>
             <th>AI Suggestion</th>
+            <th>Rationale & Sources</th>
             <th>Your Input</th>
             <th>Action</th>
           </tr>
@@ -536,6 +538,14 @@ const ValuationFlow = () => {
               <tr>
                 <td>WACC</td>
                 <td>{aiData.wacc ? (aiData.wacc * 100).toFixed(2) + '%' : 'N/A'}</td>
+                <td className="rationale-cell">
+                  {aiData.wacc_rationale ? (
+                    <div className="rationale-content">
+                      <p><strong>Why:</strong> {aiData.wacc_rationale}</p>
+                      <p><strong>Sources:</strong> {aiData.wacc_sources || 'CAPM Formula'}</p>
+                    </div>
+                  ) : 'AI explanation will appear here'}
+                </td>
                 <td>
                   <input 
                     type="number" 
@@ -556,6 +566,14 @@ const ValuationFlow = () => {
               <tr>
                 <td>Terminal Growth Rate</td>
                 <td>{aiData.terminal_growth ? (aiData.terminal_growth * 100).toFixed(2) + '%' : 'N/A'}</td>
+                <td className="rationale-cell">
+                  {aiData.terminal_growth_rationale ? (
+                    <div className="rationale-content">
+                      <p><strong>Why:</strong> {aiData.terminal_growth_rationale}</p>
+                      <p><strong>Sources:</strong> {aiData.terminal_growth_sources || 'Historical GDP'}</p>
+                    </div>
+                  ) : 'AI explanation will appear here'}
+                </td>
                 <td>
                   <input 
                     type="number" 
@@ -576,6 +594,14 @@ const ValuationFlow = () => {
               <tr>
                 <td>Terminal EBITDA Multiple</td>
                 <td>{aiData.terminal_ebitda_multiple ? aiData.terminal_ebitda_multiple.toFixed(1) + 'x' : 'N/A'}</td>
+                <td className="rationale-cell">
+                  {aiData.terminal_ebitda_multiple_rationale ? (
+                    <div className="rationale-content">
+                      <p><strong>Why:</strong> {aiData.terminal_ebitda_multiple_rationale}</p>
+                      <p><strong>Sources:</strong> {aiData.terminal_ebitda_multiple_sources || 'Peer Average'}</p>
+                    </div>
+                  ) : 'AI explanation will appear here'}
+                </td>
                 <td>
                   <input 
                     type="number" 
@@ -600,6 +626,14 @@ const ValuationFlow = () => {
                     ? aiData.revenue_growth_forecast.map(g => (g * 100).toFixed(1) + '%').join(', ') 
                     : 'N/A'}
                 </td>
+                <td className="rationale-cell">
+                  {aiData.revenue_growth_rationale ? (
+                    <div className="rationale-content">
+                      <p><strong>Why:</strong> {aiData.revenue_growth_rationale}</p>
+                      <p><strong>Sources:</strong> {aiData.revenue_growth_sources || 'Historical Trend'}</p>
+                    </div>
+                  ) : 'AI explanation will appear here'}
+                </td>
                 <td>
                   <input 
                     type="text" 
@@ -622,6 +656,14 @@ const ValuationFlow = () => {
                   {aiData.ebitda_margin_forecast 
                     ? aiData.ebitda_margin_forecast.map(m => (m * 100).toFixed(1) + '%').join(', ') 
                     : 'N/A'}
+                </td>
+                <td className="rationale-cell">
+                  {aiData.ebitda_margin_rationale ? (
+                    <div className="rationale-content">
+                      <p><strong>Why:</strong> {aiData.ebitda_margin_rationale}</p>
+                      <p><strong>Sources:</strong> {aiData.ebitda_margin_sources || '3Y Average'}</p>
+                    </div>
+                  ) : 'AI explanation will appear here'}
                 </td>
                 <td>
                   <input 
