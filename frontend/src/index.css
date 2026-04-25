@@ -485,3 +485,55 @@ body {
     padding: 12px 8px;
   }
 }
+
+/* Rationale Cell Styles */
+.rationale-cell {
+  max-width: 300px;
+  font-size: 13px;
+  line-height: 1.5;
+  vertical-align: top;
+}
+
+.rationale-content {
+  background: #f8f9fa;
+  border-radius: 6px;
+  padding: 10px;
+  border-left: 3px solid #667eea;
+}
+
+.rationale-content p {
+  margin-bottom: 6px;
+  color: #555;
+}
+
+.rationale-content p:last-child {
+  margin-bottom: 0;
+}
+
+.rationale-content strong {
+  color: #667eea;
+  font-weight: 600;
+}
+
+.data-table.enhanced {
+  font-size: 14px;
+}
+
+.data-table.enhanced th {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.manual-input {
+  width: 100%;
+  padding: 8px;
+  border: 2px solid #e0e0e0;
+  border-radius: 6px;
+  font-size: 13px;
+  transition: border-color 0.3s ease;
+}
+
+.manual-input:focus {
+  outline: none;
+  border-color: #667eea;
+}
