@@ -62,6 +62,7 @@ class TickerSelectRequest(BaseModel):
     market: str
 
 class ModelSelectRequest(BaseModel):
+    session_id: str
     model: str  # "DCF", "DuPont", or "COMPS" (single selection)
 
 class AssumptionConfirmRequest(BaseModel):
