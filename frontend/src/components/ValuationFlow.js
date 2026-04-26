@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 
 const ValuationFlow = () => {
   // State Management
@@ -16,7 +16,7 @@ const ValuationFlow = () => {
   const [error, setError] = useState(null);
   const [market, setMarket] = useState('international');
   
-  // New states for enhanced data
+  // New states for enhanced data - ALL INPUTS REQUIRED FOR MODEL CALCULATIONS ARE PRESERVED
   const [historicalData, setHistoricalData] = useState(null);
   const [forecastDrivers, setForecastDrivers] = useState({
     best_case: { sales_volume_growth: [], inflation_rate: [], opex_growth: [], capital_expenditure: [], ar_days: [], inv_days: [], ap_days: [], tax_rate: [] },
@@ -114,7 +114,7 @@ const ValuationFlow = () => {
   };
 
   // Fetch Required Inputs
-  const fetchRequiredInputs = async () => {
+  const fetchRequiredInputs = useCallback(async () => {
     try {
       const response = await fetch(`${API_BASE_URL}/step-5-6-prepare-inputs`, {
         method: 'POST',
@@ -129,7 +129,7 @@ const ValuationFlow = () => {
     } catch (err) {
       console.error('Prepare inputs error:', err);
     }
-  };
+  }, [sessionId]);
 
   useEffect(() => {
     if (selectedModel && currentStep === 5 && sessionId) {
@@ -305,7 +305,7 @@ const ValuationFlow = () => {
           // DCF results
         }
         if (data.result.dupont_outputs) {
-          setDupontRatios(data.result.dupont_outputs);
+          setDupontResults(data.result.dupont_outputs);
         }
         if (data.result.comps_outputs) {
           setCompsResults(data.result.comps_outputs);
