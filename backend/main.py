@@ -57,7 +57,6 @@ class SearchRequest(BaseModel):
     market: str = "international"  # "vietnamese" or "international"
 
 class TickerSelectRequest(BaseModel):
-    session_id: str
     ticker: str
     market: str
 
