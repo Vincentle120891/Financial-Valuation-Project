@@ -731,7 +731,7 @@ async def prepare_inputs(request: dict):
     if not session or not session.get('selected_model'):
         raise HTTPException(status_code=400, detail="No model selected")
     
-    # Build required inputs based on selected model
+    # Build required inputs based on selected model - EXPANDED to show all fields
     selected_model = session['selected_model'].lower()
     required_inputs = []
     
@@ -742,18 +742,107 @@ async def prepare_inputs(request: dict):
         "requiresInput": False
     })
     
-    # Add model-specific inputs
+    # DCF Model - All detailed inputs
     if selected_model == 'dcf':
         required_inputs.extend([
-            {"category": "DCF", "name": "WACC", "requiresInput": True},
-            {"category": "DCF", "name": "Terminal Growth Rate", "requiresInput": True},
-            {"category": "DCF", "name": "Forecast Period (years)", "requiresInput": True}
+            # Market Structure
+            {"category": "Market Structure", "name": "Current Price", "requiresInput": False},
+            {"category": "Market Structure", "name": "Shares Outstanding (Diluted)", "requiresInput": False},
+            {"category": "Market Structure", "name": "Total Debt", "requiresInput": False},
+            {"category": "Market Structure", "name": "Cash & Equivalents", "requiresInput": False},
+            {"category": "Market Structure", "name": "Beta (5Y Monthly)", "requiresInput": False},
+            
+            # Macro Indicators
+            {"category": "Macro Indicators", "name": "Risk-Free Rate (10Y)", "requiresInput": False},
+            {"category": "Macro Indicators", "name": "Equity Risk Premium", "requiresInput": False},
+            {"category": "Macro Indicators", "name": "Inflation Expectations (10Y)", "requiresInput": False},
+            
+            # Income Statement
+            {"category": "Income Statement", "name": "Revenue (Total)", "requiresInput": False},
+            {"category": "Income Statement", "name": "EBITDA", "requiresInput": False},
+            {"category": "Income Statement", "name": "EBIT / Operating Income", "requiresInput": False},
+            {"category": "Income Statement", "name": "Net Income", "requiresInput": False},
+            {"category": "Income Statement", "name": "Depreciation & Amortization", "requiresInput": False},
+            {"category": "Income Statement", "name": "Interest Expense", "requiresInput": False},
+            {"category": "Income Statement", "name": "Tax Provision", "requiresInput": False},
+            
+            # Balance Sheet
+            {"category": "Balance Sheet", "name": "Total Assets", "requiresInput": False},
+            {"category": "Balance Sheet", "name": "Total Equity", "requiresInput": False},
+            {"category": "Balance Sheet", "name": "Net PPE", "requiresInput": False},
+            {"category": "Balance Sheet", "name": "Working Capital", "requiresInput": False},
+            
+            # Cash Flow
+            {"category": "Cash Flow", "name": "Operating Cash Flow (CFO)", "requiresInput": False},
+            {"category": "Cash Flow", "name": "Capital Expenditures (CapEx)", "requiresInput": False},
+            {"category": "Cash Flow", "name": "Free Cash Flow", "requiresInput": False},
+            
+            # Forecast Assumptions (User Input Required)
+            {"category": "Forecast Assumptions", "name": "WACC", "requiresInput": True},
+            {"category": "Forecast Assumptions", "name": "Terminal Growth Rate", "requiresInput": True},
+            {"category": "Forecast Assumptions", "name": "Revenue Growth Forecast (Year 1-5)", "requiresInput": True},
+            {"category": "Forecast Assumptions", "name": "EBITDA Margin Forecast", "requiresInput": True},
+            {"category": "Forecast Assumptions", "name": "CapEx % of Revenue", "requiresInput": True},
+            {"category": "Forecast Assumptions", "name": "Tax Rate Forecast", "requiresInput": True},
+            {"category": "Forecast Assumptions", "name": "Working Capital Days (AR, Inventory, AP)", "requiresInput": True},
         ])
     
-    if selected_model == 'comparable' or selected_model == 'comps':
+    # Trading Comps Model - All detailed inputs
+    elif selected_model == 'comparable' or selected_model == 'comps':
         required_inputs.extend([
-            {"category": "Comparable Companies", "name": "Peer Group Selection", "requiresInput": True},
-            {"category": "Comparable Companies", "name": "Multiples (EV/EBITDA, P/E)", "requiresInput": True}
+            # Market Structure
+            {"category": "Market Structure", "name": "Current Price", "requiresInput": False},
+            {"category": "Market Structure", "name": "Market Capitalization", "requiresInput": False},
+            {"category": "Market Structure", "name": "Enterprise Value", "requiresInput": False},
+            {"category": "Market Structure", "name": "Shares Outstanding", "requiresInput": False},
+            
+            # Financial Metrics
+            {"category": "Financial Metrics", "name": "Revenue (LTM)", "requiresInput": False},
+            {"category": "Financial Metrics", "name": "EBITDA (LTM)", "requiresInput": False},
+            {"category": "Financial Metrics", "name": "EBIT (LTM)", "requiresInput": False},
+            {"category": "Financial Metrics", "name": "Net Income (LTM)", "requiresInput": False},
+            {"category": "Financial Metrics", "name": "Free Cash Flow (LTM)", "requiresInput": False},
+            {"category": "Financial Metrics", "name": "Book Equity", "requiresInput": False},
+            
+            # Peer Selection (User Input)
+            {"category": "Peer Selection", "name": "Peer Group Tickers", "requiresInput": True},
+            {"category": "Peer Selection", "name": "Industry/Sector Filter", "requiresInput": True},
+            
+            # Multiple Assumptions (User Input)
+            {"category": "Multiple Assumptions", "name": "Target EV/EBITDA Multiple", "requiresInput": True},
+            {"category": "Multiple Assumptions", "name": "Target P/E Multiple", "requiresInput": True},
+            {"category": "Multiple Assumptions", "name": "Target EV/Sales Multiple", "requiresInput": True},
+        ])
+    
+    # DuPont Analysis Model - All detailed inputs
+    elif selected_model == 'dupont':
+        required_inputs.extend([
+            # Income Statement
+            {"category": "Income Statement", "name": "Revenue", "requiresInput": False},
+            {"category": "Income Statement", "name": "Net Income", "requiresInput": False},
+            {"category": "Income Statement", "name": "EBIT", "requiresInput": False},
+            {"category": "Income Statement", "name": "Pre-Tax Income", "requiresInput": False},
+            {"category": "Income Statement", "name": "Interest Expense", "requiresInput": False},
+            {"category": "Income Statement", "name": "Tax Provision", "requiresInput": False},
+            
+            # Balance Sheet
+            {"category": "Balance Sheet", "name": "Total Assets", "requiresInput": False},
+            {"category": "Balance Sheet", "name": "Total Equity", "requiresInput": False},
+            {"category": "Balance Sheet", "name": "Average Total Assets", "requiresInput": False},
+            {"category": "Balance Sheet", "name": "Average Equity", "requiresInput": False},
+            
+            # Calculated Ratios
+            {"category": "DuPont Ratios", "name": "Net Profit Margin", "requiresInput": False},
+            {"category": "DuPont Ratios", "name": "Asset Turnover", "requiresInput": False},
+            {"category": "DuPont Ratios", "name": "Equity Multiplier", "requiresInput": False},
+            {"category": "DuPont Ratios", "name": "Tax Burden", "requiresInput": False},
+            {"category": "DuPont Ratios", "name": "Interest Burden", "requiresInput": False},
+            {"category": "DuPont Ratios", "name": "ROE (3-Step)", "requiresInput": False},
+            {"category": "DuPont Ratios", "name": "ROE (5-Step)", "requiresInput": False},
+            
+            # Trend Analysis Period (User Input)
+            {"category": "Analysis Settings", "name": "Analysis Period (Years)", "requiresInput": True},
+            {"category": "Analysis Settings", "name": "Benchmark Companies", "requiresInput": True},
         ])
     
     return {
