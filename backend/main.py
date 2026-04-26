@@ -766,11 +766,29 @@ async def prepare_inputs(request: dict):
             {"category": "Income Statement", "name": "Interest Expense", "requiresInput": False},
             {"category": "Income Statement", "name": "Tax Provision", "requiresInput": False},
             
-            # Balance Sheet
+            # 3-Year Historical Data
+            {"category": "3-Year Historical Data", "name": "Historical FY-1 (Revenue, EBITDA, Net Income)", "requiresInput": False},
+            {"category": "3-Year Historical Data", "name": "Historical FY-2 (Revenue, EBITDA, Net Income)", "requiresInput": False},
+            {"category": "3-Year Historical Data", "name": "Historical FY-3 (Revenue, EBITDA, Net Income)", "requiresInput": False},
+            
+            # Balance Sheet - Working Capital Components
             {"category": "Balance Sheet", "name": "Total Assets", "requiresInput": False},
             {"category": "Balance Sheet", "name": "Total Equity", "requiresInput": False},
             {"category": "Balance Sheet", "name": "Net PPE", "requiresInput": False},
-            {"category": "Balance Sheet", "name": "Working Capital", "requiresInput": False},
+            {"category": "Balance Sheet", "name": "Accounts Receivable (Current)", "requiresInput": False},
+            {"category": "Balance Sheet", "name": "Inventory", "requiresInput": False},
+            {"category": "Balance Sheet", "name": "Accounts Payable (Current)", "requiresInput": False},
+            
+            # 3-Year Historical Working Capital
+            {"category": "3-Year Historical Working Capital", "name": "AR Days - FY-1", "requiresInput": False},
+            {"category": "3-Year Historical Working Capital", "name": "Inventory Days - FY-1", "requiresInput": False},
+            {"category": "3-Year Historical Working Capital", "name": "AP Days - FY-1", "requiresInput": False},
+            {"category": "3-Year Historical Working Capital", "name": "AR Days - FY-2", "requiresInput": False},
+            {"category": "3-Year Historical Working Capital", "name": "Inventory Days - FY-2", "requiresInput": False},
+            {"category": "3-Year Historical Working Capital", "name": "AP Days - FY-2", "requiresInput": False},
+            {"category": "3-Year Historical Working Capital", "name": "AR Days - FY-3", "requiresInput": False},
+            {"category": "3-Year Historical Working Capital", "name": "Inventory Days - FY-3", "requiresInput": False},
+            {"category": "3-Year Historical Working Capital", "name": "AP Days - FY-3", "requiresInput": False},
             
             # Cash Flow
             {"category": "Cash Flow", "name": "Operating Cash Flow (CFO)", "requiresInput": False},
@@ -784,7 +802,9 @@ async def prepare_inputs(request: dict):
             {"category": "Forecast Assumptions", "name": "EBITDA Margin Forecast", "requiresInput": True},
             {"category": "Forecast Assumptions", "name": "CapEx % of Revenue", "requiresInput": True},
             {"category": "Forecast Assumptions", "name": "Tax Rate Forecast", "requiresInput": True},
-            {"category": "Forecast Assumptions", "name": "Working Capital Days (AR, Inventory, AP)", "requiresInput": True},
+            {"category": "Forecast Assumptions", "name": "Target AR Days (Forecast)", "requiresInput": True},
+            {"category": "Forecast Assumptions", "name": "Target Inventory Days (Forecast)", "requiresInput": True},
+            {"category": "Forecast Assumptions", "name": "Target AP Days (Forecast)", "requiresInput": True},
         ])
     
     # Trading Comps Model - All detailed inputs
