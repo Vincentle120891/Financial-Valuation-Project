@@ -113,6 +113,26 @@ const ValuationFlow = () => {
     }
   };
 
+  // Go back to model selection (Step 4)
+  const handleBackToModelSelection = () => {
+    setSelectedModel(null);
+    setRequiredFields([]);
+    setConfirmedValues({});
+    setAiData({});
+    setHistoricalData(null);
+    setForecastDrivers({
+      best_case: { sales_volume_growth: [], inflation_rate: [], opex_growth: [], capital_expenditure: [], ar_days: [], inv_days: [], ap_days: [], tax_rate: [] },
+      base_case: { sales_volume_growth: [], inflation_rate: [], opex_growth: [], capital_expenditure: [], ar_days: [], inv_days: [], ap_days: [], tax_rate: [] },
+      worst_case: { sales_volume_growth: [], inflation_rate: [], opex_growth: [], capital_expenditure: [], ar_days: [], inv_days: [], ap_days: [], tax_rate: [] }
+    });
+    setPeerData([]);
+    setDupontResults(null);
+    setCompsResults(null);
+    setDcfInputs(null);
+    setCurrentStep(4);
+    setError(null);
+  };
+
   // Fetch Required Inputs
   const fetchRequiredInputs = async () => {
     try {
@@ -421,7 +441,10 @@ const ValuationFlow = () => {
 
   const renderStep5 = () => (
     <div className="step-container">
-      <h2>Step 5: Required Inputs</h2>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+        <h2>Step 5: Required Inputs</h2>
+        <button onClick={handleBackToModelSelection} className="btn-secondary">← Change Model</button>
+      </div>
       <div className="summary-box">
         <h3>Data Requirements by Model</h3>
         {selectedModel === 'DCF' && (
@@ -696,7 +719,10 @@ const ValuationFlow = () => {
 
   const renderStep9 = () => (
     <div className="step-container">
-      <h2>Step 9: Run Valuation</h2>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+        <h2>Step 9: Run Valuation</h2>
+        <button onClick={handleBackToModelSelection} className="btn-secondary">← Change Model</button>
+      </div>
       <div className="summary-box">
         <h3>Configuration Summary</h3>
         <p><strong>Company:</strong> {selectedCompany?.name} ({selectedCompany?.symbol})</p>
@@ -835,6 +861,7 @@ const ValuationFlow = () => {
         )}
         
         <div style={{ marginTop: '24px', display: 'flex', gap: '12px' }}>
+          <button onClick={handleBackToModelSelection} className="btn-secondary">← Change Model</button>
           <button onClick={handleReset} className="btn-secondary">Start New Valuation</button>
           <button className="btn-primary">Export Report</button>
         </div>
