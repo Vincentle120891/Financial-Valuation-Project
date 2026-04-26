@@ -1026,13 +1026,13 @@ class DCFEngine:
                 enterprise_value=round(ev_perpetuity, 2),
                 equity_value=round(equity_perpetuity, 2),
                 equity_value_per_share=round(eq_per_share_perp, 2),
-                implied_premium_discount=round(premium_perp * 100, 2)
+                implied_premium_discount=round(premium_perp, 4)  # Store as decimal (e.g., -0.1928 = -19.28%)
             ),
             exit_multiple_method=ValuationResult(
                 enterprise_value=round(ev_multiple, 2),
                 equity_value=round(equity_multiple, 2),
                 equity_value_per_share=round(eq_per_share_mult, 2),
-                implied_premium_discount=round(premium_mult * 100, 2)
+                implied_premium_discount=round(premium_mult, 4)  # Store as decimal
             ),
             income_statement=income_stmt,
             working_capital=wc_schedule,
