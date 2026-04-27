@@ -13,6 +13,7 @@ from datetime import datetime
 from typing import List, Dict, Optional, Tuple
 from dataclasses import dataclass, field
 import statistics
+from .ai_engine import suggest_peer_companies
 
 
 # ============================================================================
@@ -553,7 +554,7 @@ class TradingCompsAnalyzer:
         return outputs
 
 
-def fetch_comps_inputs(ticker: str, peer_tickers: List[str]) -> Tuple[TargetCompanyData, List[PeerCompanyData]]:
+def fetch_comps_inputs(ticker: str, peer_tickers: Optional[List[str]] = None) -> Tuple[TargetCompanyData, List[PeerCompanyData]]:
     """
     Fetch target and peer data from yfinance
     Returns target company data and list of peer company data
@@ -581,6 +582,16 @@ def fetch_comps_inputs(ticker: str, peer_tickers: List[str]) -> Tuple[TargetComp
         currency=info.get("currency", "USD")
     )
 
+    # If no peer tickers provided, use AI to suggest peers
+    if peer_tickers is None or len(peer_tickers) == 0:
+        print(f"🤖 No peer tickers provided. Using AI to suggest peers for {ticker}...")
+        ai_suggestions = suggest_peer_companies(ticker, num_peers=10)
+        if ai_suggestions and len(ai_suggestions) > 0:
+            peer_tickers = [p["ticker"] for p in ai_suggestions]
+            print(f"✅ AI suggested {len(peer_tickers)} peers: {', '.join(peer_tickers)}")
+        else:
+            print("⚠️ AI peer suggestion failed. Please provide peer tickers manually.")
+            return target, []
     # Fetch peer data
     peers = []
     for peer_ticker in peer_tickers:
@@ -1345,7 +1356,7 @@ class TradingCompsAnalyzer:
         return outputs
 
 
-def fetch_comps_inputs(ticker: str, peer_tickers: List[str]) -> Tuple[TargetCompanyData, List[PeerCompanyData]]:
+def fetch_comps_inputs(ticker: str, peer_tickers: Optional[List[str]] = None) -> Tuple[TargetCompanyData, List[PeerCompanyData]]:
     """
     Fetch target and peer data from yfinance
     Returns target company data and list of peer company data
