@@ -17,7 +17,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Import valuation engines
-from dcf_engine_full import DCFEngine, DCFInputs, ForecastDrivers, fetch_dcf_inputs
+from dcf_engine_full import DCFEngine, DCFInputs, ScenarioDrivers, fetch_dcf_inputs
 from dupont_engine import perform_dupont_analysis
 from comps_engine import TradingCompsAnalyzer, TargetCompanyData, PeerCompanyData
 
@@ -418,45 +418,42 @@ async def run_valuation_engine(session_data: Dict) -> Dict:
             terminal_multiple = assumptions.get('terminal_ebitda_multiple', 8.0)
             
             # Build forecast drivers for all scenarios
-            base_drivers = ForecastDrivers(
-                revenue_growth=revenue_growth[:6],
+            base_drivers = ScenarioDrivers(
+                volume_growth=revenue_growth[:6],
+                price_growth=[0.0] * 6,
                 inflation_rate=[assumptions.get('inflation_rate', 0.02)] * 6 if not isinstance(assumptions.get('inflation_rate'), list) else assumptions.get('inflation_rate', [0.02]*6)[:6],
-                opex_growth=[assumptions.get('opex_growth', 0.02)] * 6 if not isinstance(assumptions.get('opex_growth'), list) else assumptions.get('opex_growth', [0.02]*6)[:6],
                 capex=[hist_fy_minus_1['revenue'] * assumptions.get('capex_pct_of_revenue', 0.05)] * 6,
-                ar_days=[assumptions.get('ar_days', 45)] * 6,
-                inv_days=[assumptions.get('inv_days', 60)] * 6,
-                ap_days=[assumptions.get('ap_days', 30)] * 6,
-                tax_rate=[assumptions.get('tax_rate', 0.21)] * 6,
+                ar_days=[assumptions.get('ar_days', 45)] * 5,
+                inv_days=[assumptions.get('inv_days', 60)] * 5,
+                ap_days=[assumptions.get('ap_days', 30)] * 5,
                 terminal_ebitda_multiple=terminal_multiple,
                 terminal_growth_rate=terminal_growth
             )
             
             # Best case (higher growth)
             best_growth = [min(g * 1.3, 0.25) for g in revenue_growth[:6]]
-            best_drivers = ForecastDrivers(
-                revenue_growth=best_growth,
+            best_drivers = ScenarioDrivers(
+                volume_growth=best_growth,
+                price_growth=[0.0] * 6,
                 inflation_rate=base_drivers.inflation_rate,
-                opex_growth=[g * 0.9 for g in base_drivers.opex_growth],
                 capex=base_drivers.capex,
                 ar_days=base_drivers.ar_days,
                 inv_days=base_drivers.inv_days,
                 ap_days=base_drivers.ap_days,
-                tax_rate=base_drivers.tax_rate,
                 terminal_ebitda_multiple=terminal_multiple * 1.2,
                 terminal_growth_rate=min(terminal_growth * 1.2, 0.035)
             )
             
             # Worst case (lower growth)
             worst_growth = [max(g * 0.6, 0.01) for g in revenue_growth[:6]]
-            worst_drivers = ForecastDrivers(
-                revenue_growth=worst_growth,
+            worst_drivers = ScenarioDrivers(
+                volume_growth=worst_growth,
+                price_growth=[0.0] * 6,
                 inflation_rate=base_drivers.inflation_rate,
-                opex_growth=[g * 1.1 for g in base_drivers.opex_growth],
                 capex=base_drivers.capex,
                 ar_days=[d * 1.2 for d in base_drivers.ar_days],
                 inv_days=[d * 1.2 for d in base_drivers.inv_days],
                 ap_days=[d * 0.9 for d in base_drivers.ap_days],
-                tax_rate=base_drivers.tax_rate,
                 terminal_ebitda_multiple=terminal_multiple * 0.7,
                 terminal_growth_rate=max(terminal_growth * 0.7, 0.01)
             )
