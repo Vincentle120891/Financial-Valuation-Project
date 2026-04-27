@@ -548,77 +548,113 @@ async def run_valuation_engine(session_data: Dict) -> Dict:
     # =====================
     elif selected_model in ['dupont', 'dupont analysis']:
         try:
-            # Prepare data for DuPont (need 6-10 years of data)
-            # Use available historical data and project forward
-            years_count = max(6, len(list(financials.get('revenue', {}).values())))
+            # Use the new dynamic DuPont engine that fetches data automatically
+            from dupont_engine import DuPontAnalysisEngine
             
-            # Build arrays with available data, repeat last value if needed
-            def extend_array(values, target_len):
-                result = list(values)[:target_len]
-                while len(result) < target_len:
-                    result.append(result[-1] if result else 0)
-                return result
+            ticker = profile.get('ticker', ticker_symbol)
+            years = 8  # Default to 8 years as per specification
             
-            revenue = extend_array(list(financials.get('revenue', {}).values()), years_count)
-            net_income = extend_array(list(financials.get('net_income', {}).values()), years_count)
-            total_assets = extend_array([profile.get('raw_info', {}).get('totalAssets', sum(revenue)*0.5)] * min(3, years_count), years_count)
-            total_equity = extend_array([profile.get('raw_info', {}).get('totalStockholderEquity', sum(revenue)*0.3)] * min(3, years_count), years_count)
-            total_debt = extend_array([profile.get('raw_info', {}).get('totalDebt', sum(revenue)*0.2)] * min(3, years_count), years_count)
+            # Initialize engine and run analysis
+            engine = DuPontAnalysisEngine(ticker, years)
+            engine.fetch_data()
+            engine.build_financial_statements()
+            engine.calculate_ratios()
+            engine.calculate_trends()
             
-            # Estimate missing fields
-            gross_profit = [r * 0.4 for r in revenue]
-            ebitda = [r * 0.2 for r in revenue]
-            operating_income = [r * 0.15 for r in revenue]
-            cogs = [r * 0.6 for r in revenue]
-            accounts_receivable = [r * 0.1 for r in revenue]
-            inventory = [r * 0.08 for r in revenue]
-            accounts_payable = [r * 0.07 for r in revenue]
-            current_assets = [r * 0.25 for r in revenue]
-            current_liabilities = [r * 0.15 for r in revenue]
-            interest_expense = [r * 0.02 for r in revenue]
-            ebt = [oi - ie for oi, ie in zip(operating_income, interest_expense)]
-            ebit = operating_income
-            
-            dupont_input = {
-                'revenue': revenue,
-                'gross_profit': gross_profit,
-                'ebitda': ebitda,
-                'operating_income': operating_income,
-                'net_income': net_income,
-                'total_assets': total_assets,
-                'total_equity': total_equity,
-                'total_debt': total_debt,
-                'accounts_receivable': accounts_receivable,
-                'inventory': inventory,
-                'accounts_payable': accounts_payable,
-                'cogs': cogs,
-                'current_assets': current_assets,
-                'current_liabilities': current_liabilities,
-                'interest_expense': interest_expense,
-                'ebt': ebt,
-                'ebit': ebit,
-                'currency': profile.get('currency', 'USD')
-            }
-            
-            result = perform_dupont_analysis(dupont_input)
+            # Get results
+            results = engine.get_results()
             
             return {
                 "model": "DuPont",
-                "success": result.get('success', False),
-                "supporting_ratios": result.get('supporting_ratios', {}),
-                "dupont_3step": result.get('dupont_3step', {}),
-                "dupont_5step": result.get('dupont_5step', {}),
-                "growth_trends": result.get('growth_trends', {}),
-                "validation": result.get('validation', {}),
-                "metadata": result.get('metadata', {})
+                "success": True,
+                "ticker": ticker,
+                "company_name": results.get('company_name', ''),
+                "years_analyzed": years,
+                "financial_statements": results.get('financial_statements', {}),
+                "ratios": results.get('ratios', {}),
+                "dupont_3step": results.get('dupont_3step', {}),
+                "dupont_5step": results.get('dupont_5step', {}),
+                "growth_trends": results.get('growth_trends', {}),
+                "validation": results.get('validation', {}),
+                "pyramid_data": results.get('pyramid_data', {})
             }
             
         except Exception as e:
-            return {
-                "model": "DuPont",
-                "error": str(e),
-                "fallback_message": "DuPont analysis failed."
-            }
+            logger.error(f"DuPont analysis failed: {str(e)}")
+            # Fallback to old estimation method if dynamic fetch fails
+            try:
+                # Prepare data for DuPont (need 6-10 years of data)
+                # Use available historical data and project forward
+                years_count = max(6, len(list(financials.get('revenue', {}).values())))
+                
+                # Build arrays with available data, repeat last value if needed
+                def extend_array(values, target_len):
+                    result = list(values)[:target_len]
+                    while len(result) < target_len:
+                        result.append(result[-1] if result else 0)
+                    return result
+                
+                revenue = extend_array(list(financials.get('revenue', {}).values()), years_count)
+                net_income = extend_array(list(financials.get('net_income', {}).values()), years_count)
+                total_assets = extend_array([profile.get('raw_info', {}).get('totalAssets', sum(revenue)*0.5)] * min(3, years_count), years_count)
+                total_equity = extend_array([profile.get('raw_info', {}).get('totalStockholderEquity', sum(revenue)*0.3)] * min(3, years_count), years_count)
+                total_debt = extend_array([profile.get('raw_info', {}).get('totalDebt', sum(revenue)*0.2)] * min(3, years_count), years_count)
+                
+                # Estimate missing fields
+                gross_profit = [r * 0.4 for r in revenue]
+                ebitda = [r * 0.2 for r in revenue]
+                operating_income = [r * 0.15 for r in revenue]
+                cogs = [r * 0.6 for r in revenue]
+                accounts_receivable = [r * 0.1 for r in revenue]
+                inventory = [r * 0.08 for r in revenue]
+                accounts_payable = [r * 0.07 for r in revenue]
+                current_assets = [r * 0.25 for r in revenue]
+                current_liabilities = [r * 0.15 for r in revenue]
+                interest_expense = [r * 0.02 for r in revenue]
+                ebt = [oi - ie for oi, ie in zip(operating_income, interest_expense)]
+                ebit = operating_income
+                
+                dupont_input = {
+                    'revenue': revenue,
+                    'gross_profit': gross_profit,
+                    'ebitda': ebitda,
+                    'operating_income': operating_income,
+                    'net_income': net_income,
+                    'total_assets': total_assets,
+                    'total_equity': total_equity,
+                    'total_debt': total_debt,
+                    'accounts_receivable': accounts_receivable,
+                    'inventory': inventory,
+                    'accounts_payable': accounts_payable,
+                    'cogs': cogs,
+                    'current_assets': current_assets,
+                    'current_liabilities': current_liabilities,
+                    'interest_expense': interest_expense,
+                    'ebt': ebt,
+                    'ebit': ebit,
+                    'currency': profile.get('currency', 'USD')
+                }
+                
+                result = perform_dupont_analysis(dupont_input)
+                
+                return {
+                    "model": "DuPont",
+                    "success": result.get('success', False),
+                    "supporting_ratios": result.get('supporting_ratios', {}),
+                    "dupont_3step": result.get('dupont_3step', {}),
+                    "dupont_5step": result.get('dupont_5step', {}),
+                    "growth_trends": result.get('growth_trends', {}),
+                    "validation": result.get('validation', {}),
+                    "metadata": result.get('metadata', {}),
+                    "fallback_used": True,
+                    "message": "Used estimated data fallback"
+                }
+            except Exception as fallback_error:
+                return {
+                    "model": "DuPont",
+                    "error": str(fallback_error),
+                    "fallback_message": "DuPont analysis failed completely."
+                }
     
     # =====================
     # TRADING COMPS
