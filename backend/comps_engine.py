@@ -13,7 +13,12 @@ from datetime import datetime
 from typing import List, Dict, Optional, Tuple
 from dataclasses import dataclass, field
 import statistics
-from .ai_engine import suggest_peer_companies
+
+# Handle both package and script execution contexts
+try:
+    from .ai_engine import suggest_peer_companies
+except ImportError:
+    from ai_engine import suggest_peer_companies
 
 
 # ============================================================================
@@ -1364,6 +1369,7 @@ def fetch_comps_inputs(ticker: str, peer_tickers: Optional[List[str]] = None) ->
     """
     Fetch target and peer data from yfinance
     Returns target company data and list of peer company data
+    If no peer_tickers provided, uses AI to suggest peers
     """
     import yfinance as yf
 
@@ -1385,8 +1391,25 @@ def fetch_comps_inputs(ticker: str, peer_tickers: Optional[List[str]] = None) ->
         book_equity=info.get("totalStockholderEquity", 0),
         shares_outstanding=info.get("sharesOutstanding", 1),
         current_stock_price=info.get("currentPrice", 0) or info.get("regularMarketPrice", 0),
-        currency=info.get("currency", "USD")
+        currency=info.get("currency", "USD"),
+        industry=info.get("industry", ""),
+        sector=info.get("sector", "")
     )
+
+    # Use AI to suggest peers if none provided
+    if not peer_tickers:
+        print(f"🤖 No peer tickers provided. Using AI to suggest peers for {target.company_name}...")
+        try:
+            peer_suggestions = suggest_peer_companies(
+                company_name=target.company_name,
+                industry=target.industry,
+                sector=target.sector
+            )
+            peer_tickers = [p['ticker'] for p in peer_suggestions]
+            print(f"   AI suggested {len(peer_tickers)} peers: {', '.join(peer_tickers)}")
+        except Exception as e:
+            print(f"   ⚠️ AI suggestion failed: {e}")
+            peer_tickers = []
 
     # Fetch peer data
     peers = []
