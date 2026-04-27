@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { searchCompanies, selectCompany, selectModels, prepareInputs, fetchData, generateAI, confirmAssumptions, runValuation } from '../services/api';
 
 const ValuationFlow = () => {
   // State Management
@@ -28,21 +29,14 @@ const ValuationFlow = () => {
   const [compsResults, setCompsResults] = useState(null);
   const [dcfInputs, setDcfInputs] = useState(null);
   const [aiData, setAiData] = useState({});
-  
-  const API_BASE_URL = 'http://localhost:8000/api';
 
   // Step 1: Search Company
-  const handleSearch = async () => {
+  const handleSearch = useCallback(async () => {
     if (!searchQuery.trim()) return;
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`${API_BASE_URL}/step-1-search`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: searchQuery, market: market })
-      });
-      const data = await response.json();
+      const data = await searchCompanies(searchQuery, market);
       console.log('Search response:', data);
       if (data.results && data.results.length > 0) {
         setSearchResults(data.results);
@@ -58,22 +52,13 @@ const ValuationFlow = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [searchQuery, market]);
 
   // Step 3: Select Company
-  const handleSelectCompany = async (company) => {
+  const handleSelectCompany = useCallback(async (company) => {
     setLoading(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/step-3-select-ticker`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          session_id: sessionId || '', 
-          ticker: company.symbol, 
-          market: company.market || 'international' 
-        })
-      });
-      const data = await response.json();
+      const data = await selectCompany(sessionId || '', company.symbol, company.market || 'international');
       console.log('Select company response:', data);
       if (data.session_id) {
         setSessionId(data.session_id);
@@ -86,19 +71,14 @@ const ValuationFlow = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [sessionId]);
 
   // Step 4: Select Model
-  const handleSelectModel = async (modelType) => {
+  const handleSelectModel = useCallback(async (modelType) => {
     setSelectedModel(modelType);
     setLoading(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/step-4-select-models`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id: sessionId, model: modelType })
-      });
-      const data = await response.json();
+      const data = await selectModels(sessionId, modelType);
       console.log('Select model response:', data);
       if (data.message) {
         setCurrentStep(5);
@@ -111,7 +91,7 @@ const ValuationFlow = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [sessionId]);
 
   // Go back to model selection (Step 4)
   const handleBackToModelSelection = () => {
@@ -134,14 +114,9 @@ const ValuationFlow = () => {
   };
 
   // Fetch Required Inputs
-  const fetchRequiredInputs = async () => {
+  const fetchRequiredInputs = useCallback(async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/step-5-6-prepare-inputs`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id: sessionId })
-      });
-      const data = await response.json();
+      const data = await prepareInputs(sessionId);
       console.log('Required inputs response:', data);
       if (data.status && data.required_inputs) {
         setRequiredFields(data.required_inputs);
@@ -149,7 +124,7 @@ const ValuationFlow = () => {
     } catch (err) {
       console.error('Prepare inputs error:', err);
     }
-  };
+  }, [sessionId]);
 
   useEffect(() => {
     if (selectedModel && currentStep === 5 && sessionId) {
@@ -158,48 +133,38 @@ const ValuationFlow = () => {
   }, [selectedModel, currentStep, sessionId, fetchRequiredInputs]);
 
   // Step 7-8: Retrieve Data (API + AI)
-  const handleRetrieveData = async () => {
+  const handleRetrieveData = useCallback(async () => {
     setLoading(true);
     try {
       // Fetch API data
-      const fetchResponse = await fetch(`${API_BASE_URL}/step-7-8-fetch-data`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id: sessionId })
-      });
-      const fetchData = await fetchResponse.json();
-      console.log('Fetch data response:', fetchData);
+      const fetchDataResponse = await fetchData(sessionId);
+      console.log('Fetch data response:', fetchDataResponse);
       
       // Fetch AI suggestions
-      const aiResponse = await fetch(`${API_BASE_URL}/step-9-generate-ai`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id: sessionId })
-      });
-      const aiData_response = await aiResponse.json();
-      console.log('AI response:', aiData_response);
+      const aiDataResponse = await generateAI(sessionId);
+      console.log('AI response:', aiDataResponse);
       
-      if (fetchData.data && aiData_response.suggestions) {
-        setAiData(aiData_response.suggestions);
+      if (fetchDataResponse.data && aiDataResponse.suggestions) {
+        setAiData(aiDataResponse.suggestions);
         
         // Extract model-specific data
-        if (fetchData.data.historical_financials) {
-          setHistoricalData(fetchData.data.historical_financials);
+        if (fetchDataResponse.data.historical_financials) {
+          setHistoricalData(fetchDataResponse.data.historical_financials);
         }
-        if (fetchData.data.forecast_drivers) {
-          setForecastDrivers(fetchData.data.forecast_drivers);
+        if (fetchDataResponse.data.forecast_drivers) {
+          setForecastDrivers(fetchDataResponse.data.forecast_drivers);
         }
-        if (fetchData.data.peers) {
-          setPeerData(fetchData.data.peers);
+        if (fetchDataResponse.data.peers) {
+          setPeerData(fetchDataResponse.data.peers);
         }
-        if (fetchData.data.dcf_inputs) {
-          setDcfInputs(fetchData.data.dcf_inputs);
+        if (fetchDataResponse.data.dcf_inputs) {
+          setDcfInputs(fetchDataResponse.data.dcf_inputs);
         }
-        if (fetchData.data.dupont_ratios) {
-          setDupontResults(fetchData.data.dupont_ratios);
+        if (fetchDataResponse.data.dupont_ratios) {
+          setDupontResults(fetchDataResponse.data.dupont_ratios);
         }
-        if (fetchData.data.comps_results) {
-          setCompsResults(fetchData.data.comps_results);
+        if (fetchDataResponse.data.comps_results) {
+          setCompsResults(fetchDataResponse.data.comps_results);
         }
         
         setCurrentStep(8);
@@ -210,7 +175,7 @@ const ValuationFlow = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [sessionId]);
 
   // Auto-fill AI Values
   const handleGenerateAllAI = () => {
@@ -275,19 +240,10 @@ const ValuationFlow = () => {
   };
 
   // Step 10: Confirm Assumptions
-  const handleConfirmAssumptions = async () => {
+  const handleConfirmAssumptions = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/step-10-confirm-assumptions`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          session_id: sessionId, 
-          assumptions: confirmedValues,
-          scenario: selectedScenario
-        })
-      });
-      const data = await response.json();
+      const data = await confirmAssumptions(sessionId, confirmedValues, selectedScenario);
       console.log('Confirm assumptions response:', data);
       if (data.status) {
         setCurrentStep(9);
@@ -298,23 +254,14 @@ const ValuationFlow = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [sessionId, confirmedValues, selectedScenario]);
 
   // Step 11-12: Run Valuation
-  const handleRunValuation = async () => {
+  const handleRunValuation = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`${API_BASE_URL}/step-11-12-valuate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          session_id: sessionId,
-          model: selectedModel,
-          scenario: selectedScenario
-        })
-      });
-      const data = await response.json();
+      const data = await runValuation(sessionId, selectedModel, selectedScenario);
       console.log('Valuation response:', data);
       
       if (data.result) {
@@ -325,7 +272,7 @@ const ValuationFlow = () => {
           // DCF results
         }
         if (data.result.dupont_outputs) {
-          setDupontRatios(data.result.dupont_outputs);
+          setDupontResults(data.result.dupont_outputs);
         }
         if (data.result.comps_outputs) {
           setCompsResults(data.result.comps_outputs);
@@ -341,7 +288,7 @@ const ValuationFlow = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [sessionId, selectedModel, selectedScenario]);
 
   // Reset All
   const handleReset = () => {

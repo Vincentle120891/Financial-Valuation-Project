@@ -1,6 +1,7 @@
 import os
 import uuid
 import json
+import logging
 from datetime import datetime, date
 from typing import Optional, Dict, Any, List
 from fastapi import FastAPI, HTTPException, Body
@@ -10,6 +11,10 @@ from pydantic import BaseModel
 import yfinance as yf
 import requests
 from dotenv import load_dotenv
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Import valuation engines
 from dcf_engine_full import DCFEngine, DCFInputs, ForecastDrivers, fetch_dcf_inputs
