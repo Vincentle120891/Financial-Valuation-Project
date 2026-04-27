@@ -418,9 +418,18 @@ async def run_valuation_engine(session_data: Dict) -> Dict:
             terminal_multiple = assumptions.get('terminal_ebitda_multiple', 8.0)
             
             # Build forecast drivers for all scenarios
+            # Split revenue growth into volume and price components (typically 60/40 or 70/30 split)
+            # If user provides separate assumptions, use them; otherwise derive from total revenue growth
+            volume_split = assumptions.get('volume_growth_split', 0.6)  # Default 60% volume, 40% price
+            
+            # Calculate volume and price growth from total revenue growth
+            # Using approximation: (1+vol)*(1+price) - 1 ≈ vol + price for small values
+            base_volume_growth = [g * volume_split for g in revenue_growth[:6]]
+            base_price_growth = [g * (1 - volume_split) for g in revenue_growth[:6]]
+            
             base_drivers = ScenarioDrivers(
-                volume_growth=revenue_growth[:6],
-                price_growth=[0.0] * 6,
+                volume_growth=base_volume_growth,
+                price_growth=base_price_growth,
                 inflation_rate=[assumptions.get('inflation_rate', 0.02)] * 6 if not isinstance(assumptions.get('inflation_rate'), list) else assumptions.get('inflation_rate', [0.02]*6)[:6],
                 capex=[hist_fy_minus_1['revenue'] * assumptions.get('capex_pct_of_revenue', 0.05)] * 6,
                 ar_days=[assumptions.get('ar_days', 45)] * 5,
@@ -432,9 +441,11 @@ async def run_valuation_engine(session_data: Dict) -> Dict:
             
             # Best case (higher growth)
             best_growth = [min(g * 1.3, 0.25) for g in revenue_growth[:6]]
+            best_volume_growth = [g * volume_split for g in best_growth]
+            best_price_growth = [g * (1 - volume_split) for g in best_growth]
             best_drivers = ScenarioDrivers(
-                volume_growth=best_growth,
-                price_growth=[0.0] * 6,
+                volume_growth=best_volume_growth,
+                price_growth=best_price_growth,
                 inflation_rate=base_drivers.inflation_rate,
                 capex=base_drivers.capex,
                 ar_days=base_drivers.ar_days,
@@ -446,9 +457,11 @@ async def run_valuation_engine(session_data: Dict) -> Dict:
             
             # Worst case (lower growth)
             worst_growth = [max(g * 0.6, 0.01) for g in revenue_growth[:6]]
+            worst_volume_growth = [g * volume_split for g in worst_growth]
+            worst_price_growth = [g * (1 - volume_split) for g in worst_growth]
             worst_drivers = ScenarioDrivers(
-                volume_growth=worst_growth,
-                price_growth=[0.0] * 6,
+                volume_growth=worst_volume_growth,
+                price_growth=worst_price_growth,
                 inflation_rate=base_drivers.inflation_rate,
                 capex=base_drivers.capex,
                 ar_days=[d * 1.2 for d in base_drivers.ar_days],
