@@ -3,7 +3,7 @@ DCF Calculation Engine - Full Implementation Matching Excel Specification
 Implements both Perpetuity (Gordon Growth) and Exit Multiple methods with:
 - Separate volume and price growth for revenue
 - Proper unlevered tax schedule for tax shield calculation
-- WACC calculation from comparable companies
+- WACC calculation from comparable companies (with AI peer suggestion)
 - Date-based partial period adjustments
 - Tax loss carryforward with separate levered/unlevered pools
 - All inputs configurable via API, AI, or manual override
@@ -14,6 +14,16 @@ from typing import Dict, List, Optional, Tuple, Any, Union
 from datetime import datetime, date
 import math
 import json
+import logging
+
+logger = logging.getLogger(__name__)
+
+# Import AI engine for peer suggestions
+try:
+    from .ai_engine import suggest_peer_companies
+except ImportError:
+    # Fallback for direct script execution
+    from ai_engine import suggest_peer_companies
 
 
 # =============================================================================
@@ -1326,7 +1336,7 @@ class DCFEngine:
 def create_default_inputs() -> DCFInputs:
     """Create default DCF inputs matching the Excel specification."""
     
-    # Comparable companies for WACC calculation
+    # Comparable companies for WACC calculation (defaults - will be replaced by AI if ticker provided)
     comparables = [
         ComparableCompany("Surge Batteries Inc.", 63702, 375499, 0.315, 0.850),
         ComparableCompany("Future Energy Co.", 43422, 311425, 0.322, 1.011),
@@ -1433,6 +1443,76 @@ def create_default_inputs() -> DCFInputs:
         # Cost of debt
         pre_tax_cost_of_debt=0.052
     )
+
+
+def fetch_dcf_inputs(ticker: str, peer_tickers: Optional[List[str]] = None) -> Tuple[Dict[str, Any], List[ComparableCompany]]:
+    """
+    Fetch DCF inputs for a target company with AI-suggested peers if none provided.
+    
+    Args:
+        ticker: Target company ticker symbol
+        peer_tickers: Optional list of peer ticker symbols for WACC calculation
+    
+    Returns:
+        Tuple of (target_company_info, list of ComparableCompany objects)
+    """
+    import yfinance as yf
+    
+    # Fetch target company info
+    try:
+        target = yf.Ticker(ticker)
+        info = target.info
+        company_name = info.get("longName", ticker)
+        industry = info.get("industry", "General")
+        sector = info.get("sector", "General")
+        market_cap = info.get("marketCap", 0)
+        enterprise_value = info.get("enterpriseValue", 0)
+        beta = info.get("beta", 1.0)
+    except Exception as e:
+        logger.warning(f"Could not fetch target company info: {e}")
+        return {}, []
+    
+    # If no peer tickers provided, use AI to suggest peers
+    if peer_tickers is None or len(peer_tickers) == 0:
+        print(f"🤖 No peer tickers provided for DCF. Using AI to suggest peers for {ticker}...")
+        ai_suggestions = suggest_peer_companies(ticker, num_peers=10)
+        if ai_suggestions and len(ai_suggestions) > 0:
+            peer_tickers = [p["ticker"] for p in ai_suggestions]
+            print(f"✅ AI suggested {len(peer_tickers)} peers: {', '.join(peer_tickers)}")
+        else:
+            print("⚠️ AI peer suggestion failed. Will use default comparables.")
+            return info, []
+    
+    # Fetch peer data and build ComparableCompany objects
+    comparables = []
+    for peer_ticker in peer_tickers:
+        try:
+            peer_yf = yf.Ticker(peer_ticker)
+            peer_info = peer_yf.info
+            
+            # Extract required fields for WACC calculation
+            debt = peer_info.get("totalDebt", 0) or 0
+            equity = peer_info.get("marketCap", 0) or 0
+            tax_rate = peer_info.get("taxRate", 0.21) or 0.21  # Default to 21% if not available
+            levered_beta = peer_info.get("beta", 1.0) or 1.0
+            
+            if debt > 0 or equity > 0:
+                comp = ComparableCompany(
+                    name=peer_info.get("longName", peer_ticker),
+                    debt=debt,
+                    equity=equity,
+                    tax_rate=tax_rate,
+                    levered_beta=levered_beta
+                )
+                comparables.append(comp)
+        except Exception as e:
+            logger.warning(f"Could not fetch peer {peer_ticker} data: {e}")
+            continue
+    
+    if len(comparables) == 0:
+        print("⚠️ Could not fetch any peer data. Will use default comparables.")
+    
+    return info, comparables
 
 
 def run_dcf_valuation(scenario: str = "base_case") -> Dict[str, Any]:

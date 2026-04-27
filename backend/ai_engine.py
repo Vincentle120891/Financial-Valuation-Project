@@ -221,3 +221,103 @@ class AIFallbackEngine:
 
 # Singleton instance
 ai_engine = AIFallbackEngine()
+
+
+# ============================================================================
+# PEER SUGGESTION ENGINE
+# ============================================================================
+
+def suggest_peer_companies(target_ticker: str, num_peers: int = 10) -> List[Dict[str, str]]:
+    """
+    Use AI to suggest peer companies for comparable analysis.
+    Returns a list of dictionaries with ticker, company_name, industry, and selection_reason.
+    """
+    import yfinance as yf
+    
+    # First, get basic info about the target company
+    try:
+        target = yf.Ticker(target_ticker)
+        info = target.info
+        company_name = info.get("longName", target_ticker)
+        industry = info.get("industry", "General")
+        sector = info.get("sector", "General")
+        description = info.get("longBusinessSummary", "")[:500] if info.get("longBusinessSummary") else ""
+        country = info.get("country", "")
+    except Exception as e:
+        logger.warning(f"Could not fetch target company info: {e}")
+        company_name = target_ticker
+        industry = "General"
+        sector = "General"
+        description = ""
+        country = ""
+    
+    prompt = f"""
+You are a senior equity research analyst specializing in comparable company analysis.
+
+TARGET COMPANY:
+- Ticker: {target_ticker}
+- Name: {company_name}
+- Industry: {industry}
+- Sector: {sector}
+- Country: {country}
+- Business Description: {description}
+
+TASK:
+Suggest exactly {num_peers} publicly traded peer companies for comparable valuation analysis.
+
+CRITERIA FOR PEER SELECTION:
+1. Direct competitors in the same industry/sector
+2. Similar business models and revenue streams
+3. Comparable market capitalization (when possible)
+4. Geographic overlap (same regions/countries)
+5. Publicly traded with available financial data
+6. Mix of: direct competitors, regional peers, and global benchmarks
+
+For EACH peer, provide:
+- ticker: Stock ticker symbol (include exchange suffix if needed, e.g., "TSCO.L" for London)
+- company_name: Full legal name
+- industry: Their specific industry
+- selection_reason: Detailed explanation (2-3 sentences) of WHY this company is a relevant peer
+
+OUTPUT FORMAT (STRICT JSON ARRAY):
+[
+  {{
+    "ticker": "SBRY.L",
+    "company_name": "J Sainsbury plc",
+    "industry": "Grocery Retail",
+    "selection_reason": "Direct UK supermarket competitor fighting for same customers. Second-largest UK grocery chain with similar format stores, loyalty programs, and banking divisions. Closest rival to Tesco as #1 and #2 UK players."
+  }},
+  ...
+]
+
+Respond ONLY with valid JSON array. No markdown, no explanations outside JSON.
+"""
+    
+    # Try to use AI engine if available
+    if ai_engine.providers:
+        try:
+            for provider_name, provider_func in ai_engine.providers:
+                try:
+                    response = provider_func(prompt)
+                    if response:
+                        # Clean up response
+                        text = response.strip()
+                        if text.startswith("```json"):
+                            text = text.replace("```json", "").replace("```", "").strip()
+                        elif text.startswith("```"):
+                            text = text.replace("```", "").strip()
+                        
+                        # Parse JSON
+                        peers = json.loads(text)
+                        if isinstance(peers, list) and len(peers) > 0:
+                            logger.info(f"✅ Successfully generated {len(peers)} peer suggestions via {provider_name.upper()}")
+                            return peers
+                except Exception as e:
+                    logger.error(f"Provider {provider_name} failed: {e}")
+                    continue
+        except Exception as e:
+            logger.error(f"AI peer suggestion failed: {e}")
+    
+    # Fallback: Return empty list with warning
+    logger.warning("⚠️ Could not generate AI peer suggestions. Returning empty list.")
+    return []

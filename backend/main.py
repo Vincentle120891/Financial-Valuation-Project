@@ -12,12 +12,12 @@ import requests
 from dotenv import load_dotenv
 
 # Import valuation engines
-from dcf_engine_full import DCFEngine, DCFInputs, ForecastDrivers
+from dcf_engine_full import DCFEngine, DCFInputs, ForecastDrivers, fetch_dcf_inputs
 from dupont_engine import perform_dupont_analysis
 from comps_engine import TradingCompsAnalyzer, TargetCompanyData, PeerCompanyData
 
 # Import Resilient AI Engine with 3-Tier Fallback
-from ai_engine import ai_engine
+from ai_engine import ai_engine, suggest_peer_companies
 
 # Load environment variables
 load_dotenv()
@@ -332,6 +332,27 @@ async def run_valuation_engine(session_data: Dict) -> Dict:
     # =====================
     if selected_model == 'dcf':
         try:
+            # Use fetch_dcf_inputs which includes AI peer suggestion for WACC calculation
+            ticker_symbol = session_data.get('ticker', 'UNKNOWN')
+            
+            # Get peer tickers from assumptions if provided, otherwise let AI suggest
+            peer_tickers_from_input = assumptions.get('peer_tickers', None)
+            
+            print(f"Fetching DCF inputs for {ticker_symbol}...")
+            if peer_tickers_from_input:
+                print(f"Using provided peers: {peer_tickers_from_input}")
+            else:
+                print("No peers provided - AI will suggest comparable companies for WACC calculation")
+            
+            # Fetch company info and comparables (AI suggests peers if none provided)
+            company_info, comparables = fetch_dcf_inputs(ticker_symbol, peer_tickers_from_input)
+            
+            # Calculate WACC from comparables if available
+            if comparables and len(comparables) > 0:
+                print(f"Calculated WACC from {len(comparables)} peer companies: {company_info.get('wacc', 0.0973):.2%}")
+            else:
+                print("No comparables available - using default WACC assumptions")
+            
             # Build historical financials from API data
             revenue_history = list(financials.get('revenue', {}).values())
             ebitda_history = list(financials.get('ebitda', {}).values())
@@ -386,7 +407,8 @@ async def run_valuation_engine(session_data: Dict) -> Dict:
             while len(revenue_growth) < 6:
                 revenue_growth.append(0.02)
             
-            wacc = assumptions.get('wacc', 0.08)
+            # Use WACC from fetch_dcf_inputs if available, otherwise from assumptions
+            wacc = company_info.get('wacc', assumptions.get('wacc', 0.08))
             terminal_growth = assumptions.get('terminal_growth_rate', 0.023)
             terminal_multiple = assumptions.get('terminal_ebitda_multiple', 8.0)
             
@@ -479,6 +501,19 @@ async def run_valuation_engine(session_data: Dict) -> Dict:
             upside_perp = (share_price_perp - current_price) / current_price * 100
             upside_mult = (share_price_mult - current_price) / current_price * 100
             
+            # Build peer info for response
+            peer_info = []
+            if comparables:
+                for comp in comparables[:5]:  # Show top 5 peers
+                    peer_info.append({
+                        "ticker": comp.ticker,
+                        "name": comp.company_name,
+                        "debt": comp.debt,
+                        "equity": comp.equity_value,
+                        "tax_rate": comp.tax_rate,
+                        "levered_beta": comp.levered_beta
+                    })
+            
             return {
                 "model": "DCF",
                 "main_outputs": {
@@ -492,7 +527,13 @@ async def run_valuation_engine(session_data: Dict) -> Dict:
                     "upside_downside_perpetuity_pct": round(upside_perp, 2),
                     "upside_downside_multiple_pct": round(upside_mult, 2)
                 },
-                "message": "DCF calculated using perpetuity and exit multiple methods"
+                "wacc_calculation": {
+                    "wacc": round(wacc, 4),
+                    "peer_count": len(comparables) if comparables else 0,
+                    "peers_used": peer_info,
+                    "methodology": "WACC calculated from peer comparables using CAPM" if comparables else "Default WACC assumptions used"
+                },
+                "message": "DCF calculated using perpetuity and exit multiple methods with AI-suggested peer comparables for WACC"
             }
             
         except Exception as e:
