@@ -1,6 +1,8 @@
 # 📊 Financial Valuation Platform
 
 > **Professional-grade company valuation platform** implementing a comprehensive 12-step guided workflow for DCF, DuPont Analysis, Trading Comps, and Real Estate valuations.
+> 
+> **Version 2.0** - Now with AI-powered peer company suggestions for WACC calculation and trading comparables.
 
 ![Python](https://img.shields.io/badge/Python-3.9+-blue.svg)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.116+-green.svg)
@@ -12,6 +14,12 @@
 ## 🎯 Overview
 
 This platform enables financial analysts, investors, and students to perform institutional-quality company valuations through an intuitive, step-by-step guided workflow. It combines **live market data**, **AI-powered assumptions**, and **industry-standard valuation methodologies** to deliver comprehensive valuation analysis with full audit trails.
+
+### ⚠️ Model Integrity Commitment
+
+**This platform adheres to strict model completeness principles.** We never remove inputs, calculations, or outputs to "simplify" the model. Every component exists for a reason and contributes to accurate, transparent valuations.
+
+See [MODEL_INTEGRITY_MANIFESTO.md](./MODEL_INTEGRITY_MANIFESTO.md) for our complete guidelines.
 
 ### Core Valuation Models
 
@@ -121,6 +129,10 @@ This platform enables financial analysts, investors, and students to perform ins
 - **Python** 3.9 or higher
 - **Node.js** 16 or higher
 - **npm** or **yarn**
+
+### ⚠️ Important: Model Integrity
+
+Before getting started, please review our [Model Integrity Manifesto](./MODEL_INTEGRITY_MANIFESTO.md). This platform follows strict principles to maintain complete, transparent, and accurate valuation models. **We do not remove features for simplicity.**
 
 ### Backend Setup
 

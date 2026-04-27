@@ -1,6 +1,7 @@
 # =============================================================================
 # Financial Valuation Backend - Python Dependencies
 # Professional-grade valuation platform with DCF, DuPont, Comps, and Real Estate models
+# Version: 2.0 - With AI-powered peer suggestion
 # =============================================================================
 
 # -----------------------------------------------------------------------------
@@ -49,3 +50,30 @@ gunicorn>=21.0.0
 # -----------------------------------------------------------------------------
 # python-multipart>=0.0.6  # For form data handling
 # fastapi-cors>=0.0.6  # Enhanced CORS support
+
+# -----------------------------------------------------------------------------
+# LOGGING & MONITORING
+# -----------------------------------------------------------------------------
+# structlog>=24.0.0  # Structured logging for better debugging
+# prometheus-client>=0.19.0  # Metrics monitoring
+
+# -----------------------------------------------------------------------------
+# NOTES ON DEPENDENCIES
+# -----------------------------------------------------------------------------
+# 
+# CRITICAL DEPENDENCIES (DO NOT REMOVE):
+# - yfinance: Required for fetching real-time financial data and peer comparables
+# - groq: Required for AI-powered peer company suggestions
+# - fastapi/pydantic: Required for API validation and data structures
+#
+# OPTIONAL DEPENDENCIES:
+# - google-generativeai: Alternative AI provider (fallback to Groq if not available)
+# - structlog: Enhanced logging for production debugging
+# - prometheus-client: Production monitoring and alerting
+#
+# MODEL INTEGRITY NOTE:
+# All dependencies are required to maintain full model functionality.
+# Do not remove dependencies to "simplify" the project - this would compromise
+# the completeness of the valuation models.
+# See MODEL_INTEGRITY_MANIFESTO.md for complete guidelines.
+#
