@@ -1,4 +1,3 @@
---- backend/comps_engine.py (原始)
 """
 Comparable Company Analysis (Trading Comps) & Precedent Transaction Model
 Complete implementation matching Excel specification with:
@@ -257,7 +256,7 @@ class TradingCompsOutputs:
     min_pe_fy24_price: float = 0.0
 
     # Football field chart data (rows 87-93 in Excel)
-    chart_ List[Dict] = field(default_factory=list)
+    chart_data: List[Dict] = field(default_factory=list)
 
     # Counts and metadata
     peer_count_total: int = 0
@@ -696,7 +695,7 @@ if __name__ == "__main__":
     print(f"LTM P/E: £{outputs.avg_pe_ltm_price:.2f}")
 
     print("\n--- Football Field Range ---")
-    for row in outputs.chart_
+    for row in outputs.chart_data:
         print(f"{row['metric']}: £{row['min']:.2f} - £{row['average']:.2f} - £{row['max']:.2f}")
 
     print("\n--- JSON Output Preview ---")
@@ -706,7 +705,6 @@ if __name__ == "__main__":
     outputs.save_to_file("trading_comps_output.json")
     print("\n✓ Results saved to trading_comps_output.json")
 
-+++ backend/comps_engine.py (修改后)
 """
 Comparable Company Analysis (Trading Comps) & Precedent Transaction Model
 Complete implementation matching Excel specification with:
@@ -984,7 +982,7 @@ class TradingCompsOutputs:
     min_pe_fy24_price: float = 0.0
 
     # Football field chart data (rows 87-93 in Excel)
-    chart_ List[Dict] = field(default_factory=list)
+    chart_data: List[Dict] = field(default_factory=list)
 
     # Counts and metadata
     peer_count_total: int = 0
@@ -1235,7 +1233,105 @@ class TradingCompsAnalyzer:
         outputs.pe_fy23_stats = self.calculate_statistics(pe_fy23_vals)
         outputs.pe_fy24_stats = self.calculate_statistics(pe_fy24_vals)
 
-        # Calculate implied valuations using median multiples
+        # Calculate implied valuations using AVERAGE, MAX, MIN multiples (matching Excel rows 64-82)
+        # Per Excel spec: Implied EV = Multiple × Target EBITDA, then Equity = EV - Net Debt, Price = Equity / Shares
+        
+        # Helper function to calculate implied share price from multiple
+        def calc_implied_price(multiple, ebitda, period_name):
+            implied_ev = multiple * ebitda
+            implied_equity = implied_ev - t.net_debt
+            implied_price = implied_equity / t.shares_outstanding
+            return implied_price
+        
+        def calc_implied_pe(multiple, eps):
+            return multiple * eps
+        
+        # AVERAGE scenario (Excel rows 64-68)
+        if outputs.ev_ebitda_ltm_stats and outputs.ev_ebitda_ltm_stats.average > 0:
+            outputs.avg_ev_ebitda_ltm_price = calc_implied_price(outputs.ev_ebitda_ltm_stats.average, t.ebitda_ltm, "LTM")
+        if outputs.ev_ebitda_fy23_stats and outputs.ev_ebitda_fy23_stats.average > 0:
+            outputs.avg_ev_ebitda_fy23_price = calc_implied_price(outputs.ev_ebitda_fy23_stats.average, t.ebitda_fy2023, "FY23")
+        if outputs.ev_ebitda_fy24_stats and outputs.ev_ebitda_fy24_stats.average > 0:
+            outputs.avg_ev_ebitda_fy24_price = calc_implied_price(outputs.ev_ebitda_fy24_stats.average, t.ebitda_fy2024, "FY24")
+        
+        if outputs.pe_ltm_stats and outputs.pe_ltm_stats.average > 0:
+            outputs.avg_pe_ltm_price = calc_implied_pe(outputs.pe_ltm_stats.average, t.eps_ltm)
+        if outputs.pe_fy23_stats and outputs.pe_fy23_stats.average > 0:
+            outputs.avg_pe_fy23_price = calc_implied_pe(outputs.pe_fy23_stats.average, t.eps_fy2023)
+        if outputs.pe_fy24_stats and outputs.pe_fy24_stats.average > 0:
+            outputs.avg_pe_fy24_price = calc_implied_pe(outputs.pe_fy24_stats.average, t.eps_fy2024)
+        
+        # MAXIMUM scenario (Excel rows 71-75)
+        if outputs.ev_ebitda_ltm_stats and outputs.ev_ebitda_ltm_stats.maximum > 0:
+            outputs.max_ev_ebitda_ltm_price = calc_implied_price(outputs.ev_ebitda_ltm_stats.maximum, t.ebitda_ltm, "LTM")
+        if outputs.ev_ebitda_fy23_stats and outputs.ev_ebitda_fy23_stats.maximum > 0:
+            outputs.max_ev_ebitda_fy23_price = calc_implied_price(outputs.ev_ebitda_fy23_stats.maximum, t.ebitda_fy2023, "FY23")
+        if outputs.ev_ebitda_fy24_stats and outputs.ev_ebitda_fy24_stats.maximum > 0:
+            outputs.max_ev_ebitda_fy24_price = calc_implied_price(outputs.ev_ebitda_fy24_stats.maximum, t.ebitda_fy2024, "FY24")
+        
+        if outputs.pe_ltm_stats and outputs.pe_ltm_stats.maximum > 0:
+            outputs.max_pe_ltm_price = calc_implied_pe(outputs.pe_ltm_stats.maximum, t.eps_ltm)
+        if outputs.pe_fy23_stats and outputs.pe_fy23_stats.maximum > 0:
+            outputs.max_pe_fy23_price = calc_implied_pe(outputs.pe_fy23_stats.maximum, t.eps_fy2023)
+        if outputs.pe_fy24_stats and outputs.pe_fy24_stats.maximum > 0:
+            outputs.max_pe_fy24_price = calc_implied_pe(outputs.pe_fy24_stats.maximum, t.eps_fy2024)
+        
+        # MINIMUM scenario (Excel rows 78-82)
+        if outputs.ev_ebitda_ltm_stats and outputs.ev_ebitda_ltm_stats.minimum > 0:
+            outputs.min_ev_ebitda_ltm_price = calc_implied_price(outputs.ev_ebitda_ltm_stats.minimum, t.ebitda_ltm, "LTM")
+        if outputs.ev_ebitda_fy23_stats and outputs.ev_ebitda_fy23_stats.minimum > 0:
+            outputs.min_ev_ebitda_fy23_price = calc_implied_price(outputs.ev_ebitda_fy23_stats.minimum, t.ebitda_fy2023, "FY23")
+        if outputs.ev_ebitda_fy24_stats and outputs.ev_ebitda_fy24_stats.minimum > 0:
+            outputs.min_ev_ebitda_fy24_price = calc_implied_price(outputs.ev_ebitda_fy24_stats.minimum, t.ebitda_fy2024, "FY24")
+        
+        if outputs.pe_ltm_stats and outputs.pe_ltm_stats.minimum > 0:
+            outputs.min_pe_ltm_price = calc_implied_pe(outputs.pe_ltm_stats.minimum, t.eps_ltm)
+        if outputs.pe_fy23_stats and outputs.pe_fy23_stats.minimum > 0:
+            outputs.min_pe_fy23_price = calc_implied_pe(outputs.pe_fy23_stats.minimum, t.eps_fy2023)
+        if outputs.pe_fy24_stats and outputs.pe_fy24_stats.minimum > 0:
+            outputs.min_pe_fy24_price = calc_implied_pe(outputs.pe_fy24_stats.minimum, t.eps_fy2024)
+        
+        # Build football field chart data (Excel rows 87-93)
+        outputs.chart_data = [
+            {
+                "metric": "LTM EV/EBITDA",
+                "min": outputs.min_ev_ebitda_ltm_price,
+                "max": outputs.max_ev_ebitda_ltm_price,
+                "average": outputs.avg_ev_ebitda_ltm_price
+            },
+            {
+                "metric": "FY2023 EV/EBITDA",
+                "min": outputs.min_ev_ebitda_fy23_price,
+                "max": outputs.max_ev_ebitda_fy23_price,
+                "average": outputs.avg_ev_ebitda_fy23_price
+            },
+            {
+                "metric": "FY2024 EV/EBITDA",
+                "min": outputs.min_ev_ebitda_fy24_price,
+                "max": outputs.max_ev_ebitda_fy24_price,
+                "average": outputs.avg_ev_ebitda_fy24_price
+            },
+            {
+                "metric": "LTM P/E",
+                "min": outputs.min_pe_ltm_price,
+                "max": outputs.max_pe_ltm_price,
+                "average": outputs.avg_pe_ltm_price
+            },
+            {
+                "metric": "FY2023 P/E",
+                "min": outputs.min_pe_fy23_price,
+                "max": outputs.max_pe_fy23_price,
+                "average": outputs.avg_pe_fy23_price
+            },
+            {
+                "metric": "FY2024 P/E",
+                "min": outputs.min_pe_fy24_price,
+                "max": outputs.max_pe_fy24_price,
+                "average": outputs.avg_pe_fy24_price
+            }
+        ]
+        
+        # Also store implied valuation objects for backward compatibility
         if outputs.ev_ebitda_ltm_stats and outputs.ev_ebitda_ltm_stats.median > 0:
             outputs.implied_by_ev_ebitda = self.calculate_implied_valuation(
                 outputs.ev_ebitda_ltm_stats.median, t.ebitda_ltm, "ev_ebitda"
@@ -1391,7 +1487,7 @@ if __name__ == "__main__":
     print(f"LTM P/E: £{outputs.avg_pe_ltm_price:.2f}")
 
     print("\n--- Football Field Range ---")
-    for row in outputs.chart_
+    for row in outputs.chart_data:
         print(f"{row['metric']}: £{row['min']:.2f} - £{row['average']:.2f} - £{row['max']:.2f}")
 
     print("\n--- JSON Output Preview ---")
