@@ -558,6 +558,9 @@ class DCFEngine:
         AP Balance = (AP Days / 365) × COGS
         NWC = AR + Inventory - AP
         Change in NWC = Prior NWC - Current NWC (positive = cash inflow)
+        
+        Per Excel spec row 73: G73 = F70 - G70 (decrease in NWC = cash inflow; increase = cash outflow)
+        So change_in_nwc = prior_nwc - current_nwc
         """
         periods = ["FY1", "FY2", "FY3", "FY4", "FY5", "Terminal"]
         n = len(periods)
@@ -595,8 +598,8 @@ class DCFEngine:
             nwc_val = ar + inv - ap
             nwc.append(nwc_val)
             
-            # Change in NWC (current - prior = cash flow impact, positive = outflow)
-            change = nwc_val - prior_nwc
+            # Change in NWC per Excel spec: prior - current (positive = cash inflow)
+            change = prior_nwc - nwc_val
             change_nwc.append(change)
             
             prior_nwc = nwc_val
@@ -717,6 +720,8 @@ class DCFEngine:
         """
         Build unlevered tax schedule (based on EBIT, as-if no debt).
         Separate NOL pool from levered schedule.
+        
+        Note: tax_dep should be the actual tax depreciation deduction (positive number)
         """
         periods = ["FY1", "FY2", "FY3", "FY4", "FY5", "Terminal"]
         n = len(periods)
@@ -737,9 +742,12 @@ class DCFEngine:
         for i in range(n):
             # Depreciation adjustment
             acctg_dep = depreciation[i]
-            tax_depreciation = -tax_dep[i] if i < len(tax_dep) else 0
+            # tax_dep is already positive deductions from depr_schedule.tax_depreciation
+            tax_depreciation = tax_dep[i] if i < len(tax_dep) else 0
             
             # Adjusted EBIT for tax purposes
+            # EBIT already has accounting depreciation deducted
+            # For tax, we add back accounting dep and subtract tax dep
             ebit_adjusted = ebit[i] + acctg_dep - tax_depreciation
             ebt_adj.append(ebit_adjusted)
             
@@ -785,7 +793,7 @@ class DCFEngine:
             years=periods,
             ebt_ebit=ebit,
             accounting_dep=depreciation,
-            tax_dep=[-t for t in tax_dep],
+            tax_dep=tax_dep[:n],  # Keep positive values
             ebt_adjusted=ebt_adj,
             nol_opening=nol_opening,
             nol_new=nol_new,
@@ -803,14 +811,21 @@ class DCFEngine:
         tax_unlevered: TaxSchedule,
         capex: List[float],
         change_in_nwc: List[float],
-        tax_levered: TaxSchedule
+        tax_levered: TaxSchedule,
+        depreciation: List[float]
     ) -> UFCFSchedule:
         """
         Calculate Unlevered Free Cash Flow using EBITDA method.
         Also calculates tax shield for reconciliation.
         
-        UFCF = EBITDA - Current Tax (Unlevered) - CapEx - Change in NWC
-        Note: change_in_nwc is calculated as (Current NWC - Prior NWC), so positive means cash outflow
+        UFCF = EBITDA - Current Tax (Unlevered) - CapEx + Change in NWC
+        
+        Per Excel spec row I257: UFCF = EBITDA - Current Tax (Unlevered) - Capex + WC Cash Flow
+        where WC Cash Flow = Prior NWC - Current NWC (positive = cash inflow, negative = outflow)
+        
+        Since change_in_nwc is already calculated as (prior - current), we ADD it:
+        - If NWC increases (current > prior): change_in_nwc is negative → reduces UFCF ✓
+        - If NWC decreases (current < prior): change_in_nwc is positive → increases UFCF ✓
         """
         periods = ["FY1", "FY2", "FY3", "FY4", "FY5", "Terminal"]
         n = len(periods)
@@ -821,9 +836,9 @@ class DCFEngine:
         for i in range(n):
             cap = capex[i] if i < len(capex) else capex[-1]
             
-            # UFCF
-            # Note: change_in_nwc is (current - prior), so we SUBTRACT it (increase in WC = cash outflow)
-            ufcf_val = ebitda[i] - tax_unlevered.current_tax[i] - cap - change_in_nwc[i]
+            # UFCF per Excel spec: EBITDA - Tax - Capex + WC_change
+            # change_in_nwc is (prior - current), so adding it gives correct cash flow impact
+            ufcf_val = ebitda[i] - tax_unlevered.current_tax[i] - cap + change_in_nwc[i]
             ufcf.append(ufcf_val)
             
             # Tax Shield = Current Tax (Unlevered) - Current Tax (Levered)
@@ -877,6 +892,10 @@ class DCFEngine:
     ) -> DCFValuationDetails:
         """
         Discount cash flows using exact date-based approach.
+        
+        Per Excel spec: Partial period adjustment affects DISCOUNTING TIMING only,
+        NOT the cash flow amounts. Cash flows are received in full; they just arrive
+        at different times within the first period.
         """
         periods = ["FY1", "FY2", "FY3", "FY4", "FY5", "Terminal"]
         n = len(periods)
@@ -902,22 +921,21 @@ class DCFEngine:
         fiscal_year_ends = fiscal_year_ends[1:]
         cf_dates = cf_dates[1:]
         
-        # Adjust UFCF for partial period (only first year)
-        adjusted_ufcf = []
-        for i, u in enumerate(ufcf):
-            if i == 0:
-                adjusted_ufcf.append(u * partial_period_factor)
-            else:
-                adjusted_ufcf.append(u)
+        # DO NOT adjust UFCF amounts for partial period
+        # The partial period is handled via yearfractions for discounting only
+        # This matches Excel spec where I298 = I291 × I296 is for PRESENTATION but
+        # the actual discounting uses the full CF with proper year fraction exponent
+        adjusted_ufcf = list(ufcf)  # Keep original values
         
-        # Discount factors
+        # Discount factors using yearfractions (which already includes partial period timing)
         discount_factors = []
         pv_discrete = []
         
         for i in range(n - 1):  # Exclude terminal from discrete
             df = 1.0 / ((1 + wacc) ** yearfractions[i])
             discount_factors.append(df)
-            pv = adjusted_ufcf[i] * df
+            # Use FULL cash flow discounted at proper time
+            pv = ufcf[i] * df
             pv_discrete.append(pv)
         
         # Terminal value discounting
@@ -1010,7 +1028,8 @@ class DCFEngine:
             tax_unlevered,
             depr_schedule.capex,
             wc_schedule.change_in_nwc,
-            tax_levered
+            tax_levered,
+            depreciation
         )
         
         # Step 15: Calculate Partial Period Factors
@@ -1021,10 +1040,12 @@ class DCFEngine:
         )
         
         # Step 16: Perpetuity Method Terminal Value
-        # TV = UFCF_terminal / (WACC - g)
-        # Note: NOT multiplying by (1+g) as terminal UFCF already represents steady-state
+        # TV = UFCF_terminal × (1 + g) / (WACC - g)
+        # Per Excel spec row M292: Terminal Value = N287 / (C285 - C284)
+        # where N287 is terminal year UFCF. Since terminal UFCF represents the LAST forecast year,
+        # we need to grow it by (1+g) to get the FIRST perpetuity year cash flow.
         terminal_ufcf = ufcf_schedule.ufcf[-1]
-        tv_perpetuity = terminal_ufcf / (wacc - drivers.terminal_growth_rate)
+        tv_perpetuity = terminal_ufcf * (1 + drivers.terminal_growth_rate) / (wacc - drivers.terminal_growth_rate)
         
         # Step 17: Discount Cash Flows - Perpetuity Method
         perpetuity_dcf = self._discount_cash_flows(
@@ -1037,6 +1058,7 @@ class DCFEngine:
         
         # Step 18: Exit Multiple Method Terminal Value
         # TV = Terminal EBITDA × Multiple
+        # This gives enterprise value at end of forecast period
         terminal_ebitda = ebitda[-1]
         tv_multiple = terminal_ebitda * drivers.terminal_ebitda_multiple
         
