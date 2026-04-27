@@ -500,10 +500,14 @@ class TradingCompsAnalyzer:
         outputs.ev_fcf_ltm = t.enterprise_value / t.free_cash_flow_ltm if t.free_cash_flow_ltm > 0 else 0
 
         # Calculate peer statistics for each multiple
-        ev_ebitda_vals = [m["ev_ebitda_ltm"] for m in filtered_peer_multiples if m["ev_ebitda_ltm"] is not None]
+        ev_ebitda_ltm_vals = [m["ev_ebitda_ltm"] for m in filtered_peer_multiples if m["ev_ebitda_ltm"] is not None]
+        ev_ebitda_fy23_vals = [m["ev_ebitda_fy23"] for m in filtered_peer_multiples if m["ev_ebitda_fy23"] is not None]
+        ev_ebitda_fy24_vals = [m["ev_ebitda_fy24"] for m in filtered_peer_multiples if m["ev_ebitda_fy24"] is not None]
+        pe_ltm_vals = [m["pe_ltm"] for m in filtered_peer_multiples if m["pe_ltm"] is not None]
+        pe_fy23_vals = [m["pe_fy23"] for m in filtered_peer_multiples if m["pe_fy23"] is not None]
+        pe_fy24_vals = [m["pe_fy24"] for m in filtered_peer_multiples if m["pe_fy24"] is not None]
         ev_sales_vals = [m["ev_sales_ltm"] for m in filtered_peer_multiples if m["ev_sales_ltm"] is not None]
         ev_ebit_vals = [m["ev_ebit_ltm"] for m in filtered_peer_multiples if m["ev_ebit_ltm"] is not None]
-        pe_vals = [m["pe_diluted_ltm"] for m in filtered_peer_multiples if m["pe_diluted_ltm"] is not None]
         pb_vals = [m["pb_ltm"] for m in filtered_peer_multiples if m["pb_ltm"] is not None]
         p_fcf_vals = [m["p_fcf_ltm"] for m in filtered_peer_multiples if m["p_fcf_ltm"] is not None]
         ev_fcf_vals = [m["ev_fcf_ltm"] for m in filtered_peer_multiples if m["ev_fcf_ltm"] is not None]
