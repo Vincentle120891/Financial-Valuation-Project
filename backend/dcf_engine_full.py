@@ -766,7 +766,7 @@ class DCFEngine:
             
             # Add new losses if EBIT is negative
             if ebit[i] < 0:
-                new_loss = -ebt[i]
+                new_loss = -ebit[i]
                 nol_new.append(new_loss)
                 nol_remaining += new_loss
             else:
