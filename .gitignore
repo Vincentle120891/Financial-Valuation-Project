@@ -1,28 +1,22 @@
-```javascript
-```python
-# Compiled and build artifacts
-*.pyc
+```
+# Dependencies
 __pycache__/
+*.pyc
 *.pyo
 *.pyd
-*.so
-*.egg-info/
-build/
-dist/
-*.egg
-
-# Dependencies
 .venv/
 venv/
 .env
 .env.local
-.env.*
+*.env.*
 
-# Logs and temp files
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# Logs
 *.log
-*.tmp
-*.swp
-*.swo
 
 # Editors
 .vscode/
@@ -30,22 +24,14 @@ venv/
 *.swp
 *.swo
 
-# Coverage reports
-.coverage
-htmlcov/
-.coverage.*
-coverage.xml
-
-# Testing
-.pytest_cache/
-.mypy_cache/
-.hypothesis/
-
-# OS generated files
+# OS
 .DS_Store
 Thumbs.db
+
+# Testing
+.coverage
+coverage/
+htmlcov/
+.pytest_cache/
+.mypy_cache/
 ```
-
-Wait, I need to reconsider. The only modified file is `backend/app/core/logging_config.py` which is a Python source file. There are no build artifacts, dependency directories, or temporary files in the change list. According to rule 6, if the change list contains only source files and no build artifacts, dependencies, or temp files, I should output an empty .gitignore.
-
-(empty)
