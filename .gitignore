@@ -1,1 +1,11 @@
-Nothing should be ignored in this case, as the changes only involve Python source files (.py) and no build artifacts, dependencies, or temporary files are present in the file list.
+```
+# Dependencies
+node_modules/
+
+# Editors
+.vscode/
+
+# Build artifacts
+build/
+dist/
+```
