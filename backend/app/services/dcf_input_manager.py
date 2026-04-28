@@ -5,7 +5,7 @@ Provides unified interface for building DCFInputs with full source tracking
 
 from typing import Dict, Any, List, Optional, Union
 from datetime import date
-from dcf_engine_full import (
+from app.engines.dcf_engine import (
     DCFInputs, ScenarioDrivers, ComparableCompany, 
     InputWithMetadata, InputSource
 )
