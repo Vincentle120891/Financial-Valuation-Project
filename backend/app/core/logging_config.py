@@ -8,7 +8,10 @@ import logging
 import sys
 from pathlib import Path
 from typing import Optional
-from pythonjsonlogger import jsonlogger
+try:
+    from pythonjsonlogger import jsonlogger
+except ImportError:
+    from python_json_logger import jsonlogger
 
 
 def setup_logging(
