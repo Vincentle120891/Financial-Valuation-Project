@@ -22,8 +22,8 @@ export const selectCompany = async (sessionId, ticker, market = 'international')
 };
 
 // Step 4: Select Models
-export const selectModels = async (sessionId, models) => {
-  const response = await api.post('/step-4-select-models', { session_id: sessionId, models });
+export const selectModels = async (sessionId, model) => {
+  const response = await api.post('/step-4-select-models', { session_id: sessionId, model });
   return response.data;
 };
 
