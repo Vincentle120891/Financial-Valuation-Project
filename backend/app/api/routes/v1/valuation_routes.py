@@ -551,33 +551,93 @@ async def prepare_inputs(request: dict = Body(...)):
     selected_model = session['selected_model'].lower()
     required_inputs: List[Dict[str, Any]] = []
     
-    required_inputs.append({
-        "category": "General",
-        "name": "Ticker Confirmation",
-        "requiresInput": False
-    })
+    # General inputs (auto-fetched but shown for transparency)
+    required_inputs.extend([
+        {"category": "Company Profile", "name": "Ticker Symbol", "requiresInput": False},
+        {"category": "Company Profile", "name": "Company Name", "requiresInput": False},
+        {"category": "Company Profile", "name": "Sector & Industry", "requiresInput": False},
+        {"category": "Company Profile", "name": "Currency", "requiresInput": False},
+    ])
     
     if selected_model == 'dcf':
+        # Historical Financials (auto-fetched from yFinance)
         required_inputs.extend([
-            {"category": "Market Structure", "name": "Current Price", "requiresInput": False},
-            {"category": "Market Structure", "name": "Shares Outstanding", "requiresInput": False},
-            {"category": "Market Structure", "name": "Total Debt", "requiresInput": False},
-            {"category": "Forecast Assumptions", "name": "WACC", "requiresInput": True},
-            {"category": "Forecast Assumptions", "name": "Terminal Growth Rate", "requiresInput": True},
-            {"category": "Forecast Assumptions", "name": "Revenue Growth Forecast", "requiresInput": True},
+            {"category": "Historical Financials", "name": "Revenue (3-5 years)", "requiresInput": False},
+            {"category": "Historical Financials", "name": "EBITDA (3-5 years)", "requiresInput": False},
+            {"category": "Historical Financials", "name": "Net Income (3-5 years)", "requiresInput": False},
+            {"category": "Historical Financials", "name": "COGS", "requiresInput": False},
+            {"category": "Historical Financials", "name": "SG&A / OpEx", "requiresInput": False},
+            {"category": "Historical Financials", "name": "Depreciation & Amortization", "requiresInput": False},
+            {"category": "Historical Financials", "name": "CapEx", "requiresInput": False},
+            {"category": "Historical Financials", "name": "Working Capital Items (AR, Inventory, AP)", "requiresInput": False},
         ])
+        
+        # Market Data (auto-fetched)
+        required_inputs.extend([
+            {"category": "Market Data", "name": "Current Stock Price", "requiresInput": False},
+            {"category": "Market Data", "name": "Shares Outstanding", "requiresInput": False},
+            {"category": "Market Data", "name": "Total Debt", "requiresInput": False},
+            {"category": "Market Data", "name": "Cash & Equivalents", "requiresInput": False},
+            {"category": "Market Data", "name": "Beta", "requiresInput": False},
+            {"category": "Market Data", "name": "Market Cap", "requiresInput": False},
+        ])
+        
+        # Forecast Drivers (user input required)
+        required_inputs.extend([
+            {"category": "Forecast Drivers", "name": "Revenue Growth Forecast (5-10 years)", "requiresInput": True},
+            {"category": "Forecast Drivers", "name": "Volume vs Price Growth Split", "requiresInput": True},
+            {"category": "Forecast Drivers", "name": "Inflation Rate Assumption", "requiresInput": True},
+            {"category": "Forecast Drivers", "name": "EBITDA Margin Forecast", "requiresInput": True},
+            {"category": "Forecast Drivers", "name": "Tax Rate", "requiresInput": True},
+            {"category": "Forecast Drivers", "name": "CapEx as % of Revenue", "requiresInput": True},
+            {"category": "Forecast Drivers", "name": "D&A as % of PPE", "requiresInput": True},
+            {"category": "Forecast Drivers", "name": "Working Capital Days (AR, Inv, AP)", "requiresInput": True},
+        ])
+        
+        # DCF Model Inputs (user input required)
+        required_inputs.extend([
+            {"category": "DCF Model Inputs", "name": "Risk-Free Rate", "requiresInput": True},
+            {"category": "DCF Model Inputs", "name": "Equity Risk Premium", "requiresInput": True},
+            {"category": "DCF Model Inputs", "name": "Beta (or use market beta)", "requiresInput": True},
+            {"category": "DCF Model Inputs", "name": "Cost of Debt", "requiresInput": True},
+            {"category": "DCF Model Inputs", "name": "WACC (calculated or manual)", "requiresInput": True},
+            {"category": "DCF Model Inputs", "name": "Terminal Growth Rate", "requiresInput": True},
+            {"category": "DCF Model Inputs", "name": "Terminal EBITDA Multiple", "requiresInput": True},
+            {"category": "DCF Model Inputs", "name": "Useful Life of Assets (existing & new)", "requiresInput": True},
+        ])
+        
+        # Peer Comparison Data (optional, auto-fetched or manual)
+        required_inputs.extend([
+            {"category": "Peer Comparison", "name": "Peer Ticker List", "requiresInput": False},
+            {"category": "Peer Comparison", "name": "Peer Multiples (EV/EBITDA, P/E)", "requiresInput": False},
+        ])
+        
     elif selected_model in ['comparable', 'comps']:
         required_inputs.extend([
-            {"category": "Market Structure", "name": "Current Price", "requiresInput": False},
-            {"category": "Market Structure", "name": "Market Capitalization", "requiresInput": False},
+            {"category": "Market Data", "name": "Current Price", "requiresInput": False},
+            {"category": "Market Data", "name": "Market Capitalization", "requiresInput": False},
+            {"category": "Market Data", "name": "Enterprise Value", "requiresInput": False},
+            {"category": "Market Data", "name": "EBITDA (TTM)", "requiresInput": False},
+            {"category": "Market Data", "name": "Net Income (TTM)", "requiresInput": False},
             {"category": "Peer Selection", "name": "Peer Group Tickers", "requiresInput": True},
+            {"category": "Peer Selection", "name": "Selected Multiples (EV/EBITDA, P/E, EV/Sales)", "requiresInput": True},
+            {"category": "Peer Selection", "name": "Premium/Discount Justification", "requiresInput": True},
         ])
+        
     elif selected_model == 'dupont':
         required_inputs.extend([
-            {"category": "Income Statement", "name": "Revenue", "requiresInput": False},
-            {"category": "Income Statement", "name": "Net Income", "requiresInput": False},
+            {"category": "Income Statement", "name": "Revenue (TTM)", "requiresInput": False},
+            {"category": "Income Statement", "name": "Net Income (TTM)", "requiresInput": False},
+            {"category": "Income Statement", "name": "EBIT", "requiresInput": False},
+            {"category": "Income Statement", "name": "Interest Expense", "requiresInput": False},
             {"category": "Balance Sheet", "name": "Total Assets", "requiresInput": False},
             {"category": "Balance Sheet", "name": "Total Equity", "requiresInput": False},
+            {"category": "Balance Sheet", "name": "Total Liabilities", "requiresInput": False},
+            {"category": "Balance Sheet", "name": "Working Capital", "requiresInput": False},
+            {"category": "Balance Sheet", "name": "Fixed Assets", "requiresInput": False},
+            {"category": "DuPont Analysis", "name": "Net Profit Margin Target", "requiresInput": True},
+            {"category": "DuPont Analysis", "name": "Asset Turnover Target", "requiresInput": True},
+            {"category": "DuPont Analysis", "name": "Equity Multiplier Target", "requiresInput": True},
         ])
     
     logger.info(f"Prepared {len(required_inputs)} input requirements for model='{selected_model}'")
