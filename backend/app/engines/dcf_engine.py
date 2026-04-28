@@ -19,11 +19,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 # Import AI engine for peer suggestions
-try:
-    from .ai_engine import suggest_peer_companies
-except ImportError:
-    # Fallback for direct script execution
-    from ai_engine import suggest_peer_companies
+from app.engines.ai_engine import suggest_peer_companies
 
 
 # =============================================================================

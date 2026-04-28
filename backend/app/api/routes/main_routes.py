@@ -1,10 +1,25 @@
+"""
+Main API Routes - Valuation Engine Endpoints
+
+This module contains all API endpoints for the valuation platform.
+Implements the 12-step workflow:
+1-2. Search tickers
+3. Select ticker and create session
+4. Select valuation model
+5-6. Prepare and confirm inputs
+7-8. Fetch financial data
+9. Generate AI assumptions
+10. Confirm assumptions
+11-12. Run valuation and show results
+"""
+
 import os
 import uuid
 import json
 import logging
 from datetime import datetime, date
 from typing import Optional, Dict, Any, List
-from fastapi import FastAPI, HTTPException, Body
+from fastapi import FastAPI, HTTPException, Body, APIRouter
 from starlette.requests import Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -12,22 +27,45 @@ import yfinance as yf
 import requests
 from dotenv import load_dotenv
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
+# Import core configuration and exceptions
+from app.core.config import settings
+from app.core.exceptions import (
+    SessionNotFoundException,
+    DataFetchException,
+    CalculationException,
+    ValidationException,
+)
+from app.core.logging_config import setup_logging
+
+# Initialize logging
+setup_logging(
+    level=settings.log_level,
+    log_format=settings.log_format,
+    log_file=settings.log_file,
+)
+
 logger = logging.getLogger(__name__)
 
 # Import valuation engines
-from dcf_engine_full import DCFEngine, DCFInputs, ScenarioDrivers, fetch_dcf_inputs
-from dupont_engine import perform_dupont_analysis
-from comps_engine import TradingCompsAnalyzer, TargetCompanyData, PeerCompanyData
+from app.engines.dcf_engine import DCFEngine, DCFInputs, ScenarioDrivers, fetch_dcf_inputs
+from app.engines.dupont_engine import perform_dupont_analysis
+from app.engines.comps_engine import TradingCompsAnalyzer, TargetCompanyData, PeerCompanyData
 
 # Import Resilient AI Engine with 3-Tier Fallback
-from ai_engine import ai_engine, suggest_peer_companies
+from app.engines.ai_engine import ai_engine, suggest_peer_companies
 
 # Load environment variables
 load_dotenv()
 
-app = FastAPI(title="Valuation Engine API", version="2.0")
+# Create router for modular API structure
+router = APIRouter(prefix=settings.api_prefix)
+
+# Main FastAPI app
+app = FastAPI(
+    title=settings.app_name,
+    version=settings.app_version,
+    description="Professional-grade financial valuation platform with DCF, DuPont, and Comps models"
+)
 
 # Root endpoint
 @app.get("/")
@@ -43,18 +81,39 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- In-Memory Session Store (Replace with Redis in production) ---
+# --- Session Store ---
+# TODO: Replace with Redis in production using settings.redis_url
+# For now, using in-memory dict (not suitable for production/multi-worker deployments)
 sessions: Dict[str, Dict[str, Any]] = {}
 
-# --- Configuration ---
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_GEMINI_API_KEY")
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-ALPHA_VANTAGE_KEY = os.getenv("ALPHA_VANTAGE_KEY") or os.getenv("ALPHA_VANTAGE_API_KEY")
 
-# Allow missing API keys for development (will use fallbacks)
-if not all([GEMINI_API_KEY, GROQ_API_KEY, ALPHA_VANTAGE_KEY]):
-    print("Warning: Some API keys missing. AI features will use fallback responses.")
-    # Don't raise error - allow app to run with fallbacks
+def get_session_store() -> Dict[str, Dict[str, Any]]:
+    """Get session store instance. Allows future replacement with Redis."""
+    return sessions
+
+
+def cleanup_expired_sessions() -> int:
+    """Remove expired sessions based on TTL setting."""
+    from datetime import timedelta
+    
+    expired_count = 0
+    current_time = datetime.now()
+    
+    for session_id, session_data in list(sessions.items()):
+        created_at = session_data.get('created_at')
+        if created_at:
+            try:
+                session_age = current_time - created_at
+                if session_age.total_seconds() > settings.session_ttl_hours * 3600:
+                    del sessions[session_id]
+                    expired_count += 1
+            except Exception:
+                continue
+    
+    if expired_count > 0:
+        logger.info(f"Cleaned up {expired_count} expired sessions")
+    
+    return expired_count
 
 # --- Pydantic Models ---
 class SearchRequest(BaseModel):
@@ -79,11 +138,28 @@ class CalculationRequest(BaseModel):
 # --- Helper Functions ---
 
 def generate_session_id() -> str:
+    """Generate a unique session ID."""
     return str(uuid.uuid4())
 
+
 def get_session(session_id: str) -> Dict:
+    """
+    Get session by ID.
+    
+    Args:
+        session_id: Session identifier
+        
+    Returns:
+        Session data dictionary
+        
+    Raises:
+        HTTPException: If session not found
+    """
     if session_id not in sessions:
-        raise HTTPException(status_code=404, detail="Session not found")
+        raise SessionNotFoundException(
+            session_id=session_id,
+            details={"hint": "Please create a new session by selecting a ticker"}
+        ).to_dict()
     return sessions[session_id]
 
 def search_tickers_yahoo(query: str, market: str) -> List[Dict]:
@@ -1038,10 +1114,45 @@ async def run_valuation(request: CalculationRequest):
 @app.get("/api/session/{session_id}")
 async def get_session_status(session_id: str):
     """Helper to check session state"""
-    if session_id not in sessions:
-        raise HTTPException(status_code=404, detail="Session not found")
-    return sessions[session_id]
+    return get_session(session_id)
+
+
+# Health check endpoints
+@app.get("/health")
+async def health_check():
+    """Health check endpoint for monitoring."""
+    return {
+        "status": "healthy",
+        "version": settings.app_version,
+        "environment": settings.environment,
+        "timestamp": datetime.now().isoformat()
+    }
+
+
+@app.get("/health/ready")
+async def readiness_check():
+    """Readiness check - verifies all dependencies are available."""
+    api_keys_status = settings.validate_api_keys()
+    missing_keys = settings.get_missing_api_keys()
+    
+    return {
+        "status": "ready" if not missing_keys else "degraded",
+        "api_keys": api_keys_status,
+        "missing_keys": missing_keys,
+        "ai_fallback_available": settings.ai_fallback_enabled,
+        "timestamp": datetime.now().isoformat()
+    }
+
+
+# Include router in app
+app.include_router(router)
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(
+        app,
+        host="0.0.0.0",
+        port=8000,
+        log_level=settings.log_level.lower(),
+        access_log=settings.is_development()
+    )
