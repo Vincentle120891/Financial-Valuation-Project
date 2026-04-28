@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { searchCompanies, selectCompany, selectModels, prepareInputs, fetchData, generateAI, confirmAssumptions, runValuation } from '../services/api';
+import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, AreaChart, Area, ComposedChart, Scatter } from 'recharts';
 
 const ValuationFlow = () => {
   // State Management
@@ -441,7 +442,74 @@ const ValuationFlow = () => {
     </div>
   );
 
-  const renderStep8 = () => (
+  const renderStep8 = () => {
+    // Helper function to prepare historical revenue data for charts
+    const prepareHistoricalChartData = () => {
+      if (!historicalData || !historicalData.financials) return [];
+      const years = historicalData.financials.years || [];
+      const revenues = historicalData.financials.revenue || [];
+      return years.map((year, idx) => ({
+        year,
+        revenue: revenues[idx] || 0,
+        formattedRevenue: revenues[idx] ? `$${(revenues[idx] / 1000).toFixed(1)}B` : 'N/A'
+      }));
+    };
+
+    // Helper function to prepare forecast comparison data
+    const prepareForecastComparisonData = () => {
+      if (!aiData.revenue_growth_forecast || !historicalData) return [];
+      const periods = aiData.revenue_growth_forecast.length;
+      const baseRevenue = historicalData.financials?.revenue?.[historicalData.financials.revenue.length - 1] || 1000;
+      let cumulativeRevenue = baseRevenue;
+      
+      return aiData.revenue_growth_forecast.map((growth, idx) => {
+        cumulativeRevenue = cumulativeRevenue * (1 + growth);
+        return {
+          period: `Year ${idx + 1}`,
+          growthRate: (growth * 100).toFixed(1),
+          projectedRevenue: Math.round(cumulativeRevenue),
+          formattedRevenue: `$${(cumulativeRevenue / 1000).toFixed(1)}B`
+        };
+      });
+    };
+
+    // Helper function to prepare EBITDA margin trend data
+    const prepareEbitdaTrendData = () => {
+      if (!historicalData || !aiData.ebitda_margin_forecast) return [];
+      const historicalMargins = historicalData.ebitda_margins || [];
+      const forecastMargins = aiData.ebitda_margin_forecast || [];
+      const data = [];
+      
+      // Add historical margins
+      if (historicalData.financials?.years) {
+        historicalData.financials.years.forEach((year, idx) => {
+          data.push({
+            period: year.toString(),
+            margin: historicalMargins[idx] ? (historicalMargins[idx] * 100).toFixed(1) : null,
+            type: 'Historical',
+            isHistorical: true
+          });
+        });
+      }
+      
+      // Add forecast margins
+      forecastMargins.forEach((margin, idx) => {
+        data.push({
+          period: `Y${idx + 1}`,
+          margin: (margin * 100).toFixed(1),
+          type: 'Forecast',
+          isHistorical: false
+        });
+      });
+      
+      return data;
+    };
+
+    const historicalChartData = prepareHistoricalChartData();
+    const forecastComparisonData = prepareForecastComparisonData();
+    const ebitdaTrendData = prepareEbitdaTrendData();
+    
+    return (
     <div className="step-container">
       <h2>Step 8: Review & Confirm Assumptions</h2>
       
@@ -463,6 +531,31 @@ const ValuationFlow = () => {
               <p>{historicalData.avg_roe ? (historicalData.avg_roe * 100).toFixed(1) + '%' : 'N/A'}</p>
             </div>
           </div>
+          
+          {/* Historical Revenue Chart */}
+          {historicalChartData.length > 0 && (
+            <div style={{ marginTop: '24px' }}>
+              <h4 style={{ marginBottom: '12px', color: '#333' }}>Revenue Trend</h4>
+              <ResponsiveContainer width="100%" height={250}>
+                <AreaChart data={historicalChartData}>
+                  <defs>
+                    <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#667eea" stopOpacity={0.8}/>
+                      <stop offset="95%" stopColor="#667eea" stopOpacity={0.1}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
+                  <XAxis dataKey="year" stroke="#666" />
+                  <YAxis stroke="#666" tickFormatter={(value) => `$${(value/1000).toFixed(0)}B`} />
+                  <Tooltip 
+                    formatter={(value) => [`$${(value/1000).toFixed(1)}B`, 'Revenue']}
+                    contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                  />
+                  <Area type="monotone" dataKey="revenue" stroke="#667eea" fillOpacity={1} fill="url(#colorRevenue)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          )}
         </div>
       )}
       
@@ -484,6 +577,218 @@ const ValuationFlow = () => {
               <p>{peerData.avg_revenue_growth ? (peerData.avg_revenue_growth * 100).toFixed(1) + '%' : 'N/A'}</p>
             </div>
           </div>
+        </div>
+      )}
+      
+      {/* AI Suggestion Visualizations */}
+      {aiData && Object.keys(aiData).length > 0 && (
+        <div className="summary-box" style={{ background: 'linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%)' }}>
+          <h3 style={{ color: '#667eea' }}>🤖 AI Suggestions with Rationale</h3>
+          <p style={{ marginBottom: '20px', color: '#666' }}>AI analyzes historical trends, peer benchmarks, and market conditions to provide data-driven recommendations</p>
+          
+          {/* Revenue Growth Forecast Visualization */}
+          {forecastComparisonData.length > 0 && (
+            <div style={{ marginBottom: '32px' }}>
+              <h4 style={{ marginBottom: '12px', color: '#333' }}>
+                📈 Revenue Growth Forecast vs Historical
+                {aiData.revenue_growth_rationale && (
+                  <span style={{ display: 'block', fontSize: '13px', fontWeight: 'normal', color: '#666', marginTop: '6px' }}>
+                    💡 <strong>AI Reasoning:</strong> {aiData.revenue_growth_rationale}
+                  </span>
+                )}
+              </h4>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+                <ResponsiveContainer width="100%" height={280}>
+                  <ComposedChart data={forecastComparisonData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
+                    <XAxis dataKey="period" stroke="#666" />
+                    <YAxis yAxisId="left" stroke="#667eea" label={{ value: 'Growth Rate (%)', angle: -90, position: 'insideLeft' }} />
+                    <YAxis yAxisId="right" orientation="right" stroke="#764ba2" label={{ value: 'Revenue ($B)', angle: 90, position: 'insideRight' }} />
+                    <Tooltip 
+                      formatter={(value, name) => {
+                        if (name === 'Growth Rate') return [`${value}%`, 'Growth Rate'];
+                        return [`$${(value/1000).toFixed(1)}B`, 'Projected Revenue'];
+                      }}
+                      contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                    />
+                    <Legend />
+                    <Bar yAxisId="left" dataKey="growthRate" fill="#667eea" name="Growth Rate (%)" barSize={30} />
+                    <Line yAxisId="right" type="monotone" dataKey="projectedRevenue" stroke="#764ba2" strokeWidth={3} name="Projected Revenue" dot={{ r: 5 }} />
+                  </ComposedChart>
+                </ResponsiveContainer>
+                
+                <div style={{ padding: '16px', background: 'white', borderRadius: '8px' }}>
+                  <h5 style={{ marginBottom: '12px', color: '#333' }}>Key Metrics</h5>
+                  <div style={{ marginBottom: '12px' }}>
+                    <strong style={{ color: '#666' }}>Avg Forecast Growth:</strong>
+                    <p style={{ fontSize: '24px', color: '#667eea', fontWeight: 'bold' }}>
+                      {(forecastComparisonData.reduce((sum, d) => sum + parseFloat(d.growthRate), 0) / forecastComparisonData.length).toFixed(1)}%
+                    </p>
+                  </div>
+                  <div style={{ marginBottom: '12px' }}>
+                    <strong style={{ color: '#666' }}>Final Year Revenue:</strong>
+                    <p style={{ fontSize: '24px', color: '#764ba2', fontWeight: 'bold' }}>
+                      {forecastComparisonData[forecastComparisonData.length - 1]?.formattedRevenue}
+                    </p>
+                  </div>
+                  <div>
+                    <strong style={{ color: '#666' }}>Trend:</strong>
+                    <p style={{ fontSize: '16px', color: forecastComparisonData[0]?.growthRate > forecastComparisonData[forecastComparisonData.length - 1]?.growthRate ? '#28a745' : '#dc3545', fontWeight: 'bold' }}>
+                      {forecastComparisonData[0]?.growthRate > forecastComparisonData[forecastComparisonData.length - 1]?.growthRate 
+                        ? '📉 Decelerating (conservative approach)' 
+                        : '📈 Accelerating (optimistic outlook)'}
+                    </p>
+                  </div>
+                  {aiData.revenue_growth_sources && (
+                    <div style={{ marginTop: '16px', paddingTop: '12px', borderTop: '1px solid #e0e0e0' }}>
+                      <strong style={{ color: '#666', fontSize: '12px' }}>📊 Data Sources:</strong>
+                      <p style={{ fontSize: '12px', color: '#888' }}>{aiData.revenue_growth_sources}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+          
+          {/* EBITDA Margin Trend Visualization */}
+          {ebitdaTrendData.length > 0 && (
+            <div style={{ marginBottom: '32px' }}>
+              <h4 style={{ marginBottom: '12px', color: '#333' }}>
+                💰 EBITDA Margin Trend (Historical → Forecast)
+                {aiData.ebitda_margin_rationale && (
+                  <span style={{ display: 'block', fontSize: '13px', fontWeight: 'normal', color: '#666', marginTop: '6px' }}>
+                    💡 <strong>AI Reasoning:</strong> {aiData.ebitda_margin_rationale}
+                  </span>
+                )}
+              </h4>
+              <ResponsiveContainer width="100%" height={280}>
+                <LineChart data={ebitdaTrendData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
+                  <XAxis dataKey="period" stroke="#666" />
+                  <YAxis stroke="#666" label={{ value: 'Margin (%)', angle: -90, position: 'insideLeft' }} />
+                  <Tooltip 
+                    formatter={(value) => [`${value}%`, 'EBITDA Margin']}
+                    contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                  />
+                  <Legend />
+                  <Line 
+                    type="monotone" 
+                    dataKey="margin" 
+                    stroke="#28a745" 
+                    strokeWidth={3} 
+                    dot={(props) => {
+                      const { cx, cy, payload } = props;
+                      const color = payload.isHistorical ? '#667eea' : '#764ba2';
+                      return <circle cx={cx} cy={cy} r={6} fill={color} stroke="white" strokeWidth={2} />;
+                    }}
+                    name="EBITDA Margin %"
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+              <div style={{ display: 'flex', gap: '24px', marginTop: '12px', justifyContent: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: '#667eea' }}></div>
+                  <span style={{ fontSize: '13px', color: '#666' }}>Historical</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: '#764ba2' }}></div>
+                  <span style={{ fontSize: '13px', color: '#666' }}>AI Forecast</span>
+                </div>
+              </div>
+              {aiData.ebitda_margin_sources && (
+                <div style={{ marginTop: '12px', textAlign: 'center' }}>
+                  <strong style={{ color: '#666', fontSize: '12px' }}>📊 Data Sources:</strong>
+                  <span style={{ fontSize: '12px', color: '#888', marginLeft: '8px' }}>{aiData.ebitda_margin_sources}</span>
+                </div>
+              )}
+            </div>
+          )}
+          
+          {/* WACC Breakdown */}
+          {aiData.wacc && (
+            <div style={{ marginBottom: '32px' }}>
+              <h4 style={{ marginBottom: '12px', color: '#333' }}>
+                🎯 WACC (Weighted Average Cost of Capital)
+                {aiData.wacc_rationale && (
+                  <span style={{ display: 'block', fontSize: '13px', fontWeight: 'normal', color: '#666', marginTop: '6px' }}>
+                    💡 <strong>AI Reasoning:</strong> {aiData.wacc_rationale}
+                  </span>
+                )}
+              </h4>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px' }}>
+                <div style={{ padding: '16px', background: 'white', borderRadius: '8px', textAlign: 'center' }}>
+                  <div style={{ fontSize: '32px', fontWeight: 'bold', color: '#667eea' }}>
+                    {(aiData.wacc * 100).toFixed(2)}%
+                  </div>
+                  <div style={{ fontSize: '13px', color: '#666', marginTop: '8px' }}>WACC</div>
+                </div>
+                <div style={{ padding: '16px', background: 'white', borderRadius: '8px', textAlign: 'center' }}>
+                  <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#28a745' }}>
+                    {aiData.risk_free_rate ? (aiData.risk_free_rate * 100).toFixed(2) + '%' : 'N/A'}
+                  </div>
+                  <div style={{ fontSize: '13px', color: '#666', marginTop: '8px' }}>Risk-Free Rate</div>
+                </div>
+                <div style={{ padding: '16px', background: 'white', borderRadius: '8px', textAlign: 'center' }}>
+                  <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#ffc107' }}>
+                    {aiData.beta ? aiData.beta.toFixed(2) : 'N/A'}
+                  </div>
+                  <div style={{ fontSize: '13px', color: '#666', marginTop: '8px' }}>Beta</div>
+                </div>
+                <div style={{ padding: '16px', background: 'white', borderRadius: '8px', textAlign: 'center' }}>
+                  <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#dc3545' }}>
+                    {aiData.market_risk_premium ? (aiData.market_risk_premium * 100).toFixed(2) + '%' : 'N/A'}
+                  </div>
+                  <div style={{ fontSize: '13px', color: '#666', marginTop: '8px' }}>Market Risk Premium</div>
+                </div>
+              </div>
+              {aiData.wacc_sources && (
+                <div style={{ marginTop: '12px', textAlign: 'center' }}>
+                  <strong style={{ color: '#666', fontSize: '12px' }}>📊 Data Sources:</strong>
+                  <span style={{ fontSize: '12px', color: '#888', marginLeft: '8px' }}>{aiData.wacc_sources}</span>
+                </div>
+              )}
+            </div>
+          )}
+          
+          {/* Terminal Value Assumptions */}
+          {aiData.terminal_growth && (
+            <div style={{ marginBottom: '32px' }}>
+              <h4 style={{ marginBottom: '12px', color: '#333' }}>
+                🔮 Terminal Value Assumptions
+                {aiData.terminal_growth_rationale && (
+                  <span style={{ display: 'block', fontSize: '13px', fontWeight: 'normal', color: '#666', marginTop: '6px' }}>
+                    💡 <strong>AI Reasoning:</strong> {aiData.terminal_growth_rationale}
+                  </span>
+                )}
+              </h4>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <div style={{ padding: '20px', background: 'white', borderRadius: '8px' }}>
+                  <div style={{ fontSize: '14px', color: '#666', marginBottom: '8px' }}>Terminal Growth Rate</div>
+                  <div style={{ fontSize: '36px', fontWeight: 'bold', color: '#764ba2' }}>
+                    {(aiData.terminal_growth * 100).toFixed(2)}%
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#888', marginTop: '8px' }}>
+                    Perpetual growth rate for terminal value calculation
+                  </div>
+                </div>
+                <div style={{ padding: '20px', background: 'white', borderRadius: '8px' }}>
+                  <div style={{ fontSize: '14px', color: '#666', marginBottom: '8px' }}>Terminal EBITDA Multiple</div>
+                  <div style={{ fontSize: '36px', fontWeight: 'bold', color: '#667eea' }}>
+                    {aiData.terminal_ebitda_multiple ? aiData.terminal_ebitda_multiple.toFixed(1) + 'x' : 'N/A'}
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#888', marginTop: '8px' }}>
+                    Exit multiple based on peer analysis
+                  </div>
+                </div>
+              </div>
+              {aiData.terminal_growth_sources && (
+                <div style={{ marginTop: '12px', textAlign: 'center' }}>
+                  <strong style={{ color: '#666', fontSize: '12px' }}>📊 Data Sources:</strong>
+                  <span style={{ fontSize: '12px', color: '#888', marginLeft: '8px' }}>{aiData.terminal_growth_sources}</span>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
       
@@ -686,6 +991,33 @@ const ValuationFlow = () => {
   const renderStep10 = () => {
     if (!valuationResults) return null;
     
+    // Helper to prepare FCF projection data for DCF charts
+    const prepareFcfChartData = () => {
+      if (!valuationResults.dcf_outputs?.free_cash_flows) return [];
+      const fcfArray = valuationResults.dcf_outputs.free_cash_flows;
+      return fcfArray.map((fcf, idx) => ({
+        period: idx === fcfArray.length - 1 ? 'Terminal' : `Year ${idx + 1}`,
+        fcf: Math.round(fcf),
+        formattedFcf: `$${(Math.abs(fcf) / 1000).toFixed(1)}B`,
+        isNegative: fcf < 0
+      }));
+    };
+
+    // Helper to prepare DuPont trend data
+    const prepareDupontTrendData = () => {
+      if (!valuationResults.dupont_outputs?.trends) return [];
+      return valuationResults.dupont_outputs.trends.map((trend, idx) => ({
+        year: trend.year || `Year ${idx + 1}`,
+        roe: (trend.roe * 100).toFixed(1),
+        netMargin: (trend.net_margin * 100).toFixed(1),
+        assetTurnover: trend.asset_turnover?.toFixed(2),
+        equityMultiplier: trend.equity_multiplier?.toFixed(2)
+      }));
+    };
+
+    const fcfChartData = prepareFcfChartData();
+    const dupontTrendData = prepareDupontTrendData();
+    
     return (
       <div className="step-container">
         <h2>Valuation Results</h2>
@@ -717,9 +1049,53 @@ const ValuationFlow = () => {
               </div>
             </div>
             
+            {/* FCF Projection Chart */}
+            {fcfChartData.length > 0 && (
+              <div className="summary-box" style={{ marginTop: '24px' }}>
+                <h3 style={{ marginBottom: '16px' }}>📊 Free Cash Flow Projections</h3>
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={fcfChartData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
+                    <XAxis dataKey="period" stroke="#666" />
+                    <YAxis stroke="#666" tickFormatter={(value) => `$${(Math.abs(value)/1000).toFixed(0)}B`} />
+                    <Tooltip 
+                      formatter={(value) => [`$${(Math.abs(value)/1000).toFixed(1)}B`, 'Free Cash Flow']}
+                      contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                    />
+                    <Bar 
+                      dataKey="fcf" 
+                      fill={(props) => props.payload.isNegative ? '#dc3545' : '#28a745'}
+                      name="Free Cash Flow"
+                      radius={[8, 8, 0, 0]}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginTop: '20px' }}>
+                  <div style={{ padding: '16px', background: 'white', borderRadius: '8px', textAlign: 'center' }}>
+                    <div style={{ fontSize: '13px', color: '#666', marginBottom: '8px' }}>Total PV of FCF</div>
+                    <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#667eea' }}>
+                      ${valuationResults.dcf_outputs.pv_of_fcf ? (valuationResults.dcf_outputs.pv_of_fcf / 1000).toFixed(1) + 'B' : 'N/A'}
+                    </div>
+                  </div>
+                  <div style={{ padding: '16px', background: 'white', borderRadius: '8px', textAlign: 'center' }}>
+                    <div style={{ fontSize: '13px', color: '#666', marginBottom: '8px' }}>Terminal Value (PV)</div>
+                    <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#764ba2' }}>
+                      ${valuationResults.dcf_outputs.pv_of_terminal_value ? (valuationResults.dcf_outputs.pv_of_terminal_value / 1000).toFixed(1) + 'B' : 'N/A'}
+                    </div>
+                  </div>
+                  <div style={{ padding: '16px', background: 'white', borderRadius: '8px', textAlign: 'center' }}>
+                    <div style={{ fontSize: '13px', color: '#666', marginBottom: '8px' }}>WACC Used</div>
+                    <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#667eea' }}>
+                      {(valuationResults.dcf_outputs.wacc_used * 100)?.toFixed(2) + '%' || 'N/A'}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+            
             {/* Sensitivity Tables */}
             {valuationResults.dcf_outputs.sensitivity_tables && (
-              <div className="summary-box">
+              <div className="summary-box" style={{ marginTop: '24px' }}>
                 <h3>Sensitivity Analysis</h3>
                 <p>WACC vs Terminal Growth (EV in $M)</p>
                 {/* Render sensitivity table here */}
@@ -728,7 +1104,7 @@ const ValuationFlow = () => {
           </div>
         )}
         
-        {/* DuPont Results */}
+        {/* DuPont Results with Trend Chart */}
         {selectedModel === 'DuPont' && valuationResults.dupont_outputs && (
           <div className="results-dashboard">
             <div className="primary-result">
@@ -751,11 +1127,41 @@ const ValuationFlow = () => {
               </div>
             </div>
             
-            {/* Trend Analysis */}
-            {valuationResults.dupont_outputs.trends && (
-              <div className="summary-box">
-                <h3>5-Year Trend Analysis</h3>
-                <p>ROE decomposition trends visible in detailed report</p>
+            {/* ROE Trend Chart */}
+            {dupontTrendData.length > 0 && (
+              <div className="summary-box" style={{ marginTop: '24px' }}>
+                <h3 style={{ marginBottom: '16px' }}>📈 5-Year ROE Decomposition Trend</h3>
+                <ResponsiveContainer width="100%" height={300}>
+                  <LineChart data={dupontTrendData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
+                    <XAxis dataKey="year" stroke="#666" />
+                    <YAxis stroke="#666" label={{ value: 'ROE (%)', angle: -90, position: 'insideLeft' }} />
+                    <Tooltip 
+                      contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                    />
+                    <Legend />
+                    <Line type="monotone" dataKey="roe" stroke="#667eea" strokeWidth={3} name="ROE %" dot={{ r: 5 }} />
+                    <Line type="monotone" dataKey="netMargin" stroke="#28a745" strokeWidth={2} name="Net Margin %" strokeDasharray="5 5" />
+                  </LineChart>
+                </ResponsiveContainer>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginTop: '20px' }}>
+                  <div style={{ padding: '12px', background: 'white', borderRadius: '8px' }}>
+                    <strong style={{ color: '#666', fontSize: '12px' }}>Avg ROE</strong>
+                    <p style={{ fontSize: '20px', fontWeight: 'bold', color: '#667eea' }}>
+                      {(dupontTrendData.reduce((sum, d) => sum + parseFloat(d.roe), 0) / dupontTrendData.length).toFixed(1)}%
+                    </p>
+                  </div>
+                  <div style={{ padding: '12px', background: 'white', borderRadius: '8px' }}>
+                    <strong style={{ color: '#666', fontSize: '12px' }}>ROE Trend</strong>
+                    <p style={{ fontSize: '20px', fontWeight: 'bold', color: parseFloat(dupontTrendData[dupontTrendData.length - 1]?.roe) > parseFloat(dupontTrendData[0]?.roe) ? '#28a745' : '#dc3545' }}>
+                      {parseFloat(dupontTrendData[dupontTrendData.length - 1]?.roe) > parseFloat(dupontTrendData[0]?.roe) ? '📈 Improving' : '📉 Declining'}
+                    </p>
+                  </div>
+                  <div style={{ padding: '12px', background: 'white', borderRadius: '8px' }}>
+                    <strong style={{ color: '#666', fontSize: '12px' }}>Latest ROE</strong>
+                    <p style={{ fontSize: '20px', fontWeight: 'bold', color: '#764ba2' }}>{dupontTrendData[dupontTrendData.length - 1]?.roe}%</p>
+                  </div>
+                </div>
               </div>
             )}
           </div>
@@ -786,7 +1192,7 @@ const ValuationFlow = () => {
             
             {/* Peer Multiples */}
             {valuationResults.comps_outputs.peer_statistics && (
-              <div className="summary-box">
+              <div className="summary-box" style={{ marginTop: '24px' }}>
                 <h3>Peer Multiples Statistics</h3>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
                   <div>
