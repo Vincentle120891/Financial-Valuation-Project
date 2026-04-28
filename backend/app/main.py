@@ -209,8 +209,9 @@ def get_session_store() -> dict:
 app.include_router(search_router_v1, prefix="/api/v1")
 app.include_router(valuation_router_v1, prefix="/api/v1")
 
-# Legacy routes (for backward compatibility - can be removed in future)
-# app.include_router(search_router_v1, prefix="/api")  # Uncomment if needed
+# Legacy routes (for backward compatibility)
+app.include_router(search_router_v1, prefix="/api")
+app.include_router(valuation_router_v1, prefix="/api")
 
 
 @app.on_event("startup")
