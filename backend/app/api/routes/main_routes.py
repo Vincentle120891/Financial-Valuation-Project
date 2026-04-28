@@ -48,7 +48,7 @@ logger = logging.getLogger(__name__)
 
 # Import valuation engines
 from app.engines.dcf_engine import DCFEngine, DCFInputs, ScenarioDrivers, fetch_dcf_inputs
-from app.engines.dupont_engine import perform_dupont_analysis
+from app.engines.dupont_engine import DuPontAnalyzer, run_analysis as perform_dupont_analysis
 from app.engines.comps_engine import TradingCompsAnalyzer, TargetCompanyData, PeerCompanyData
 
 # Import Resilient AI Engine with 3-Tier Fallback
