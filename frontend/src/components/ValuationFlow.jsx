@@ -1270,4 +1270,6 @@ const ValuationFlow = () => {
   );
 };
 
+}
+
 export default ValuationFlow;
