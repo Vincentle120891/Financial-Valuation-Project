@@ -23,61 +23,82 @@ const RequirementsStep = ({
   dupontResults,
   compsResults,
   aiData,
-  onContinueToAssumptions
+  onContinueToAssumptions,
+  requiredFields = []
 }) => {
-  const getModelRequirements = () => {
-    switch (selectedModel) {
-      case 'DCF':
-        return (
-          <>
-            <p><strong>Historical:</strong> 3 most recent fiscal years (FY-3, FY-2, FY-1)</p>
-            <ul>
-              <li>Revenue, COGS, Operating Expenses</li>
-              <li>Depreciation & Amortization</li>
-              <li>Working Capital items (AR, Inventory, AP)</li>
-              <li>Capital Expenditures</li>
-            </ul>
-            <p><strong>Forecast:</strong> 6 periods (monthly/quarterly/annual)</p>
-            <ul>
-              <li>Revenue growth assumptions</li>
-              <li>EBITDA margins</li>
-              <li>WACC and Terminal Growth Rate</li>
-            </ul>
-          </>
-        );
-      case 'DuPont':
-        return (
-          <>
-            <p><strong>Historical:</strong> 3-5 years of annual data</p>
-            <ul>
-              <li>Net Income</li>
-              <li>Revenue</li>
-              <li>Total Assets</li>
-              <li>Shareholders' Equity</li>
-            </ul>
-            <p><strong>Output:</strong> ROE decomposition trends</p>
-          </>
-        );
-      case 'COMPS':
-        return (
-          <>
-            <p><strong>Target Company:</strong> Latest financial metrics</p>
-            <ul>
-              <li>Market Cap, Enterprise Value</li>
-              <li>EBITDA, Net Income, Revenue</li>
-              <li>Shares Outstanding</li>
-            </ul>
-            <p><strong>Peer Group:</strong> 5+ comparable companies</p>
-            <ul>
-              <li>Same industry/sector</li>
-              <li>Similar size and growth profile</li>
-              <li>Trading multiples (P/E, EV/EBITDA, EV/Sales)</li>
-            </ul>
-          </>
-        );
-      default:
-        return <p>Please select a model first.</p>;
+  // Group required fields by category
+  const getGroupedRequiredFields = () => {
+    if (!requiredFields || requiredFields.length === 0) return {};
+    
+    return requiredFields.reduce((groups, field) => {
+      const category = field.category || 'Other';
+      if (!groups[category]) {
+        groups[category] = [];
+      }
+      groups[category].push(field);
+      return groups;
+    }, {});
+  };
+
+  // Render all required inputs from backend
+  const renderAllRequiredInputs = () => {
+    const groupedFields = getGroupedRequiredFields();
+    
+    if (Object.keys(groupedFields).length === 0) {
+      return null;
     }
+
+    return (
+      <div className="summary-box" style={{ background: 'linear-gradient(135deg, #f5f5f5 0%, #e0e0e0 100%)', marginTop: '20px' }}>
+        <h3>📋 All Required Inputs ({requiredFields.length} total)</h3>
+        
+        {Object.entries(groupedFields).map(([category, fields]) => (
+          <div key={category} style={{ marginBottom: '20px' }}>
+            <h4 style={{ color: '#1976d2', marginBottom: '12px', borderBottom: '2px solid #1976d2', paddingBottom: '6px' }}>
+              {category}
+            </h4>
+            <div style={{ display: 'grid', gap: '8px' }}>
+              {fields.map((field, idx) => (
+                <div 
+                  key={idx} 
+                  style={{ 
+                    display: 'flex', 
+                    justifyContent: 'space-between', 
+                    alignItems: 'center',
+                    padding: '10px 14px',
+                    background: field.requiresInput ? '#fff3e0' : '#e8f5e9',
+                    borderRadius: '6px',
+                    borderLeft: field.requiresInput ? '4px solid #ff9800' : '4px solid #4caf50'
+                  }}
+                >
+                  <span style={{ fontWeight: field.requiresInput ? 600 : 400, color: '#333' }}>
+                    {field.name}
+                  </span>
+                  <span style={{ 
+                    fontSize: '12px', 
+                    padding: '4px 8px', 
+                    borderRadius: '4px',
+                    background: field.requiresInput ? '#ff9800' : '#4caf50',
+                    color: 'white',
+                    fontWeight: 600
+                  }}>
+                    {field.requiresInput ? '⚠ User Input Required' : '✓ Auto-Fetched'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+        
+        <div style={{ marginTop: '16px', padding: '12px', background: '#e3f2fd', borderRadius: '6px' }}>
+          <p style={{ margin: 0, fontSize: '14px', color: '#1565c0' }}>
+            <strong>Legend:</strong> 
+            <span style={{ marginLeft: '12px' }}>🟠 Orange = Requires manual input/confirmation</span>
+            <span style={{ marginLeft: '12px' }}>🟢 Green = Automatically fetched from data sources</span>
+          </p>
+        </div>
+      </div>
+    );
   };
 
   // Check if data has been retrieved
@@ -346,10 +367,8 @@ const RequirementsStep = ({
         </button>
       </div>
       
-      <div className="summary-box">
-        <h3>Data Requirements by Model</h3>
-        {getModelRequirements()}
-      </div>
+      {/* Render ALL required inputs from backend - comprehensive list */}
+      {renderAllRequiredInputs()}
 
       {/* Show retrieved data if available */}
       {renderRetrievedData()}
