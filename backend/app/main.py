@@ -7,14 +7,19 @@ includes all routers, and sets up middleware.
 
 import logging
 from datetime import datetime
-from fastapi import FastAPI, Request, Response
+from typing import Any, Dict
+from fastapi import FastAPI, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
 import time
+import uuid
 
 from app.core.config import settings
 from app.core.logging_config import setup_logging, get_logger
-from app.api.routes.search_routes import router as search_router
-from app.api.routes.valuation_routes import router as valuation_router
+from app.core.exceptions import ValuationException
+from app.api.routes.v1.search_routes import router as search_router_v1
+from app.api.routes.v1.valuation_routes import router as valuation_router_v1
 
 # Setup structured logging at application startup
 setup_logging(
@@ -25,14 +30,21 @@ setup_logging(
 
 logger = get_logger(__name__)
 
-# Create the main application instance
+
+def generate_request_id() -> str:
+    """Generate a unique request ID for tracing."""
+    return str(uuid.uuid4())
+
+
+# Create the main application instance with API versioning
 app = FastAPI(
     title=settings.app_name,
     version=settings.app_version,
     description="Financial Valuation Platform with DCF, DuPont, and Comps analysis",
     docs_url="/docs",
     redoc_url="/redoc",
-    openapi_url="/openapi.json"
+    openapi_url="/openapi.json",
+    root_path=settings.api_root_path or ""
 )
 
 # Configure CORS
@@ -56,11 +68,14 @@ async def logging_middleware(request: Request, call_next):
     """
     start_time = time.time()
     
+    # Generate or extract request ID for tracing
+    request_id = request.headers.get("X-Request-ID", generate_request_id())
+    
     # Log request
     logger.info(
         "Incoming request",
         extra={
-            "request_id": id(request),
+            "request_id": request_id,
             "method": request.method,
             "path": request.url.path,
             "query_params": str(request.query_params),
@@ -78,7 +93,7 @@ async def logging_middleware(request: Request, call_next):
     logger.info(
         "Request completed",
         extra={
-            "request_id": id(request),
+            "request_id": request_id,
             "method": request.method,
             "path": request.url.path,
             "status_code": response.status_code,
@@ -86,10 +101,98 @@ async def logging_middleware(request: Request, call_next):
         }
     )
     
-    # Add processing time header
+    # Add processing time and request ID headers
     response.headers["X-Process-Time"] = str(round(process_time * 1000, 2))
+    response.headers["X-Request-ID"] = request_id
     
     return response
+
+
+# Custom exception handlers for structured error responses
+@app.exception_handler(ValuationException)
+async def valuation_exception_handler(request: Request, exc: ValuationException):
+    """Handle custom valuation exceptions with structured responses."""
+    request_id = request.headers.get("X-Request-ID", generate_request_id())
+    
+    logger.warning(
+        f"Valuation exception: {exc.error_code}",
+        extra={
+            "request_id": request_id,
+            "error_code": exc.error_code,
+            "details": exc.details,
+        }
+    )
+    
+    return JSONResponse(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        content={
+            "error": {
+                "code": exc.error_code,
+                "message": exc.message,
+                "details": exc.details,
+                "type": exc.__class__.__name__,
+                "request_id": request_id,
+            }
+        },
+        headers={"X-Request-ID": request_id},
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """Handle Pydantic validation errors with structured responses."""
+    request_id = request.headers.get("X-Request-ID", generate_request_id())
+    
+    logger.warning(
+        "Request validation failed",
+        extra={
+            "request_id": request_id,
+            "errors": exc.errors(),
+        }
+    )
+    
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content={
+            "error": {
+                "code": "VALIDATION_ERROR",
+                "message": "Request validation failed",
+                "details": exc.errors(),
+                "type": "RequestValidationError",
+                "request_id": request_id,
+            }
+        },
+        headers={"X-Request-ID": request_id},
+    )
+
+
+@app.exception_handler(Exception)
+async def general_exception_handler(request: Request, exc: Exception):
+    """Handle unexpected exceptions with structured responses."""
+    request_id = request.headers.get("X-Request-ID", generate_request_id())
+    
+    logger.error(
+        f"Unexpected exception: {str(exc)}",
+        extra={
+            "request_id": request_id,
+            "exception_type": exc.__class__.__name__,
+        },
+        exc_info=True,
+    )
+    
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={
+            "error": {
+                "code": "INTERNAL_ERROR",
+                "message": "An unexpected error occurred",
+                "details": {"exception_type": exc.__class__.__name__} if settings.debug else {},
+                "type": "InternalError",
+                "request_id": request_id,
+            }
+        },
+        headers={"X-Request-ID": request_id},
+    )
 
 
 # In-memory session store (TODO: Replace with Redis in production)
@@ -101,9 +204,13 @@ def get_session_store() -> dict:
     return sessions_store
 
 
-# Include routers
-app.include_router(search_router)
-app.include_router(valuation_router)
+# Include routers with API versioning
+# Version 1 routes
+app.include_router(search_router_v1, prefix="/api/v1")
+app.include_router(valuation_router_v1, prefix="/api/v1")
+
+# Legacy routes (for backward compatibility - can be removed in future)
+# app.include_router(search_router_v1, prefix="/api")  # Uncomment if needed
 
 
 @app.on_event("startup")
@@ -115,6 +222,7 @@ async def startup_event():
             "environment": settings.environment,
             "debug_mode": settings.debug,
             "log_level": settings.log_level,
+            "api_versions": ["v1"],
         }
     )
 
