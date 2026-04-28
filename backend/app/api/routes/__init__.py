@@ -1,5 +1,5 @@
 """API Routes module - HTTP endpoint handlers."""
 
-from .main_routes import app
+from .main_routes import app, router
 
-__all__ = ["app"]
+__all__ = ["app", "router"]
