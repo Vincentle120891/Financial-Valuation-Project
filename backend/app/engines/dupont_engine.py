@@ -267,9 +267,36 @@ class DuPontAnalyzer:
         self.validation_errors = []
         self.warnings = []
     
+    async def analyze(self) -> DuPontResult:
+        """
+        Perform complete DuPont analysis (async wrapper).
+        
+        Returns:
+            DuPontResult with all calculated metrics and ratios
+        """
+        if self.statements is None:
+            raise ValueError("No financial statements loaded. Call load_data() first.")
+        
+        # Calculate derived metrics
+        self._calculate_derived_metrics()
+        
+        # Calculate all ratios
+        self._calculate_ratios()
+        
+        # Validate results
+        self._validate_results()
+        
+        return DuPontResult(
+            financial_statements=self.statements,
+            derived_metrics=self.metrics,
+            ratios=self.ratios,
+            validation_errors=self.validation_errors,
+            warnings=self.warnings,
+        )
+    
     def calculate_all(self) -> DuPontResult:
         """
-        Perform complete DuPont analysis.
+        Perform complete DuPont analysis (sync method for backward compatibility).
         
         Returns:
             DuPontResult with all calculated metrics and ratios
