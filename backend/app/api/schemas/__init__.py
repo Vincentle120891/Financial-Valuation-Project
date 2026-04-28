@@ -2,45 +2,102 @@
 
 from datetime import datetime, date
 from typing import Optional, Dict, Any, List
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator, ConfigDict
 
 
 # =============================================================================
-# REQUEST MODELS
+# REQUEST MODELS WITH VALIDATION
 # =============================================================================
 
 class SearchRequest(BaseModel):
     """Request model for ticker search."""
-    query: str = Field(..., description="Search query (ticker symbol or company name)")
+    query: str = Field(..., min_length=1, max_length=50, description="Search query (ticker symbol or company name)")
     market: str = Field(default="international", description="Market type", examples=["international", "vietnamese"])
+    
+    @field_validator('query')
+    @classmethod
+    def validate_query(cls, v: str) -> str:
+        """Validate and sanitize search query."""
+        if not v.strip():
+            raise ValueError("Query cannot be empty or whitespace only")
+        return v.strip()
+    
+    @field_validator('market')
+    @classmethod
+    def validate_market(cls, v: str) -> str:
+        """Validate market parameter."""
+        allowed_markets = ["international", "vietnamese"]
+        if v.lower() not in allowed_markets:
+            raise ValueError(f"Market must be one of: {allowed_markets}")
+        return v.lower()
 
 
 class TickerSelectRequest(BaseModel):
     """Request model for ticker selection."""
-    ticker: str = Field(..., description="Selected ticker symbol")
+    ticker: str = Field(..., min_length=1, max_length=20, description="Selected ticker symbol")
     market: str = Field(..., description="Market type")
+    
+    @field_validator('ticker')
+    @classmethod
+    def validate_ticker(cls, v: str) -> str:
+        """Validate ticker format."""
+        if not v.strip():
+            raise ValueError("Ticker cannot be empty")
+        # Allow alphanumeric, dots, and dashes
+        import re
+        if not re.match(r'^[A-Za-z0-9.\-]+$', v):
+            raise ValueError("Ticker contains invalid characters")
+        return v.strip().upper()
+    
+    @field_validator('market')
+    @classmethod
+    def validate_market(cls, v: str) -> str:
+        """Validate market parameter."""
+        allowed_markets = ["international", "vietnamese"]
+        if v.lower() not in allowed_markets:
+            raise ValueError(f"Market must be one of: {allowed_markets}")
+        return v.lower()
 
 
 class ModelSelectRequest(BaseModel):
     """Request model for model selection."""
-    session_id: str = Field(..., description="Session identifier")
-    model: str = Field(..., description="Valuation model", examples=["DCF", "DuPont", "COMPS"])
+    session_id: str = Field(..., min_length=1, description="Session identifier")
+    model: str = Field(..., min_length=1, description="Valuation model", examples=["DCF", "DuPont", "COMPS"])
+    
+    @field_validator('model')
+    @classmethod
+    def validate_model(cls, v: str) -> str:
+        """Validate valuation model."""
+        allowed_models = ["DCF", "DuPont", "COMPS", "dupont", "comps", "comparable", "trading comps", "dupont analysis"]
+        if v.upper() not in [m.upper() for m in allowed_models] and v.lower() not in allowed_models:
+            raise ValueError(f"Model must be one of: DCF, DuPont, COMPS")
+        return v
 
 
 class AssumptionConfirmRequest(BaseModel):
     """Request model for confirming assumptions."""
-    session_id: str = Field(..., description="Session identifier")
+    session_id: str = Field(..., min_length=1, description="Session identifier")
     assumptions: Dict[str, Any] = Field(..., description="User modified or accepted assumptions")
+    
+    @field_validator('assumptions')
+    @classmethod
+    def validate_assumptions(cls, v: Dict[str, Any]) -> Dict[str, Any]:
+        """Validate assumptions structure."""
+        if not isinstance(v, dict):
+            raise ValueError("Assumptions must be a dictionary")
+        if len(v) == 0:
+            raise ValueError("Assumptions cannot be empty")
+        return v
 
 
 class CalculationRequest(BaseModel):
     """Request model for running valuation calculation."""
-    session_id: str = Field(..., description="Session identifier")
+    session_id: str = Field(..., min_length=1, description="Session identifier")
 
 
 class SessionFetchRequest(BaseModel):
     """Request model for fetching data in a session."""
-    session_id: str = Field(..., description="Session identifier")
+    session_id: str = Field(..., min_length=1, description="Session identifier")
 
 
 # =============================================================================
