@@ -2,7 +2,7 @@
 
 from .dcf_engine import DCFEngine, DCFInputs, ScenarioDrivers, fetch_dcf_inputs, ComparableCompany
 from .comps_engine import TradingCompsAnalyzer, TargetCompanyData, PeerCompanyData
-from .dupont_engine import DuPontAnalyzer, run_analysis as perform_dupont_analysis
+from .dupont_engine import DuPontAnalyzer, DuPontResult
 from .ai_engine import ai_engine, suggest_peer_companies, AIFallbackEngine
 
 __all__ = [
@@ -20,7 +20,7 @@ __all__ = [
     
     # DuPont Engine
     "DuPontAnalyzer",
-    "perform_dupont_analysis",
+    "DuPontResult",
     
     # AI Engine
     "ai_engine",
