@@ -1,9 +1,1 @@
-```
-# Environment variables
-.env
-.env.local
-.env.*
-
-# Examples of environment files (keep example but ignore actual env files)
-!.env.example
-```
+Nothing should be ignored based on the provided file changes. The only modified file is a Python source file (`backend/app/main.py`), which should not be added to .gitignore.
