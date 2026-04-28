@@ -1,63 +1,50 @@
 ```python
-# Python
+# Compiled and build artifacts
+*.pyc
 __pycache__/
-*.py[cod]
-*$py.class
+*.pyo
+*.pyd
 *.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
 *.egg-info/
-.installed.cfg
+build/
+dist/
 *.egg
 
-# Virtual environments
-venv/
-ENV/
-env.bak/
+# Dependencies
 .venv/
+venv/
+.env
+.env.local
+.env.*
 
-# IDE
+# Logs and temp files
+*.log
+*.tmp
+*.swp
+*.swo
+
+# Editors
 .vscode/
 .idea/
 *.swp
 *.swo
 
-# Environment
-.env
-.env.local
-*.env.*
-
-# Logs
-*.log
-
-# Coverage
+# Coverage reports
 .coverage
 htmlcov/
 .coverage.*
-.coverage.xml
+coverage.xml
+
+# Testing
 .pytest_cache/
-
-# MyPy
 .mypy_cache/
+.hypothesis/
 
-# Temp files
-*.tmp
-*~
+# OS generated files
+.DS_Store
+Thumbs.db
 ```
 
-Wait, let me reconsider. The only file added is `backend/app/main.py` which is a source code file. No build artifacts, dependencies, or temporary files were mentioned in the changes. Following rule #6, if the change list contains only source files and no build artifacts, dependencies, or temp files, I should output an empty .gitignore.
+Wait, I need to reconsider. The only modified file is `backend/app/core/logging_config.py` which is a Python source file. There are no build artifacts, dependency directories, or temporary files in the change list. According to rule 6, if the change list contains only source files and no build artifacts, dependencies, or temp files, I should output an empty .gitignore.
 
-```python
-
-```
+(empty)
