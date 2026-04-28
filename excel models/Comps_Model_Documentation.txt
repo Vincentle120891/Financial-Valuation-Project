@@ -1,0 +1,608 @@
+================================================================================
+COMPARABLE COMPANY ANALYSIS (TRADING COMPS) & PRECEDENT TRANSACTION MODEL
+Full Documentation — Structured for AI Consumption
+All figures in GBP millions unless stated. Currency: GBP. 100 pence = 1 GBP.
+================================================================================
+
+Workbook Sheets:
+  Cover              → Table of contents / title page
+  Trading Comps      → Comparable trading multiples + implied share price output
+  TSCO               → Tesco PLC detailed data (primary comparable)
+  transaction comps  → Precedent transaction analysis
+  Morrisons          → Wm Morrison / CD&R acquisition detail (primary transaction comp)
+
+--------------------------------------------------------------------------------
+1. MODEL OVERVIEW
+--------------------------------------------------------------------------------
+
+Purpose:
+  Two-part relative valuation model:
+  (A) Trading Comps  — values a target company by applying peer trading multiples
+                       (EV/EBITDA and P/E) to the target's own EBITDA and EPS,
+                       producing an implied share price range.
+  (B) Transaction Comps — same logic applied to precedent M&A deal multiples.
+
+Analysis Date:       2022-08-31  (Trading Comps)  [Trading Comps!M6]
+                     2021-12-31  (Transaction Comps) [transaction comps!C6]
+
+Next Fiscal Year:    2023 (Trading Comps), 2022 (Transaction Comps)
+
+Metric periods:
+  LTM  = Last Twelve Months (actuals)
+  FY   = Forecast / consensus estimates for next fiscal year and year after
+
+Multiples used:
+  EV/EBITDA  — Enterprise Value divided by EBITDA (EV-level metric)
+  P/E        — Share Price divided by EPS (equity-level metric)
+
+--------------------------------------------------------------------------------
+2. TRADING COMPS SHEET — STRUCTURE AND CALCULATIONS
+--------------------------------------------------------------------------------
+
+[2A] COMPARABLE COMPANY TABLE (rows 13–33)
+
+  Column layout per company (rows 16–25, one row per comparable):
+    Col L  = Company Name
+    Col M  = Enterprise Value (GBP mm)
+    Col N  = Share Price (GBP/sh)
+    Col O  = Market Capitalization (GBP mm)
+    Col P  = EBITDA LTM
+    Col Q  = EBITDA FY2023   (= $M$7 = 2023)
+    Col R  = EBITDA FY2024   (= Q14+1 = 2024)
+    Col S  = EPS LTM
+    Col T  = EPS FY2023
+    Col U  = EPS FY2024
+
+  Tesco (TSCO) — row 16 (primary comparable, fully built out):
+    L16 = TSCO!$D$12        → "Tesco PLC"
+    M16 = TSCO!$D$26        → Enterprise Value (pulled from TSCO sheet)
+    N16 = TSCO!$I$11        → Share Price = 2.487 GBP/sh
+    O16 = TSCO!$D$19        → Market Cap (FD)
+    P16 = TSCO!$G$90        → EBITDA LTM
+    Q16 = TSCO!$H$90        → EBITDA FY2023 estimate
+    R16 = TSCO!$I$90        → EBITDA FY2024 estimate
+    S16 = TSCO!$G$95        → EPS LTM (Non-IFRS diluted, GBP/sh)
+    T16 = TSCO!$H$95        → EPS FY2023 estimate
+    U16 = TSCO!$I$95        → EPS FY2024 estimate
+
+  Row 17 = Second comparable (Sainsbury / SBRY) — contains #REF! errors,
+           meaning data was not populated for this comparable.
+  Rows 18–25 = Slots for additional comparables (empty).
+
+  Multiple Calculations:
+    EV/EBITDA LTM  (V16) = IF(P16<=0 or blank, "na", M16/P16)
+    EV/EBITDA FY23 (W16) = IF(Q16<=0 or blank, "na", M16/Q16)
+    EV/EBITDA FY24 (X16) = IF(R16<=0 or blank, "na", M16/R16)
+    P/E LTM        (Y16) = IF(S16<=0 or blank, "na", N16/S16)
+    P/E FY23       (Z16) = IF(T16<=0 or blank, "na", N16/T16)
+    P/E FY24       (AA16)= IF(U16<=0 or blank, "na", N16/U16)
+
+  Summary Statistics (rows 30–33):
+    Average (V30:AA30) = IFERROR(AVERAGE(V16:V25), "n/a")
+    Median  (V31:AA31) = IFERROR(MEDIAN(V16:V25),  "n/a")
+    Maximum (V32:AA32) = IFERROR(MAX(V16:V25),      "n/a")
+    Minimum (V33:AA33) = IFERROR(MIN(V16:V25),      "n/a")
+
+[2B] MULTIPLE SUMMARY TABLE (rows 50–54)
+
+  Pulls stats from the comparable table above:
+    Row 52 (Average): EV/EBITDA LTM=V30, EV/EBITDA FY23=W30, EV/EBITDA FY24=X30
+                      P/E LTM=Y30, P/E FY23=Z30, P/E FY24=AA30
+    Row 53 (Max):     Same pattern using row 32 (MAX) references
+    Row 54 (Min):     Same pattern using row 33 (MIN) references
+
+[2C] TARGET COMPANY INPUTS (rows 58–82)
+
+  Hard-coded target company financial metrics:
+    EBITDA  LTM:   D60 = 1,234  GBP mm
+    EBITDA  FY23:  F60 = 1,320  GBP mm
+    EBITDA  FY24:  H60 = 1,360  GBP mm
+    EPS     LTM:   E61 = 0.325  GBP/sh
+    EPS     FY23:  G61 = 0.3575 GBP/sh
+    EPS     FY24:  I61 = 0.3754 GBP/sh
+
+  Capital structure inputs:
+    Net Debt:            D65 = 1,725   (F65, H65 = $D65, same for all periods)
+    Shares Outstanding:  D66 = 1,525 mm (F66, H66 = $D66)
+
+[2D] IMPLIED SHARE PRICE CALCULATIONS
+
+  ── AVERAGE MULTIPLES ──
+
+  Enterprise Value (EBITDA method):
+    D64 = D52 (avg EV/EBITDA LTM) × D60 (target LTM EBITDA)
+    F64 = F52 (avg EV/EBITDA FY23) × F60 (target FY23 EBITDA)
+    H64 = H52 (avg EV/EBITDA FY24) × H60 (target FY24 EBITDA)
+
+  EBITDA-Implied Share Price:
+    D67 = (D64 − D65) / D66   → (Avg EV − Net Debt) / Shares
+    F67 = (F64 − F65) / F66
+    H67 = (H64 − H65) / H66
+
+  P/E-Implied Share Price:
+    E68 = E52 (avg P/E LTM) × E61 (target LTM EPS)
+    G68 = G52 × G61
+    I68 = I52 × I61
+
+  ── MAXIMUM MULTIPLES ──
+
+  Enterprise Value:
+    D71 = D53 (max EV/EBITDA LTM) × D60
+    F71 = F53 × F60
+    H71 = H53 × H60
+
+  EBITDA-Implied Share Price:
+    D74 = (D71 − D72) / D73   [same net debt and shares]
+    F74 = (F71 − F72) / F73
+    H74 = (H71 − H72) / H73
+
+  P/E-Implied Share Price:
+    E75 = E61 × E53   [target EPS × max P/E]
+    G75 = G61 × G53
+    I75 = I61 × I53
+
+  ── MINIMUM MULTIPLES ──
+
+  Enterprise Value:
+    D78 = D54 (min EV/EBITDA LTM) × D60
+    F78 = F54 × F60
+    H78 = H54 × H60
+
+  EBITDA-Implied Share Price:
+    D81 = (D78 − D79) / D80
+    F81 = (F78 − F79) / F80
+    H81 = (H78 − H79) / H80
+
+  P/E-Implied Share Price:
+    E82 = E61 × E54
+    G82 = G61 × G54
+    I82 = I61 × I54
+
+[2E] CHART DATA TABLE (rows 87–93)
+
+  Used to drive a football field / waterfall chart:
+  Each row = one metric/period combination.
+  Columns: Min | Delta (Max−Min) | Max | Average
+
+  Row 88: LTM EV/EBITDA
+    C88 = D81 (min-implied price), D88 = E88−C88 (bar width), E88 = D74 (max), F88 = D67 (avg)
+
+  Row 89: FY2023 EV/EBITDA
+    C89 = F81, D89 = E89−C89, E89 = F74, F89 = F67
+
+  Row 90: FY2024 EV/EBITDA
+    C90 = H81, D90 = E90−C90, E90 = H74, F90 = H67
+
+  Row 91: LTM P/E
+    C91 = E82, D91 = E91−C91, E91 = E75, F91 = E68
+
+  Row 92: FY2023 P/E
+    C92 = G82, D92 = E92−C92, E92 = G75, F92 = G68
+
+  Row 93: FY2024 P/E
+    C93 = I82, D93 = E93−C93, E93 = I75, F93 = I68
+
+--------------------------------------------------------------------------------
+3. TSCO SHEET — TESCO PLC DETAILED DATA
+--------------------------------------------------------------------------------
+
+[3A] COMPANY INFORMATION (rows 9–13)
+
+  Stock Ticker:        D11 = "LSE: TSCO"
+  Company Name:        D12 = "Tesco PLC"
+  Analysis Date:       D13 = Trading Comps!$M$6 = 2022-08-31
+  Share Price:         I11 = 2.487 GBP/sh   (hardcoded)
+  Shares Outstanding:  I12 = IFERROR(D127, "n/a")  → from fully diluted shares table
+  Market Cap (FD):     I13 = I11 × I12
+
+[3B] ENTERPRISE VALUE BRIDGE (rows 17–26)
+
+  Starting point: Market Capitalization
+    D19 = I13   [FD market cap]
+
+  Adjustments to bridge from equity to enterprise value:
+    D20 = I26              → Plus: Net Debt
+    D21 = 547 + 7,411      → Plus: Lease Liabilities (Current + Non-Current) = 7,958
+    D22 = 0                → Plus: Preferred Stock
+    D23 = 16               → Plus: Non-Controlling Interest
+    D24 = -86              → Less: Investments in Affiliates/JVs
+    D25 = -(22+226+1253+2076+368-14) = -(3,931) → Less: Other Investments/Securities
+
+  Enterprise Value:
+    D26 = SUM(D19:D25)   [Market Cap + all adjustments]
+
+  Net Debt build (right-side columns I):
+    I19 = 725    (Current Borrowings)
+    I20 = 6,674  (Non-Current Borrowings)
+    I21 = 0      (Other Debt)
+    I22 = SUM(I19:I21) = Total Debt
+    I25 = -2,345 (Less: Cash & Equivalents)
+    I26 = SUM(I22:I25) = Net Debt   → feeds D20
+
+[3C] INCOME STATEMENT — AS REPORTED (rows 30–66)
+
+  Period columns:
+    D = Latest Full Fiscal Year (FY2022, ended 2022-02-26)
+    E = Current YTD             (same date — no partial year data entered; E values = 0)
+    F = Previous YTD            (2021-02-26; values = 0)
+    G = LTM = D + E − F        (reduces to just column D since E=F=0)
+
+  GAAP P&L (hardcoded actuals in column D):
+    Revenue (D39):           61,344
+    Cost of Sales (D40):     56,711  (= 56,750 − 39)
+    Gross Profit (D41):      D39 − D40 = 4,633
+    SG&A (D43):              2,073
+    EBIT (D44):              D41 − D43 = 2,560
+    Finance Cost net (D46):  551
+    Other Non-Op Income(D47):9
+    Equity Income (D48):     15
+    EBT (D49):               D44 − D46 + D47 + D48 = 2,033
+    Taxes (D51):             510
+    Consolidated Net Inc(D52):D49 − D51 = 1,523
+    Disc. Operations (D54):  40  (loss/profit from discontinued)
+    Non-Controlling Int(D55): 2
+    Net Income to Co. (D56): D52 − D55 − D54 = 1,481
+
+  LTM column (G) formula pattern:
+    G39 = D39 + E39 − F39   → reduces to D39 since E39=F39=0
+
+  Diluted EPS (D59):
+    D59 = IFERROR(D56 / D61, "na")
+    Diluted shares D61 = 7,746 mm
+
+[3D] NON-IFRS METRICS & ANALYST ESTIMATES (rows 70–112)
+
+  Normalization Adjustments (to remove non-recurring items):
+    D78 = 265   (Amounts in Operating Expense — adds back to EBIT)
+    D79 = -101 + 38 = -63   (Non-Operating, net)
+    D80 = 8     (Tax impact)
+
+  Non-IFRS Metrics:
+
+    EBIT (Adjusted):
+      D88 = D44 + D78 = GAAP EBIT + Operating adjustments
+           = 2,560 + 265 = 2,825
+
+    EBITDA:
+      D89 = 1,718  (D&A, hardcoded)
+      D90 = D89 + D88 = 1,718 + 2,825 = 4,543  [LTM actual]
+      H90 = 4,435.76  [FY2023 consensus estimate]
+      I90 = 4,596.49  [FY2024 consensus estimate]
+
+    Adjusted Net Income:
+      D91 = D52 + D78 + D79 + D80 − D55 − D54
+           = 1,523 + 265 + (−63) + 8 − 2 − 40 = 1,691
+
+    Adjusted Diluted EPS:
+      D95 = IFERROR((D91 + D93) / (D61 + D94), "na")
+            = 1,691 / 7,746 ≈ 0.218 GBP/sh  [LTM]
+      H95 = 0.21  [FY2023 consensus estimate]
+      I95 = 0.22  [FY2024 consensus estimate]
+
+[3E] TRADING MULTIPLES — TESCO (rows 100–112)
+
+  Based on current Enterprise Value (D26) and share price (I11):
+
+    EV / Revenue LTM  (G103) = IFERROR($D$26 / G87, "−")
+    EV / Revenue FY23 (H103) = IFERROR($D$26 / H87, "−")
+    EV / Revenue FY24 (I103) = IFERROR($D$26 / I87, "−")
+
+    EV / EBITDA LTM   (G104) = IFERROR($D$26 / G90, "−")
+    EV / EBITDA FY23  (H104) = IFERROR($D$26 / H90, "−")   → feeds Trading Comps W16
+    EV / EBITDA FY24  (I104) = IFERROR($D$26 / I90, "−")
+
+    P/E LTM           (G105) = IFERROR($I$11 / G95, "−")
+    P/E FY23          (H105) = IFERROR($I$11 / H95, "−")
+    P/E FY24          (I105) = IFERROR($I$11 / I95, "−")
+
+[3F] FULLY DILUTED SHARES OUTSTANDING (rows 115–155)
+
+  Basic Shares Outstanding (D124):   7,637.99 mm
+  Dilution from Unvested Awards (D125): = I127 (total unvested)
+  Dilution from Options (D126):         = I152 (net new shares from treasury method)
+  Fully Diluted Shares (D127):        = SUM(D124:D126) → feeds I12
+
+  Unvested Stock Awards:
+    RSUs (I124):               0
+    Performance Shares (I125): 41.639 mm
+    Other (I126):              10.713 + 2.337 = 13.050 mm
+    Total Unvested (I127):     SUM(I124:I126) = 54.689 mm
+
+  Options & Warrants — Treasury Stock Method (rows 135–152):
+    8 option tranches and 1 warrant tranche.
+    For each tranche:
+      ITM check (G135) = IF(Share Price > Exercise Price AND outstanding > 0, 1, 0)
+      Exercised (H135) = ITM flag × shares outstanding
+      Proceeds  (I135) = Exercise Price × Exercised shares
+
+    Tranche 1: 160.485 mm options at GBP 2.0834 exercise → ITM (2.487 > 2.0834)
+    Tranche 2: 6.802 mm at GBP 2.1223 → ITM
+    Tranche 3: 2.012 mm at GBP 0 → ITM (price > 0)
+    Tranche 4: 0.010 mm at GBP 1.5201 → ITM
+    Tranche 5: 0.542 mm at GBP 0 → ITM
+    Tranches 6–8, Warrants: 0 shares
+
+    Total ITM options (I150):          = H144 = sum of all exercised options
+    Less: Treasury repurchase (I151):  = −(Total Proceeds / Share Price)
+                                        i.e. how many shares bought back with option proceeds
+    Net dilution (I152):               = I150 + I151   → feeds D126
+
+--------------------------------------------------------------------------------
+4. TRANSACTION COMPS SHEET — PRECEDENT TRANSACTION ANALYSIS
+--------------------------------------------------------------------------------
+
+[4A] STRUCTURE (rows 12–35)
+
+  Analysis Date:     C6 = 2021-12-31
+  Next Fiscal Year:  C7 = 2022
+
+  Column layout per transaction (rows 15–24, one row per deal):
+    B = Announcement Date
+    C = Target Name
+    D = Acquirer Name
+    E = Transaction Value (Enterprise Value of the deal)
+    F = Target LTM EBITDA
+    G = Target FY2022 EBITDA estimate
+    H = Target FY2023 EBITDA estimate
+    I = EV/EBITDA LTM    = IFERROR(IF(F15<=0,"na", E15/F15), "na")
+    J = EV/EBITDA FY2022 = IFERROR(IF(G15<=0,"na", E15/G15), "na")
+    K = EV/EBITDA FY2023 = IFERROR(IF(H15<=0,"na", E15/H15), "na")
+
+  Primary Transaction — Morrisons / CD&R (row 15):
+    B15 = Morrisons!$F$7           → Announcement Date: 2021-06-19
+    C15 = Morrisons!$F$5           → Target: Wm Morrison Supermarkets PLC
+    D15 = Morrisons!$F$6           → Acquirer: Clayton, Dubilier & Rice
+    E15 = Morrisons!$E$52          → Transaction Value (Modeled EV)
+    F15 = Morrisons!$H$114         → LTM EBITDA
+    G15 = Morrisons!$I$114         → FY2022 EBITDA estimate
+    H15 = Morrisons!$J$114         → FY2023 EBITDA estimate
+
+  Summary Statistics (rows 28–31):
+    Average  (I28:K28) = IFERROR(AVERAGE(I15:I24), "n/a")
+    Median   (I29:K29) = IFERROR(MEDIAN(I15:I24),  "n/a")
+    Maximum  (I30:K30) = IFERROR(MAX(I15:I24),     "n/a")
+    Minimum  (I31:K31) = IFERROR(MIN(I15:I24),     "n/a")
+
+  Note: Only one transaction is fully populated (Morrisons row 15).
+        Rows 16–24 are empty — model is set up for up to 10 transactions.
+
+--------------------------------------------------------------------------------
+5. MORRISONS SHEET — ACQUISITION DETAIL (CD&R acquires Wm Morrison)
+--------------------------------------------------------------------------------
+
+[5A] DEAL OVERVIEW (rows 3–12)
+
+  Target:              Wm Morrison Supermarkets PLC  (F5)
+  Acquirer:            Clayton, Dubilier & Rice       (F6)
+  Announcement Date:   2021-06-19                     (F7)
+  Closing Date:        2021-10-27                     (F8)
+  Status:              Completed                      (F9)
+  Target Price 1-Day Prior: 1.7845 GBP/sh             (F10)
+  Description:         CD&R acquired 100% equity stake in Wm Morrison
+
+[5B] TRANSACTION DETAILS AND PREMIUMS PAID (rows 14–27)
+
+  Consideration:
+    Type:                  Cash                    (E17)
+    Cash Offer/sh:         2.87 GBP/sh             (E18)
+    Exchange Ratio:        0 (not applicable)      (E19)
+    Equity Offer Price/sh: IFERROR(E19 × F11, "na") → "na" since cash deal
+    Other Consideration:   0                       (E21)
+    Total Offer Price/sh:  E22 = IF(ISNUMBER(E20), E20+E18+E21, E18+E21) = 2.87 GBP/sh
+
+  Premiums Paid Analysis:
+    1-Day Prior price:    J17 = F10 = 1.7845
+    1-Week Prior price:   J18 = 1.7485
+    1-Month Prior price:  J19 = 1.8355
+
+    Original offer at 2.30 GBP/sh:
+      Premium vs 1-Day:   I22 = 2.30 / J17 − 1 = +28.9%
+      Premium vs 1-Week:  I23 = 2.30 / J18 − 1 = +31.5%
+      Premium vs 1-Month: I24 = 2.30 / J19 − 1 = +25.3%
+
+    Final offer at 2.87 GBP/sh:
+      Premium vs 1-Day:   J22 = $E$22 / J17 − 1 = +60.8%
+      Premium vs 1-Week:  J23 = $E$22 / J18 − 1 = +64.1%
+      Premium vs 1-Month: J24 = $E$22 / J19 − 1 = +56.4%
+
+[5C] TRANSACTION VALUE (ENTERPRISE VALUE BRIDGE) (rows 30–52)
+
+  Equity Value:
+    E35 = E22 = 2.87 GBP/sh (total offer price per share)
+    E36 = IFERROR(F148, "n/a") → fully diluted shares = 2,458.41 mm
+    E37 = E35 × E36 = 2.87 × 2,458.41 = 7,055.6 GBP mm (Equity Offer Value)
+    E39 = IF(E38≠0, E38, E37) = E37 (no override)   → Modeled Equity Value
+
+  Enterprise Value:
+    E43 = E39        → Market Cap
+    E44 = J52        → Plus: Net Debt
+    E45 = 75 + 1,287 → Plus: Lease Liabilities = 1,362
+    E46 = 0          → Plus: Preferred Stock
+    E47 = 0          → Plus: Non-Controlling Interest
+    E48 = -31        → Less: Affiliates/JVs
+    E49 = -58        → Less: Other Investments
+    E50 = SUM(E43:E49) = Transaction Value (EV)
+    E52 = IF(E51≠0, E51, E50) = E50   → Modeled Transaction Value (feeds comps sheet)
+
+  Net Debt build (J column):
+    J43 = 96        (Current Borrowings)
+    J44 = 1,885     (Non-Current Borrowings)
+    J45 = 0         (Other Debt)
+    J46 = SUM(J43:J45) = 1,981 (Total Debt)
+    J51 = -274      (Less: Cash)
+    J52 = SUM(J46:J51) = 1,707  → Net Debt
+
+[5D] INCOME STATEMENT — AS REPORTED (rows 58–89)
+
+  Period columns:
+    E = Latest Full Fiscal Year (FY2021, ended 2021-01-31)
+    F = Current YTD (6 months ended 2021-08-01)
+    G = Previous YTD (6 months ended 2020-08-02)
+    H = LTM = E + F − G   (LTM for 12 months ending 2021-08-01)
+
+  Hardcoded actuals:
+    Revenue:          E63=17,598 | F63=9,054  | G63=8,734
+    Cost of Sales:    E64=17,210 | F64=8,827  | G64=8,443
+    Gross Profit:     E65=E63−E64 | F65=F63−F64 | G65=G63−G64
+    SG&A:             E67=228−92−2=134 | F67=139−50+9=98 | G67=146−45=101
+    EBIT:             E68=E65−E67 | F68=F65−F67 | G68=G65−G67
+    Finance Cost:     E70=111     | F70=55      | G70=57
+    Other Non-Op Inc: E71=22      | F71=8       | G71=12
+    Equity Income:    E72=0       | F72=0       | G72=0
+    EBT:              E73=E68−E70+E71+E72  (same pattern F,G)
+    Taxes:            E75=69      | F75=136     | G75=75
+    Net Inc (consol): E76=E73−E75  (same pattern)
+    Disc. Ops:        E78=0 | F78=0 | G78=0
+    Non-Ctrl Int:     E79=0 | F79=0 | G79=0
+    Net Inc to Co:    E80=E76−E79−E78  (same pattern)
+
+  LTM = E + F − G for each line:
+    H63 = E63+F63−G63 = 17,598+9,054−8,734 = 17,918
+    H64 = E64+F64−G64 = 17,210+8,827−8,443 = 17,594
+    etc.
+
+  Diluted shares: E85=2,423.3 | F85=2,403.2 | G85=2,403.8
+  LTM shares: H85 = E85+F85−G85 = 2,422.7 mm
+  LTM EPS: H83 = H80 / H85
+
+[5E] NON-IFRS METRICS (rows 93–127)
+
+  Normalization Adjustments:
+    Operating (E101=52, F101=28, G101=30)  → adds back to EBIT
+    Non-Operating (E102=−16, F102=−5, G102=−8)
+    Tax Impact (E103=11, F103=112, G103=36)
+
+  Adjusted EBIT:
+    E112 = E68 + E101 = GAAP EBIT + Operating adjustments
+    H112 = E112+F112−G112   [LTM]
+
+  D&A:
+    E113=541, F113=282, G113=271
+    H113 = E113+F113−G113 = 552
+
+  Adjusted EBITDA:
+    E114 = E113 + E112
+    H114 = H113 + H112     → LTM EBITDA   (feeds transaction comps F15)
+    I114 = na (no FY2022 estimate)
+    J114 = na (no FY2023 estimate)
+
+  Adjusted Net Income:
+    E115 = E76+E101+E102+E103−E79−E78
+    H115 = LTM adjusted net income
+
+  Diluted EPS (adjusted):
+    H119 = IFERROR((H115+H117)/(H85+H118), "na")   [LTM]
+
+  Trading Multiples based on Transaction EV (E50):
+    EV/Revenue LTM  (H124) = IFERROR($E$50 / H111, "−")
+    EV/EBITDA LTM   (H125) = IFERROR($E$50 / H114, "−")   → transaction multiple
+    P/E LTM         (H126) = IFERROR($E$35 / H119, "−")
+
+[5F] FULLY DILUTED SHARES — MORRISONS (rows 138–171)
+
+  Basic Shares: F145 = 2,418 mm
+  Dilution from Unvested (F146) = J148 = total unvested awards
+  Dilution from Options  (F147) = J171 = net new shares (treasury method)
+  Fully Diluted (F148) = SUM(F145:F147) → feeds E36
+
+  Unvested Awards:
+    RSUs (J145):              0
+    Performance Shares (J146): 37.586 mm
+    Other (J147):              2.821 mm
+    Total (J148):              40.407 mm
+
+  Options — Treasury Stock Method:
+    Tranche 1: 54.526 mm at GBP 1.68 exercise vs offer price GBP 2.87 → ITM
+    Tranches 2–9: 0 shares
+
+    In-the-money (J169)  = I164 = 54.526 mm
+    Treasury repurchase  (J170) = −J164 / F155 = −(54.526 × 1.68) / 2.87 = −31.92 mm
+    Net additional shares (J171) = J169 + J170 = 22.61 mm → feeds F147
+
+--------------------------------------------------------------------------------
+6. CROSS-SHEET DATA FLOW
+--------------------------------------------------------------------------------
+
+  TSCO → Trading Comps:
+    TSCO!D12  → Trading Comps!L16   (company name)
+    TSCO!D26  → Trading Comps!M16   (enterprise value)
+    TSCO!I11  → Trading Comps!N16   (share price)
+    TSCO!D19  → Trading Comps!O16   (market cap)
+    TSCO!G90  → Trading Comps!P16   (LTM EBITDA)
+    TSCO!H90  → Trading Comps!Q16   (FY23 EBITDA)
+    TSCO!I90  → Trading Comps!R16   (FY24 EBITDA)
+    TSCO!G95  → Trading Comps!S16   (LTM EPS)
+    TSCO!H95  → Trading Comps!T16   (FY23 EPS)
+    TSCO!I95  → Trading Comps!U16   (FY24 EPS)
+
+  Trading Comps → Trading Comps (summary stats):
+    V30:AA30 → D52:I52   (average multiples → target price calcs)
+    V32:AA32 → D53:I53   (max multiples)
+    V33:AA33 → D54:I54   (min multiples)
+
+  Morrisons → transaction comps:
+    Morrisons!F7  → transaction comps!B15   (announcement date)
+    Morrisons!F5  → transaction comps!C15   (target name)
+    Morrisons!F6  → transaction comps!D15   (acquirer name)
+    Morrisons!E52 → transaction comps!E15   (transaction value/EV)
+    Morrisons!H114→ transaction comps!F15   (LTM EBITDA)
+    Morrisons!I114→ transaction comps!G15   (FY2022 EBITDA)
+    Morrisons!J114→ transaction comps!H15   (FY2023 EBITDA)
+
+  Trading Comps → TSCO (date reference):
+    Trading Comps!$M$6 → TSCO!D13   (analysis date)
+
+  transaction comps → Morrisons:
+    transaction comps!$G$13 → Morrisons!I108, I122  (FY2022 column header)
+    transaction comps!$H$13 → Morrisons!J108, J122  (FY2023 column header)
+
+--------------------------------------------------------------------------------
+7. KEY MODEL MECHANICS
+--------------------------------------------------------------------------------
+
+  1. LTM Calculation Pattern:
+       LTM = Latest Full Year + Current YTD − Prior Year YTD
+       This adjusts the latest annual figure by adding the current partial year
+       and subtracting the equivalent period from the prior year.
+       Where YTD = 0 (as in Tesco), LTM = Latest Full Year.
+
+  2. Enterprise Value Bridge (both TSCO and Morrisons):
+       EV = Market Cap + Net Debt + Lease Liabilities + Preferred + Minority
+            − Investments in Affiliates − Other Investments/Securities
+       Lease liabilities are explicitly added (post-IFRS 16, leases capitalized on B/S).
+
+  3. Non-IFRS Normalization:
+       Adjusted EBITDA = GAAP EBIT + Operating Adjustments + D&A
+       Removes one-time, restructuring, or non-cash items to show recurring earnings.
+       This adjusted figure is used for all multiple calculations.
+
+  4. Treasury Stock Method (options dilution):
+       Net new shares = ITM options exercised − shares repurchased with proceeds
+       Proceeds = Exercise Price × ITM shares exercised
+       Repurchased shares = Proceeds / Current Share Price
+       Only in-the-money options (exercise price < current price) are included.
+
+  5. Multiple Application (Trading Comps):
+       EV/EBITDA → multiply by target EBITDA → get implied EV → subtract net debt
+                → divide by shares → implied share price
+       P/E       → multiply by target EPS → implied share price directly
+
+  6. Premiums Paid Analysis:
+       Calculated relative to pre-announcement share price at 1-day, 1-week,
+       and 1-month intervals. Both original and final offer prices tracked separately.
+       The premium to 1-day prior is the most commonly referenced market standard.
+
+  7. Football Field / Waterfall Chart:
+       Chart data table in rows 87–93 of Trading Comps is structured as:
+       Min | Width (Max−Min) | Max | Average Point
+       This is the standard format for a stacked bar chart showing valuation ranges
+       alongside a central estimate, one row per metric/period combination.
+
+  8. Only one comparable company (Tesco) is fully built in Trading Comps.
+     Sainsbury (row 17) has #REF! errors, meaning the linked data sheet is missing.
+     Only one transaction (Morrisons) is fully built in Transaction Comps.
+     Model is structured to accommodate up to 10 comps in each analysis.
+
+================================================================================
+END OF DOCUMENTATION
+================================================================================

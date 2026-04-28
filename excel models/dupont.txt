@@ -1,0 +1,557 @@
+================================================================================
+MID RETAILER FINANCIAL ANALYSIS — FULL DOCUMENTATION
+Structured for AI Consumption. All figures in USD millions unless stated.
+================================================================================
+
+Workbook Sheets:
+  Financial Statements     → 3 core statements + derived financial metrics
+  Ratio Calculations       → Full ratio suite across 4 categories + DuPont checks
+  3 Step DuPont Pyramid    → Visual display of 3-factor ROE decomposition
+  5 Step DuPont Pyramid    → Visual display of 5-factor ROE decomposition
+
+Period mapping (columns F–M):
+  F = Year 1 | G = Year 2 | H = Year 3 | I = Year 4
+  J = Year 5 | K = Year 6 | L = Year 7 | M = Year 8
+
+================================================================================
+1. FINANCIAL STATEMENTS SHEET
+================================================================================
+
+--------------------------------------------------------------------------------
+1A. INCOME STATEMENT (rows 8–30)
+--------------------------------------------------------------------------------
+
+Revenue (row 8) — hardcoded actuals:
+  Yr1: 112,640 | Yr2: 116,199 | Yr3: 118,719 | Yr4: 129,025
+  Yr5: 141,576 | Yr6: 152,703 | Yr7: 166,761 | Yr8: 195,929
+
+COGS (row 9) — formula structure: = −gross COGS + depreciation (netting method):
+  F9 = −98,458 + 1,029    → Net COGS = −97,429
+  G9 = −101,065 + 1,127   → Net COGS = −99,938
+  H9 = −102,901 + 1,255   → Net COGS = −101,646
+  I9 = −111,882 + 1,370   → Net COGS = −110,512
+  J9 = −123,152 + 1,437   → Net COGS = −121,715
+  K9 = −132,886 + 1,492   → Net COGS = −131,394
+  L9 = −144,939 + 1,645   → Net COGS = −143,294
+  M9 = −170,684 + 1,781   → Net COGS = −168,903
+  NOTE: The positive component embedded in COGS equals the Depreciation row (row 18),
+        allowing EBITDA (row 15) to exclude depreciation naturally.
+
+Gross Profit (row 10):
+  F10 = SUM(F8:F9) = Revenue + Net COGS
+
+SG&A (row 13) — hardcoded actuals (negative):
+  Yr1: −10,899 | Yr2: −11,445 | Yr3: −12,068 | Yr4: −12,950
+  Yr5: −13,876 | Yr6: −14,994 | Yr7: −16,332 | Yr8: −18,461
+
+Other Operating Expenses (row 14) — hardcoded actuals (negative):
+  Yr1: −63 | Yr2: −65 | Yr3: −78 | Yr4: −82
+  Yr5: −68 | Yr6: −86 | Yr7: −55 | Yr8: −76
+
+EBITDA (row 15):
+  F15 = SUM(F10:F14) = Gross Profit + SG&A + Other OpEx
+  (Depreciation already removed from COGS, so this is true EBITDA)
+
+Depreciation (row 18) — hardcoded (negative), mirrors amount embedded in COGS:
+  Yr1: −1,029 | Yr2: −1,127 | Yr3: −1,255 | Yr4: −1,370
+  Yr5: −1,437 | Yr6: −1,492 | Yr7: −1,645 | Yr8: −1,781
+
+EBIT (row 19):
+  F19 = SUM(F15:F18) = EBITDA − Depreciation
+
+Interest Expense (row 22) — hardcoded (negative):
+  Yr1: −113 | Yr2: −124 | Yr3: −133 | Yr4: −134
+  Yr5: −159 | Yr6: −150 | Yr7: −160 | Yr8: −171
+
+Interest Income (row 23) — hardcoded (positive):
+  Yr1: 90 | Yr2: 104 | Yr3: 80 | Yr4: 62
+  Yr5: 121 | Yr6: 178 | Yr7: 92 | Yr8: 143
+
+EBT (row 24):
+  F24 = SUM(F19:F23) = EBIT + Interest Expense + Interest Income
+
+Provision for Taxes (row 27) — formula: −current tax − other tax component:
+  F27 = −1,109 − 30    | G27 = −1,195 − 32  | H27 = −1,243 − 26
+  I27 = −1,325 − 35    | J27 = −1,263 − 45  | K27 = −1,061 − 45
+  L27 = −1,308 − 57    | M27 = −1,601 − 72
+
+Net Income (row 30):
+  F30 = SUM(F24:F29) = EBT + Taxes
+  (Rows 25, 26, 28, 29 are blank — no minority interest or other items)
+
+--------------------------------------------------------------------------------
+1B. CASH FLOW STATEMENT (rows 40–65)
+--------------------------------------------------------------------------------
+
+CASH FROM OPERATIONS (rows 41–46):
+
+  Net Income       (F41) = F30
+  Depreciation     (F42) = −F18   [sign flip: D&A is positive cash add-back]
+  Cash from A/R    (F43) = E77 − F77   [prior year AR − current year AR]
+                           → increase in AR = cash outflow; decrease = inflow
+  Cash from Inventory (F44) = E78 − F78   [same logic]
+  Cash from A/P    (F45) = F89 − E89   [increase in AP = cash inflow]
+  Subtotal CFO     (F46) = SUM(F41:F45)
+
+  For subsequent years (G–M): same formula pattern referencing current and prior year
+  balance sheet rows.
+
+CASH FROM INVESTING (rows 50–51):
+
+  CapEx (row 50) — hardcoded (negative):
+    Yr1: −3,773 | Yr2: −3,572 | Yr3: −2,623 | Yr4: −5,482
+    Yr5: −2,950 | Yr6: −2,950 | Yr7: −7,487 | Yr8: −9,300
+  Subtotal CFI (F51) = SUM(F50)
+
+CASH FROM FINANCING (rows 55–59):
+
+  Change in Long-Term Debt:
+    F55 = 178 (hardcoded)
+    G55–M55 = current year LTD − prior year LTD (e.g. G55 = G93−F93)
+
+  Change in Common Equity:
+    F56 = −376 (hardcoded)
+    G56–M56 = current year Common Equity − prior year (e.g. G56 = G99−F99)
+
+  Dividends (row 57):
+    F57 = −584; G57–M57 = 0
+
+  Change in Revolving Credit Line:
+    F58 = 0 (hardcoded)
+    G58–M58 = current revolving − prior revolving (e.g. G58 = G90−F90)
+
+  Subtotal CFF (F59) = SUM(F55:F58)
+
+CASH BALANCE (rows 63–65):
+
+  Beginning Cash (row 63) — hardcoded:
+    Yr1: 4,644 | Yr2: 5,738 | Yr3: 4,801 | Yr4: 3,379
+    Yr5: 4,546 | Yr6: 6,055 | Yr7: 8,384 | Yr8: 12,277
+
+  Change (row 64):
+    F64 = F46 + F51 + F59   [CFO + CFI + CFF]
+
+  Ending Cash (row 65):
+    F65 = SUM(F63:F64) = Beginning + Change
+    NOTE: Ending cash does NOT directly link to the Balance Sheet cash (row 76).
+          The Balance Sheet cash appears to be independently sourced.
+
+--------------------------------------------------------------------------------
+1C. BALANCE SHEET (rows 74–107)
+--------------------------------------------------------------------------------
+
+ASSETS:
+
+  Cash (row 76) — hardcoded:
+    Yr1: 7,315 | Yr2: 6,419 | Yr3: 4,729 | Yr4: 5,779
+    Yr5: 7,259 | Yr6: 9,444 | Yr7: 13,305 | Yr8: 12,175
+
+  Accounts Receivable (row 77) — formula: two components summed:
+    F77 = 1,148 + 669 = 1,817
+    G77 = 1,224 + 748 = 1,972
+    H77 = 1,252 + 268 = 1,520
+    I77 = 1,432 + 272 = 1,704
+    J77 = 1,669 + 321 = 1,990
+    K77 = 1,535 + 1,111 = 2,646
+    L77 = 1,550 + 1,023 = 2,573
+    M77 = 1,803 + 1,312 = 3,115
+    (Two components likely = trade receivables + other receivables)
+
+  Inventories (row 78) — hardcoded:
+    Yr1: 8,456 | Yr2: 8,908 | Yr3: 8,969 | Yr4: 9,834
+    Yr5: 11,040 | Yr6: 11,395 | Yr7: 12,242 | Yr8: 14,215
+
+  Total Current Assets (row 79):
+    F79 = SUM(F76:F78) = Cash + AR + Inventory
+
+  PP&E (row 81) — formula: two components (net book value + ROU asset or similar):
+    F81 = 15,436 (hardcoded)
+    G81 = 16,141 (hardcoded)
+    H81 = 17,945 (hardcoded)
+    I81 = 18,161 + 869 = 19,030
+    J81 = 19,681 + 860 = 20,541
+    K81 = 20,890 + 1,025 = 21,915
+    L81 = 24,595 + 2,841 = 27,436
+    M81 = 26,382 + 3,381 = 29,763
+
+  Total Assets (row 84):
+    F84 = F79 + F81 = Total Current Assets + PP&E
+
+  Balance sheet check (row 107):
+    F107 = F84 − F104   → should equal 0 (Total Assets − Total Liabilities & Equity)
+
+LIABILITIES:
+
+  Accounts Payable (row 89) — hardcoded:
+    Yr1: 14,412 | Yr2: 15,257 | Yr3: 14,475 | Yr4: 17,409
+    Yr5: 19,836 | Yr6: 21,538 | Yr7: 24,749 | Yr8: 28,642
+
+  Revolving Credit Line (row 90) — hardcoded:
+    Yr1: 0 | Yr2: 1,283 | Yr3: 1,100 | Yr4: 86
+    Yr5: 90 | Yr6: 1,699 | Yr7: 95 | Yr8: 799
+
+  Total Current Liabilities (row 91):
+    F91 = SUM(F89:F90) = AP + Revolver
+
+  Long-Term Debt (row 93) — hardcoded:
+    Yr1: 6,309 | Yr2: 6,283 | Yr3: 5,509 | Yr4: 8,074
+    Yr5: 8,105 | Yr6: 6,920 | Yr7: 12,428 | Yr8: 12,263
+
+  Total Liabilities (row 94):
+    F94 = SUM(F91:F93) = Current Liabilities + Long-Term Debt
+
+EQUITY:
+
+  Common Equity (row 99) — hardcoded:
+    Yr1: 4,845 | Yr2: 4,099 | Yr3: 4,393 | Yr4: 4,790
+    Yr5: 4,912 | Yr6: 4,985 | Yr7: 5,405 | Yr8: 5,898
+
+  Retained Earnings (row 100) — hardcoded:
+    Yr1: 7,458 | Yr2: 6,518 | Yr3: 7,686 | Yr4: 5,988
+    Yr5: 7,887 | Yr6: 10,258 | Yr7: 12,879 | Yr8: 11,666
+
+  Total Shareholders' Equity (row 101):
+    F101 = SUM(F99:F100) = Common Equity + Retained Earnings
+
+  Total Liabilities & Equity (row 104):
+    F104 = F101 + F94
+
+--------------------------------------------------------------------------------
+1D. SUPPLEMENTAL FINANCIAL METRICS (rows 116–135)
+--------------------------------------------------------------------------------
+
+NET OPERATING PROFIT AFTER TAX (NOPAT):
+
+  EBIT (row 117):          F117 = F19
+  Effective Tax Rate (row 118): F118 = IFERROR(−F27/F24, 0)
+                                 = Tax Provision / EBT (sign-adjusted)
+  NOPAT (row 119):         F119 = F117 × (1 − F118)
+                           = EBIT × (1 − Effective Tax Rate)
+
+INVESTED CAPITAL (rows 121–128):
+
+  Interest Bearing Current Liabilities (row 122):  F122 = F90   [Revolver]
+  Interest Bearing Long-Term Liabilities (row 123): F123 = F93   [LTD]
+  Total Interest Bearing Liabilities (row 124):    F124 = SUM(F122:F123)
+  Cash (row 125):                                   F125 = −F76  [deducted]
+  Net Debt (row 126):                               F126 = F124 + F125
+  Equity (row 127):                                 F127 = F101
+  Invested Capital (row 128):                       F128 = SUM(F126:F127)
+                                                    = Net Debt + Equity
+
+NET ASSETS (rows 131–135):
+
+  Current Assets (row 131):    F131 = F79
+  Less: Cash (row 132):        F132 = −F76
+  Long-Term Assets (row 133):  F133 = F81
+  Non-Interest Bearing CL (row 134): F134 = −F89   [Accounts Payable only]
+  Net Assets (row 135):        F135 = SUM(F131:F134)
+                               = (Current Assets − Cash) + PP&E − AP
+                               = PP&E + Net Working Capital (ex-cash, ex-interest-bearing)
+
+================================================================================
+2. RATIO CALCULATIONS SHEET
+================================================================================
+
+All ratios follow the same pattern:
+  Numerator in columns F–M (linked from Financial Statements)
+  Denominator in the row below
+  Ratio result in columns O–V (= numerator / denominator, with IF guard for zero)
+
+--------------------------------------------------------------------------------
+2A. PROFITABILITY AND RETURN RATIOS (rows 8–65)
+--------------------------------------------------------------------------------
+
+Return on Equity (ROE):
+  O8 = F8 / F9 = Net Income / Total Shareholders' Equity
+
+Return on Assets (ROA):
+  O11 = F11 / F12 = Net Income / Total Assets
+
+Return on Net Assets (RONA):
+  O14 = F14 / F15 = Net Income / Net Assets (PP&E + NWC, from row 135)
+
+Return on Invested Capital (ROIC):
+  O17 = F17 / F18 = NOPAT / Invested Capital
+
+INCOME STATEMENT MARGIN BRIDGE (all expressed as % of Revenue):
+  Gross Margin            O20 = Gross Profit / Revenue
+  SG&A % of Revenue       O23 = SG&A / Revenue
+  Other OpEx %            O26 = Other Expenses / Revenue
+  EBITDA Margin           O29 = EBITDA / Revenue
+  CHECK (row 31): Gross Margin − SG&A% − Other% = EBITDA Margin  →  should be "OK"
+
+  Depreciation % Revenue  O33 = Depreciation / Revenue
+  EBIT Margin             O36 = EBIT / Revenue
+  CHECK (row 38): EBITDA Margin − Dep% = EBIT Margin  →  should be "OK"
+
+  Net Finance Cost %      O40 = (Interest Expense − Interest Income) / Revenue
+                               = −(Int Exp + Int Inc) / Revenue
+  EBT Margin              O44 = EBT / Revenue
+  CHECK (row 46): EBIT Margin − Finance% = EBT Margin  →  should be "OK"
+
+  Tax % of Revenue        O48 = Tax / Revenue
+  Net Profit Margin       O51 = Net Income / Revenue
+  CHECK (row 53): EBT Margin − Tax% = Net Profit Margin  →  should be "OK"
+
+DUPONT COMPONENT RATIOS:
+  Effective Tax Rate     O55 = Tax / EBT
+  Tax Burden             O58 = Net Income / EBT          [= 1 − Effective Tax Rate]
+  Effective Interest Rate O61 = Interest Expense / Total Interest Bearing Liabilities
+  Interest Burden        O64 = Net Income / EBIT         [= EBT/EBIT × Tax Burden]
+
+--------------------------------------------------------------------------------
+2B. ASSET UTILIZATION RATIOS (rows 73–103)
+--------------------------------------------------------------------------------
+
+Asset Turnover:      O73 = Revenue / Total Assets
+PPE Turnover:        O76 = Revenue / PP&E
+Cash Turnover:       O79 = Revenue / Cash
+Cash Days:           O82 = (Cash × 365) / Revenue
+
+A/R Turnover:        O85 = Revenue / Accounts Receivable
+A/R Days (DSO):      O88 = (AR × 365) / Revenue
+
+Inventory Turnover:  O91 = COGS / Inventory
+Inventory Days (DIO):O94 = (Inventory × 365) / COGS
+
+A/P Turnover:        O97 = COGS / Accounts Payable
+A/P Days (DPO):      O100 = (AP × 365) / COGS
+
+Cash Conversion Cycle / Working Capital Funding Gap:
+  O103 = O88 + O94 − O100
+       = DSO + DIO − DPO
+       = Days to collect cash from customers + days to sell inventory
+         minus days to pay suppliers
+
+--------------------------------------------------------------------------------
+2C. LEVERAGE RATIOS (rows 111–124)
+--------------------------------------------------------------------------------
+
+Total Assets to Equity:    O111 = Total Assets / Equity       [Financial leverage]
+Total Liabilities to Equity: O114 = Total Liabilities / Equity
+Debt to Equity:            O117 = (Revolver + LTD) / Equity   [Interest-bearing only]
+Debt to EBITDA:            O120 = (Revolver + LTD) / EBITDA
+Net Debt to EBITDA:        O123 = Net Debt / EBITDA
+
+--------------------------------------------------------------------------------
+2D. LIQUIDITY RATIOS (rows 132–139)
+--------------------------------------------------------------------------------
+
+Current Ratio:     O132 = Current Assets / Current Liabilities
+Quick Ratio:       O135 = (Current Assets − Inventory) / Current Liabilities
+Interest Coverage: O138 = EBITDA / Interest Expense
+
+--------------------------------------------------------------------------------
+2E. GROWTH TRENDS (rows 147–169)
+--------------------------------------------------------------------------------
+
+Pattern for each metric: Growth% = (Current Year − Prior Year) / Prior Year
+
+Revenue Growth:      P147 = (G8 − F8) / F8   [starts from Year 2]
+EBITDA Growth:       P150 = (G15 − F15) / F15
+EBIT Growth:         P153 = (G19 − F19) / F19
+Net Income Growth:   P156 = (G30 − F30) / F30
+Total Asset Growth:  P159 = (G84 − F84) / F84
+
+LEVERAGE MEASURES (from operating / financial leverage):
+
+Degree of Operating Leverage (DOL):
+  P162 = % Change in EBIT / % Change in Revenue
+       = P153 / P147
+       Measures sensitivity of EBIT to Revenue changes
+
+Degree of Financial Leverage (DFL):
+  P165 = % Change in Net Income / % Change in EBIT
+       = P156 / P153
+       Measures sensitivity of Net Income to EBIT changes (amplified by interest)
+
+Degree of Total Leverage (DTL):
+  P168 = % Change in Net Income / % Change in Revenue
+       = P165 / P147   (= DOL × DFL combined)
+
+--------------------------------------------------------------------------------
+2F. DUPONT CHECKS (rows 172–211)
+--------------------------------------------------------------------------------
+
+3-STEP DUPONT CHECK (rows 177–187):
+  Net Profit Margin  (O177) = Net Income / Revenue       → row 51
+  Asset Turnover     (O180) = Revenue / Total Assets     → row 73
+  Asset to Equity    (O183) = Total Assets / Equity      → row 111
+
+  ROE (3-step) (O186) = Net Profit Margin × Asset Turnover × Asset to Equity
+  CHECK (O187): IF ABS(O186 − ROE) < 0.0001 → "OK" else "Error"
+  Confirms: ROE = (NI/Rev) × (Rev/Assets) × (Assets/Equity)
+
+5-STEP DUPONT CHECK (rows 195–211):
+  Tax Burden        (O195) = Net Income / EBT            → row 58
+  Interest Burden   (O198) = EBT / EBIT                  → row 64
+  EBIT Margin       (O201) = EBIT / Revenue               → row 36
+  Asset Turnover    (O204) = Revenue / Total Assets       → row 73
+  Asset to Equity   (O207) = Total Assets / Equity        → row 111
+
+  ROE (5-step) (O210) = Tax Burden × Interest Burden × EBIT Margin
+                        × Asset Turnover × Asset to Equity
+  CHECK (O211): IF ABS(O210 − ROE) < 0.0001 → "OK" else "Error"
+  Confirms the full Dupont identity decomposes cleanly into ROE.
+
+================================================================================
+3. 3 STEP DUPONT PYRAMID SHEET
+================================================================================
+
+This sheet is a VISUAL DISPLAY only. All cells pull directly from Ratio Calculations.
+No new calculations are performed here.
+
+Top of pyramid: ROE = Ratio Calculations!O8 (Year 1) through !V8 (Year 8)
+
+Three Level-1 branches (the three multipliers):
+  Net Profit Margin    → Ratio Calculations!O51:V51
+  Asset to Equity      → Ratio Calculations!O111:V111
+  Asset Turnover       → Ratio Calculations!O73:V73
+
+Level-2 drill-downs under each branch:
+
+  Under Net Profit Margin:
+    EBT Margin         → O44:V44
+    EBIT Margin        → O36:V36
+    EBITDA Margin      → O29:V29
+    Gross Margin       → O20:V20
+    (each drilling one step up the P&L)
+
+  Under Asset Turnover:
+    Cash Turnover      → O79:V79   + Cash Days → O82:V82
+    A/R Turnover       → O85:V85   + A/R Days  → O88:V88
+    Inventory Turnover → O91:V91   + Inv Days  → O94:V94
+    PPE Turnover       → O76:V76   + A/P Days  → O100:V100
+
+  Working Capital Analysis sidebar:
+    Cash Days (O82), A/R Days (O88), Inventory Days (O94), A/P Days (O100)
+    CCC = A/R Days + Inv Days − A/P Days (computed directly in this sheet as:
+          AJ31 = AJ19 + AJ23 − AJ27)
+
+  Expense breakdown under Gross Margin:
+    SG&A %             → O23:V23
+    Other OpEx %       → O26:V26
+    Depreciation %     → O33:V33
+
+  Under Other Non-Operating Expense:
+    Net Finance Cost % → O40:V40
+
+  Under Tax:
+    Tax % Revenue      → O48:V48
+
+Growth Analysis panel (bottom-left):
+  Revenue Growth       → P147:V147
+  EBITDA Growth        → P150:V150
+  EBIT Growth          → P153:V153
+  Net Income Growth    → P156:V156
+  Asset Growth         → P159:V159
+  DOL                  → P168:V168
+
+Leverage Analysis panel (bottom-right):
+  Debt / Equity        → O117:V117
+  Debt / EBITDA        → O120:V120
+  Current Ratio        → O132:V132
+  Quick Ratio          → O135:V135
+  Interest Coverage    → O138:V138
+
+================================================================================
+4. 5 STEP DUPONT PYRAMID SHEET
+================================================================================
+
+Same visual structure as 3-Step, but with the ROE decomposition expanded to 5 factors.
+
+Top: ROE = Ratio Calculations!O8:V8
+
+Five Level-1 branches:
+  Tax Burden           → O58:V58    (Net Income / EBT)
+  Interest Burden      → O64:V64    (EBT / EBIT — sensitivity of NI to interest)
+  EBIT Margin          → O201:V201
+  Asset to Equity      → O111:V111
+  Asset Turnover       → O73:V73
+
+Level-2 and working capital drill-downs: identical to 3-Step sheet.
+
+The 5-step decomposition makes explicit what the 3-step Net Profit Margin hides:
+  — Tax Burden shows how much EBT survives after taxes
+  — Interest Burden shows how much EBIT survives after interest
+  — EBIT Margin shows operating efficiency
+  These three together = Net Profit Margin (when multiplied)
+
+================================================================================
+5. RAW DATA SUMMARY — 8-YEAR FINANCIAL HISTORY
+================================================================================
+
+  Metric               Yr1      Yr2      Yr3      Yr4      Yr5      Yr6      Yr7      Yr8
+  ──────────────────────────────────────────────────────────────────────────────────────
+  Revenue            112,640  116,199  118,719  129,025  141,576  152,703  166,761  195,929
+  Gross Profit        15,211   16,261   17,073   18,513   19,861   21,309   23,467   27,026
+  EBITDA               4,249    4,750    4,927    5,481    5,917    6,229    7,080    8,489
+  EBIT                 3,220    3,623    3,672    4,111    4,480    4,737    5,435    6,708
+  EBT                  3,197    3,603    3,619    4,039    4,442    4,765    5,367    6,680
+  Net Income           2,058    2,376    2,350    2,679    3,134    3,659    4,002    5,007
+
+  Total Assets        31,024   31,532   31,186   36,317   40,840   45,400   58,519   61,153
+  Total Equity        12,303   10,617   12,079   10,778   12,799   15,243   18,284   17,564
+  Net Debt (est)      -1,006     867    1,880    2,381     936    -1,524     -782     883
+
+  CapEx               -3,773   -3,572   -2,623   -5,482   -2,950   -2,950   -7,487   -9,300
+
+  NOTE: Gross Profit = Revenue + Net COGS (per model formula)
+  NOTE: Net Debt = Revolver + LTD − Cash; negative = net cash position
+
+================================================================================
+6. CROSS-SHEET DATA FLOW
+================================================================================
+
+  Financial Statements → Ratio Calculations:
+    All P&L, Balance Sheet, and supplemental metric lines feed Ratio Calculations
+    via direct cell references (e.g. ='Financial Statements'!F30).
+
+  Ratio Calculations → DuPont Pyramid sheets:
+    Both pyramid sheets pull every ratio directly from Ratio Calculations columns O–V.
+    No calculations are performed on the pyramid sheets themselves.
+
+  DuPont pyramid sheets → no downstream sheets.
+
+================================================================================
+7. KEY MODEL MECHANICS
+================================================================================
+
+  1. COGS netting design: Depreciation is embedded as a positive offset inside COGS
+     (e.g. F9 = −98,458 + 1,029). This means SUM(F8:F9) = true gross profit
+     without depreciation, and row 15 (EBITDA = Gross Profit + SG&A + Other) is
+     a genuine EBITDA. Row 18 then subtracts D&A to reach EBIT.
+
+  2. Effective Tax Rate: Computed as −Tax / EBT (sign-adjusted so the result is
+     a positive percentage). Used immediately to compute NOPAT = EBIT × (1−ETR).
+
+  3. Cash Flow construction: Uses the indirect method. CFO = Net Income + D&A +
+     working capital changes derived from balance sheet movements.
+     F43 = E77 − F77 means: cash from AR = prior balance minus current balance
+     (reduction in AR = cash inflow). AP is the opposite sign (increase = inflow).
+
+  4. Net Assets = (Current Assets − Cash) + PP&E − Accounts Payable.
+     This is the asset base required to run operations excluding financing items
+     (cash and interest-bearing debt). It equals operating NWC + PP&E.
+
+  5. Invested Capital = Net Debt + Equity = (Interest-Bearing Debt − Cash) + Equity.
+     ROIC = NOPAT / Invested Capital measures how efficiently the company
+     generates after-tax operating profit from its debt and equity capital.
+
+  6. Margin bridge integrity: Four nested CHECK rows (31, 38, 46, 53) verify that
+     each step of the income statement margin waterfall mathematically reconciles:
+       Gross% − SG&A% − Other% = EBITDA%
+       EBITDA% − Dep% = EBIT%
+       EBIT% − Finance% = EBT%
+       EBT% − Tax% = Net Profit%
+
+  7. DuPont identity checks: Both 3-step and 5-step checks confirm the product of
+     their respective factors equals directly-computed ROE (within 0.0001 tolerance).
+
+  8. CCC is computed twice: once in Ratio Calculations (row 103) and again directly
+     in each DuPont pyramid sheet (e.g. AJ31 = AR Days + Inv Days − AP Days).
+
+================================================================================
+END OF DOCUMENTATION
+================================================================================

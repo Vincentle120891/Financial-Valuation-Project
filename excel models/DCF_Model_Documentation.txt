@@ -1,0 +1,550 @@
+================================================================================
+APPLIED DCF VALUATION MODEL — FULL DOCUMENTATION
+Structured for AI consumption. All figures in USD thousands unless stated.
+Workbook Sheets: Inputs, Model, Outputs (+ mirrored "-R" variants for checks)
+================================================================================
+
+────────────────────────────────────────────────────────────────────────────────
+1. MODEL OVERVIEW
+────────────────────────────────────────────────────────────────────────────────
+
+Purpose:
+  Discounted Cash Flow (DCF) valuation of an operating company using two methods:
+  (A) Perpetuity / Gordon Growth Method  — terminal value = UFCF / (WACC - g)
+  (B) Exit Multiple Method               — terminal value = Terminal EBITDA × Multiple
+
+Forecast horizon: 5 discrete years (columns I–M in Model sheet)
+Terminal year:    1 perpetuity/exit year (column N in Model sheet)
+Historical years: 3 actuals (columns F, G, H in Model sheet — years 2020, 2021, 2022)
+
+Scenario switch: Inputs!D7 / Outputs!F6
+  1 = Best Case, 2 = Base Case, 3 = Worst Case
+  Used with CHOOSE() to select the appropriate driver row for revenue/cost/capex.
+
+────────────────────────────────────────────────────────────────────────────────
+2. INPUTS SHEET — HARD-CODED ASSUMPTIONS
+────────────────────────────────────────────────────────────────────────────────
+
+[A] SCENARIO SWITCH
+  Cell D7  = Outputs!F6   → Active scenario (1=Best, 2=Base, 3=Worst)
+
+[B] REVENUE DRIVERS (Columns G–L = Forecast Years 1–5, L = Terminal)
+
+  Sales Volume Growth (%)
+    Scenario switch via CHOOSE($D$7, row12, row13, row14)
+    Active row (G10:L10) feeds Model!I7:N7
+
+    Best  (row 12): G12=3.0%, H12=2.0%, I12=2.0%, J12=1.5%, K12=1.5%, L12=1.0%
+    Base  (row 13): G13=2.0%, H13=1.0%, I13=1.0%, J13=0.5%, K13=0.5%, L13=0.5%
+    Worst (row 14): G14=1.0%, H14=1.0%, I14=0.5%, J14=0.5%, K14=0.5%, L14=0.5%
+
+  Pricing Increases (%)
+    Scenario switch via CHOOSE($D$7, row19, row20, row21)
+    Active row (G17:L17) feeds Model!I8:N8
+
+    Best  (row 19): G19=3.5%, H19=2.0%, I19=2.0%, J19=2.0%, K19=1.5%, L19=0.8%
+    Base  (row 20): G20=3.0%, H20=1.0%, I20=1.0%, J20=1.0%, K20=0.5%, L20=0.5%
+    Worst (row 21): G21=1.0%, H21=1.0%, I21=0.5%, J21=0.5%, K21=0.5%, L21=0.5%
+
+  Revenue Growth Formula (Model Sheet):
+    I21 = H21 × (1 + Inputs!G10) × (1 + Inputs!G17)
+    i.e. prior year revenue × (1 + volume growth) × (1 + price growth)
+    Each subsequent year applies its own column's volume and price growth.
+
+[C] CAPITAL EXPENDITURE (USD thousands)
+    Scenario switch via CHOOSE($D$7, row26, row27, row28)
+    Active row (G24:L24) feeds Model!I85:M85
+
+    Best  (row 26): 4,000 / 4,300 / 4,400 / 4,600 / 4,800  (Terminal: 4,900)
+    Base  (row 27): 4,550 / 4,700 / 4,850 / 5,000 / 5,125  (Terminal: 5,300)
+    Worst (row 28): 5,000 / 5,200 / 5,400 / 5,500 / 5,600  (Terminal: 5,800)
+
+[D] INFLATION / PROJECTED COST INCREASE (%)
+    Single scenario (not scenario-switched):
+    G31=3.5%, H31=3.0%, I31=3.0%, J31=2.5%, K31=2.5%, L31=1.5%
+    Feeds Model!I9:N9 → drives COGS and OpEx growth.
+
+[E] WORKING CAPITAL (Days)
+    Accounts Receivable Days: G35–K35 = 45 days each; L35 = K35 (terminal = prior yr)
+    Inventory Days:           G36–K36 = 25 days each; L36 = K36
+    Accounts Payable Days:    G37–K37 = 40 days each; L37 = K37
+
+    Balance Calculation (Model Sheet):
+      AR Balance   = (AR Days / Days in Period) × Revenue
+      Inv Balance  = (Inv Days / Days in Period) × COGS
+      AP Balance   = (AP Days / Days in Period) × COGS
+
+[F] WACC INPUTS — COMPARABLE COMPANY ANALYSIS
+
+  Five European comparable companies (rows 51–55):
+    Surge Batteries Inc.     | Debt=63,702  | Equity=375,499 | Tax=31.5% | Levered β=0.850
+    Future Energy Co.        | Debt=43,422  | Equity=311,425 | Tax=32.2% | Levered β=1.011
+    Clean Green Ltd.         | Debt=26,211  | Equity=131,996 | Tax=31.9% | Levered β=1.336
+    Full Power Solutions Ltd.| Debt=15,109  | Equity= 95,746 | Tax=33.0% | Levered β=0.994
+    Earthcor Power Inc.      | Debt=95,234  | Equity=666,541 | Tax=30.2% | Levered β=0.883
+
+  Derived Metrics per Company:
+    D/E Ratio    (I51) = Debt / Equity           (e.g. I51 = F51/G51)
+    D/Capital    (J51) = Debt / (Debt + Equity)  (e.g. J51 = F51/(F51+G51))
+    Unlevered β  (L51) = Levered β / (1 + (1-Tax Rate) × D/E)
+
+  Averages (row 57):
+    Avg Tax Rate         H57 = AVERAGE(H51:H55)
+    Avg D/E              I57 = AVERAGE(I51:I55)
+    Avg D/Capital        J57 = AVERAGE(J51:J55)
+    Avg Levered Beta     K57 = AVERAGE(K51:K55)
+    Avg Unlevered Beta   L57 = AVERAGE(L51:L55)
+
+  Cost of Equity (rows 63–66):
+    Risk-Free Rate        L63 = 2.4%
+    Market Risk Premium   F63 = 4.7%
+    Avg Unlevered Beta    F64 = L57 (from comparables average)
+    Country Risk Premium  L65 = 3.6%
+    Equity Risk Premium   F66 = Market Risk Premium × Levered Beta  [= F63 × F65]
+    Levered Beta          F65 = F64 × (1 + (1-Tax Rate) × Target D/E)
+    Cost of Equity        L66 = SUM(L63:L65) = Risk-Free + ERP + Country Premium
+
+  Capital Structure:
+    Actual D / Capital (E73) = D73/D75 = 19,102 / 145,222
+    Actual E / Capital (E74) = D74/D75 = 126,120 / 145,222
+    Target D weight    F73  = 15%
+    Target E weight    F74  = 85%
+    Target D/E         F77  = F73/F74 = 0.1765
+
+  Cost of Debt:
+    Pre-Tax Cost of Debt   L72 = 5.2%
+    Tax Rate               L73 = 30%
+    After-Tax Cost of Debt L74 = L72 × (1 - L73) = 3.64%
+
+  WACC Calculation:
+    L84 = (Target Debt Weight × After-Tax Cost of Debt)
+          + (Target Equity Weight × Cost of Equity)
+        = F73 × L74 + F74 × L66
+    This feeds Inputs!F109 and then Outputs!O13 / Model!C285 / Model!C332
+
+[G] OTHER INPUTS (rows 88–114)
+
+  Dates:
+    Valuation Date          F94  = 2023-03-31
+    First Expected CF Date  F95  = 2023-06-30
+    First Fiscal Year End   F96  = 2023-12-31
+    First Forecast Year     F97  = YEAR(F96) = 2023
+
+  Date Validation:
+    F98 = IF(F94 > F95, 1, 0)   → flags error if valuation date > first CF date
+    F99 = IF(F95 > F96, 1, 0)   → flags error if first CF date > fiscal year end
+
+  Balance Sheet Opening Balances (End of FY2022):
+    Net Debt                   L94  = 18,642
+    PP&E (Gross Book)          L95  = 65,014
+    Tax Basis for PP&E         L96  = 39,211
+    Tax Losses Carried Forward L97  = 24,128
+
+  Valuation Parameters:
+    Plant Capacity (Units/Day) L104 = 1,600
+    Shares Outstanding (FD)    F105 = 34,200 thousand
+    Current Stock Price ($/sh) F106 = $2.23
+    Terminal Growth Rate        F107 = 2.0%
+    Terminal EBITDA Multiple    F108 = 7×
+    WACC                        F109 = L84 (linked from WACC section)
+
+  Depreciation Parameters:
+    Projected Interest Expense  L105 = 2,520
+    First Year Tax Dep. Rate    L106 = 50% (half-year convention)
+    Blended Tax Dep. Rate       L107 = 15% (declining balance)
+    First Year Acctg Dep. Rate  L108 = 50%
+    Useful Life: Existing Assets L109 = 16 years
+    Useful Life: New Assets      L110 = 20 years
+
+────────────────────────────────────────────────────────────────────────────────
+3. MODEL SHEET — CALCULATION ENGINE
+────────────────────────────────────────────────────────────────────────────────
+
+Column mapping:
+  F   = Historical Year 1 (e.g. FY2020)
+  G   = Historical Year 2 (e.g. FY2021)
+  H   = Historical Year 3 (e.g. FY2022)  ← last actual
+  I   = Forecast Year 1 (FY2023)
+  J   = Forecast Year 2 (FY2024)
+  K   = Forecast Year 3 (FY2025)
+  L   = Forecast Year 4 (FY2026)
+  M   = Forecast Year 5 (FY2027)
+  N   = Terminal Year
+
+[3A] INCOME STATEMENT (rows 21–41)
+
+  Revenue (row 21):
+    F21–H21 = Hardcoded actuals: 51,585 / 53,494 / 55,749
+    I21 = H21 × (1 + Inputs!G10) × (1 + Inputs!G17)
+          → Prior revenue × (1 + volume growth) × (1 + price growth)
+    J21–N21 = Same pattern with respective year columns.
+
+  COGS (row 22):
+    F22–H22 = Hardcoded actuals: 27,697 / 28,429 / 29,200
+    I22 = H22 × (1 + I9)     where I9 = inflation rate for yr1
+    J22–N22 = Same pattern.
+
+  Gross Profit (row 23):
+    F23 = F21 - F22   [Revenue - COGS]
+    Same for G–N.
+
+  SG&A (row 26):
+    F26–H26 = 5,877 / 6,006 / 6,144 (actuals)
+    I26 = H26 × (1 + I16)    [I16 = projected cost increase = inflation]
+
+  Other OpEx (row 27):
+    F27–H27 = 1,764 / 1,931 / 2,026 (actuals)
+    I27 = H27 × (1 + I16)
+
+  EBITDA (row 28):
+    F28 = F23 - SUM(F26:F27)   [Gross Profit - SG&A - Other]
+
+  Depreciation (row 31):
+    F31–H31 = 2,960 / 3,196 / 3,452 (actuals)
+    I31–M31 = I118 through M118   [from Depreciation Schedule — see 3C]
+    N31 = Inputs!L24              [terminal capex = terminal depreciation assumption]
+
+  EBIT (row 32):
+    F32 = F28 - F31   [EBITDA - Depreciation]
+
+  Interest Expense (row 34):
+    F34–H34 = 1,488 / 2,580 / 2,448 (actuals)
+    I34–N34 = $C$18 = Inputs!L105 = 2,520 (projected, held constant)
+
+  EBT (row 35):
+    F35 = F32 - F34   [EBIT - Interest]
+
+  Taxes (rows 37–39):
+    Current Tax  (row 37):  I37–M37 = from Income Tax Schedule (Levered); N37 = EBT × Tax Rate
+    Deferred Tax (row 38):  I38–M38 = from Income Tax Schedule (Levered); N38 = 0
+    Total Tax    (row 39):  = SUM(Current + Deferred)
+
+  Net Income (row 41):
+    F41 = F35 - F39   [EBT - Total Tax]
+
+[3B] WORKING CAPITAL SCHEDULE (rows 45–76)
+
+  Days in Period (row 50): 365 for all years (hardcoded in historical, linked from C6 in forecast)
+
+  Step 1 — Amounts Per Day (rows 55–58):
+    For Forecast years (I–N):
+      AR Days  (I56) = Inputs!G35  → 45 days
+      Inv Days (I57) = Inputs!G36  → 25 days
+      AP Days  (I58) = Inputs!G37  → 40 days
+
+    For Historical years (F–H):
+      AR Days  (F56) = (F62 / F51) × F50   → back-calculated from actuals
+      Inv Days (F57) = (F63 / F52) × F50
+      AP Days  (F58) = (F64 / F52) × F50
+
+  Step 2 — Total Balances (rows 62–64):
+    For Forecast:
+      AR Balance  (I62) = (I56 / I50) × I51   = (45/365) × Revenue
+      Inv Balance (I63) = (I57 / I50) × I52   = (25/365) × COGS
+      AP Balance  (I64) = (I58 / I50) × I52   = (40/365) × COGS
+
+    Historical (F–H): hardcoded actuals
+      AR: 5,708 / 6,333 / 6,624
+      Inv: 1,792 / 1,923 / 2,009
+      AP: 3,024 / 3,205 / 3,319
+
+  Net Working Capital (rows 68–70):
+    Current Assets      (row 68) = AR + Inventory
+    Current Liabilities (row 69) = Accounts Payable
+    NWC                 (row 70) = Current Assets - Current Liabilities
+
+  Cash from Working Capital (row 73):
+    G73 = F70 - G70     [decrease in NWC = cash inflow; increase = cash outflow]
+    I73 = H70 - I70
+    Same pattern for J–N.
+    Note: F73 = opening balance adjustment from Model-R sheet.
+
+[3C] DEPRECIATION SCHEDULE (rows 80–118)
+
+  Capital Expenditure (row 85):
+    F85–H85 = 4,982 / 5,199 / 4,400 (actuals)
+    I85–M85 = from Inputs! scenario capex rows
+
+  Section A — Existing Asset Depreciation (rows 88–90):
+    Useful life: D89 = Inputs!L109 = 16 years
+    Opening PP&E: D90 = Inputs!L95 = 65,014 (end of FY2022)
+    Percent of life remaining per year (I90:M90):
+      I90 = MIN(D89 - SUM(H90 prior years), 1)   → decrement remaining life
+    Annual Depreciation (I116) = (D90 / D89) × I90
+      = (65,014 / 16) × fraction of year = straight-line on opening balance
+
+  Section B — New Asset Depreciation (rows 94–112):
+    Useful life: D95 = Inputs!L110 = 20 years
+    First-year convention: D96 = Inputs!L108 = 50%
+    
+    For each forecast year's capex cohort (rows 108–112, one row per year):
+      Capex for year (G108) = SUMIF to find capex in that year
+      Annual rate   (H108) = Capex / Useful Life (per year amount)
+      Depreciation  (I108) = H108 × percent-of-year factor (I100)
+      
+  Total Depreciation (row 118):
+    I118 = Existing Asset Dep (I116) + New Asset Dep (I117)
+    I117 = SUM(I108:I112)   → sum of all cohort depreciation in year I
+
+[3D] ASSET SCHEDULE (rows 126–151)
+
+  PP&E Roll (rows 137–141):
+    Beginning (I138) = Ending of prior year (H141 = Inputs!L95)
+    + Capex   (I139) = I85
+    - Depreciation (I140) = I118 × (-1)
+    Ending    (I141) = SUM(I138:I140)
+
+  Tax Basis Roll (rows 144–148):
+    Beginning (I145) = Prior year ending (H148 = Inputs!L96 = 39,211)
+    + Capex   (I146) = I139
+    Tax Depreciation (I147) = -(Beginning + Capex × First-Yr-Rate) × Blended-Rate
+      = -(I145 + I146 × D133) × D134
+      = -(I145 + I146 × 50%) × 15%   [declining balance method]
+    Ending (I148) = SUM(I145:I147)
+
+[3E] INCOME TAX SCHEDULE — LEVERED (rows 155–193)
+
+  Purpose: Calculate taxes on EBT (after interest), adjusting for tax vs. book depreciation
+           and using tax loss carryforwards.
+
+  Step 1 — Depreciation Adjustment:
+    EBT              (I168) = I35   [from Income Statement]
+    + Accounting Dep (I169) = I140 × (-1)   [add back book dep]
+    - Tax Dep        (I170) = I147          [deduct tax dep]
+    EBT After Adj    (I171) = SUM(I168:I170)
+
+  Step 2 — Tax Loss Application:
+    Opening Tax Losses   (I179) = Prior year ending (H182 = Inputs!L97 = 24,128)
+    + New Losses         (I180) = -MIN(I168, 0)     [if EBT negative, add to pool]
+    - Used Losses        (I181) = -MIN(I179, I174) × I161
+                                  [use min of available losses and adj EBT, only if profitable]
+    Ending Tax Losses    (I182) = SUM(I179:I181)
+    Taxable Income       (I176) = MAX(SUM(I174:I175), 0)
+
+  Step 3 — Tax Computation:
+    Current Tax  (I187) = Tax Rate × Taxable Income = D163 × I176
+    Total Tax    (I189) = MAX(Tax Rate × EBT After Adj, 0)
+    Deferred Tax (I188) = Total Tax - Current Tax = I189 - I187
+
+[3F] INCOME TAX SCHEDULE — UNLEVERED (rows 197–235)
+
+  Same structure as Levered, but starting from EBIT instead of EBT.
+  Purpose: Compute "as-if-unlevered" taxes for UFCF calculation.
+
+  EBT = EBIT (I210) = I32   [no interest deducted]
+  Same depreciation adjustments and tax loss carryforward logic.
+  Separate tax loss pool starting from H224 = H182 (same opening balance).
+
+  Output:
+    Current Tax (Unlevered) (I229) = D205 × I218
+
+[3G] UNLEVERED FREE CASH FLOW SCHEDULE (rows 239–275)
+
+  Tax Shield Calculation (rows 244–247):
+    Current Tax (Unlevered) (I245) = I229   [taxes if no debt]
+    Current Tax (Levered)   (I246) = I187   [actual taxes paid]
+    Tax Shield              (I247) = I245 - I246   [value of interest tax benefit]
+
+  Method 1 — EBITDA Method:
+    EBITDA               (I253) = I28
+    - Current Tax (Unlev)(I254) = I245 × (-1)
+    - Capex              (I255) = Inputs capex × (-1)
+    ± Working Capital    (I256) = I73
+    = UFCF               (I257) = SUM(I253:I256)
+
+  Method 2 — Net Income Method (cross-check):
+    Net Income           (I261) = I41
+    + Depreciation       (I262) = I31
+    + Deferred Tax       (I263) = I188   [levered deferred tax]
+    + Interest Expense   (I264) = I34
+    - Tax Shield         (I265) = I247 × (-1)
+    - Capex              (I266) = same as method 1
+    ± Working Capital    (I267) = same as method 1
+    = UFCF               (I268) = SUM(I261:I267)
+
+  Reconciliation Check:
+    I271 = IF(ROUND(I257 - I268, 1) = 0, 0, 1)   → should be 0 (methods match)
+
+[3H] DCF SCHEDULE: PERPETUITY METHOD (rows 279–322)
+
+  Inputs from Outputs dashboard (data table driven):
+    Terminal Growth Rate: C284 = Outputs!O12
+    WACC:                 C285 = Outputs!O13
+
+  Dates:
+    Fiscal Year Ends: H284 = Inputs!F94 (valuation date); I284 = Inputs!F96; J–M = EDATE(prior, 12)
+    CF Timing:        H285 = H284; I285 = Inputs!F95; J–M = EDATE(prior, 12)
+
+  Terminal Value (M292):
+    M292 = N287 / (C285 - C284)   → UFCF_terminal / (WACC - growth rate)
+    Only appears in final forecast year (M), then discounted.
+
+  Partial Period Adjustment (row 296):
+    I296 = YEARFRAC(I284, H284)   → fraction of year from valuation date to FY end
+    Adjusts cash flows for stub period.
+
+  Adjusted Cash Flows:
+    I298 = I291 × I296   [discrete CF × period fraction]
+    M299 = M292 × M296   [terminal value × period fraction]
+
+  Discount Factors (row 303):
+    H303 = 0 (valuation date)
+    I303 = H303 + YEARFRAC(I285, H285)   → cumulative years to each CF date
+    Discount Factor = 1 / (1 + WACC)^years
+
+  PV of each cash flow (rows 305–306):
+    I305 = I298 / (1 + C285)^I303   [PV of discrete CF]
+    M306 = M299 / (1 + C285)^M303   [PV of terminal value]
+
+  Enterprise Value (rows 310–313):
+    Manual Method:   H311 = SUM(I307:M307)   [sum of all discounted CFs]
+    XNPV Function:   H312 = XNPV(C285, H300:M300, H285:M285)   [exact date-based NPV]
+    PV of Discrete:  L311 = SUM(I305:M305)
+    PV of Terminal:  L312 = SUM(I306:M306)
+    Enterprise Value:L313 = L311 + L312
+
+  Equity Value (rows 316–319):
+    Enterprise Value (H317) = H312
+    Less: Net Debt   (H318) = -Inputs!L94 = -18,642
+    Equity Value     (H319) = H317 + H318
+    Equity Value/sh  (M319) = M317 / M318   [equity value / shares outstanding]
+
+[3I] DCF SCHEDULE: EXIT MULTIPLE METHOD (rows 326–369)
+
+  Same structure as Perpetuity Method, but terminal value is:
+    N339 = (N335 × C331) / (1 + C332)^F340
+         = (Terminal EBITDA × Multiple) / (1 + WACC)^partial_year
+
+  Where:
+    N335 = N28   [terminal EBITDA]
+    C331 = Outputs!O56 = Terminal EBITDA Multiple (7×)
+    C332 = Outputs!O57 = WACC
+    F340 = YEARFRAC(N332, N331) = partial period in terminal year
+
+  Discounting and equity bridge identical to Perpetuity Method.
+  XNPV (H359) is the primary output used in Outputs dashboard.
+
+────────────────────────────────────────────────────────────────────────────────
+4. OUTPUTS SHEET — DASHBOARDS AND SENSITIVITY TABLES
+────────────────────────────────────────────────────────────────────────────────
+
+[4A] DASHBOARD: PERPETUITY METHOD (rows 3–43)
+
+  Scenario Switch: F6 = 2 (Base Case active)
+
+  Main Outputs (rows 13–17) — one row per scenario via Data Table:
+    Column F = Enterprise Value  (from Model!H312 via data table, varying D7)
+    Column G = Equity Value      = Enterprise Value - Net Debt (O14)
+    Column H = Equity Value/sh   = Equity Value / Shares Outstanding (O15)
+
+  Selected Inputs (column O):
+    O12 = Terminal Growth Rate   = Inputs!F107 = 2.0%
+    O13 = WACC                   = Inputs!L84
+    O14 = Net Debt               = Inputs!L94 = 18,642
+    O15 = Shares Outstanding     = Inputs!F105 = 34,200
+    O16 = Current Stock Price    = Inputs!F106 = $2.23
+
+  Sensitivity Table 1 — Enterprise Value (rows 22–28):
+    Rows: WACC (5 values: WACC-2% to WACC+2% in 1% steps)
+    Cols: Terminal Growth Rate (5 values: g-1% to g+1% in 0.5% steps)
+    Cell formula: Data Table (two-input) varying C285 (WACC) and C284 (growth)
+    Base case: F26 = 131,576 (EV at base WACC and base growth)
+
+  Sensitivity Table 2 — Equity Value (rows 36–41):
+    D37 = D24 - O14   [EV minus net debt for each WACC/growth combination]
+
+  Sensitivity Table 3 — Premium/(Discount) to Stock Price (cols L–P):
+    L37 = (L24 / O15) / O16 - 1   [implied equity per share / current price - 1]
+
+[4B] DASHBOARD: EXIT MULTIPLE METHOD (rows 47–87)
+
+  Same structure as Perpetuity Dashboard.
+  Selected Inputs:
+    O56 = Terminal EBITDA Multiple = Inputs!F108 = 7×
+    O57 = WACC                     = Inputs!L84
+
+  Sensitivity Table — Enterprise Value (rows 67–72):
+    Rows: WACC (5 values in 1% steps)
+    Cols: Terminal Multiple (5 values: Multiple ±0.5 and ±1.0)
+    Base case: F70 = 131,844
+
+  Base Case Results Summary (from both methods):
+    Perpetuity Method:
+      Enterprise Value ≈ 131,576
+      Equity Value     ≈ 112,934  (131,576 - 18,642)
+      Equity per Share ≈ $3.30   (112,934 / 34,200 × 1,000)
+
+    Exit Multiple Method:
+      Enterprise Value ≈ 131,844
+      Equity Value     ≈ 113,202
+      Equity per Share ≈ $3.31
+
+    Current Stock Price: $2.23
+    Implied Premium (Base Case): ~48% upside
+
+────────────────────────────────────────────────────────────────────────────────
+5. CROSS-SHEET DATA FLOW SUMMARY
+────────────────────────────────────────────────────────────────────────────────
+
+  Inputs → Model:
+    Revenue drivers (G10:L10, G17:L17)  → Model I7:N7, I8:N8
+    Capex (G24:L24)                      → Model I85:M85, I255:N266
+    Inflation (G31:L31)                  → Model I9:N9
+    WC days (G35:L37)                    → Model I56:N58
+    WACC (L84)                           → Model C285, C332
+    Terminal growth (F107)               → Model C284 via Outputs!O12
+    Terminal multiple (F108)             → Model C331 via Outputs!O56
+    Net debt (L94)                       → Model H318, H365
+    Shares (F105)                        → Model M318, M365
+    PP&E/Tax opening balances            → Model H141, H148, H182
+
+  Model → Outputs:
+    Enterprise Value (H312, H359)        → Outputs F13, F57 (Data Table inputs)
+    Scenario switch (D7 via Outputs!F6)  → Inputs D7 → all CHOOSE() formulas
+
+  Outputs → Model (circularity via Data Tables):
+    Outputs!O12 → Model!C284 (terminal growth for sensitivity)
+    Outputs!O13 → Model!C285 (WACC for sensitivity)
+    Outputs!O56 → Model!C331 (multiple for sensitivity)
+    Outputs!O57 → Model!C332 (WACC for multiple method sensitivity)
+
+  Model → Inputs:
+    Outputs!F6 → Inputs!D7 (scenario switch)
+
+────────────────────────────────────────────────────────────────────────────────
+6. KEY MODEL MECHANICS & ASSUMPTIONS
+────────────────────────────────────────────────────────────────────────────────
+
+  1. Revenue = Prior Revenue × (1 + Volume Growth) × (1 + Price Growth)
+     Both volume and price grow independently per year and scenario.
+
+  2. COGS and OpEx grow at the inflation rate (not revenue growth).
+
+  3. Working capital days are held constant at forecast-year levels into terminal year.
+     Terminal year WC change uses M70 - N70, where N70 uses same days as M.
+
+  4. Depreciation is straight-line for both existing and new assets.
+     Tax depreciation uses declining-balance (15% blended rate) with half-year convention
+     in the first year (50% of full-year rate).
+
+  5. Tax losses carry forward indefinitely; no loss carryback.
+     Separate tax loss pools for levered and unlevered schedules.
+
+  6. Interest expense is held constant at 2,520 for all forecast years.
+     This simplifies the model (no debt amortization modeled).
+
+  7. Terminal capex = terminal depreciation (no net investment in terminal year).
+     This ensures UFCF in terminal year = NOPAT + non-cash items.
+
+  8. Two UFCF methods (EBITDA and Net Income) must reconcile to within 0.1.
+     If they differ, the check cell flags 1 (error).
+
+  9. Partial-period adjustment accounts for the stub period between valuation date
+     (2023-03-31) and first fiscal year end (2023-12-31) = ~0.75 years.
+
+  10. The XNPV function is the primary valuation output (more accurate than manual
+      sum due to exact date handling, including leap years).
+
+================================================================================
+END OF DOCUMENTATION
+================================================================================
