@@ -136,6 +136,11 @@ const ValuationFlow = () => {
     setError(null);
   };
 
+  // ==================== CONTINUE TO ASSUMPTIONS (STEP 8) ====================
+  const handleContinueToAssumptions = useCallback(() => {
+    setCurrentStep(8);
+  }, []);
+
   // ==================== FETCH REQUIRED INPUTS ====================
   const fetchRequiredInputs = useCallback(async () => {
     try {
@@ -187,7 +192,8 @@ const ValuationFlow = () => {
           setCompsResults(fetchDataResponse.data.comps_results);
         }
         
-        setCurrentStep(8);
+        // Stay on step 5 to show retrieved data, don't jump to step 8
+        // setCurrentStep(8); // Removed - stay on step 5
       }
     } catch (err) {
       console.error('Retrieve data error:', err);
@@ -322,6 +328,16 @@ const ValuationFlow = () => {
           <RequirementsStep
             selectedModel={selectedModel}
             onBackToModelSelection={handleBackToModelSelection}
+            onRetrieveData={handleRetrieveData}
+            loading={loading}
+            historicalData={historicalData}
+            forecastDrivers={forecastDrivers}
+            peerData={peerData}
+            dcfInputs={dcfInputs}
+            dupontResults={dupontResults}
+            compsResults={compsResults}
+            aiData={aiData}
+            onContinueToAssumptions={handleContinueToAssumptions}
           />
         );
       case 8:
