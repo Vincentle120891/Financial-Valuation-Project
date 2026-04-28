@@ -48,7 +48,7 @@ logger = logging.getLogger(__name__)
 
 # Import valuation engines
 from app.engines.dcf_engine import DCFEngine, DCFInputs, ScenarioDrivers, fetch_dcf_inputs
-from app.engines.dupont_engine import DuPontAnalyzer, run_analysis as perform_dupont_analysis
+from app.engines.dupont_engine import DuPontAnalyzer, DuPontResult
 from app.engines.comps_engine import TradingCompsAnalyzer, TargetCompanyData, PeerCompanyData
 
 # Import Resilient AI Engine with 3-Tier Fallback
@@ -639,113 +639,70 @@ async def run_valuation_engine(session_data: Dict) -> Dict:
     # =====================
     elif selected_model in ['dupont', 'dupont analysis']:
         try:
-            # Use the new dynamic DuPont engine that fetches data automatically
-            from dupont_engine import DuPontAnalysisEngine
+            # Use the new dynamic DuPont engine with API -> AI -> Manual flow
+            # No hardcoded fallbacks - requires proper data source
             
             ticker = profile.get('ticker', ticker_symbol)
-            years = 8  # Default to 8 years as per specification
             
-            # Initialize engine and run analysis
-            engine = DuPontAnalysisEngine(ticker, years)
-            engine.fetch_data()
-            engine.build_financial_statements()
-            engine.calculate_ratios()
-            engine.calculate_trends()
+            # Get API key from environment or settings
+            api_key = os.getenv('GROQ_API_KEY', '') or getattr(settings, 'groq_api_key', '')
             
-            # Get results
-            results = engine.get_results()
+            if not api_key:
+                raise HTTPException(
+                    status_code=500,
+                    detail="AI API key not configured. Cannot perform DuPont analysis without data fetching capabilities."
+                )
             
+            # Initialize engine with API key for AI-assisted data fetching
+            engine = DuPontAnalyzer(api_key=api_key)
+            
+            # Check if user provided custom inputs
+            custom_inputs = session_data.get('dupont_custom_inputs', {})
+            
+            # Run async analysis
+            import asyncio
+            result = await engine.analyze(ticker=ticker, custom_inputs=custom_inputs)
+            
+            if result.status == "error":
+                raise HTTPException(status_code=400, detail=result.message)
+            
+            if result.status == "incomplete":
+                # Return partial results with missing fields identified
+                return {
+                    "model": "DuPont",
+                    "success": False,
+                    "status": "incomplete",
+                    "ticker": ticker,
+                    "message": result.message,
+                    "missing_fields": result.missing_fields,
+                    "ai_suggestions": result.ai_suggestions,
+                    "requires_manual_input": True
+                }
+            
+            # Successful analysis
             return {
                 "model": "DuPont",
                 "success": True,
+                "status": "success",
                 "ticker": ticker,
-                "company_name": results.get('company_name', ''),
-                "years_analyzed": years,
-                "financial_statements": results.get('financial_statements', {}),
-                "ratios": results.get('ratios', {}),
-                "dupont_3step": results.get('dupont_3step', {}),
-                "dupont_5step": results.get('dupont_5step', {}),
-                "growth_trends": results.get('growth_trends', {}),
-                "validation": results.get('validation', {}),
-                "pyramid_data": results.get('pyramid_data', {})
+                "company_name": ticker,
+                "results": {
+                    "roe": result.roe,
+                    "net_profit_margin": result.net_profit_margin,
+                    "asset_turnover": result.asset_turnover,
+                    "equity_multiplier": result.equity_multiplier,
+                    "components": result.components
+                },
+                "data_source": result.detailed_results.get('source', 'unknown') if result.detailed_results else 'unknown',
+                "ai_suggestions": result.ai_suggestions,
+                "message": result.message
             }
             
+        except HTTPException:
+            raise
         except Exception as e:
             logger.error(f"DuPont analysis failed: {str(e)}")
-            # Fallback to old estimation method if dynamic fetch fails
-            try:
-                # Prepare data for DuPont (need 6-10 years of data)
-                # Use available historical data and project forward
-                years_count = max(6, len(list(financials.get('revenue', {}).values())))
-                
-                # Build arrays with available data, repeat last value if needed
-                def extend_array(values, target_len):
-                    result = list(values)[:target_len]
-                    while len(result) < target_len:
-                        result.append(result[-1] if result else 0)
-                    return result
-                
-                revenue = extend_array(list(financials.get('revenue', {}).values()), years_count)
-                net_income = extend_array(list(financials.get('net_income', {}).values()), years_count)
-                total_assets = extend_array([profile.get('raw_info', {}).get('totalAssets', sum(revenue)*0.5)] * min(3, years_count), years_count)
-                total_equity = extend_array([profile.get('raw_info', {}).get('totalStockholderEquity', sum(revenue)*0.3)] * min(3, years_count), years_count)
-                total_debt = extend_array([profile.get('raw_info', {}).get('totalDebt', sum(revenue)*0.2)] * min(3, years_count), years_count)
-                
-                # Estimate missing fields
-                gross_profit = [r * 0.4 for r in revenue]
-                ebitda = [r * 0.2 for r in revenue]
-                operating_income = [r * 0.15 for r in revenue]
-                cogs = [r * 0.6 for r in revenue]
-                accounts_receivable = [r * 0.1 for r in revenue]
-                inventory = [r * 0.08 for r in revenue]
-                accounts_payable = [r * 0.07 for r in revenue]
-                current_assets = [r * 0.25 for r in revenue]
-                current_liabilities = [r * 0.15 for r in revenue]
-                interest_expense = [r * 0.02 for r in revenue]
-                ebt = [oi - ie for oi, ie in zip(operating_income, interest_expense)]
-                ebit = operating_income
-                
-                dupont_input = {
-                    'revenue': revenue,
-                    'gross_profit': gross_profit,
-                    'ebitda': ebitda,
-                    'operating_income': operating_income,
-                    'net_income': net_income,
-                    'total_assets': total_assets,
-                    'total_equity': total_equity,
-                    'total_debt': total_debt,
-                    'accounts_receivable': accounts_receivable,
-                    'inventory': inventory,
-                    'accounts_payable': accounts_payable,
-                    'cogs': cogs,
-                    'current_assets': current_assets,
-                    'current_liabilities': current_liabilities,
-                    'interest_expense': interest_expense,
-                    'ebt': ebt,
-                    'ebit': ebit,
-                    'currency': profile.get('currency', 'USD')
-                }
-                
-                result = perform_dupont_analysis(dupont_input)
-                
-                return {
-                    "model": "DuPont",
-                    "success": result.get('success', False),
-                    "supporting_ratios": result.get('supporting_ratios', {}),
-                    "dupont_3step": result.get('dupont_3step', {}),
-                    "dupont_5step": result.get('dupont_5step', {}),
-                    "growth_trends": result.get('growth_trends', {}),
-                    "validation": result.get('validation', {}),
-                    "metadata": result.get('metadata', {}),
-                    "fallback_used": True,
-                    "message": "Used estimated data fallback"
-                }
-            except Exception as fallback_error:
-                return {
-                    "model": "DuPont",
-                    "error": str(fallback_error),
-                    "fallback_message": "DuPont analysis failed completely."
-                }
+            raise HTTPException(status_code=500, detail=f"DuPont analysis error: {str(e)}")
     
     # =====================
     # TRADING COMPS
