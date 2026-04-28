@@ -32,6 +32,8 @@ class Settings(BaseSettings):
     
     # API Settings
     api_prefix: str = Field(default="/api", description="API route prefix")
+    api_root_path: Optional[str] = Field(default=None, description="Root path for API (for reverse proxy setups)")
+    api_version: str = Field(default="v1", description="Current API version")
     cors_origins: List[str] = Field(default=["*"], description="Allowed CORS origins")
     
     # =========================================================================
