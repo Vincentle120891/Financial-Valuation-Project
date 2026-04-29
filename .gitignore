@@ -1,1 +1,5 @@
-Nothing should be ignored based on the provided file changes, as they only include source code files (.jsx) without any build artifacts, dependencies, or temporary files.
+```
+# Model integrity cache
+.model_integrity_cache.json
+backend/.model_integrity_cache.json
+```
