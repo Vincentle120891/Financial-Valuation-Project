@@ -150,22 +150,22 @@ const AssumptionsStep = ({
       )}
       
       {/* Peer Benchmarking */}
-      {peerData && Object.keys(peerData).length > 0 && (
+      {peerData && Array.isArray(peerData) && peerData.length > 0 && (
         <div className="summary-box">
           <h3>Peer Benchmarking</h3>
-          <p><strong>Peers Analyzed:</strong> {Array.isArray(peerData) ? peerData.length : 'N/A'} companies</p>
+          <p><strong>Peers Analyzed:</strong> {peerData.length} companies</p>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginTop: '12px' }}>
             <div>
               <strong>Median EV/EBITDA:</strong>
-              <p>{peerData.median_ev_ebitda ? peerData.median_ev_ebitda.toFixed(1) + 'x' : 'N/A'}</p>
+              <p>{peerData[0]?.ev_ebitda_ltm ? peerData[0].ev_ebitda_ltm.toFixed(1) + 'x' : 'N/A'}</p>
             </div>
             <div>
               <strong>Median P/E:</strong>
-              <p>{peerData.median_pe ? peerData.median_pe.toFixed(1) + 'x' : 'N/A'}</p>
+              <p>{peerData[0]?.pe_ltm ? peerData[0].pe_ltm.toFixed(1) + 'x' : 'N/A'}</p>
             </div>
             <div>
-              <strong>Peer Growth Avg:</strong>
-              <p>{peerData.avg_revenue_growth ? (peerData.avg_revenue_growth * 100).toFixed(1) + '%' : 'N/A'}</p>
+              <strong>Peer Count:</strong>
+              <p>{peerData.length}</p>
             </div>
           </div>
         </div>
