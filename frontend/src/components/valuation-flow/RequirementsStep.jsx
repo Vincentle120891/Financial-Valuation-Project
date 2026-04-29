@@ -23,6 +23,7 @@ const RequirementsStep = ({
   dupontResults,
   compsResults,
   aiData,
+  aiError,
   onShowInputs,
   requiredFields = []
 }) => {
@@ -358,6 +359,32 @@ const RequirementsStep = ({
     return null;
   };
 
+  // Render AI error warning in Step 5
+  const renderAiError = () => {
+    if (!aiError || !hasRetrievedData) return null;
+    
+    return (
+      <div className="summary-box" style={{ background: 'linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%)', border: '2px solid #ff9800', marginTop: '20px' }}>
+        <h3 style={{ color: '#e65100' }}>⚠️ AI Suggestions Failed</h3>
+        <p style={{ marginBottom: '12px', color: '#e65100' }}>{aiError}</p>
+        <div style={{ background: 'white', padding: '12px', borderRadius: '6px', marginTop: '12px' }}>
+          <strong>💡 What this means:</strong>
+          <p style={{ margin: '8px 0', color: '#333' }}>
+            Financial data was successfully loaded, but AI-powered suggestions could not be generated. 
+            You can still proceed to view the retrieved data and manually enter your assumptions.
+          </p>
+          <strong>📋 Next Steps:</strong>
+          <ol style={{ margin: '8px 0', paddingLeft: '20px', color: '#333' }}>
+            <li>Click "View Retrieved Inputs" to see the loaded financial data</li>
+            <li>Manually enter your assumptions for WACC, Terminal Growth, etc.</li>
+            <li>Use historical trends and peer benchmarks to inform your inputs</li>
+            <li>Optionally click "Refresh Data" to retry AI generation</li>
+          </ol>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="step-container">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
@@ -375,6 +402,9 @@ const RequirementsStep = ({
       
       {/* Show missing data warning if applicable */}
       {renderMissingData()}
+      
+      {/* Show AI error warning if applicable */}
+      {renderAiError()}
 
       <div style={{ marginTop: '20px', display: 'flex', gap: '10px' }}>
         {!hasRetrievedData ? (

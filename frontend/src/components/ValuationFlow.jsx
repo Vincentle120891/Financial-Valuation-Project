@@ -53,6 +53,7 @@ const ValuationFlow = () => {
   const [compsResults, setCompsResults] = useState(null);
   const [dcfInputs, setDcfInputs] = useState(null);
   const [aiData, setAiData] = useState({});
+  const [aiError, setAiError] = useState(null);
 
   // ==================== STEP 1: SEARCH COMPANY ====================
   const handleSearch = useCallback(async () => {
@@ -173,37 +174,63 @@ const ValuationFlow = () => {
   // ==================== STEP 7-8: RETRIEVE DATA ====================
   const handleRetrieveData = useCallback(async () => {
     setLoading(true);
+    setError(null);
+    setAiError(null);
     try {
-      const fetchDataResponse = await fetchData(sessionId);
-      console.log('Fetch data response:', fetchDataResponse);
+      // Fetch financial data first
+      let fetchDataResponse = null;
+      try {
+        fetchDataResponse = await fetchData(sessionId);
+        console.log('Fetch data response:', fetchDataResponse);
+      } catch (fetchErr) {
+        console.error('Fetch data error:', fetchErr);
+        setError('Failed to fetch financial data. Please try again.');
+      }
       
-      const aiDataResponse = await generateAI(sessionId);
-      console.log('AI response:', aiDataResponse);
+      // Generate AI suggestions
+      let aiDataResponse = null;
+      try {
+        aiDataResponse = await generateAI(sessionId);
+        console.log('AI response:', aiDataResponse);
+      } catch (aiErr) {
+        console.error('Generate AI error:', aiErr);
+        // Store detailed AI error for display
+        const aiErrorMessage = aiErr.message || 'Unknown error occurred';
+        setAiError(`AI suggestions could not be generated. Reason: ${aiErrorMessage}. You can still proceed with manual inputs.`);
+      }
       
-      if (fetchDataResponse.data && aiDataResponse.suggestions) {
+      // Set AI data if available
+      if (aiDataResponse && aiDataResponse.suggestions) {
         setAiData(aiDataResponse.suggestions);
+      }
+      
+      // Set financial data if available
+      if (fetchDataResponse && fetchDataResponse.data) {
+        const data = fetchDataResponse.data;
         
-        if (fetchDataResponse.data.historical_financials) {
-          setHistoricalData(fetchDataResponse.data.historical_financials);
+        if (data.historical_financials) {
+          setHistoricalData(data.historical_financials);
         }
-        if (fetchDataResponse.data.forecast_drivers) {
-          setForecastDrivers(fetchDataResponse.data.forecast_drivers);
+        if (data.forecast_drivers) {
+          setForecastDrivers(data.forecast_drivers);
         }
-        if (fetchDataResponse.data.peers) {
-          setPeerData(fetchDataResponse.data.peers);
+        if (data.peers) {
+          setPeerData(data.peers);
         }
-        if (fetchDataResponse.data.dcf_inputs) {
-          setDcfInputs(fetchDataResponse.data.dcf_inputs);
+        if (data.dcf_inputs) {
+          setDcfInputs(data.dcf_inputs);
         }
-        if (fetchDataResponse.data.dupont_ratios) {
-          setDupontResults(fetchDataResponse.data.dupont_ratios);
+        if (data.dupont_ratios) {
+          setDupontResults(data.dupont_ratios);
         }
-        if (fetchDataResponse.data.comps_results) {
-          setCompsResults(fetchDataResponse.data.comps_results);
+        if (data.comps_results) {
+          setCompsResults(data.comps_results);
         }
-        
-        // Stay on step 5 to show retrieved data, don't jump to step 8
-        // setCurrentStep(8); // Removed - stay on step 5
+      }
+      
+      // Clear general error if we got at least some data
+      if ((fetchDataResponse?.data || aiDataResponse?.suggestions) && error) {
+        setError(null);
       }
     } catch (err) {
       console.error('Retrieve data error:', err);
@@ -347,6 +374,7 @@ const ValuationFlow = () => {
             dupontResults={dupontResults}
             compsResults={compsResults}
             aiData={aiData}
+            aiError={aiError}
             requiredFields={requiredFields}
             onShowInputs={handleShowInputs}
           />
@@ -357,6 +385,7 @@ const ValuationFlow = () => {
             historicalData={historicalData}
             peerData={peerData}
             aiData={aiData}
+            aiError={aiError}
             confirmedValues={confirmedValues}
             selectedModel={selectedModel}
             onManualInput={handleManualInput}
@@ -373,6 +402,7 @@ const ValuationFlow = () => {
             historicalData={historicalData}
             peerData={peerData}
             aiData={aiData}
+            aiError={aiError}
             confirmedValues={confirmedValues}
             selectedModel={selectedModel}
             onManualInput={handleManualInput}
