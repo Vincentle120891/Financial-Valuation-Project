@@ -146,6 +146,11 @@ const ValuationFlow = () => {
     setCurrentStep(8);
   }, []);
 
+  // ==================== BACK TO REQUIREMENTS (FROM STEP 6/8) ====================
+  const handleBackToRequirements = useCallback(() => {
+    setCurrentStep(5);
+  }, []);
+
   // ==================== FETCH REQUIRED INPUTS ====================
   const fetchRequiredInputs = useCallback(async () => {
     try {
@@ -358,6 +363,7 @@ const ValuationFlow = () => {
             onUseAI={handleUseAI}
             showReviewOnly={true}
             onContinueToConfirm={handleContinueToAssumptions}
+            onBackToRequirements={handleBackToRequirements}
             loading={loading}
           />
         );
@@ -372,6 +378,7 @@ const ValuationFlow = () => {
             onManualInput={handleManualInput}
             onUseAI={handleUseAI}
             onConfirmAssumptions={handleConfirmAssumptions}
+            onBackToRequirements={handleBackToRequirements}
             loading={loading}
           />
         );

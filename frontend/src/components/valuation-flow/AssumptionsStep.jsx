@@ -15,6 +15,7 @@ import {
  * - AI suggestions with rationale
  * - Manual input override (Step 8 only)
  * - Interactive charts (Revenue, EBITDA, Growth)
+ * - Health check and error validation
  * 
  * Props:
  * - showReviewOnly: boolean (default: false) - If true, shows read-only view for Step 6
@@ -31,8 +32,80 @@ const AssumptionsStep = ({
   onConfirmAssumptions,
   loading,
   showReviewOnly = false,
-  onContinueToConfirm
+  onContinueToConfirm,
+  onBackToRequirements
 }) => {
+  // ==================== HEALTH CHECK & ERROR VALIDATION ====================
+  
+  // Validate data integrity
+  const validateDataHealth = () => {
+    const issues = [];
+    
+    // Check historical data
+    if (!historicalData) {
+      issues.push({
+        type: 'error',
+        field: 'Historical Data',
+        message: 'No historical financial data available'
+      });
+    } else {
+      if (!historicalData.revenue || Object.keys(historicalData.revenue).length === 0) {
+        issues.push({
+          type: 'warning',
+          field: 'Revenue',
+          message: 'Revenue data is missing or empty'
+        });
+      }
+      if (!historicalData.ebitda || Object.keys(historicalData.ebitda).length === 0) {
+        issues.push({
+          type: 'warning',
+          field: 'EBITDA',
+          message: 'EBITDA data is missing or empty'
+        });
+      }
+    }
+    
+    // Check peer data
+    if (!peerData || (Array.isArray(peerData) && peerData.length === 0)) {
+      issues.push({
+        type: 'warning',
+        field: 'Peer Data',
+        message: 'No peer comparison data available'
+      });
+    }
+    
+    // Check AI data for DCF model
+    if (selectedModel === 'DCF' && (!aiData || Object.keys(aiData).length === 0)) {
+      issues.push({
+        type: 'error',
+        field: 'AI Suggestions',
+        message: 'AI suggestions not generated. Please retrieve data first.'
+      });
+    } else if (aiData && Object.keys(aiData).length > 0) {
+      // Validate critical AI fields
+      if (!aiData.wacc_percent?.value && !aiData.wacc) {
+        issues.push({
+          type: 'warning',
+          field: 'WACC',
+          message: 'WACC suggestion is missing'
+        });
+      }
+      if (!aiData.terminal_growth_rate_percent?.value && !aiData.terminal_growth) {
+        issues.push({
+          type: 'warning',
+          field: 'Terminal Growth',
+          message: 'Terminal growth suggestion is missing'
+        });
+      }
+    }
+    
+    return issues;
+  };
+  
+  const dataHealthIssues = validateDataHealth();
+  const hasCriticalErrors = dataHealthIssues.some(issue => issue.type === 'error');
+  const hasWarnings = dataHealthIssues.some(issue => issue.type === 'warning');
+  const hasAnyData = historicalData || (peerData && peerData.length > 0) || (aiData && Object.keys(aiData).length > 0);
   // Prepare historical chart data
   const prepareHistoricalChartData = () => {
     if (!historicalData?.revenue) return [];
@@ -93,13 +166,65 @@ const AssumptionsStep = ({
 
   return (
     <div className="step-container">
-      <h2>{showReviewOnly ? 'Step 6: View Retrieved Inputs' : 'Step 8: Review & Confirm Assumptions'}</h2>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+        <h2>{showReviewOnly ? 'Step 6: View Retrieved Inputs' : 'Step 8: Review & Confirm Assumptions'}</h2>
+        {onBackToRequirements && (
+          <button onClick={onBackToRequirements} className="btn-secondary">
+            ← Back to Requirements
+          </button>
+        )}
+      </div>
       
-      {/* Show message if no data available */}
-      {!historicalData && (!peerData || peerData.length === 0) && (!aiData || Object.keys(aiData).length === 0) && (
-        <div className="summary-box" style={{ background: 'linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%)' }}>
-          <h3 style={{ color: '#e65100' }}>⚠ No Data Available</h3>
-          <p>Please go back to Step 5 and click "Retrieve Data" first to load the input values.</p>
+      {/* ==================== HEALTH CHECK DISPLAY ==================== */}
+      {!hasAnyData && (
+        <div className="summary-box" style={{ background: 'linear-gradient(135deg, #ffebee 0%, #ffcdd2 100%)', border: '2px solid #f44336' }}>
+          <h3 style={{ color: '#c62828' }}>🚨 Critical: No Data Loaded</h3>
+          <p style={{ marginBottom: '16px' }}>The system has not retrieved any data yet. Please follow these steps:</p>
+          <ol style={{ color: '#c62828', lineHeight: '1.8' }}>
+            <li>Click "Back to Requirements" button above</li>
+            <li>Click "Retrieve Data" in Step 5</li>
+            <li>Wait for data to load successfully</li>
+            <li>Click "View Retrieved Inputs" to return here</li>
+          </ol>
+          {onBackToRequirements && (
+            <button onClick={onBackToRequirements} className="btn-primary" style={{ marginTop: '16px' }}>
+              Go to Step 5 →
+            </button>
+          )}
+        </div>
+      )}
+      
+      {/* Health Issues Summary */}
+      {hasAnyData && dataHealthIssues.length > 0 && (
+        <div className="summary-box" style={{ 
+          background: hasCriticalErrors 
+            ? 'linear-gradient(135deg, #ffebee 0%, #ffcdd2 100%)' 
+            : 'linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%)',
+          border: hasCriticalErrors ? '2px solid #f44336' : '2px solid #ff9800'
+        }}>
+          <h3 style={{ color: hasCriticalErrors ? '#c62828' : '#e65100' }}>
+            {hasCriticalErrors ? '🚨 Data Integrity Issues Detected' : '⚠ Data Quality Warnings'}
+          </h3>
+          <p style={{ marginBottom: '12px' }}>
+            {hasCriticalErrors 
+              ? 'Critical issues must be resolved before proceeding. Please go back and retrieve data again.' 
+              : 'Some data fields are missing or incomplete. You may proceed with caution.'}
+          </p>
+          <ul style={{ marginBottom: '16px' }}>
+            {dataHealthIssues.map((issue, idx) => (
+              <li key={idx} style={{ 
+                color: issue.type === 'error' ? '#c62828' : '#e65100',
+                marginBottom: '6px'
+              }}>
+                <strong>{issue.field}:</strong> {issue.message}
+              </li>
+            ))}
+          </ul>
+          {hasCriticalErrors && onBackToRequirements && (
+            <button onClick={onBackToRequirements} className="btn-primary">
+              Go Back to Fix Issues →
+            </button>
+          )}
         </div>
       )}
       
