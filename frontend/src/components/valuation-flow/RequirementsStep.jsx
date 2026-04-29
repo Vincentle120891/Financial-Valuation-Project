@@ -422,7 +422,7 @@ const RequirementsStep = ({
               className="btn-secondary"
               disabled={loading}
             >
-              {loading ? 'Refreshing...' : '↻ Refresh Data'}
+              {loading ? 'Fetching...' : '↻ Fetch'}
             </button>
             <button 
               onClick={onShowInputs} 
