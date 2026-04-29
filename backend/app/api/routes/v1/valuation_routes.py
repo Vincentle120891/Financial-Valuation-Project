@@ -165,6 +165,7 @@ def fetch_financial_data(ticker_symbol: str, market: str) -> Dict:
                 "total_assets": sanitize_dict(balance_sheet.loc['Total Assets'].to_dict() if 'Total Assets' in balance_sheet.index else {}),
                 "total_debt": sanitize_dict(balance_sheet.loc['Total Debt'].to_dict() if 'Total Debt' in balance_sheet.index else {}),
                 "free_cash_flow": sanitize_dict(cashflow.loc['Free Cash Flow'].to_dict() if 'Free Cash Flow' in cashflow.index else {}),
+                "years": [str(year) for year in revenue_years]
             },
             "historical_financials": historical_financials,
             "raw_info": info
@@ -467,8 +468,26 @@ def run_valuation_engine(session_data: Dict) -> Dict:
             info = profile.get('raw_info', {})
             market_cap = info.get('marketCap', 1000000000) or 1000000000
             enterprise_value = market_cap + (info.get('totalDebt', 0) or 0) - (info.get('cash', 0) or 0)
-            revenue_ltm = list(financials.get('revenue', {}).values())[0] if financials.get('revenue') else 100000000
-            ebitda_ltm = list(financials.get('ebitda', {}).values())[0] if financials.get('ebitda') else revenue_ltm * 0.2
+            
+            # Get the actual historical years from financial data
+            years = financials.get('years', [])
+            if len(years) >= 3:
+                # Use the 3 most recent years for LTM and forward estimates
+                revenue_dict = financials.get('revenue', {})
+                ebitda_dict = financials.get('ebitda', {})
+                
+                revenue_ltm = revenue_dict.get(years[0], 100000000) if years else 100000000
+                ebitda_ltm = ebitda_dict.get(years[0], revenue_ltm * 0.2) if years else revenue_ltm * 0.2
+                
+                # Calculate forward estimates based on historical growth
+                if len(years) >= 2:
+                    growth_rate = (revenue_dict.get(years[0], 0) / revenue_dict.get(years[1], 1)) - 1 if revenue_dict.get(years[1], 0) > 0 else 0.05
+                else:
+                    growth_rate = 0.05
+            else:
+                revenue_ltm = list(financials.get('revenue', {}).values())[0] if financials.get('revenue') else 100000000
+                ebitda_ltm = list(financials.get('ebitda', {}).values())[0] if financials.get('ebitda') else revenue_ltm * 0.2
+                growth_rate = 0.05
             
             target = TargetCompanyData(
                 ticker=ticker,
@@ -503,18 +522,17 @@ def run_valuation_engine(session_data: Dict) -> Dict:
                     company_name=f"{name} Corp",
                     market_cap=market_cap * variation,
                     enterprise_value=enterprise_value * variation,
-                    revenue_ltm=revenue_ltm * variation,
                     ebitda_ltm=ebitda_ltm * variation,
-                    ebit_ltm=ebitda_ltm * 0.75 * variation,
-                    net_income_ltm=revenue_ltm * 0.1 * variation,
-                    free_cash_flow_ltm=ebitda_ltm * 0.7 * variation,
-                    book_equity=market_cap * 0.4 * variation,
+                    ebitda_fy2023=ebitda_ltm * (1 + growth_rate) * variation,
+                    ebitda_fy2024=ebitda_ltm * (1 + growth_rate) ** 2 * variation,
+                    eps_ltm=(revenue_ltm * 0.1 * variation) / 1000000,
+                    eps_fy2023=(revenue_ltm * 0.1 * (1 + growth_rate) * variation) / 1000000,
+                    eps_fy2024=(revenue_ltm * 0.1 * (1 + growth_rate) ** 2 * variation) / 1000000,
+                    share_price=100 * variation,
                     shares_outstanding=1000000 * variation,
-                    current_stock_price=100 * variation,
                     industry=industry,
                     sector=sector,
-                    selection_reason=f"Same {sector} sector",
-                    similarity_score=0.9 - (i * 0.05)
+                    selection_reason=f"Same {sector} sector"
                 ))
             
             analyzer = TradingCompsAnalyzer(target, peers)
@@ -760,18 +778,17 @@ async def fetch_data(request: SessionFetchRequest):
                     company_name=f"{name} Corp",
                     market_cap=market_cap * variation,
                     enterprise_value=enterprise_value * variation,
-                    revenue_ltm=revenue_ltm * variation,
                     ebitda_ltm=ebitda_ltm * variation,
-                    ebit_ltm=ebitda_ltm * 0.75 * variation,
-                    net_income_ltm=revenue_ltm * 0.1 * variation,
-                    free_cash_flow_ltm=ebitda_ltm * 0.7 * variation,
-                    book_equity=market_cap * 0.4 * variation,
+                    ebitda_fy2023=ebitda_ltm * 1.05 * variation,
+                    ebitda_fy2024=ebitda_ltm * 1.10 * variation,
+                    eps_ltm=(revenue_ltm * 0.1 * variation) / 1000000,
+                    eps_fy2023=(revenue_ltm * 0.105 * variation) / 1000000,
+                    eps_fy2024=(revenue_ltm * 0.110 * variation) / 1000000,
+                    share_price=100 * variation,
                     shares_outstanding=1000000 * variation,
-                    current_stock_price=100 * variation,
                     industry=industry,
                     sector=sector,
-                    selection_reason=f"Same {sector} sector",
-                    similarity_score=0.9 - (i * 0.05)
+                    selection_reason=f"Same {sector} sector"
                 ))
 
             analyzer = TradingCompsAnalyzer(target, peers)
