@@ -53,6 +53,7 @@ const ValuationFlow = () => {
   const [compsResults, setCompsResults] = useState(null);
   const [dcfInputs, setDcfInputs] = useState(null);
   const [aiData, setAiData] = useState({});
+  const [aiError, setAiError] = useState(null);
 
   // ==================== STEP 1: SEARCH COMPANY ====================
   const handleSearch = useCallback(async () => {
@@ -174,6 +175,7 @@ const ValuationFlow = () => {
   const handleRetrieveData = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setAiError(null);
     try {
       // Fetch financial data first
       let fetchDataResponse = null;
@@ -192,10 +194,9 @@ const ValuationFlow = () => {
         console.log('AI response:', aiDataResponse);
       } catch (aiErr) {
         console.error('Generate AI error:', aiErr);
-        // Don't block - AI suggestions are optional for viewing inputs
-        if (!error) {
-          setError('Financial data loaded, but AI suggestions could not be generated.');
-        }
+        // Store detailed AI error for display
+        const aiErrorMessage = aiErr.message || 'Unknown error occurred';
+        setAiError(`AI suggestions could not be generated. Reason: ${aiErrorMessage}. You can still proceed with manual inputs.`);
       }
       
       // Set AI data if available
@@ -227,7 +228,7 @@ const ValuationFlow = () => {
         }
       }
       
-      // Clear error if we got at least some data
+      // Clear general error if we got at least some data
       if ((fetchDataResponse?.data || aiDataResponse?.suggestions) && error) {
         setError(null);
       }
@@ -373,6 +374,7 @@ const ValuationFlow = () => {
             dupontResults={dupontResults}
             compsResults={compsResults}
             aiData={aiData}
+            aiError={aiError}
             requiredFields={requiredFields}
             onShowInputs={handleShowInputs}
           />
@@ -383,6 +385,7 @@ const ValuationFlow = () => {
             historicalData={historicalData}
             peerData={peerData}
             aiData={aiData}
+            aiError={aiError}
             confirmedValues={confirmedValues}
             selectedModel={selectedModel}
             onManualInput={handleManualInput}
@@ -399,6 +402,7 @@ const ValuationFlow = () => {
             historicalData={historicalData}
             peerData={peerData}
             aiData={aiData}
+            aiError={aiError}
             confirmedValues={confirmedValues}
             selectedModel={selectedModel}
             onManualInput={handleManualInput}

@@ -25,6 +25,7 @@ const AssumptionsStep = ({
   historicalData,
   peerData,
   aiData,
+  aiError,
   confirmedValues,
   selectedModel,
   onManualInput,
@@ -189,6 +190,28 @@ const AssumptionsStep = ({
           {onBackToRequirements && (
             <button onClick={onBackToRequirements} className="btn-primary" style={{ marginTop: '16px' }}>
               Go to Step 5 →
+            </button>
+          )}
+        </div>
+      )}
+      
+      {/* AI Error Display - Show when financial data exists but AI failed */}
+      {hasAnyData && aiError && (
+        <div className="summary-box" style={{ background: 'linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%)', border: '2px solid #ff9800' }}>
+          <h3 style={{ color: '#e65100' }}>⚠️ AI Suggestions Unavailable</h3>
+          <p style={{ marginBottom: '12px', color: '#e65100' }}>{aiError}</p>
+          <div style={{ background: 'white', padding: '16px', borderRadius: '6px', marginTop: '12px' }}>
+            <h4 style={{ color: '#1565c0', marginBottom: '8px' }}>📋 Next Steps:</h4>
+            <ol style={{ color: '#333', lineHeight: '1.8', marginLeft: '20px' }}>
+              <li><strong>Review Retrieved Data:</strong> Scroll down to view the historical financials and peer data that were successfully loaded.</li>
+              <li><strong>Manual Input:</strong> Use the input fields below to manually enter your assumptions for WACC, Terminal Growth, and other forecast parameters.</li>
+              <li><strong>Use Historical Trends:</strong> Refer to the historical charts and peer benchmarks shown below to inform your manual inputs.</li>
+              <li><strong>Retry AI (Optional):</strong> Go back to Step 5 and click "Refresh Data" to attempt AI generation again.</li>
+            </ol>
+          </div>
+          {!showReviewOnly && onBackToRequirements && (
+            <button onClick={onBackToRequirements} className="btn-secondary" style={{ marginTop: '16px' }}>
+              ← Back to Step 5 to Refresh Data
             </button>
           )}
         </div>
