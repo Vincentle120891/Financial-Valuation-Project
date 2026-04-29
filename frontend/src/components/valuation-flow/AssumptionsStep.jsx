@@ -195,9 +195,14 @@ const AssumptionsStep = ({
                 <>
                   <tr>
                     <td>WACC</td>
-                    <td>{aiData.wacc ? (aiData.wacc * 100).toFixed(2) + '%' : 'N/A'}</td>
+                    <td>{aiData.wacc_percent ? (aiData.wacc_percent.value / 100).toFixed(2) + '%' : aiData.wacc ? (aiData.wacc * 100).toFixed(2) + '%' : 'N/A'}</td>
                     <td className="rationale-cell">
-                      {aiData.wacc_rationale ? (
+                      {aiData.wacc_percent?.rationale ? (
+                        <div className="rationale-content">
+                          <p><strong>Why:</strong> {aiData.wacc_percent.rationale}</p>
+                          <p><strong>Sources:</strong> {aiData.wacc_percent.sources || 'CAPM Formula'}</p>
+                        </div>
+                      ) : aiData.wacc_rationale ? (
                         <div className="rationale-content">
                           <p><strong>Why:</strong> {aiData.wacc_rationale}</p>
                           <p><strong>Sources:</strong> {aiData.wacc_sources || 'CAPM Formula'}</p>
@@ -215,7 +220,7 @@ const AssumptionsStep = ({
                     </td>
                     <td>
                       {!confirmedValues.wacc ? (
-                        <button onClick={() => onUseAI('wacc', aiData.wacc)} className="btn-small">Use AI</button>
+                        <button onClick={() => onUseAI('wacc', aiData.wacc_percent ? aiData.wacc_percent.value / 100 : aiData.wacc)} className="btn-small">Use AI</button>
                       ) : (
                         <span className="positive">✓ Confirmed</span>
                       )}
@@ -223,9 +228,14 @@ const AssumptionsStep = ({
                   </tr>
                   <tr>
                     <td>Terminal Growth Rate</td>
-                    <td>{aiData.terminal_growth ? (aiData.terminal_growth * 100).toFixed(2) + '%' : 'N/A'}</td>
+                    <td>{aiData.terminal_growth_rate_percent ? (aiData.terminal_growth_rate_percent.value / 100).toFixed(2) + '%' : aiData.terminal_growth ? (aiData.terminal_growth * 100).toFixed(2) + '%' : 'N/A'}</td>
                     <td className="rationale-cell">
-                      {aiData.terminal_growth_rationale ? (
+                      {aiData.terminal_growth_rate_percent?.rationale ? (
+                        <div className="rationale-content">
+                          <p><strong>Why:</strong> {aiData.terminal_growth_rate_percent.rationale}</p>
+                          <p><strong>Sources:</strong> {aiData.terminal_growth_rate_percent.sources || 'Historical GDP'}</p>
+                        </div>
+                      ) : aiData.terminal_growth_rationale ? (
                         <div className="rationale-content">
                           <p><strong>Why:</strong> {aiData.terminal_growth_rationale}</p>
                           <p><strong>Sources:</strong> {aiData.terminal_growth_sources || 'Historical GDP'}</p>
@@ -243,7 +253,7 @@ const AssumptionsStep = ({
                     </td>
                     <td>
                       {!confirmedValues.terminal_growth ? (
-                        <button onClick={() => onUseAI('terminal_growth', aiData.terminal_growth)} className="btn-small">Use AI</button>
+                        <button onClick={() => onUseAI('terminal_growth', aiData.terminal_growth_rate_percent ? aiData.terminal_growth_rate_percent.value / 100 : aiData.terminal_growth)} className="btn-small">Use AI</button>
                       ) : (
                         <span className="positive">✓ Confirmed</span>
                       )}
@@ -253,7 +263,9 @@ const AssumptionsStep = ({
                     <td>Revenue Growth Forecast</td>
                     <td>
                       {aiData.revenue_growth_forecast 
-                        ? aiData.revenue_growth_forecast.map(g => (g * 100).toFixed(1) + '%').join(', ') 
+                        ? (Array.isArray(aiData.revenue_growth_forecast) 
+                            ? aiData.revenue_growth_forecast.map(g => typeof g === 'object' ? (g.value / 100).toFixed(1) + '%' : (g * 100).toFixed(1) + '%').join(', ')
+                            : 'N/A')
                         : 'N/A'}
                     </td>
                     <td className="rationale-cell">
@@ -261,6 +273,11 @@ const AssumptionsStep = ({
                         <div className="rationale-content">
                           <p><strong>Why:</strong> {aiData.revenue_growth_rationale}</p>
                           <p><strong>Sources:</strong> {aiData.revenue_growth_sources || 'Historical Trend'}</p>
+                        </div>
+                      ) : aiData.revenue_growth_forecast?.[0]?.rationale ? (
+                        <div className="rationale-content">
+                          <p><strong>Why:</strong> {aiData.revenue_growth_forecast[0].rationale}</p>
+                          <p><strong>Sources:</strong> {aiData.revenue_growth_forecast[0].sources || 'Historical Trend'}</p>
                         </div>
                       ) : 'AI explanation will appear here'}
                     </td>
@@ -274,7 +291,7 @@ const AssumptionsStep = ({
                     </td>
                     <td>
                       {!confirmedValues.revenue_growth_forecast ? (
-                        <button onClick={() => onUseAI('revenue_growth_forecast', aiData.revenue_growth_forecast)} className="btn-small">Use AI</button>
+                        <button onClick={() => onUseAI('revenue_growth_forecast', aiData.revenue_growth_forecast?.map(g => typeof g === 'object' ? g.value / 100 : g))} className="btn-small">Use AI</button>
                       ) : (
                         <span className="positive">✓ Confirmed</span>
                       )}
