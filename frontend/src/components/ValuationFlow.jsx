@@ -1,4 +1,4 @@
---- frontend/src/components/ValuationFlow.jsx (原始)
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { searchCompanies, selectCompany, selectModels, prepareInputs, fetchData, generateAI, confirmAssumptions, runValuation } from '../services/api';
 import SearchStep from './valuation-flow/SearchStep';
