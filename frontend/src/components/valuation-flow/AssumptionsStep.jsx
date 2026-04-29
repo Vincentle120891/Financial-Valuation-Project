@@ -96,7 +96,7 @@ const AssumptionsStep = ({
       <h2>{showReviewOnly ? 'Step 6: View Retrieved Inputs' : 'Step 8: Review & Confirm Assumptions'}</h2>
       
       {/* Show message if no data available */}
-      {!historicalData && (!peerData || Object.keys(peerData).length === 0) && (!aiData || Object.keys(aiData).length === 0) && (
+      {!historicalData && (!peerData || peerData.length === 0) && (!aiData || Object.keys(aiData).length === 0) && (
         <div className="summary-box" style={{ background: 'linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%)' }}>
           <h3 style={{ color: '#e65100' }}>⚠ No Data Available</h3>
           <p>Please go back to Step 5 and click "Retrieve Data" first to load the input values.</p>

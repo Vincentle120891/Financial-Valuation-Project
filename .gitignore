@@ -1,1 +1,1 @@
-Nothing should be ignored since the changes only include source code files (.py and .jsx) without any build artifacts, dependencies, or temporary files.
+(frontend/src/components/valuation-flow/AssumptionsStep.jsx is a source code file, and there are no build artifacts, dependencies, or temporary files in the changes)
