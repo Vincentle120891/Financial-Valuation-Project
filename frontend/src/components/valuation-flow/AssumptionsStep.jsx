@@ -96,7 +96,7 @@ const AssumptionsStep = ({
       <h2>{showReviewOnly ? 'Step 6: View Retrieved Inputs' : 'Step 8: Review & Confirm Assumptions'}</h2>
       
       {/* Show message if no data available */}
-      {!historicalData && !peerData?.length && (!aiData || Object.keys(aiData).length === 0) && (
+      {!historicalData && (!peerData || Object.keys(peerData).length === 0) && (!aiData || Object.keys(aiData).length === 0) && (
         <div className="summary-box" style={{ background: 'linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%)' }}>
           <h3 style={{ color: '#e65100' }}>⚠ No Data Available</h3>
           <p>Please go back to Step 5 and click "Retrieve Data" first to load the input values.</p>
@@ -150,10 +150,10 @@ const AssumptionsStep = ({
       )}
       
       {/* Peer Benchmarking */}
-      {peerData && peerData.length > 0 && (
+      {peerData && Object.keys(peerData).length > 0 && (
         <div className="summary-box">
           <h3>Peer Benchmarking</h3>
-          <p><strong>Peers Analyzed:</strong> {peerData.length} companies</p>
+          <p><strong>Peers Analyzed:</strong> {Array.isArray(peerData) ? peerData.length : 'N/A'} companies</p>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginTop: '12px' }}>
             <div>
               <strong>Median EV/EBITDA:</strong>
