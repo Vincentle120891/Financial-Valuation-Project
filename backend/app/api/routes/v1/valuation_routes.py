@@ -102,6 +102,51 @@ def fetch_financial_data(ticker_symbol: str, market: str) -> Dict:
         balance_sheet = ticker.balance_sheet
         cashflow = ticker.cashflow
         
+        # Calculate historical metrics
+        revenue_years = list(income_stmt.columns) if income_stmt is not None and not income_stmt.empty else []
+        revenue_values = [sanitize_value(income_stmt.loc['Total Revenue', year]) for year in revenue_years] if 'Total Revenue' in income_stmt.index else []
+        ebitda_values = [sanitize_value(income_stmt.loc['EBITDA', year]) for year in revenue_years] if 'EBITDA' in income_stmt.index else []
+        
+        # Calculate CAGR and averages
+        revenue_cagr = None
+        avg_ebitda_margin = None
+        avg_roe = None
+        
+        if len(revenue_values) >= 3 and revenue_values[0] and revenue_values[-1]:
+            n_years = len(revenue_values) - 1
+            revenue_cagr = (revenue_values[0] / revenue_values[-1]) ** (1/n_years) - 1
+        
+        ebitda_margins = []
+        net_incomes = []
+        total_assets_list = []
+        for year in revenue_years:
+            rev = sanitize_value(income_stmt.loc['Total Revenue', year]) if 'Total Revenue' in income_stmt.index else None
+            ebit = sanitize_value(income_stmt.loc['EBITDA', year]) if 'EBITDA' in income_stmt.index else None
+            net = sanitize_value(income_stmt.loc['Net Income', year]) if 'Net Income' in income_stmt.index else None
+            assets = sanitize_value(balance_sheet.loc['Total Assets', year]) if 'Total Assets' in balance_sheet.index else None
+            
+            if rev and ebit:
+                ebitda_margins.append(ebit / rev)
+            if rev and net:
+                net_incomes.append(net)
+            if assets and net:
+                total_assets_list.append(assets)
+        
+        if ebitda_margins:
+            avg_ebitda_margin = sum(ebitda_margins) / len(ebitda_margins)
+        
+        if net_incomes and total_assets_list:
+            avg_roe = sum([n/a for n,a in zip(net_incomes, total_assets_list)]) / len(net_incomes)
+        
+        # Build historical financials object
+        historical_financials = {
+            "revenue": {str(year): sanitize_value(income_stmt.loc['Total Revenue', year]) for year in revenue_years} if 'Total Revenue' in income_stmt.index else {},
+            "ebitda": {str(year): sanitize_value(income_stmt.loc['EBITDA', year]) for year in revenue_years} if 'EBITDA' in income_stmt.index else {},
+            "revenue_cagr": revenue_cagr,
+            "avg_ebitda_margin": avg_ebitda_margin,
+            "avg_roe": avg_roe
+        }
+        
         data = {
             "profile": {
                 "symbol": ticker_symbol,
@@ -121,6 +166,7 @@ def fetch_financial_data(ticker_symbol: str, market: str) -> Dict:
                 "total_debt": sanitize_dict(balance_sheet.loc['Total Debt'].to_dict() if 'Total Debt' in balance_sheet.index else {}),
                 "free_cash_flow": sanitize_dict(cashflow.loc['Free Cash Flow'].to_dict() if 'Free Cash Flow' in cashflow.index else {}),
             },
+            "historical_financials": historical_financials,
             "raw_info": info
         }
         
