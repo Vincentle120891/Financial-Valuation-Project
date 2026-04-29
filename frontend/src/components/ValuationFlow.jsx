@@ -266,13 +266,17 @@ const ValuationFlow = () => {
         setValuationResults(data.result);
 
         if (data.result.dcf_outputs) {
-          // DCF results
+          // DCF results - already included in data.result
         }
         if (data.result.dupont_outputs) {
           setDupontResults(data.result.dupont_outputs);
+          // Also update valuationResults to include dupont_outputs for ResultsStep
+          setValuationResults(prev => ({ ...prev, dupont_outputs: data.result.dupont_outputs }));
         }
         if (data.result.comps_outputs) {
           setCompsResults(data.result.comps_outputs);
+          // Also update valuationResults to include comps_outputs for ResultsStep
+          setValuationResults(prev => ({ ...prev, comps_outputs: data.result.comps_outputs }));
         }
 
         setCurrentStep(10);
