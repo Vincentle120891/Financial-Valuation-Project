@@ -7,14 +7,18 @@ import {
 
 /**
  * AssumptionsStep Component
- * Step 8: Review & Confirm Assumptions
+ * Steps 6 & 8: View Retrieved Inputs / Review & Confirm Assumptions
  * 
  * Features:
  * - Historical trends visualization
  * - Peer benchmarking summary
  * - AI suggestions with rationale
- * - Manual input override
+ * - Manual input override (Step 8 only)
  * - Interactive charts (Revenue, EBITDA, Growth)
+ * 
+ * Props:
+ * - showReviewOnly: boolean (default: false) - If true, shows read-only view for Step 6
+ * - onContinueToConfirm: function - Callback to navigate from Step 6 to Step 8
  */
 const AssumptionsStep = ({
   historicalData,
@@ -25,7 +29,9 @@ const AssumptionsStep = ({
   onManualInput,
   onUseAI,
   onConfirmAssumptions,
-  loading
+  loading,
+  showReviewOnly = false,
+  onContinueToConfirm
 }) => {
   // Prepare historical chart data
   const prepareHistoricalChartData = () => {
@@ -87,7 +93,7 @@ const AssumptionsStep = ({
 
   return (
     <div className="step-container">
-      <h2>Step 8: Review & Confirm Assumptions</h2>
+      <h2>{showReviewOnly ? 'Step 6: View Retrieved Inputs' : 'Step 8: Review & Confirm Assumptions'}</h2>
       
       {/* Benchmark Summary */}
       {historicalData && (
@@ -272,13 +278,22 @@ const AssumptionsStep = ({
           </table>
           
           <div style={{ marginTop: '20px' }}>
-            <button 
-              onClick={onConfirmAssumptions} 
-              disabled={loading} 
-              className="btn-primary btn-large"
-            >
-              Confirm Assumptions & Proceed
-            </button>
+            {showReviewOnly ? (
+              <button 
+                onClick={onContinueToConfirm} 
+                className="btn-primary btn-large"
+              >
+                Continue to Confirm Assumptions →
+              </button>
+            ) : (
+              <button 
+                onClick={onConfirmAssumptions} 
+                disabled={loading} 
+                className="btn-primary btn-large"
+              >
+                Confirm Assumptions & Proceed
+              </button>
+            )}
           </div>
         </div>
       )}

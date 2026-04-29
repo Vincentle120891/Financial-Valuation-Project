@@ -136,6 +136,11 @@ const ValuationFlow = () => {
     setError(null);
   };
 
+  // ==================== SHOW INPUTS (STEP 6) ====================
+  const handleShowInputs = useCallback(() => {
+    setCurrentStep(6);
+  }, []);
+
   // ==================== CONTINUE TO ASSUMPTIONS (STEP 8) ====================
   const handleContinueToAssumptions = useCallback(() => {
     setCurrentStep(8);
@@ -338,7 +343,22 @@ const ValuationFlow = () => {
             compsResults={compsResults}
             aiData={aiData}
             requiredFields={requiredFields}
-            onContinueToAssumptions={handleContinueToAssumptions}
+            onShowInputs={handleShowInputs}
+          />
+        );
+      case 6:
+        return (
+          <AssumptionsStep
+            historicalData={historicalData}
+            peerData={peerData}
+            aiData={aiData}
+            confirmedValues={confirmedValues}
+            selectedModel={selectedModel}
+            onManualInput={handleManualInput}
+            onUseAI={handleUseAI}
+            showReviewOnly={true}
+            onContinueToConfirm={handleContinueToAssumptions}
+            loading={loading}
           />
         );
       case 8:
@@ -403,6 +423,7 @@ const ValuationFlow = () => {
             currentStep === 1 ? 'Search Company' :
             currentStep === 4 ? 'Select Model' :
             currentStep === 5 ? 'Review Requirements' :
+            currentStep === 6 ? 'View Retrieved Inputs' :
             currentStep === 8 ? 'Confirm Assumptions' :
             currentStep === 9 ? 'Run Valuation' :
             currentStep === 10 ? 'View Results' : 'In Progress'

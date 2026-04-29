@@ -23,7 +23,7 @@ const RequirementsStep = ({
   dupontResults,
   compsResults,
   aiData,
-  onContinueToAssumptions,
+  onShowInputs,
   requiredFields = []
 }) => {
   // Group required fields by category
@@ -395,10 +395,10 @@ const RequirementsStep = ({
               {loading ? 'Refreshing...' : '↻ Refresh Data'}
             </button>
             <button 
-              onClick={onContinueToAssumptions} 
+              onClick={onShowInputs} 
               className="btn-primary"
             >
-              Review Assumptions →
+              View Retrieved Inputs →
             </button>
           </>
         )}
