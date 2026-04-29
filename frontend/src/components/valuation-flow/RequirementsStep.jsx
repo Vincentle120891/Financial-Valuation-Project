@@ -102,7 +102,7 @@ const RequirementsStep = ({
   };
 
   // Check if data has been retrieved
-  const hasRetrievedData = historicalData || peerData || dcfInputs || dupontResults || compsResults;
+  const hasRetrievedData = historicalData || peerData || dcfInputs || dupontResults || compsResults || (aiData && Object.keys(aiData).length > 0);
 
   // Render retrieved data summary
   const renderRetrievedData = () => {
