@@ -845,12 +845,22 @@ async def generate_ai(request: Request):
     session['ai_suggestions'] = ai_results
     session['status'] = "ai_generated"
     
+    # Extract AI status metadata for frontend
+    ai_metadata = ai_results.get('_ai_status', {})
+    
     logger.info(f"AI assumptions generated for session='{session_id}'")
     
     return AIAssumptionsResponse(
         status="ai_ready",
         suggestions=ai_results,
-        message="AI analysis complete. Please review assumptions."
+        message="AI analysis complete. Please review assumptions.",
+        _metadata={
+            "ai_success": ai_metadata.get("success", False),
+            "provider_used": ai_metadata.get("provider_used"),
+            "fallback_reason": ai_metadata.get("fallback_reason"),
+            "provider_errors": ai_metadata.get("errors", {}),
+            "used_fallback": ai_metadata.get("provider_used") is None
+        }
     )
 
 

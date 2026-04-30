@@ -112,43 +112,61 @@ const ForecastDriversStep = ({
   // Generate array of years for forecast (5-10 years)
   const forecastYears = Array.from({ length: 5 }, (_, i) => `Year ${i + 1}`);
 
-  // Render forecast driver input row
+  // Render forecast driver input row with AI suggestions
   const renderForecastDriverRow = (scenario, field, label, step = 0.01, isPercentage = true) => {
     const values = localForecastDrivers[scenario]?.[field] || [];
     
     return (
       <div key={`${scenario}_${field}`} className="driver-row" style={{ marginBottom: '16px', padding: '12px', background: '#f9f9f9', borderRadius: '6px' }}>
-        <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '8px', color: '#333' }}>
-          {label} {isPercentage && '(%)'}
-        </label>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+          <label style={{ fontWeight: 'bold', color: '#333' }}>
+            {label} {isPercentage && '(%)'}
+          </label>
+        </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '8px' }}>
-          {forecastYears.map((year, idx) => (
-            <div key={idx}>
-              <label style={{ fontSize: '12px', color: '#666', display: 'block', marginBottom: '4px' }}>{year}</label>
-              <input
-                type="number"
-                step={step}
-                value={values[idx] !== undefined ? (isPercentage ? (values[idx] * 100).toFixed(2) : values[idx].toFixed(2)) : ''}
-                onChange={(e) => handleForecastDriverChange(scenario, field, idx, isPercentage ? parseFloat(e.target.value) / 100 : parseFloat(e.target.value))}
-                disabled={!editMode.forecastDrivers}
-                style={{
-                  width: '100%',
-                  padding: '6px',
-                  border: '1px solid #ddd',
-                  borderRadius: '4px',
-                  fontSize: '13px'
-                }}
-              />
-            </div>
-          ))}
+          {forecastYears.map((year, idx) => {
+            const aiSuggestion = values[idx];
+            const displayValue = aiSuggestion !== undefined ? (isPercentage ? (aiSuggestion * 100).toFixed(2) : aiSuggestion.toFixed(2)) : '';
+            
+            return (
+              <div key={idx}>
+                <label style={{ fontSize: '12px', color: '#666', display: 'block', marginBottom: '4px' }}>{year}</label>
+                <input
+                  type="number"
+                  step={step}
+                  value={displayValue}
+                  onChange={(e) => handleForecastDriverChange(scenario, field, idx, isPercentage ? parseFloat(e.target.value) / 100 : parseFloat(e.target.value))}
+                  disabled={!editMode.forecastDrivers}
+                  style={{
+                    width: '100%',
+                    padding: '6px',
+                    border: '1px solid #ddd',
+                    borderRadius: '4px',
+                    fontSize: '13px'
+                  }}
+                />
+                {aiSuggestion?.rationale && (
+                  <div style={{ fontSize: '10px', color: '#667eea', marginTop: '4px', fontStyle: 'italic' }}>
+                    💡 {aiSuggestion.rationale}
+                  </div>
+                )}
+                {aiSuggestion?.sources && (
+                  <div style={{ fontSize: '9px', color: '#999', marginTop: '2px' }}>
+                    Source: {aiSuggestion.sources}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
     );
   };
 
-  // Render DCF input field
+  // Render DCF input field with AI suggestions
   const renderDcfInputField = (field, label, step = 0.001, isPercentage = true, min = 0, max = 1) => {
-    const value = localDcfInputs[field];
+    const valueObj = localDcfInputs[field];
+    const value = typeof valueObj === 'object' && valueObj !== null ? valueObj.value : valueObj;
     const displayValue = isPercentage ? (value * 100).toFixed(2) : value.toFixed(2);
     
     return (
@@ -172,6 +190,16 @@ const ForecastDriversStep = ({
             fontSize: '14px'
           }}
         />
+        {typeof valueObj === 'object' && valueObj !== null && valueObj.rationale && (
+          <div style={{ fontSize: '11px', color: '#667eea', marginTop: '6px', fontStyle: 'italic' }}>
+            💡 {valueObj.rationale}
+          </div>
+        )}
+        {typeof valueObj === 'object' && valueObj !== null && valueObj.sources && (
+          <div style={{ fontSize: '10px', color: '#999', marginTop: '3px' }}>
+            Source: {valueObj.sources}
+          </div>
+        )}
       </div>
     );
   };
