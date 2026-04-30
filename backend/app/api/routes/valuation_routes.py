@@ -193,13 +193,22 @@ async def generate_ai_assumptions(data: Dict, model: str) -> Dict:
     
     formatted_results = {"model": model.upper()}
     
-    # Add metadata about AI generation
+    # Extract AI status information for better error reporting
+    ai_status = ai_results.pop("_ai_status", None)
+    
+    # Add metadata about AI generation with detailed error info
     formatted_results["_metadata"] = {
         "provider_status": provider_status,
         "available_providers": available_providers,
-        "used_fallback": len(ai_results.get("wacc_percent", {}).get("sources", "").split(":")[0].strip() if isinstance(ai_results.get("wacc_percent", {}).get("sources"), str) else "") == 0 or 
-                         "Fallback" in ai_results.get("wacc_percent", {}).get("rationale", "") or
-                         "CAPM (Fallback" in ai_results.get("wacc_percent", {}).get("rationale", "")
+        "used_fallback": ai_status.get("success", False) is False if ai_status else (
+            len(ai_results.get("wacc_percent", {}).get("sources", "").split(":")[0].strip() if isinstance(ai_results.get("wacc_percent", {}).get("sources"), str) else "") == 0 or 
+            "Fallback" in ai_results.get("wacc_percent", {}).get("rationale", "") or
+            "CAPM (Fallback" in ai_results.get("wacc_percent", {}).get("rationale", "")
+        ),
+        "ai_success": ai_status.get("success") if ai_status else None,
+        "provider_used": ai_status.get("provider_used") if ai_status else None,
+        "provider_errors": ai_status.get("errors", {}) if ai_status else {},
+        "fallback_reason": ai_status.get("fallback_reason") if ai_status and not ai_status.get("success") else None
     }
     
     for key, item in ai_results.items():
