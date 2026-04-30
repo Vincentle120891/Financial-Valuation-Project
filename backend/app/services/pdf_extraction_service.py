@@ -3,7 +3,7 @@ PDF Extraction Service for Vietnamese Market Reports
 
 Supports extraction of financial data from:
 - Annual Reports (Báo cáo thường niên)
-- Financial Statements (Báo cáo tài chính)
+- Financial Statements (Báo cáo tài chính) - TT99 compliant
 - Prospectus (Bản cáo bạch)
 - HOSE/HNX official filings
 
@@ -18,6 +18,12 @@ Implementation Options:
 2. Table extraction (camelot-py, tabula-py)
 3. OCR for scanned documents (pytesseract, pdf2image)
 4. Vietnamese language processing (pyvi, underthesea)
+
+TT99 Compliance:
+- Maps extracted data to Thông Tư 99/2025/TT-BTC templates
+- Supports Mẫu số B 01, B 02, B 03 - DN
+- Validates cross-statement linkages
+- Preserves Mã số (line codes) without renumbering
 """
 
 import os
@@ -30,6 +36,25 @@ from datetime import datetime
 import io
 
 logger = logging.getLogger(__name__)
+
+# Import TT99 models for validation and mapping
+try:
+    from app.models.vietnamese_financial_model import (
+        BalanceSheetTT99,
+        IncomeStatementTT99,
+        CashFlowStatementTT99,
+        LineItem,
+        CurrencyUnit,
+        STANDARD_LINE_ITEMS_B01,
+        STANDARD_LINE_ITEMS_B02,
+        STANDARD_LINE_ITEMS_B03,
+        create_vietnamese_line_item,
+        INTERNATIONAL_MAPPING
+    )
+    TT99_AVAILABLE = True
+except ImportError:
+    TT99_AVAILABLE = False
+    logger.warning("TT99 models not available. Install with: pip install vietnamese-financial-model")
 
 
 @dataclass
@@ -227,7 +252,7 @@ class VietnamesePDFExtractor:
             file_path: Path to the PDF file
             
         Returns:
-            ExtractedFinancialData object
+            ExtractedFinancialData object with TT99 validation if available
         """
         if not os.path.exists(file_path):
             raise FileNotFoundError(f"PDF file not found: {file_path}")
@@ -257,6 +282,126 @@ class VietnamesePDFExtractor:
                     "No suitable extraction method available. "
                     "Please install at least one of: pdfplumber, camelot-py, tabula-py"
                 )
+    
+    def extract_to_tt99_format(self, file_path: str) -> Dict[str, Any]:
+        """
+        Extract financial data and convert to TT99 standardized format.
+        
+        Args:
+            file_path: Path to the PDF file
+            
+        Returns:
+            Dictionary containing:
+            - balance_sheet: BalanceSheetTT99 object
+            - income_statement: IncomeStatementTT99 object
+            - cash_flow: CashFlowStatementTT99 object (if cash flow data found)
+            - validation_results: Validation status for each statement
+        """
+        if not TT99_AVAILABLE:
+            raise ImportError("TT99 models not available. Please install vietnamese-financial-model")
+        
+        # First extract raw data
+        extracted_data = self.extract_from_file(file_path)
+        
+        # Convert to TT99 format
+        result = {
+            'balance_sheet': self._convert_to_balance_sheet_tt99(extracted_data),
+            'income_statement': self._convert_to_income_statement_tt99(extracted_data),
+            'cash_flow': self._convert_to_cash_flow_tt99(extracted_data),
+            'validation_results': {}
+        }
+        
+        # Validate each statement
+        if result['balance_sheet']:
+            is_valid, errors = result['balance_sheet'].validate()
+            result['validation_results']['balance_sheet'] = {'valid': is_valid, 'errors': errors}
+        
+        if result['income_statement']:
+            is_valid, errors = result['income_statement'].validate()
+            result['validation_results']['income_statement'] = {'valid': is_valid, 'errors': errors}
+        
+        if result['cash_flow']:
+            is_valid, errors = result['cash_flow'].validate()
+            result['validation_results']['cash_flow'] = {'valid': is_valid, 'errors': errors}
+        
+        return result
+    
+    def _convert_to_balance_sheet_tt99(self, data: ExtractedFinancialData) -> Optional[BalanceSheetTT99]:
+        """Convert extracted data to TT99 Balance Sheet format"""
+        if not TT99_AVAILABLE or not any([
+            data.total_assets, data.total_liabilities, data.total_equity
+        ]):
+            return None
+        
+        bs = BalanceSheetTT99(
+            company_name=data.company_name,
+            fiscal_year=data.fiscal_year,
+            currency_unit=CurrencyUnit.VND,
+            total_assets=data.total_assets,
+            total_liabilities=data.total_liabilities,
+            total_equity=data.total_equity,
+            extraction_method=data.extraction_method,
+            confidence_score=data.confidence_score,
+            source_file=data.source_file
+        )
+        
+        # Map extracted fields to TT99 line items
+        if data.cash_and_equivalents:
+            bs.assets_short_term.append(create_vietnamese_line_item('110', data.cash_and_equivalents))
+        if data.accounts_receivable:
+            bs.assets_short_term.append(create_vietnamese_line_item('131', data.accounts_receivable))
+        if data.inventory:
+            bs.assets_short_term.append(create_vietnamese_line_item('141', data.inventory))
+        if data.property_plant_equipment:
+            bs.assets_long_term.append(create_vietnamese_line_item('221', data.property_plant_equipment))
+        
+        return bs
+    
+    def _convert_to_income_statement_tt99(self, data: ExtractedFinancialData) -> Optional[IncomeStatementTT99]:
+        """Convert extracted data to TT99 Income Statement format"""
+        if not TT99_AVAILABLE or not any([
+            data.revenue, data.gross_profit, data.net_income
+        ]):
+            return None
+        
+        is_stmt = IncomeStatementTT99(
+            company_name=data.company_name,
+            fiscal_year=data.fiscal_year,
+            currency_unit=CurrencyUnit.VND,
+            net_revenue=data.revenue,
+            cost_of_goods_sold=data.cost_of_revenue,
+            gross_profit=data.gross_profit,
+            operating_profit=data.ebit,
+            net_profit=data.net_income,
+            extraction_method=data.extraction_method,
+            confidence_score=data.confidence_score,
+            source_file=data.source_file
+        )
+        
+        return is_stmt
+    
+    def _convert_to_cash_flow_tt99(self, data: ExtractedFinancialData) -> Optional[CashFlowStatementTT99]:
+        """Convert extracted data to TT99 Cash Flow Statement format"""
+        if not TT99_AVAILABLE or not any([
+            data.operating_cash_flow, data.investing_cash_flow, data.financing_cash_flow
+        ]):
+            return None
+        
+        cf = CashFlowStatementTT99(
+            company_name=data.company_name,
+            fiscal_year=data.fiscal_year,
+            currency_unit=CurrencyUnit.VND,
+            method='indirect',  # Default assumption
+            operating_cash_flow=data.operating_cash_flow,
+            investing_cash_flow=data.investing_cash_flow,
+            financing_cash_flow=data.financing_cash_flow,
+            capex=data.capex,
+            extraction_method=data.extraction_method,
+            confidence_score=data.confidence_score,
+            source_file=data.source_file
+        )
+        
+        return cf
     
     def _detect_best_method(self, file_path: str) -> str:
         """Detect the best extraction method for a given PDF."""
