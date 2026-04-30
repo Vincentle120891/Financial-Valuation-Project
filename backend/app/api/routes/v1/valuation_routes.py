@@ -502,8 +502,8 @@ def run_valuation_engine(session_data: Dict) -> Dict:
                 free_cash_flow_ltm=ebitda_ltm * 0.7,
                 book_equity=market_cap * 0.4,
                 shares_outstanding=info.get('sharesOutstanding', 1000000) or 1000000,
-                current_stock_price=profile.get('current_price', 100) or 100,
-                currency="VND" if market == "vietnamese" else profile.get('currency', 'USD')
+                share_price=profile.get('current_price', 100) or 100,
+                currency=profile.get('currency', 'USD')
             )
             
             sector = info.get('sector', 'Technology')
@@ -758,7 +758,7 @@ async def fetch_data(request: SessionFetchRequest):
                 free_cash_flow_ltm=ebitda_ltm * 0.7,
                 book_equity=market_cap * 0.4,
                 shares_outstanding=info.get('sharesOutstanding', 1000000) or 1000000,
-                current_stock_price=financial_data.get('profile', {}).get('current_price', 100) or 100,
+                share_price=financial_data.get('profile', {}).get('current_price', 100) or 100,
                 currency=financial_data.get('profile', {}).get('currency', 'USD')
             )
 
