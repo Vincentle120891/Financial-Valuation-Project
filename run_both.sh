@@ -44,7 +44,7 @@ echo ""
     fuser -k 8000/tcp 2>/dev/null
     
     # Navigate to the project directory
-    cd /workspace/backend/
+    cd /home/vincent/Financial-Valuation-Project/backend/
     if [ -f "/home/vincent/.venv/bin/activate" ]; then
         source "/home/vincent/.venv/bin/activate"
     elif [ -f ".venv/bin/activate" ]; then
@@ -63,7 +63,7 @@ sleep 1
 
 # Start frontend (Vite/React) on its default port with custom commands
 (
-    cd /workspace/frontend
+    cd /home/vincent/Financial-Valuation-Project/frontend
     
     npm install
 
