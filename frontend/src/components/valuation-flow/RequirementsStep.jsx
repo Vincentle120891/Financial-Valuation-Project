@@ -359,14 +359,56 @@ const RequirementsStep = ({
     return null;
   };
 
-  // Render AI error warning in Step 5
+  // Render AI error warning in Step 5 with detailed provider errors
   const renderAiError = () => {
     if (!aiError || !hasRetrievedData) return null;
+    
+    // Try to parse detailed error info from aiError
+    let detailedErrors = null;
+    let fallbackReason = null;
+    try {
+      // Check if aiError contains JSON string with details
+      if (typeof aiError === 'string' && aiError.includes('{')) {
+        const errorObj = JSON.parse(aiError);
+        if (errorObj.errors) {
+          detailedErrors = errorObj.errors;
+        }
+        if (errorObj.fallback_reason) {
+          fallbackReason = errorObj.fallback_reason;
+        }
+      }
+    } catch (e) {
+      // Not a JSON string, use as is
+    }
     
     return (
       <div className="summary-box" style={{ background: 'linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%)', border: '2px solid #ff9800', marginTop: '20px' }}>
         <h3 style={{ color: '#e65100' }}>⚠️ AI Suggestions Failed</h3>
-        <p style={{ marginBottom: '12px', color: '#e65100' }}>{aiError}</p>
+        <p style={{ marginBottom: '12px', color: '#e65100' }}>{fallbackReason || aiError}</p>
+        
+        {/* Show detailed provider errors if available */}
+        {detailedErrors && Object.keys(detailedErrors).length > 0 && (
+          <div style={{ background: 'white', padding: '12px', borderRadius: '6px', marginTop: '12px', marginBottom: '12px' }}>
+            <strong>🔍 Detailed Error Information:</strong>
+            <div style={{ marginTop: '8px' }}>
+              {Object.entries(detailedErrors).map(([provider, error]) => (
+                <div key={provider} style={{ 
+                  padding: '8px', 
+                  margin: '6px 0', 
+                  background: '#ffebee', 
+                  borderRadius: '4px',
+                  borderLeft: '3px solid #f44336'
+                }}>
+                  <strong>{provider.toUpperCase()}:</strong>
+                  <code style={{ display: 'block', marginTop: '4px', fontSize: '12px', color: '#c62828', wordBreak: 'break-word' }}>
+                    {error}
+                  </code>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        
         <div style={{ background: 'white', padding: '12px', borderRadius: '6px', marginTop: '12px' }}>
           <strong>💡 What this means:</strong>
           <p style={{ margin: '8px 0', color: '#333' }}>

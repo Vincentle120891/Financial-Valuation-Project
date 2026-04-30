@@ -184,7 +184,12 @@ class AIFallbackEngine:
     def _call_gemini(self, prompt: str) -> Optional[str]:
         import google.generativeai as genai
         genai.configure(api_key=GEMINI_API_KEY)
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        # Use available model - gemini-pro or gemini-1.5-pro
+        try:
+            model = genai.GenerativeModel('gemini-pro')
+        except Exception:
+            # Fallback to default available model
+            model = genai.GenerativeModel()
         response = model.generate_content(prompt + "\n\nRespond ONLY with valid JSON.")
         # Clean up markdown code blocks if present
         text = response.text
