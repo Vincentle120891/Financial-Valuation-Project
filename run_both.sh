@@ -38,17 +38,36 @@ echo -e "${FRONTEND_COLOR}Starting Vite/React frontend on port 3000...${NC}"
 echo -e "${NC}Press Ctrl+C to stop both servers.${NC}"
 echo ""
 
-# Start backend (FastAPI) on port 8000
-cd /workspace/backend
-uvicorn app.main:app --host 0.0.0.0 --port 8000 > >(while IFS= read -r line; do echo -e "${BACKEND_COLOR}[BACKEND]${NC} $line"; done) 2>&1 &
+# Start backend (FastAPI) on port 8000 with custom commands
+(
+    echo "Clearing port 8000..."
+    fuser -k 8000/tcp 2>/dev/null
+    
+    # Navigate to the project directory
+    cd /home/vincent/Financial-Valuation-Project/backend/
+    source "/home/vincent/.venv/bin/activate"
+    pip install -r requirements.txt
+    
+    # Start the Uvicorn server
+    echo "Starting Valuation Agent..."
+    uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+) > >(while IFS= read -r line; do echo -e "${BACKEND_COLOR}[BACKEND]${NC} $line"; done) 2>&1 &
 BACKEND_PID=$!
 
 # Small delay to let backend start
 sleep 1
 
-# Start frontend (Vite/React) on its default port
-cd /workspace/frontend
-npm run dev > >(while IFS= read -r line; do echo -e "${FRONTEND_COLOR}[FRONTEND]${NC} $line"; done) 2>&1 &
+# Start frontend (Vite/React) on its default port with custom commands
+(
+    cd /home/vincent/Financial-Valuation-Project/frontend
+    
+    npm install
+
+    npm audit
+    npm audit fix
+    npm run build
+    npm run dev
+) > >(while IFS= read -r line; do echo -e "${FRONTEND_COLOR}[FRONTEND]${NC} $line"; done) 2>&1 &
 FRONTEND_PID=$!
 
 # Wait for both processes
