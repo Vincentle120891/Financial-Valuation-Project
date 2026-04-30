@@ -3,6 +3,7 @@ import { searchCompanies, selectCompany, selectModels, prepareInputs, fetchData,
 import SearchStep from './valuation-flow/SearchStep';
 import ModelSelectionStep from './valuation-flow/ModelSelectionStep';
 import RequirementsStep from './valuation-flow/RequirementsStep';
+import ForecastDriversStep from './valuation-flow/ForecastDriversStep';
 import AssumptionsStep from './valuation-flow/AssumptionsStep';
 import RunValuationStep from './valuation-flow/RunValuationStep';
 import ResultsStep from './valuation-flow/ResultsStep';
@@ -140,6 +141,11 @@ const ValuationFlow = () => {
   // ==================== SHOW INPUTS (STEP 6) ====================
   const handleShowInputs = useCallback(() => {
     setCurrentStep(6);
+  }, []);
+
+  // ==================== CONTINUE TO FORECAST DRIVERS (STEP 7) ====================
+  const handleContinueToForecastDrivers = useCallback(() => {
+    setCurrentStep(7);
   }, []);
 
   // ==================== CONTINUE TO ASSUMPTIONS (STEP 8) ====================
@@ -413,8 +419,20 @@ const ValuationFlow = () => {
             onManualInput={handleManualInput}
             onUseAI={handleUseAI}
             showReviewOnly={true}
-            onContinueToConfirm={handleContinueToAssumptions}
+            onContinueToForecastDrivers={handleContinueToForecastDrivers}
             onBackToRequirements={handleBackToRequirements}
+            loading={loading}
+          />
+        );
+      case 7:
+        return (
+          <ForecastDriversStep
+            forecastDrivers={forecastDrivers}
+            dcfInputs={dcfInputs}
+            onManualInput={handleManualInput}
+            onConfirmDrivers={handleConfirmAssumptions}
+            onBackToRequirements={handleBackToRequirements}
+            onContinueToAssumptions={handleContinueToAssumptions}
             loading={loading}
           />
         );
@@ -483,6 +501,7 @@ const ValuationFlow = () => {
             currentStep === 4 ? 'Select Model' :
             currentStep === 5 ? 'Review Requirements' :
             currentStep === 6 ? 'View Retrieved Inputs' :
+            currentStep === 7 ? 'Modify Forecast Drivers' :
             currentStep === 8 ? 'Confirm Assumptions' :
             currentStep === 9 ? 'Run Valuation' :
             currentStep === 10 ? 'View Results' : 'In Progress'

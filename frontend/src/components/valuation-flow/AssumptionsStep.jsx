@@ -19,7 +19,7 @@ import {
  * 
  * Props:
  * - showReviewOnly: boolean (default: false) - If true, shows read-only view for Step 6
- * - onContinueToConfirm: function - Callback to navigate from Step 6 to Step 8
+ * - onContinueToForecastDrivers: function - Callback to navigate from Step 6 to Step 7
  */
 const AssumptionsStep = ({
   historicalData,
@@ -33,7 +33,7 @@ const AssumptionsStep = ({
   onConfirmAssumptions,
   loading,
   showReviewOnly = false,
-  onContinueToConfirm,
+  onContinueToForecastDrivers,
   onBackToRequirements
 }) => {
   // ==================== HEALTH CHECK & ERROR VALIDATION ====================
@@ -482,10 +482,10 @@ const AssumptionsStep = ({
           <div style={{ marginTop: '20px' }}>
             {showReviewOnly ? (
               <button 
-                onClick={onContinueToConfirm} 
+                onClick={onContinueToForecastDrivers} 
                 className="btn-primary btn-large"
               >
-                Continue to Confirm Assumptions →
+                Continue to Modify Forecast Drivers →
               </button>
             ) : (
               <button 
