@@ -49,7 +49,7 @@ class TargetCompanyData:
     # Capital structure
     net_debt: float
     shares_outstanding: float  # In millions
-    current_stock_price: float  # Per share
+    share_price: float  # Per share
 
     # Metadata
     currency: str = "GBP"
@@ -439,7 +439,7 @@ class TradingCompsAnalyzer:
             implied_ev = implied_equity + self.target.enterprise_value - self.target.market_cap
 
         implied_share_price = implied_equity / self.target.shares_outstanding
-        current_price = self.target.current_stock_price
+        current_price = self.target.share_price
         upside = (implied_share_price - current_price) / current_price * 100
 
         return ImpliedSharePriceResult(
@@ -587,7 +587,7 @@ def fetch_comps_inputs(ticker: str, peer_tickers: Optional[List[str]] = None) ->
         free_cash_flow_ltm=info.get("freeCashflow", 0),
         book_equity=info.get("totalStockholderEquity", 0),
         shares_outstanding=info.get("sharesOutstanding", 1),
-        current_stock_price=info.get("currentPrice", 0) or info.get("regularMarketPrice", 0),
+        share_price=info.get("currentPrice", 0) or info.get("regularMarketPrice", 0),
         currency=info.get("currency", "USD")
     )
 
@@ -620,7 +620,7 @@ def fetch_comps_inputs(ticker: str, peer_tickers: Optional[List[str]] = None) ->
                 free_cash_flow_ltm=peer_info.get("freeCashflow", 0),
                 book_equity=peer_info.get("totalStockholderEquity", 0),
                 shares_outstanding=peer_info.get("sharesOutstanding", 1),
-                current_stock_price=peer_info.get("currentPrice", 0) or peer_info.get("regularMarketPrice", 0),
+                share_price=peer_info.get("currentPrice", 0) or peer_info.get("regularMarketPrice", 0),
                 industry=peer_info.get("industry", ""),
                 sector=peer_info.get("sector", ""),
                 selection_reason="Industry peer"
@@ -654,7 +654,7 @@ if __name__ == "__main__":
         eps_fy2024=0.3754,  # I61
         net_debt=1725,  # D65
         shares_outstanding=1525,  # D66 (mm)
-        current_stock_price=2.49,
+        share_price=2.49,
         currency="GBP",
         analysis_date="2022-08-31"
     )
@@ -709,7 +709,7 @@ if __name__ == "__main__":
         print(f"P/E LTM:       {s.average:.2f}x / {s.median:.2f}x / {s.maximum:.2f}x / {s.minimum:.2f}x")
 
     print("\n--- Implied Share Prices (using Average Multiples) ---")
-    print(f"LTM EV/EBITDA: £{outputs.avg_ev_ebitda_ltm_price:.2f} ({(outputs.avg_ev_ebitda_ltm_price/target.current_stock_price-1)*100:+.1f}% vs current)")
+    print(f"LTM EV/EBITDA: £{outputs.avg_ev_ebitda_ltm_price:.2f} ({(outputs.avg_ev_ebitda_ltm_price/target.share_price-1)*100:+.1f}% vs current)")
     print(f"FY23 EV/EBITDA: £{outputs.avg_ev_ebitda_fy23_price:.2f}")
     print(f"FY24 EV/EBITDA: £{outputs.avg_ev_ebitda_fy24_price:.2f}")
     print(f"LTM P/E: £{outputs.avg_pe_ltm_price:.2f}")
@@ -775,7 +775,7 @@ class TargetCompanyData:
     # Capital structure
     net_debt: float = 0.0
     shares_outstanding: float = 0.0  # In millions
-    current_stock_price: float = 0.0  # Per share
+    share_price: float = 0.0  # Per share
 
     # Metadata
     currency: str = "GBP"
@@ -1173,7 +1173,7 @@ class TradingCompsAnalyzer:
             implied_ev = implied_equity + self.target.enterprise_value - self.target.market_cap
 
         implied_share_price = implied_equity / self.target.shares_outstanding
-        current_price = self.target.current_stock_price
+        current_price = self.target.share_price
         upside = (implied_share_price - current_price) / current_price * 100
 
         return ImpliedSharePriceResult(
@@ -1390,7 +1390,7 @@ def fetch_comps_inputs(ticker: str, peer_tickers: Optional[List[str]] = None) ->
         free_cash_flow_ltm=info.get("freeCashflow", 0),
         book_equity=info.get("totalStockholderEquity", 0),
         shares_outstanding=info.get("sharesOutstanding", 1),
-        current_stock_price=info.get("currentPrice", 0) or info.get("regularMarketPrice", 0),
+        share_price=info.get("currentPrice", 0) or info.get("regularMarketPrice", 0),
         currency=info.get("currency", "USD"),
         industry=info.get("industry", ""),
         sector=info.get("sector", "")
@@ -1430,7 +1430,7 @@ def fetch_comps_inputs(ticker: str, peer_tickers: Optional[List[str]] = None) ->
                 free_cash_flow_ltm=peer_info.get("freeCashflow", 0),
                 book_equity=peer_info.get("totalStockholderEquity", 0),
                 shares_outstanding=peer_info.get("sharesOutstanding", 1),
-                current_stock_price=peer_info.get("currentPrice", 0) or peer_info.get("regularMarketPrice", 0),
+                share_price=peer_info.get("currentPrice", 0) or peer_info.get("regularMarketPrice", 0),
                 industry=peer_info.get("industry", ""),
                 sector=peer_info.get("sector", ""),
                 selection_reason="Industry peer"
@@ -1464,7 +1464,7 @@ if __name__ == "__main__":
         eps_fy2024=0.3754,  # I61
         net_debt=1725,  # D65
         shares_outstanding=1525,  # D66 (mm)
-        current_stock_price=2.49,
+        share_price=2.49,
         currency="GBP",
         analysis_date="2022-08-31"
     )
@@ -1519,7 +1519,7 @@ if __name__ == "__main__":
         print(f"P/E LTM:       {s.average:.2f}x / {s.median:.2f}x / {s.maximum:.2f}x / {s.minimum:.2f}x")
 
     print("\n--- Implied Share Prices (using Average Multiples) ---")
-    print(f"LTM EV/EBITDA: £{outputs.avg_ev_ebitda_ltm_price:.2f} ({(outputs.avg_ev_ebitda_ltm_price/target.current_stock_price-1)*100:+.1f}% vs current)")
+    print(f"LTM EV/EBITDA: £{outputs.avg_ev_ebitda_ltm_price:.2f} ({(outputs.avg_ev_ebitda_ltm_price/target.share_price-1)*100:+.1f}% vs current)")
     print(f"FY23 EV/EBITDA: £{outputs.avg_ev_ebitda_fy23_price:.2f}")
     print(f"FY24 EV/EBITDA: £{outputs.avg_ev_ebitda_fy24_price:.2f}")
     print(f"LTM P/E: £{outputs.avg_pe_ltm_price:.2f}")
