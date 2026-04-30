@@ -97,36 +97,53 @@ class VietnamesePDFExtractor:
     - pytesseract: OCR for scanned documents
     """
     
-    # Vietnamese financial terms mapping
+    # Vietnamese financial terms mapping (with diacritics and common variations)
     VIETNAMESE_TERMS = {
         # Income Statement
         'doanh_thu': 'revenue',
         'doanh_thu_thuan': 'net_revenue',
         'giá_vốn_hàng_bán': 'cost_of_revenue',
+        'loi_nhuan_gop': 'gross_profit',  # Without diacritics variant
         'lợi_nhập_gộp': 'gross_profit',
         'chi_phí_bán_hàng': 'selling_expenses',
+        'chi_phi_ban_hang': 'selling_expenses',  # Without diacritics
         'chi_phí_quản_lý_doanh_nghiệp': 'administrative_expenses',
+        'chi_phi_quan_ly_doanh_nghiep': 'administrative_expenses',  # Without diacritics
         'chi_phí_hoạt_động': 'operating_expenses',
         'lợi_nhập_từ_hoạt_động_kinh_doanh': 'operating_profit',
         'ebitda': 'ebitda',
         'lợi_nhập_trước_thuế': 'profit_before_tax',
         'thuế_thu_nhập_doanh_nghiệp': 'income_tax',
+        'loi_nhuan_sau_thue': 'net_income',  # Without diacritics variant
         'lợi_nhập_sau_thuế': 'net_income',
+        'loi_nhuan_rong': 'net_income',
         'lợi_nhập_ròng': 'net_income',
         
         # Balance Sheet
         'tổng_tài_sản': 'total_assets',
+        'tong_tai_san': 'total_assets',  # Without diacritics
         'tài_sản_ngắn_hạn': 'current_assets',
+        'tai_san_ngan_han': 'current_assets',  # Without diacritics
         'tài_sản_dài_hạn': 'non_current_assets',
+        'tai_san_dai_han': 'non_current_assets',  # Without diacritics
         'tổng_nợ_phải_trả': 'total_liabilities',
+        'tong_no_phai_tra': 'total_liabilities',  # Without diacritics
         'nợ_ngắn_hạn': 'current_liabilities',
+        'no_ngan_han': 'current_liabilities',  # Without diacritics
         'nợ_dài_hạn': 'long_term_debt',
+        'no_dai_han': 'long_term_debt',  # Without diacritics
         'vốn_chủ_sở_hữu': 'total_equity',
+        'von_chu_so_huu': 'total_equity',  # Without diacritics
+        'tien_va_tuong_duong_tien': 'cash_and_equivalents',  # Full phrase without diacritics
         'tiền_và_tương_đương_tiền': 'cash_and_equivalents',
         'phải_thu_khách_hàng': 'accounts_receivable',
+        'phai_thu_khach_hang': 'accounts_receivable',  # Without diacritics
         'hàng_tồn_kho': 'inventory',
+        'hang_ton_kho': 'inventory',  # Without diacritics
+        'tai_san_co_dinh': 'property_plant_equipment',  # Without diacritics
         'tài_sản_cố_định': 'property_plant_equipment',
         'nợ_vay': 'total_debt',
+        'no_vay': 'total_debt',  # Without diacritics
         
         # Cash Flow
         'lưu_chuyển_tiền_từ_hoạt_động_kinh_doanh': 'operating_cash_flow',
@@ -496,11 +513,34 @@ class VietnamesePDFExtractor:
         # Search in tables
         for table_info in tables:
             table_data = table_info.get('data', table_info.get('rows', []))
-            self._parse_table_for_financials(result, table_data)
+            self._parse_table_for_financials(result, table_data, parse_number)
     
     def _parse_table_for_financials(self, result: ExtractedFinancialData, 
-                                   table_data: List[List[str]]):
+                                   table_data: List[List[str]],
+                                   parse_number=None):
         """Parse a table for financial data."""
+        import unicodedata
+        
+        if parse_number is None:
+            def parse_number(value: str) -> Optional[float]:
+                if not value:
+                    return None
+                try:
+                    cleaned = re.sub(r'[,\s]', '', str(value))
+                    if ',' in cleaned and '.' not in cleaned:
+                        cleaned = cleaned.replace(',', '.')
+                    return float(cleaned)
+                except (ValueError, TypeError):
+                    return None
+                    
+        def remove_diacritics(text):
+            """Remove Vietnamese diacritics for matching"""
+            if not text:
+                return ''
+            text = str(text).replace('_', ' ')
+            normalized = unicodedata.normalize('NFKD', text)
+            return ''.join(c for c in normalized if not unicodedata.combining(c)).lower()
+        
         if not table_data or len(table_data) < 2:
             return
         
@@ -523,10 +563,12 @@ class VietnamesePDFExtractor:
                 continue
             
             row_label = str(row[0]).lower().strip() if row else ''
+            row_label_normalized = remove_diacritics(row_label)
             
-            # Match row label to financial fields
+            # Match row label to financial fields (with diacritic normalization)
             for vi_term, en_field in self.VIETNAMESE_TERMS.items():
-                if vi_term in row_label or en_field.replace('_', ' ') in row_label:
+                vi_term_normalized = remove_diacritics(vi_term)
+                if vi_term_normalized in row_label_normalized or en_field.replace('_', ' ') in row_label_normalized:
                     # Found matching field, extract values
                     for col_idx in year_cols:
                         if col_idx < len(row):
