@@ -109,7 +109,7 @@ def fetch_financial_data(ticker_symbol: str, market: str) -> Dict:
                 "sector": info.get('sector'),
                 "industry": info.get('industry'),
                 "current_price": sanitize_value(info.get('currentPrice')),
-                "currency": info.get('currency', 'USD'),
+                "currency": "VND" if market == "vietnamese" else info.get('currency', 'USD'),
                 "market_cap": sanitize_value(info.get('marketCap')),
                 "beta": sanitize_value(info.get('beta', 1.0))
             },
@@ -226,13 +226,14 @@ def run_valuation_engine(session_data: Dict) -> Dict:
     from app.engines.dcf_engine import DCFEngine, DCFInputs, ScenarioDrivers, fetch_dcf_inputs
     
     model = session_data.get('selected_model', 'DCF')
+    market = session_data.get('market', 'international')
     assumptions = session_data['confirmed_assumptions']
     financial_data = session_data['financial_data']
     financials = financial_data['financials']
     profile = financial_data['profile']
     ticker = session_data.get('ticker', 'UNKNOWN')
     
-    logger.info(f"Running valuation engine for model='{model}', ticker='{ticker}'")
+    logger.info(f"Running valuation engine for model='{model}', ticker='{ticker}', market='{market}'")
     
     selected_model = model.lower() if model else 'dcf'
     
@@ -312,7 +313,7 @@ def run_valuation_engine(session_data: Dict) -> Dict:
             
             dcf_inputs = DCFInputs(
                 valuation_date=date.today().isoformat(),
-                currency=profile.get('currency', 'USD'),
+                currency="VND" if market == "vietnamese" else profile.get('currency', 'USD'),
                 historical_fy_minus_1=hist_fy_minus_1,
                 historical_fy_minus_2=hist_fy_minus_2,
                 historical_fy_minus_3=hist_fy_minus_3,
@@ -437,7 +438,7 @@ def run_valuation_engine(session_data: Dict) -> Dict:
                 book_equity=market_cap * 0.4,
                 shares_outstanding=info.get('sharesOutstanding', 1000000) or 1000000,
                 current_stock_price=profile.get('current_price', 100) or 100,
-                currency=profile.get('currency', 'USD')
+                currency="VND" if market == "vietnamese" else profile.get('currency', 'USD')
             )
             
             sector = info.get('sector', 'Technology')
