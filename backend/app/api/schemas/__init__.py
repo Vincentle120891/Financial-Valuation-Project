@@ -165,6 +165,9 @@ class AIAssumptionsResponse(BaseModel):
     status: str
     suggestions: Dict[str, Any]
     message: str
+    
+    class Config:
+        extra = "allow"  # Allow additional fields like _metadata with provider_errors and fallback_reason
 
 
 class ValuationResultResponse(BaseModel):
