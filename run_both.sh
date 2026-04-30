@@ -44,8 +44,12 @@ echo ""
     fuser -k 8000/tcp 2>/dev/null
     
     # Navigate to the project directory
-    cd /home/vincent/Financial-Valuation-Project/backend/
-    source "/home/vincent/.venv/bin/activate"
+    cd /workspace/backend/
+    if [ -f "/home/vincent/.venv/bin/activate" ]; then
+        source "/home/vincent/.venv/bin/activate"
+    elif [ -f ".venv/bin/activate" ]; then
+        source ".venv/bin/activate"
+    fi
     pip install -r requirements.txt
     
     # Start the Uvicorn server
@@ -59,7 +63,7 @@ sleep 1
 
 # Start frontend (Vite/React) on its default port with custom commands
 (
-    cd /home/vincent/Financial-Valuation-Project/frontend
+    cd /workspace/frontend
     
     npm install
 
