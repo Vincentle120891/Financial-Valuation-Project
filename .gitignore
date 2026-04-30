@@ -1,1 +1,1 @@
-Nothing should be ignored in this case. The added and modified files are all source code and documentation files (.py and .md extensions), which should be tracked by git. There are no build artifacts, dependencies, or temporary files in the changes that would warrant adding ignore rules.
+Nothing needs to be added to .gitignore since the changes only include a shell script (`run_both.sh`) and a requirements file (`backend/requirements.txt`), which are both source/config files that should be tracked in version control.
