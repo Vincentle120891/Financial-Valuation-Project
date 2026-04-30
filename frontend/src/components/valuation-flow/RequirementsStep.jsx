@@ -419,14 +419,14 @@ const RequirementsStep = ({
           <>
             <button 
               onClick={onRetrieveData} 
-              className="btn-secondary"
+              className="btn-primary"
               disabled={loading}
             >
-              {loading ? 'Fetching...' : '↻ Fetch'}
+              {loading ? '🔄 Refreshing Data...' : '🔄 Refresh Data'}
             </button>
             <button 
               onClick={onShowInputs} 
-              className="btn-primary"
+              className="btn-secondary"
             >
               View Retrieved Inputs →
             </button>

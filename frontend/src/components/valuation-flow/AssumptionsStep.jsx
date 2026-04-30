@@ -321,11 +321,40 @@ const AssumptionsStep = ({
       
       {/* AI Suggestions Table */}
       {aiData && Object.keys(aiData).length > 0 && (
-        <div className="summary-box" style={{ background: 'linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%)' }}>
-          <h3 style={{ color: '#667eea' }}>🤖 AI Suggestions with Rationale</h3>
+        <div className="summary-box" style={{ 
+          background: aiData._metadata?.used_fallback 
+            ? 'linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%)' 
+            : 'linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%)'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+            <h3 style={{ color: '#667eea' }}>
+              {aiData._metadata?.used_fallback ? '⚠️ AI Fallback Mode - Deterministic Assumptions' : '🤖 AI Suggestions with Rationale'}
+            </h3>
+            {aiData._metadata && (
+              <span style={{ fontSize: '12px', padding: '4px 8px', background: aiData._metadata.used_fallback ? '#ff9800' : '#4caf50', color: 'white', borderRadius: '4px' }}>
+                {aiData._metadata.used_fallback ? 'Fallback Used' : 'AI Generated'}
+              </span>
+            )}
+          </div>
           <p style={{ marginBottom: '20px', color: '#666' }}>
-            AI analyzes historical trends, peer benchmarks, and market conditions to provide data-driven recommendations
+            {aiData._metadata?.used_fallback 
+              ? 'AI providers were unavailable. Using deterministic fallback rules based on CAPM formula and historical averages. You can still manually adjust these assumptions.'
+              : 'AI analyzes historical trends, peer benchmarks, and market conditions to provide data-driven recommendations'
+            }
           </p>
+          {aiData._metadata?.provider_status && (
+            <div style={{ marginBottom: '16px', padding: '12px', background: 'rgba(255,255,255,0.5)', borderRadius: '6px', fontSize: '13px' }}>
+              <strong>Provider Status:</strong>{' '}
+              {Object.entries(aiData._metadata.provider_status).map(([provider, status]) => (
+                <span key={provider} style={{ 
+                  marginRight: '12px', 
+                  color: status === 'configured' ? '#4caf50' : '#f44336' 
+                }}>
+                  {provider.toUpperCase()}: {status === 'configured' ? '✓' : '✗'}
+                </span>
+              ))}
+            </div>
+          )}
           
           <table className="assumptions-table">
             <thead>

@@ -122,6 +122,7 @@ const ValuationFlow = () => {
     setRequiredFields([]);
     setConfirmedValues({});
     setAiData({});
+    setAiError(null); // Clear AI errors
     setHistoricalData(null);
     setForecastDrivers({
       best_case: { sales_volume_growth: [], inflation_rate: [], opex_growth: [], capital_expenditure: [], ar_days: [], inv_days: [], ap_days: [], tax_rate: [] },
@@ -171,18 +172,17 @@ const ValuationFlow = () => {
   }, [selectedModel, currentStep, sessionId, fetchRequiredInputs]);
 
   // ==================== STEP 7-8: RETRIEVE DATA ====================
+  const [aiError, setAiError] = useState(null);
+  
   const handleRetrieveData = useCallback(async () => {
     setLoading(true);
+    setAiError(null); // Clear previous AI errors
     try {
       const fetchDataResponse = await fetchData(sessionId);
       console.log('Fetch data response:', fetchDataResponse);
 
-      const aiDataResponse = await generateAI(sessionId);
-      console.log('AI response:', aiDataResponse);
-
-      if (fetchDataResponse.data && aiDataResponse.suggestions) {
-        setAiData(aiDataResponse.suggestions);
-
+      // Set financial data first
+      if (fetchDataResponse.data) {
         if (fetchDataResponse.data.historical_financials) {
           setHistoricalData(fetchDataResponse.data.historical_financials);
         }
@@ -201,10 +201,54 @@ const ValuationFlow = () => {
         if (fetchDataResponse.data.comps_results) {
           setCompsResults(fetchDataResponse.data.comps_results);
         }
-
-        // Stay on step 5 to show retrieved data, don't jump to step 8
-        // setCurrentStep(8); // Removed - stay on step 5
       }
+
+      // Try to generate AI suggestions
+      try {
+        const aiDataResponse = await generateAI(sessionId);
+        console.log('AI response:', aiDataResponse);
+
+        if (aiDataResponse.suggestions) {
+          setAiData(aiDataResponse.suggestions);
+          
+          // Build detailed error message from metadata
+          const metadata = aiDataResponse.suggestions._metadata;
+          if (metadata && !metadata.ai_success) {
+            // AI failed, build detailed error message
+            let errorMsg = '⚠️ AI generation failed. ';
+            
+            if (metadata.fallback_reason) {
+              errorMsg += `Reason: ${metadata.fallback_reason}. `;
+            }
+            
+            if (metadata.provider_errors && Object.keys(metadata.provider_errors).length > 0) {
+              errorMsg += 'Provider errors: ';
+              const errorDetails = Object.entries(metadata.provider_errors)
+                .map(([provider, error]) => `${provider}: ${error}`)
+                .join('; ');
+              errorMsg += errorDetails;
+            } else if (!metadata.available_providers || metadata.available_providers.length === 0) {
+              errorMsg += 'No AI providers configured. Please add API keys for Groq, Gemini, or Qwen.';
+            }
+            
+            errorMsg += ' Using deterministic fallback - assumptions generated from CAPM formula and historical averages.';
+            setAiError(errorMsg);
+          } else if (metadata?.used_fallback) {
+            setAiError('⚠️ AI providers unavailable. Using deterministic fallback - assumptions generated from CAPM formula and historical averages.');
+          } else {
+            setAiError(null); // Clear any previous AI error
+          }
+        } else if (aiDataResponse.detail) {
+          setAiError(aiDataResponse.detail);
+        }
+      } catch (aiErr) {
+        console.error('AI generation failed:', aiErr);
+        setAiError(aiErr.message || 'AI suggestions could not be generated. You can still proceed with manual inputs.');
+        // Don't fail the entire operation - financial data is still available
+      }
+
+      // Stay on step 5 to show retrieved data, don't jump to step 8
+      // setCurrentStep(8); // Removed - stay on step 5
     } catch (err) {
       console.error('Retrieve data error:', err);
       setError('Failed to retrieve data');
@@ -301,6 +345,7 @@ const ValuationFlow = () => {
     setSessionId(null);
     setRequiredFields([]);
     setAiData({});
+    setAiError(null); // Clear AI errors on reset
     setConfirmedValues({});
     setSelectedScenario('base_case');
     setValuationResults(null);
@@ -351,6 +396,7 @@ const ValuationFlow = () => {
             dupontResults={dupontResults}
             compsResults={compsResults}
             aiData={aiData}
+            aiError={aiError}
             requiredFields={requiredFields}
             onShowInputs={handleShowInputs}
           />
@@ -361,6 +407,7 @@ const ValuationFlow = () => {
             historicalData={historicalData}
             peerData={peerData}
             aiData={aiData}
+            aiError={aiError}
             confirmedValues={confirmedValues}
             selectedModel={selectedModel}
             onManualInput={handleManualInput}
@@ -377,6 +424,7 @@ const ValuationFlow = () => {
             historicalData={historicalData}
             peerData={peerData}
             aiData={aiData}
+            aiError={aiError}
             confirmedValues={confirmedValues}
             selectedModel={selectedModel}
             onManualInput={handleManualInput}
