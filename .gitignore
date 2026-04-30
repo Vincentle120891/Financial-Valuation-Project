@@ -1,7 +1,1 @@
-```
-# PDF files
-*.pdf
-
-# Test files directory
-test_pdfs/
-```
+Nothing should be ignored since the changes only include source code files (.py files) and no build artifacts, dependencies, or temporary files.
