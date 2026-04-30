@@ -20,6 +20,7 @@ from app.core.logging_config import setup_logging, get_logger
 from app.core.exceptions import ValuationException
 from app.api.routes.v1.search_routes import router as search_router_v1
 from app.api.routes.v1.valuation_routes import router as valuation_router_v1
+from app.api.routes.v1.pdf_extraction_routes import router as pdf_extraction_router_v1
 
 # Setup structured logging at application startup
 setup_logging(
@@ -208,6 +209,7 @@ def get_session_store() -> dict:
 # Version 1 routes
 app.include_router(search_router_v1, prefix="/api/v1")
 app.include_router(valuation_router_v1, prefix="/api/v1")
+app.include_router(pdf_extraction_router_v1, prefix="/api/v1/pdf")
 
 # Legacy routes (for backward compatibility)
 app.include_router(search_router_v1, prefix="/api")
