@@ -141,7 +141,7 @@ async def generate_ai_assumptions(data: Dict, model: str) -> Dict:
         model: Selected valuation model (DCF, DuPont, COMPS)
         
     Returns:
-        Dictionary containing AI-generated assumptions
+        Dictionary containing AI-generated assumptions with error info if fallback was used
     """
     from app.engines.ai_engine import ai_engine
     
@@ -185,9 +185,22 @@ async def generate_ai_assumptions(data: Dict, model: str) -> Dict:
         }
     }
     
+    # Get provider status for transparency
+    provider_status = ai_engine.get_provider_status()
+    available_providers = [k for k, v in provider_status.items() if v == "configured"]
+    
     ai_results = ai_engine.generate_assumptions(company_data, model)
     
     formatted_results = {"model": model.upper()}
+    
+    # Add metadata about AI generation
+    formatted_results["_metadata"] = {
+        "provider_status": provider_status,
+        "available_providers": available_providers,
+        "used_fallback": len(ai_results.get("wacc_percent", {}).get("sources", "").split(":")[0].strip() if isinstance(ai_results.get("wacc_percent", {}).get("sources"), str) else "") == 0 or 
+                         "Fallback" in ai_results.get("wacc_percent", {}).get("rationale", "") or
+                         "CAPM (Fallback" in ai_results.get("wacc_percent", {}).get("rationale", "")
+    }
     
     for key, item in ai_results.items():
         if isinstance(item, dict) and 'value' in item:

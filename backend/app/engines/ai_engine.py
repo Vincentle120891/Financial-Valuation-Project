@@ -34,6 +34,23 @@ class AIFallbackEngine:
         
         if not self.providers:
             logger.warning("⚠️ NO AI PROVIDERS CONFIGURED. Falling back to deterministic defaults.")
+    
+    def get_provider_status(self) -> Dict[str, str]:
+        """Get status of each provider (available, missing_key, etc.)"""
+        status = {}
+        if GROQ_API_KEY:
+            status["groq"] = "configured"
+        else:
+            status["groq"] = "missing_key"
+        if GEMINI_API_KEY:
+            status["gemini"] = "configured"
+        else:
+            status["gemini"] = "missing_key"
+        if QWEN_API_KEY:
+            status["qwen"] = "configured"
+        else:
+            status["qwen"] = "missing_key"
+        return status
 
     def generate_assumptions(self, company_data: Dict[str, Any], model_type: str) -> Dict[str, Any]:
         """
@@ -41,6 +58,7 @@ class AIFallbackEngine:
         Returns structured data with value, rationale, and sources.
         """
         prompt = self._build_prompt(company_data, model_type)
+        last_error = None
         
         # Try each provider in order
         for provider_name, provider_func in self.providers:
@@ -51,11 +69,16 @@ class AIFallbackEngine:
                     logger.info(f"✅ Successfully generated assumptions via {provider_name.upper()}")
                     return self._parse_response(response, model_type)
             except Exception as e:
-                logger.error(f"❌ {provider_name.upper()} failed: {str(e)}")
+                error_msg = f"{provider_name.upper()}: {str(e)}"
+                logger.error(f"❌ {error_msg}")
+                last_error = error_msg
                 continue
         
         # Final fallback: Deterministic rules-based engine
-        logger.warning("⚠️ All AI providers failed. Using deterministic fallback rules.")
+        if last_error:
+            logger.warning(f"⚠️ All AI providers failed ({last_error}). Using deterministic fallback rules.")
+        else:
+            logger.warning("⚠️ All AI providers failed. Using deterministic fallback rules.")
         return self._deterministic_fallback(company_data, model_type)
 
     def _build_prompt(self, data: Dict[str, Any], model_type: str) -> str:

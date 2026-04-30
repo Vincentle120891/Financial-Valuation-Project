@@ -210,7 +210,12 @@ const ValuationFlow = () => {
 
         if (aiDataResponse.suggestions) {
           setAiData(aiDataResponse.suggestions);
-          setAiError(null); // Clear any previous AI error
+          // Check if fallback was used and show appropriate message
+          if (aiDataResponse.suggestions._metadata?.used_fallback) {
+            setAiError('AI providers unavailable. Using deterministic fallback - assumptions generated from CAPM formula and historical averages.');
+          } else {
+            setAiError(null); // Clear any previous AI error
+          }
         } else if (aiDataResponse.detail) {
           setAiError(aiDataResponse.detail);
         }
