@@ -125,22 +125,48 @@ class AIFallbackEngine:
         2. "rationale": A simple 1-sentence explanation of WHY this number was chosen.
         3. "sources": The specific data point or formula used (e.g., "Historical Avg 3Y", "CAPM Formula").
         
-        FIELDS TO GENERATE:
-        - wacc_percent
-        - terminal_growth_rate_percent
-        - revenue_growth_forecast (list of 5 years)
-        - ebitda_margin_target_percent
-        - capex_percent_of_revenue
-        - depreciation_percent_of_revenue
-        - working_capital_days_receivables
-        - working_capital_days_payables
-        - working_capital_days_inventory
-        - tax_rate_percent
+        FORECAST DRIVERS (5-Year Projections - provide arrays of 5 values each):
+        - sales_volume_growth: Array of 5 yearly growth rates (%)
+        - inflation_rate: Array of 5 yearly inflation rates (%)
+        - opex_growth: Array of 5 yearly OpEx growth rates (%)
+        - capital_expenditure: Array of 5 yearly CapEx as % of revenue
+        - ar_days: Array of 5 yearly Accounts Receivable days
+        - inv_days: Array of 5 yearly Inventory days
+        - ap_days: Array of 5 yearly Accounts Payable days
+        - tax_rate: Array of 5 yearly tax rates (%)
+        
+        DCF MODEL INPUTS (single values):
+        - risk_free_rate: Current risk-free rate (%)
+        - equity_risk_premium: Equity risk premium (%)
+        - beta: Company beta
+        - cost_of_debt: Cost of debt (%)
+        - wacc: Weighted Average Cost of Capital (%)
+        - terminal_growth_rate: Terminal growth rate (%)
+        - terminal_ebitda_multiple: Terminal EBITDA multiple
+        - useful_life_existing: Useful life of existing assets (years)
         
         OUTPUT FORMAT (STRICT JSON):
         {{
-            "wacc_percent": {{ "value": 8.5, "rationale": "...", "sources": "..." }},
-            ...
+            "sales_volume_growth": [
+                {{ "value": 5.2, "rationale": "...", "sources": "..." }},
+                {{ "value": 4.8, "rationale": "...", "sources": "..." }},
+                ... (5 years total)
+            ],
+            "inflation_rate": [ ... ],
+            "opex_growth": [ ... ],
+            "capital_expenditure": [ ... ],
+            "ar_days": [ ... ],
+            "inv_days": [ ... ],
+            "ap_days": [ ... ],
+            "tax_rate": [ ... ],
+            "risk_free_rate": {{ "value": 4.5, "rationale": "...", "sources": "..." }},
+            "equity_risk_premium": {{ "value": 5.5, "rationale": "...", "sources": "..." }},
+            "beta": {{ "value": 1.2, "rationale": "...", "sources": "..." }},
+            "cost_of_debt": {{ "value": 5.0, "rationale": "...", "sources": "..." }},
+            "wacc": {{ "value": 8.5, "rationale": "...", "sources": "..." }},
+            "terminal_growth_rate": {{ "value": 2.0, "rationale": "...", "sources": "..." }},
+            "terminal_ebitda_multiple": {{ "value": 10.0, "rationale": "...", "sources": "..." }},
+            "useful_life_existing": {{ "value": 10, "rationale": "...", "sources": "..." }}
         }}
         """
 
@@ -228,39 +254,80 @@ class AIFallbackEngine:
         hist_growth = financials.get('revenue_growth_avg', 5.0)
         
         return {
-            "wacc_percent": {
+            # Forecast Drivers (5-year arrays)
+            "sales_volume_growth": [
+                {"value": round(hist_growth * (0.95 - i*0.03), 1), "rationale": "Gradual moderation from historical growth", "sources": "Historical Trend Adj."}
+                for i in range(5)
+            ],
+            "inflation_rate": [
+                {"value": 2.5, "rationale": "Stable inflation assumption", "sources": "Central Bank Target"}
+                for _ in range(5)
+            ],
+            "opex_growth": [
+                {"value": round(hist_growth * 0.9, 1), "rationale": "OpEx grows slightly slower than revenue", "sources": "Efficiency Improvement"}
+                for _ in range(5)
+            ],
+            "capital_expenditure": [
+                {"value": 5.0, "rationale": "Standard maintenance CapEx", "sources": "Industry Average"}
+                for _ in range(5)
+            ],
+            "ar_days": [
+                {"value": 45, "rationale": "Standard credit terms", "sources": "Industry Norm"}
+                for _ in range(5)
+            ],
+            "inv_days": [
+                {"value": 60, "rationale": "Standard inventory turnover", "sources": "Industry Norm"}
+                for _ in range(5)
+            ],
+            "ap_days": [
+                {"value": 30, "rationale": "Standard payment terms", "sources": "Industry Norm"}
+                for _ in range(5)
+            ],
+            "tax_rate": [
+                {"value": 21.0, "rationale": "Statutory corporate rate", "sources": "US Tax Code"}
+                for _ in range(5)
+            ],
+            # DCF Model Inputs (single values)
+            "risk_free_rate": {
+                "value": rf,
+                "rationale": "Current government bond yield",
+                "sources": "Market Data"
+            },
+            "equity_risk_premium": {
+                "value": erp,
+                "rationale": "Standard equity risk premium",
+                "sources": "Damodaran Data"
+            },
+            "beta": {
+                "value": beta,
+                "rationale": "Company's market beta",
+                "sources": "Market Data"
+            },
+            "cost_of_debt": {
+                "value": cost_of_debt,
+                "rationale": "Estimated borrowing cost",
+                "sources": "Credit Rating Estimate"
+            },
+            "wacc": {
                 "value": round(wacc, 2),
                 "rationale": "Calculated via CAPM (Fallback Mode)",
                 "sources": f"Formula: {rf}% + ({beta} × {erp}%)"
             },
-            "terminal_growth_rate_percent": {
+            "terminal_growth_rate": {
                 "value": 2.0,
                 "rationale": "Conservative long-term inflation target",
                 "sources": "Fed Target (2%)"
             },
-            "revenue_growth_forecast": [
-                {"value": round(hist_growth * 0.9, 1), "rationale": "Slight moderation", "sources": "Historical Avg Adj."}
-                for _ in range(5)
-            ],
-            "ebitda_margin_target_percent": {
-                "value": financials.get('ebitda_margin_avg', 15.0),
-                "rationale": "Maintaining historical efficiency",
-                "sources": "3Y Historical Average"
+            "terminal_ebitda_multiple": {
+                "value": 10.0,
+                "rationale": "Industry average multiple",
+                "sources": "Sector Comparables"
             },
-            "capex_percent_of_revenue": {
-                "value": 5.0,
-                "rationale": "Standard maintenance CapEx assumption",
-                "sources": "Industry Standard"
-            },
-            "depreciation_percent_of_revenue": {
-                "value": 3.0,
-                "rationale": "Aligned with asset base turnover",
-                "sources": "Historical Ratio"
-            },
-            "working_capital_days_receivables": {"value": 45, "rationale": "Standard terms", "sources": "Industry Norm"},
-            "working_capital_days_payables": {"value": 30, "rationale": "Standard terms", "sources": "Industry Norm"},
-            "working_capital_days_inventory": {"value": 60, "rationale": "Standard turnover", "sources": "Industry Norm"},
-            "tax_rate_percent": {"value": 21.0, "rationale": "Statutory corporate rate", "sources": "US Tax Code"}
+            "useful_life_existing": {
+                "value": 10,
+                "rationale": "Standard asset useful life",
+                "sources": "Accounting Standard"
+            }
         }
 
 # Singleton instance
