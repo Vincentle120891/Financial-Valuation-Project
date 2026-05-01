@@ -107,4 +107,90 @@ export const getForecastBenchmarks = async (sessionId) => {
   return response.data;
 };
 
+// =====================
+// International Markets
+// =====================
+
+// Get list of supported international markets
+export const getInternationalMarkets = async () => {
+  const response = await api.get('/international/tickers');
+  return response.data;
+};
+
+// Fetch international ticker data
+export const fetchInternationalTicker = async (ticker, marketCode) => {
+  const response = await api.get('/international/fetch', {
+    params: { ticker, market_code: marketCode }
+  });
+  return response.data;
+};
+
+// Batch fetch international tickers
+export const fetchInternationalTickersBatch = async (tickers) => {
+  const response = await api.post('/international/fetch-batch', { tickers });
+  return response.data;
+};
+
+// =====================
+// Vietnamese Market
+// =====================
+
+// Get list of all Vietnamese stocks
+export const getVietnameseStocks = async () => {
+  const response = await api.get('/vietnam/tickers');
+  return response.data;
+};
+
+// Search Vietnamese stocks
+export const searchVietnameseStocks = async (query) => {
+  const response = await api.get('/vietnam/search', {
+    params: { q: query }
+  });
+  return response.data;
+};
+
+// Fetch Vietnamese ticker (basic)
+export const fetchVietnameseTicker = async (ticker, marketCode = 'VN') => {
+  const response = await api.get('/vietnam/fetch', {
+    params: { ticker, market_code: marketCode }
+  });
+  return response.data;
+};
+
+// Fetch Vietnamese ticker (enhanced with peers, index data, etc.)
+export const fetchVietnameseTickerEnhanced = async (ticker, includePeers = true, includeIndexData = true) => {
+  const response = await api.get('/vietnam/fetch-enhanced', {
+    params: { 
+      ticker, 
+      include_peers: includePeers, 
+      include_index_data: includeIndexData 
+    }
+  });
+  return response.data;
+};
+
+// Get Vietnam market overview
+export const getVietnamMarketOverview = async () => {
+  const response = await api.get('/vietnam/market-overview');
+  return response.data;
+};
+
+// Get specific Vietnam market info (VN, HA, VC)
+export const getVietnamMarketInfo = async (marketCode) => {
+  const response = await api.get(`/vietnam/market-info/${marketCode}`);
+  return response.data;
+};
+
+// Get stocks by sector
+export const getVietnameseStocksBySector = async (sectorName) => {
+  const response = await api.get(`/vietnam/sector/${sectorName}`);
+  return response.data;
+};
+
+// Batch fetch Vietnamese stocks
+export const fetchVietnameseTickersBatch = async (tickers) => {
+  const response = await api.post('/vietnam/fetch-batch', { tickers });
+  return response.data;
+};
+
 export default api;
