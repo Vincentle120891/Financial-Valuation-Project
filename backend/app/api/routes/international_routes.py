@@ -14,7 +14,7 @@ from app.services.metrics_calculator import MetricsCalculator
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api", tags=["International & Vietnamese Tickers"])
+router = APIRouter(tags=["International & Vietnamese Tickers"])
 
 # Initialize services
 intl_service = InternationalTickerService()
