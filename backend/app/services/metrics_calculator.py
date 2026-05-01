@@ -5,9 +5,18 @@ Calculates ALL derived metrics from API data:
     - Margins (EBITDA, Net, FCF) - historical + 3Y averages
     - Growth Rates (CAGR, YoY) - calculated from revenue history
     - Working Capital Days (AR, Inv, AP) - from balance sheet
+        *Note: Uses available AR, Inventory, AP from balance sheet
     - Capex Ratios - from cash flow / revenue
     - Implied Cost of Debt = Interest Expense / Total Debt
+        *Note: May be unavailable if Interest Expense is missing from yfinance
     - Debt ratios, ROE, ROIC, market multiples
+
+CALCULATIONS THAT REQUIRE EXTERNAL INPUTS (not calculated here):
+    - Equity Risk Premium (ERP) - Requires AI estimation or external macro data
+    - Country Risk Premium - Requires AI estimation or external macro data
+    - Terminal EBITDA Multiples - Requires AI estimation or analyst comps
+    - Risk-Free Rate - Requires treasury yield API or manual input
+    - Forward-looking Beta - Can be calculated from historical prices (optional helper provided)
 """
 
 import logging

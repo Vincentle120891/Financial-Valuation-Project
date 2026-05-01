@@ -169,15 +169,20 @@ async def generate_ai_assumptions(data: Dict, model: str) -> Dict:
     Step 9: Generate AI assumptions for valuation using comprehensive Step 5 data.
     
     Updated to receive ALL calculated metrics from fetch_and_calculate_all_metrics().
-    AI now ONLY generates 4 inputs:
-        - Equity Risk Premium
-        - Terminal Growth Rate  
-        - Terminal EBITDA Multiple
-        - Country Risk Premium
+    
+    IMPORTANT: The following inputs CANNOT be fetched via API and MUST be AI-generated:
+        - Equity Risk Premium (ERP) - Macro/market input based on market conditions
+        - Country Risk Premium - Geographic risk adjustment
+        - Terminal EBITDA Multiple - Forward-looking exit multiple
+        - Terminal Growth Rate - Long-term sustainable growth rate
+    
+    All other inputs (margins, growth rates, working capital days, capex ratios, 
+    cost of debt, debt ratios, ROE, ROIC, market multiples) are calculated from 
+    actual financial data fetched in Step 5A.
     
     Args:
         data: Comprehensive financial data dictionary containing:
-            - key_stats: Market cap, beta, enterprise value, etc.
+            - key_stats: Market cap, enterprise value, etc.
             - income_statement: Revenue, EBITDA, net income, interest, D&A
             - balance_sheet: Debt, cash, equity, AR, inventory, AP
             - cash_flow: FCF, operating CF, capex, dividends

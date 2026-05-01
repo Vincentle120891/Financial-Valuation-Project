@@ -1,12 +1,23 @@
 """
 YFinance Service - Step 5A: API Fetch
 
-Fetches ALL raw data from yfinance free tier:
-    - Income Statement: Revenue, COGS, EBITDA, EBIT, Net Income, Interest, D&A
+Fetches ALL available raw data from yfinance free tier:
+    - Income Statement: Revenue, COGS, EBITDA, EBIT, Net Income, Interest Expense*, D&A
+        *Note: Interest Expense often missing for recent periods in yfinance
     - Balance Sheet: Debt, Cash, Equity, Working Capital, Shares, AR, Inventory, AP
     - Cash Flow: FCF, Operating CF, Capex, Dividends
-    - Key Stats: Beta, Market Cap, Enterprise Value
-    - Analyst Estimates
+    - Key Stats: Market Cap, Enterprise Value
+        *Note: Beta and Risk-Free Rate NOT available via yfinance API - must be calculated/fetched elsewhere
+    - Analyst Estimates: Revenue estimates, earnings estimates, target prices, recommendations
+
+DATA LIMITATIONS (CANNOT be fetched from yfinance):
+    - Equity Risk Premium (ERP) - Macro input, requires external source or AI estimation
+    - Country Risk Premium - Macro input, requires external source or AI estimation  
+    - Terminal EBITDA Multiples - Forward-looking, requires AI estimation or analyst comps
+    - Risk-Free Rate - Not provided by yfinance, requires treasury yield API or manual input
+    - Forward-looking Beta - Must be calculated from historical prices or use default
+    - Segment Data - Not available in yfinance free tier
+    - Management Guidance - Not available, requires SEC filings or company reports
 """
 
 import logging
