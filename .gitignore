@@ -1,1 +1,1 @@
-Nothing should be ignored based on the provided file changes. The modification of 'backend/app/engines/ai_engine.py' is a source code file that should not be added to .gitignore.
+Nothing should be ignored since only Python source files (.py) were added without any build artifacts, dependencies, or temporary files.
