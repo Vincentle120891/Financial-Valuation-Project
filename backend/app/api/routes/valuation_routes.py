@@ -652,9 +652,11 @@ async def generate_ai(request: Request):
         request: Request containing session_id
         
     Returns:
-        AI-generated assumptions
+        AI-generated assumptions with detailed error information if fallback was used
     """
     from app.main import get_session_store
+    import asyncio
+    from concurrent.futures import TimeoutError as FuturesTimeoutError
     
     data = await request.json()
     session_id = data.get('session_id')
@@ -664,11 +666,42 @@ async def generate_ai(request: Request):
     if not session['financial_data']:
         raise HTTPException(status_code=400, detail="Financial data missing")
     
-    ai_results = await generate_ai_assumptions(session['financial_data'], session['selected_model'])
-    session['ai_suggestions'] = ai_results
-    session['status'] = "ai_generated"
-    
-    logger.info(f"AI assumptions generated for session='{session_id}'")
+    try:
+        # Add timeout wrapper for AI generation (90 seconds max)
+        logger.info(f"Starting AI generation for session='{session_id}' with 90s timeout...")
+        
+        # Run AI generation with timeout
+        ai_results = await asyncio.wait_for(
+            generate_ai_assumptions(session['financial_data'], session['selected_model']),
+            timeout=90.0
+        )
+        
+        session['ai_suggestions'] = ai_results
+        session['status'] = "ai_generated"
+        
+        logger.info(f"AI assumptions generated successfully for session='{session_id}'")
+        
+    except asyncio.TimeoutError:
+        logger.error(f"AI generation timed out for session='{session_id}' after 90 seconds")
+        # Return a structured error response instead of throwing
+        return AIAssumptionsResponse(
+            status="ai_timeout",
+            suggestions={
+                "_metadata": {
+                    "provider_status": {},
+                    "available_providers": [],
+                    "used_fallback": True,
+                    "ai_success": False,
+                    "provider_used": None,
+                    "provider_errors": {"timeout": "AI generation exceeded 90 second timeout"},
+                    "fallback_reason": "Request timeout - AI providers did not respond within time limit"
+                }
+            },
+            message="⚠️ AI generation timed out after 90 seconds. Using deterministic fallback assumptions based on historical data and standard formulas."
+        )
+    except Exception as e:
+        logger.error(f"AI generation failed for session='{session_id}': {str(e)}")
+        raise HTTPException(status_code=500, detail=f"AI generation failed: {str(e)}")
     
     return AIAssumptionsResponse(
         status="ai_ready",

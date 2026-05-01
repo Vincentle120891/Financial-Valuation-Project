@@ -211,38 +211,44 @@ const ValuationFlow = () => {
 
       // Try to generate AI suggestions
       try {
+        console.log('🤖 Starting AI generation...');
         const aiDataResponse = await generateAI(sessionId);
         console.log('AI response:', aiDataResponse);
 
         if (aiDataResponse.suggestions) {
           setAiData(aiDataResponse.suggestions);
           
-          // Build detailed error message from metadata
-          const metadata = aiDataResponse.suggestions._metadata;
-          if (metadata && !metadata.ai_success) {
-            // AI failed, build detailed error message
-            let errorMsg = '⚠️ AI generation failed. ';
-            
-            if (metadata.fallback_reason) {
-              errorMsg += `Reason: ${metadata.fallback_reason}. `;
-            }
-            
-            if (metadata.provider_errors && Object.keys(metadata.provider_errors).length > 0) {
-              errorMsg += 'Provider errors: ';
-              const errorDetails = Object.entries(metadata.provider_errors)
-                .map(([provider, error]) => `${provider}: ${error}`)
-                .join('; ');
-              errorMsg += errorDetails;
-            } else if (!metadata.available_providers || metadata.available_providers.length === 0) {
-              errorMsg += 'No AI providers configured. Please add API keys for Groq, Gemini, or Qwen.';
-            }
-            
-            errorMsg += ' Using deterministic fallback - assumptions generated from CAPM formula and historical averages.';
-            setAiError(errorMsg);
-          } else if (metadata?.used_fallback) {
-            setAiError('⚠️ AI providers unavailable. Using deterministic fallback - assumptions generated from CAPM formula and historical averages.');
+          // Check for timeout status
+          if (aiDataResponse.status === 'ai_timeout') {
+            setAiError('⏱️ AI generation timed out after 90 seconds. Using deterministic fallback - assumptions generated from CAPM formula and historical averages.');
           } else {
-            setAiError(null); // Clear any previous AI error
+            // Build detailed error message from metadata
+            const metadata = aiDataResponse.suggestions._metadata;
+            if (metadata && !metadata.ai_success) {
+              // AI failed, build detailed error message
+              let errorMsg = '⚠️ AI generation failed. ';
+              
+              if (metadata.fallback_reason) {
+                errorMsg += `Reason: ${metadata.fallback_reason}. `;
+              }
+              
+              if (metadata.provider_errors && Object.keys(metadata.provider_errors).length > 0) {
+                errorMsg += 'Provider errors: ';
+                const errorDetails = Object.entries(metadata.provider_errors)
+                  .map(([provider, error]) => `${provider}: ${error}`)
+                  .join('; ');
+                errorMsg += errorDetails;
+              } else if (!metadata.available_providers || metadata.available_providers.length === 0) {
+                errorMsg += 'No AI providers configured. Please add API keys for Groq, Gemini, or Qwen.';
+              }
+              
+              errorMsg += ' Using deterministic fallback - assumptions generated from CAPM formula and historical averages.';
+              setAiError(errorMsg);
+            } else if (metadata?.used_fallback) {
+              setAiError('⚠️ AI providers unavailable. Using deterministic fallback - assumptions generated from CAPM formula and historical averages.');
+            } else {
+              setAiError(null); // Clear any previous AI error
+            }
           }
         } else if (aiDataResponse.detail) {
           setAiError(aiDataResponse.detail);
