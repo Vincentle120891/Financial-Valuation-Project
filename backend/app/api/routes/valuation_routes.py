@@ -58,9 +58,41 @@ def get_session(session_id: str, sessions: Dict) -> Dict:
     return sessions[session_id]
 
 
+def fetch_and_calculate_all_metrics(ticker_symbol: str, market: str) -> Dict[str, Any]:
+    """
+    Step 5A + 5B: Unified function that fetches raw data AND calculates all metrics.
+    
+    Executes Step 5A → Step 5B sequentially:
+    - Step 5A: Fetch ALL raw data from yfinance (income statement, balance sheet, cash flow, key stats, analyst estimates)
+    - Step 5B: Calculate ALL derived metrics (margins, growth rates, working capital days, capex ratios, cost of debt, debt ratios, ROE, ROIC, market multiples)
+    
+    Args:
+        ticker_symbol: Stock ticker symbol
+        market: Market type (vietnamese or international)
+        
+    Returns:
+        Comprehensive data package containing both raw and calculated metrics
+    """
+    from app.services.metrics_calculator import fetch_and_calculate_all_metrics as fetch_calc_metrics
+    
+    try:
+        logger.info(f"Fetching and calculating all metrics for ticker='{ticker_symbol}', market='{market}'")
+        
+        # Execute Step 5A → Step 5B sequentially
+        comprehensive_data = fetch_calc_metrics(ticker_symbol, market)
+        
+        logger.info(f"Successfully fetched and calculated all metrics for ticker='{ticker_symbol}'")
+        return comprehensive_data
+        
+    except Exception as e:
+        logger.error(f"Failed to fetch and calculate metrics for ticker='{ticker_symbol}': {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Data fetch and calculation failed: {str(e)}")
+
+
 def fetch_financial_data(ticker_symbol: str, market: str) -> Dict:
     """
     Step 7 & 8: Fetch financial data from yFinance.
+    (Legacy function - kept for backward compatibility)
     
     Args:
         ticker_symbol: Stock ticker symbol
@@ -134,10 +166,24 @@ def fetch_financial_data(ticker_symbol: str, market: str) -> Dict:
 
 async def generate_ai_assumptions(data: Dict, model: str) -> Dict:
     """
-    Step 9: Generate AI assumptions for valuation.
+    Step 9: Generate AI assumptions for valuation using comprehensive Step 5 data.
+    
+    Updated to receive ALL calculated metrics from fetch_and_calculate_all_metrics().
+    AI now ONLY generates 4 inputs:
+        - Equity Risk Premium
+        - Terminal Growth Rate  
+        - Terminal EBITDA Multiple
+        - Country Risk Premium
     
     Args:
-        data: Financial data dictionary
+        data: Comprehensive financial data dictionary containing:
+            - key_stats: Market cap, beta, enterprise value, etc.
+            - income_statement: Revenue, EBITDA, net income, interest, D&A
+            - balance_sheet: Debt, cash, equity, AR, inventory, AP
+            - cash_flow: FCF, operating CF, capex, dividends
+            - analyst_estimates: Revenue/earnings estimates, target prices
+            - calculated_metrics: Margins, growth rates, working capital days, 
+              capex ratios, cost of debt, debt ratios, ROE, ROIC, market multiples
         model: Selected valuation model (DCF, DuPont, COMPS)
         
     Returns:
@@ -147,48 +193,135 @@ async def generate_ai_assumptions(data: Dict, model: str) -> Dict:
     
     logger.info(f"Generating AI assumptions for model='{model}'")
     
-    profile = data.get('profile', {})
-    financials = data.get('financials', {})
+    # Extract comprehensive company data from Step 5 results
+    symbol = data.get('symbol', 'UNKNOWN')
+    key_stats = data.get('key_stats', {})
+    income_stmt = data.get('income_statement', {})
+    balance_sheet = data.get('balance_sheet', {})
+    cash_flow = data.get('cash_flow', {})
+    analyst_estimates = data.get('analyst_estimates', {})
+    calculated_metrics = data.get('calculated_metrics', {})
     
-    revenue_history = list(financials.get('revenue', {}).values())
-    ebitda_history = list(financials.get('ebitda', {}).values())
-    net_income_history = list(financials.get('net_income', {}).values())
+    # Get historical values from income statement
+    revenue_dict = income_stmt.get('total_revenue', {})
+    ebitda_dict = income_stmt.get('ebitda', {})
+    net_income_dict = income_stmt.get('net_income', {})
+    interest_expense_dict = income_stmt.get('interest_expense', {})
     
-    rev_growth_rates = []
-    for i in range(min(3, len(revenue_history) - 1)):
-        if revenue_history[i] and revenue_history[i+1] and revenue_history[i+1] > 0:
-            growth = (revenue_history[i] - revenue_history[i+1]) / revenue_history[i+1]
-            rev_growth_rates.append(growth)
+    # Convert to sorted lists (most recent first)
+    def get_sorted_values(d: Dict) -> List[float]:
+        items = [(k, v) for k, v in d.items() if v is not None]
+        try:
+            sorted_items = sorted(items, key=lambda x: str(x[0]), reverse=True)
+        except Exception:
+            sorted_items = items
+        return [v for _, v in sorted_items]
     
-    avg_hist_growth = sum(rev_growth_rates) / len(rev_growth_rates) if rev_growth_rates else 0.05
+    revenue_history = get_sorted_values(revenue_dict)
+    ebitda_history = get_sorted_values(ebitda_dict)
+    net_income_history = get_sorted_values(net_income_dict)
+    interest_expense_history = get_sorted_values(interest_expense_dict)
     
-    ebitda_margins = []
-    net_margins = []
-    for i in range(min(3, len(revenue_history))):
-        if revenue_history[i] and ebitda_history[i]:
-            ebitda_margins.append(ebitda_history[i] / revenue_history[i])
-        if revenue_history[i] and net_income_history[i]:
-            net_margins.append(net_income_history[i] / revenue_history[i])
-    
+    # Build comprehensive company data package for AI
     company_data = {
-        "ticker": profile.get('ticker', 'UNKNOWN'),
-        "sector": profile.get('sector', 'General'),
+        "ticker": symbol,
+        "sector": key_stats.get('sector', 'General'),
+        "industry": key_stats.get('industry', 'General'),
+        
+        # Financial metrics from calculated_metrics
         "financials": {
             "revenue_ttm": revenue_history[0] if revenue_history else 0,
-            "ebitda_margin_avg": round(sum(ebitda_margins)/len(ebitda_margins)*100, 1) if ebitda_margins else 15.0,
-            "net_margin_avg": round(sum(net_margins)/len(net_margins)*100, 1) if net_margins else 10.0,
-            "revenue_growth_avg": round(avg_hist_growth * 100, 1)
+            "ebitda_ttm": ebitda_history[0] if ebitda_history else 0,
+            "net_income_ttm": net_income_history[0] if net_income_history else 0,
+            
+            # Margins (historical + 3Y averages)
+            "ebitda_margin_latest": calculated_metrics.get('margins', {}).get('ebitda_margin', {}).get('latest'),
+            "ebitda_margin_avg_3y": calculated_metrics.get('margins', {}).get('ebitda_margin', {}).get('avg_3y'),
+            "net_margin_latest": calculated_metrics.get('margins', {}).get('net_margin', {}).get('latest'),
+            "net_margin_avg_3y": calculated_metrics.get('margins', {}).get('net_margin', {}).get('avg_3y'),
+            "fcf_margin_latest": calculated_metrics.get('margins', {}).get('fcf_margin', {}).get('latest'),
+            "fcf_margin_avg_3y": calculated_metrics.get('margins', {}).get('fcf_margin', {}).get('avg_3y'),
+            "operating_margin_latest": calculated_metrics.get('margins', {}).get('operating_margin', {}).get('latest'),
+            
+            # Growth Rates (CAGR, YoY)
+            "revenue_growth_yoy_latest": calculated_metrics.get('growth_rates', {}).get('revenue', {}).get('latest_yoy'),
+            "revenue_cagr_3y": calculated_metrics.get('growth_rates', {}).get('revenue', {}).get('cagr_3y'),
+            "revenue_cagr_5y": calculated_metrics.get('growth_rates', {}).get('revenue', {}).get('cagr_5y'),
+            "ebitda_cagr_3y": calculated_metrics.get('growth_rates', {}).get('ebitda', {}).get('cagr_3y'),
+            "net_income_cagr_3y": calculated_metrics.get('growth_rates', {}).get('net_income', {}).get('cagr_3y'),
+            "eps_cagr_3y": calculated_metrics.get('growth_rates', {}).get('eps', {}).get('cagr_3y'),
         },
+        
+        # Working Capital Days (AR, Inv, AP)
+        "working_capital": {
+            "dso_latest": calculated_metrics.get('working_capital_days', {}).get('dso', {}).get('latest'),
+            "dso_avg_3y": calculated_metrics.get('working_capital_days', {}).get('dso', {}).get('avg_3y'),
+            "dio_latest": calculated_metrics.get('working_capital_days', {}).get('dio', {}).get('latest'),
+            "dio_avg_3y": calculated_metrics.get('working_capital_days', {}).get('dio', {}).get('avg_3y'),
+            "dpo_latest": calculated_metrics.get('working_capital_days', {}).get('dpo', {}).get('latest'),
+            "dpo_avg_3y": calculated_metrics.get('working_capital_days', {}).get('dpo', {}).get('avg_3y'),
+            "cash_conversion_cycle_latest": calculated_metrics.get('working_capital_days', {}).get('cash_conversion_cycle', {}).get('latest'),
+        },
+        
+        # Capex Ratios
+        "capex": {
+            "capex_to_revenue_latest": calculated_metrics.get('capex_ratios', {}).get('capex_to_revenue', {}).get('latest'),
+            "capex_to_revenue_avg_3y": calculated_metrics.get('capex_ratios', {}).get('capex_to_revenue', {}).get('avg_3y'),
+            "fcf_to_revenue_latest": calculated_metrics.get('capex_ratios', {}).get('fcf_to_revenue', {}).get('latest'),
+            "capex_to_ocf_latest": calculated_metrics.get('capex_ratios', {}).get('capex_to_ocf', {}).get('latest'),
+        },
+        
+        # Cost of Debt (Implied = Interest Expense / Total Debt)
+        "debt_cost": {
+            "implied_cost_of_debt_latest": calculated_metrics.get('cost_of_debt', {}).get('implied_cost_of_debt', {}).get('latest'),
+            "implied_cost_of_debt_avg_3y": calculated_metrics.get('cost_of_debt', {}).get('implied_cost_of_debt', {}).get('avg_3y'),
+        },
+        
+        # Debt Ratios
+        "leverage": {
+            "debt_to_equity_latest": calculated_metrics.get('debt_ratios', {}).get('debt_to_equity', {}).get('latest'),
+            "debt_to_assets_latest": calculated_metrics.get('debt_ratios', {}).get('debt_to_assets', {}).get('latest'),
+            "current_ratio_latest": calculated_metrics.get('debt_ratios', {}).get('current_ratio', {}).get('latest'),
+            "quick_ratio_latest": calculated_metrics.get('debt_ratios', {}).get('quick_ratio', {}).get('latest'),
+            "net_debt_latest": calculated_metrics.get('debt_ratios', {}).get('net_debt', {}).get('latest'),
+        },
+        
+        # Profitability & Returns (ROE, ROIC)
+        "returns": {
+            "roe_latest": calculated_metrics.get('roe_roic', {}).get('roe', {}).get('latest'),
+            "roic_latest": calculated_metrics.get('roe_roic', {}).get('roic', {}).get('latest'),
+            "roa_latest": calculated_metrics.get('profitability_ratios', {}).get('roa', {}).get('latest'),
+        },
+        
+        # Market Data
         "market_data": {
-            "beta": profile.get('beta', 1.0),
-            "risk_free_rate": 4.5
-        }
+            "beta": key_stats.get('beta', 1.0),
+            "market_cap": key_stats.get('market_cap'),
+            "enterprise_value": key_stats.get('enterprise_value'),
+            "current_price": key_stats.get('current_price'),
+            "pe_ratio": key_stats.get('pe_ratio'),
+            "price_to_book": key_stats.get('price_to_book'),
+            "ev_to_ebitda": key_stats.get('ev_to_ebitda'),
+            "dividend_yield": key_stats.get('dividend_yield'),
+        },
+        
+        # Market Multiples
+        "multiples": calculated_metrics.get('market_multiples', {}),
+        
+        # Analyst Estimates
+        "analyst_estimates": {
+            "revenue_growth_estimate": analyst_estimates.get('revenue_estimates', {}).get('growth'),
+            "earnings_growth_estimate": analyst_estimates.get('earnings_estimates', {}).get('growth'),
+            "target_price_mean": analyst_estimates.get('target_prices', {}).get('mean'),
+            "num_analysts": analyst_estimates.get('revenue_estimates', {}).get('num_analysts'),
+        },
     }
     
     # Get provider status for transparency
     provider_status = ai_engine.get_provider_status()
     available_providers = [k for k, v in provider_status.items() if v == "configured"]
     
+    # Generate AI assumptions - now focused on only 4 key inputs
     ai_results = ai_engine.generate_assumptions(company_data, model)
     
     formatted_results = {"model": model.upper()}
@@ -201,14 +334,15 @@ async def generate_ai_assumptions(data: Dict, model: str) -> Dict:
         "provider_status": provider_status,
         "available_providers": available_providers,
         "used_fallback": ai_status.get("success", False) is False if ai_status else (
-            len(ai_results.get("wacc_percent", {}).get("sources", "").split(":")[0].strip() if isinstance(ai_results.get("wacc_percent", {}).get("sources"), str) else "") == 0 or 
-            "Fallback" in ai_results.get("wacc_percent", {}).get("rationale", "") or
-            "CAPM (Fallback" in ai_results.get("wacc_percent", {}).get("rationale", "")
+            len(ai_results.get("equity_risk_premium", {}).get("sources", "").split(":")[0].strip() if isinstance(ai_results.get("equity_risk_premium", {}).get("sources"), str) else "") == 0 or 
+            "Fallback" in ai_results.get("equity_risk_premium", {}).get("rationale", "") or
+            "CAPM (Fallback" in ai_results.get("equity_risk_premium", {}).get("rationale", "")
         ),
         "ai_success": ai_status.get("success") if ai_status else None,
         "provider_used": ai_status.get("provider_used") if ai_status else None,
         "provider_errors": ai_status.get("errors", {}) if ai_status else {},
-        "fallback_reason": ai_status.get("fallback_reason") if ai_status and not ai_status.get("success") else None
+        "fallback_reason": ai_status.get("fallback_reason") if ai_status and not ai_status.get("success") else None,
+        "comprehensive_data_used": True,  # Flag indicating Step 5 data was used
     }
     
     for key, item in ai_results.items():
@@ -231,7 +365,7 @@ async def generate_ai_assumptions(data: Dict, model: str) -> Dict:
                     })
             formatted_results[key] = formatted_list
     
-    logger.info(f"AI assumptions generated successfully for model='{model}'")
+    logger.info(f"AI assumptions generated successfully for model='{model}' using comprehensive Step 5 data")
     return formatted_results
 
 
