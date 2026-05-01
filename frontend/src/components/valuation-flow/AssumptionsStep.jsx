@@ -7,19 +7,20 @@ import {
 
 /**
  * AssumptionsStep Component
- * Steps 6 & 8: View Retrieved Inputs / Review & Confirm Assumptions
+ * Step 9: Review & Confirm Assumptions (Final confirmation before running valuation)
  * 
  * Features:
  * - Historical trends visualization
  * - Peer benchmarking summary
  * - AI suggestions with rationale
- * - Manual input override (Step 8 only)
+ * - Manual input override
  * - Interactive charts (Revenue, EBITDA, Growth)
  * - Health check and error validation
+ * - Final confirmation of all assumptions
  * 
  * Props:
- * - showReviewOnly: boolean (default: false) - If true, shows read-only view for Step 6
- * - onContinueToForecastDrivers: function - Callback to navigate from Step 6 to Step 7
+ * - onConfirmAssumptions: function - Callback to confirm and proceed to Run Valuation
+ * - onBackToRequirements: function - Callback to go back to requirements step
  */
 const AssumptionsStep = ({
   historicalData,

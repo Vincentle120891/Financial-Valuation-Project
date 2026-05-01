@@ -3,6 +3,8 @@ import { searchCompanies, selectCompany, selectModels, prepareInputs, fetchData,
 import SearchStep from './valuation-flow/SearchStep';
 import ModelSelectionStep from './valuation-flow/ModelSelectionStep';
 import RequirementsStep from './valuation-flow/RequirementsStep';
+import ApiDataStep from './valuation-flow/ApiDataStep';
+import AiAssumptionsStep from './valuation-flow/AiAssumptionsStep';
 import ForecastDriversStep from './valuation-flow/ForecastDriversStep';
 import AssumptionsStep from './valuation-flow/AssumptionsStep';
 import RunValuationStep from './valuation-flow/RunValuationStep';
@@ -15,11 +17,13 @@ import ResultsStep from './valuation-flow/ResultsStep';
  * 1. Search Company
  * 2-3. (Skipped in current implementation)
  * 4. Select Model
- * 5. Review Requirements
- * 6-7. (Data retrieval happens internally)
- * 8. Confirm Assumptions
- * 9. Run Valuation
- * 10. View Results
+ * 5. Review Requirements (shows what data is needed)
+ * 6. API Data Review (displays data retrieved from APIs)
+ * 7. AI Assumptions (displays AI-generated assumptions)
+ * 8. Forecast Drivers (manual input for forecast drivers)
+ * 9. Confirm Assumptions
+ * 10. Run Valuation
+ * 11. View Results
  *
  * Architecture:
  * - Container component managing state and business logic
@@ -138,24 +142,34 @@ const ValuationFlow = () => {
     setError(null);
   };
 
-  // ==================== SHOW INPUTS (STEP 6) ====================
-  const handleShowInputs = useCallback(() => {
+  // ==================== SHOW API DATA (STEP 6) ====================
+  const handleShowApiData = useCallback(() => {
     setCurrentStep(6);
   }, []);
 
-  // ==================== CONTINUE TO FORECAST DRIVERS (STEP 7) ====================
-  const handleContinueToForecastDrivers = useCallback(() => {
+  // ==================== CONTINUE TO AI ASSUMPTIONS (STEP 7) ====================
+  const handleContinueToAiAssumptions = useCallback(() => {
     setCurrentStep(7);
   }, []);
 
-  // ==================== CONTINUE TO ASSUMPTIONS (STEP 8) ====================
-  const handleContinueToAssumptions = useCallback(() => {
+  // ==================== CONTINUE TO FORECAST DRIVERS (STEP 8) ====================
+  const handleContinueToForecastDrivers = useCallback(() => {
     setCurrentStep(8);
+  }, []);
+
+  // ==================== CONTINUE TO ASSUMPTIONS (STEP 9) ====================
+  const handleContinueToAssumptions = useCallback(() => {
+    setCurrentStep(9);
   }, []);
 
   // ==================== BACK TO REQUIREMENTS (FROM STEP 6/8) ====================
   const handleBackToRequirements = useCallback(() => {
     setCurrentStep(5);
+  }, []);
+
+  // ==================== BACK TO API DATA (FROM STEP 7) ====================
+  const handleBackToApiData = useCallback(() => {
+    setCurrentStep(6);
   }, []);
 
   // ==================== FETCH REQUIRED INPUTS ====================
@@ -410,27 +424,38 @@ const ValuationFlow = () => {
             aiData={aiData}
             aiError={aiError}
             requiredFields={requiredFields}
-            onShowInputs={handleShowInputs}
+            onShowInputs={handleShowApiData}
           />
         );
       case 6:
         return (
-          <AssumptionsStep
+          <ApiDataStep
             historicalData={historicalData}
+            forecastDrivers={forecastDrivers}
             peerData={peerData}
+            dcfInputs={dcfInputs}
+            dupontResults={dupontResults}
+            compsResults={compsResults}
+            onBackToRequirements={handleBackToRequirements}
+            onContinueToAiAssumptions={handleContinueToAiAssumptions}
+            loading={loading}
+          />
+        );
+      case 7:
+        return (
+          <AiAssumptionsStep
             aiData={aiData}
             aiError={aiError}
             confirmedValues={confirmedValues}
             selectedModel={selectedModel}
             onManualInput={handleManualInput}
             onUseAI={handleUseAI}
-            showReviewOnly={true}
+            onBackToApiData={handleBackToApiData}
             onContinueToForecastDrivers={handleContinueToForecastDrivers}
-            onBackToRequirements={handleBackToRequirements}
             loading={loading}
           />
         );
-      case 7:
+      case 8:
         return (
           <ForecastDriversStep
             forecastDrivers={forecastDrivers}
@@ -442,7 +467,7 @@ const ValuationFlow = () => {
             loading={loading}
           />
         );
-      case 8:
+      case 9:
         return (
           <AssumptionsStep
             historicalData={historicalData}
@@ -458,7 +483,7 @@ const ValuationFlow = () => {
             loading={loading}
           />
         );
-      case 9:
+      case 10:
         return (
           <RunValuationStep
             selectedCompany={selectedCompany}
@@ -470,7 +495,7 @@ const ValuationFlow = () => {
             onRunValuation={handleRunValuation}
           />
         );
-      case 10:
+      case 11:
         return (
           <ResultsStep
             valuationResults={valuationResults}
