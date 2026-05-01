@@ -123,18 +123,31 @@ class AIFallbackEngine:
 
     def _build_prompt(self, data: Dict[str, Any], model_type: str) -> str:
         """
-        Construct a detailed, well-structured prompt for the LLM.
-        Enhanced with clear instructions, context, and output format requirements.
+        Construct a detailed, well-structured prompt for the LLM based on model type.
         
-        NOTE: AI ONLY generates 4 inputs that cannot be fetched from APIs:
-        1. Equity Risk Premium
-        2. Country Risk Premium  
-        3. Terminal Growth Rate
-        4. Terminal EBITDA Multiple
+        Different valuation models require different AI-generated inputs:
+        - DCF: 4 forward-looking assumptions (ERP, CRP, Terminal Growth, Terminal Multiple)
+        - DuPont: NO AI inputs needed (purely historical calculation)
+        - Comps: Peer company suggestions only (multiples calculated from data)
+        - Vietnamese/International: Market-specific assumptions
         
-        All other inputs (Risk-Free Rate, Beta, Cost of Debt, WACC, Forecast Drivers)
-        are calculated from API data or user-provided scenario drivers.
+        All other inputs (Risk-Free Rate, Beta, Cost of Debt, WACC, Forecast Drivers,
+        Margins, Working Capital Days, Capex %) are calculated from API data or 
+        user-provided scenario drivers.
         """
+        if model_type == "DuPont":
+            return self._build_dupont_prompt(data)
+        elif model_type == "Comps":
+            return self._build_comps_prompt(data)
+        elif model_type == "Vietnamese":
+            return self._build_vietnamese_prompt(data)
+        elif model_type == "International":
+            return self._build_international_prompt(data)
+        else:
+            # Default to DCF
+            return self._build_dcf_prompt(data)
+    
+    def _build_dcf_prompt(self, data: Dict[str, Any]) -> str:
         ticker = data.get('ticker', 'UNKNOWN')
         company_name = data.get('company_name', 'Unknown Company')
         financials = data.get('financials', {})
@@ -234,6 +247,227 @@ Return ONLY valid JSON with exactly these 4 keys plus rationale:
     "terminal_growth_rate": 2.0,
     "terminal_ebitda_multiple": 10.5,
     "rationale": "ERP of 5.5% reflects current market conditions with moderate volatility. CRP of 0% as company operates primarily in US stable market. Terminal growth of 2.0% aligns with long-term Fed inflation target and GDP growth expectations. Terminal EBITDA multiple of 10.5x is based on sector peer average, adjusted for company's mature market position and stable cash flows."
+}}
+
+Now generate the JSON response for {ticker}:
+""".strip()
+
+    def _build_dupont_prompt(self, data: Dict[str, Any]) -> str:
+        """
+        DuPont Analysis requires NO AI-generated inputs.
+        All metrics are calculated from historical financial statements.
+        
+        This prompt informs the AI that no action is needed for DuPont.
+        """
+        ticker = data.get('ticker', 'UNKNOWN')
+        company_name = data.get('company_name', 'Unknown Company')
+        
+        return f"""
+# ROLE
+You are a senior financial analyst specializing in DuPont analysis.
+
+# TASK
+NO AI INPUTS REQUIRED for DuPont Analysis.
+
+DuPont analysis is a PURELY HISTORICAL calculation that decomposes ROE into:
+1. Net Profit Margin (from income statement)
+2. Asset Turnover (from balance sheet and income statement)
+3. Equity Multiplier (from balance sheet)
+
+All required inputs are fetched from yfinance API:
+- Revenue, Net Income → Margins
+- Total Assets, Total Equity → Leverage ratios
+- Working Capital components (AR, Inventory, AP) → Efficiency ratios
+
+# COMPANY CONTEXT
+- Ticker: {ticker}
+- Name: {company_name}
+
+# OUTPUT
+Return an empty JSON object as no AI assumptions are needed:
+{{}}
+
+Do NOT generate any forward-looking assumptions. All DuPont metrics will be calculated from historical API data.
+""".strip()
+
+    def _build_comps_prompt(self, data: Dict[str, Any]) -> str:
+        """
+        Comps Analysis requires NO AI-generated valuation inputs.
+        All multiples are calculated from peer company financial data.
+        
+        NOTE: Peer suggestion is handled separately by suggest_peer_companies().
+        This prompt confirms no additional AI inputs are needed.
+        """
+        ticker = data.get('ticker', 'UNKNOWN')
+        company_name = data.get('company_name', 'Unknown Company')
+        sector = data.get('sector', 'General')
+        industry = data.get('industry', 'General')
+        
+        return f"""
+# ROLE
+You are a senior equity research analyst specializing in comparable company analysis.
+
+# TASK
+NO AI INPUTS REQUIRED for Comparable Company Analysis.
+
+All valuation multiples are CALCULATED from peer company data:
+- EV/EBITDA = Enterprise Value / EBITDA (fetched from yfinance)
+- P/E = Price per Share / EPS (fetched from yfinance)
+- EV/Revenue = Enterprise Value / Revenue (fetched from yfinance)
+- P/B = Market Cap / Book Value (fetched from yfinance)
+
+Peer companies are suggested via separate function (suggest_peer_companies).
+
+# COMPANY CONTEXT
+- Ticker: {ticker}
+- Name: {company_name}
+- Sector: {sector}
+- Industry: {industry}
+
+# OUTPUT
+Return an empty JSON object as no AI assumptions are needed:
+{{}}
+
+Do NOT generate any multiples or forward-looking assumptions. All Comps metrics will be calculated from peer API data.
+""".strip()
+
+    def _build_vietnamese_prompt(self, data: Dict[str, Any]) -> str:
+        """
+        Vietnamese Model may require market-specific assumptions.
+        For now, similar to DCF but with Vietnam-specific context.
+        """
+        ticker = data.get('ticker', 'UNKNOWN')
+        company_name = data.get('company_name', 'Unknown Company')
+        country = data.get('country', 'Vietnam')
+        financials = data.get('financials', {})
+        market_data = data.get('market_data', {})
+        
+        revenue_growth = financials.get('revenue_growth_avg', 'N/A')
+        ebitda_margin = financials.get('ebitda_margin_avg', 'N/A')
+        
+        return f"""
+# ROLE
+You are a senior financial analyst specializing in Vietnamese market valuations.
+
+# TASK
+Generate ONLY the 4 forward-looking assumptions for Vietnamese market company {company_name} ({ticker}).
+
+# CRITICAL: AI-ONLY INPUTS (same as DCF)
+1. **Equity Risk Premium (ERP)**: Market risk premium for Vietnamese market
+2. **Country Risk Premium (CRP)**: Vietnam-specific risk premium (typically 2-4% for emerging market)
+3. **Terminal Growth Rate**: Perpetual growth rate (should not exceed Vietnam's long-term GDP growth ~5-6%)
+4. **Terminal EBITDA Multiple**: Exit multiple based on Vietnamese market conditions
+
+# DO NOT PROVIDE
+- Risk-Free Rate (use Vietnamese government bond rate)
+- Beta (calculated from historical prices)
+- Cost of Debt (calculated from interest expense / debt)
+- WACC (calculated from CAPM)
+- Margins, Growth Rates, Working Capital Days (all calculated from financials)
+
+# COMPANY CONTEXT
+## Historical Performance
+- Revenue Growth (Avg 3Y): {revenue_growth}%
+- EBITDA Margin (Avg 3Y): {ebitda_margin}%
+
+## Market Data
+- Sector: {data.get('sector', 'General')}
+- Industry: {data.get('industry', 'General')}
+- Country: {country}
+
+# VIETNAM-SPECIFIC GUIDELINES
+- ERP for Vietnam: Typically 6.0% - 8.0% (higher than developed markets due to emerging market risk)
+- CRP for Vietnam: 2.0% - 4.0% (reflecting emerging market political/economic risk)
+- Terminal Growth: 4.0% - 6.0% (aligned with Vietnam's higher GDP growth potential)
+- Terminal Multiples: Generally lower than developed markets (8x - 12x typical)
+
+# OUTPUT REQUIREMENTS
+Return ONLY valid JSON:
+{{
+    "equity_risk_premium": <number>,
+    "country_risk_premium": <number>,
+    "terminal_growth_rate": <number>,
+    "terminal_ebitda_multiple": <number>,
+    "rationale": "<string explaining all 4 choices with Vietnam context>"
+}}
+
+# EXAMPLE RESPONSE
+{{
+    "equity_risk_premium": 7.0,
+    "country_risk_premium": 3.0,
+    "terminal_growth_rate": 5.0,
+    "terminal_ebitda_multiple": 9.5,
+    "rationale": "ERP of 7.0% reflects Vietnam's emerging market status with moderate volatility. CRP of 3.0% accounts for Vietnam-specific political and currency risks. Terminal growth of 5.0% aligns with Vietnam's strong GDP growth expectations. Terminal EBITDA multiple of 9.5x reflects Vietnamese market discount vs developed market peers."
+}}
+
+Now generate the JSON response for {ticker}:
+""".strip()
+
+    def _build_international_prompt(self, data: Dict[str, Any]) -> str:
+        """
+        International Model requires cross-border adjustments.
+        Similar to DCF but with multi-country considerations.
+        """
+        ticker = data.get('ticker', 'UNKNOWN')
+        company_name = data.get('company_name', 'Unknown Company')
+        country = data.get('country', 'US')
+        financials = data.get('financials', {})
+        market_data = data.get('market_data', {})
+        
+        revenue_growth = financials.get('revenue_growth_avg', 'N/A')
+        ebitda_margin = financials.get('ebitda_margin_avg', 'N/A')
+        
+        return f"""
+# ROLE
+You are a senior financial analyst specializing in international/cross-border valuations.
+
+# TASK
+Generate ONLY the 4 forward-looking assumptions for international company {company_name} ({ticker}) operating in {country}.
+
+# CRITICAL: AI-ONLY INPUTS (same as DCF, with international context)
+1. **Equity Risk Premium (ERP)**: Base market risk premium (adjust for developed vs emerging)
+2. **Country Risk Premium (CRP)**: Specific to {country} operations
+3. **Terminal Growth Rate**: Perpetual growth rate (consider country's long-term GDP growth)
+4. **Terminal EBITDA Multiple**: Exit multiple (adjust for market development level)
+
+# DO NOT PROVIDE
+- Risk-Free Rate (use appropriate government bond rate for base currency)
+- Beta (calculated from historical prices, may need unlevering/relevering)
+- Cost of Debt (calculated from interest expense / debt)
+- WACC (calculated from CAPM with country adjustments)
+- Margins, Growth Rates, Working Capital Days (all calculated from financials)
+
+# COMPANY CONTEXT
+## Historical Performance
+- Revenue Growth (Avg 3Y): {revenue_growth}%
+- EBITDA Margin (Avg 3Y): {ebitda_margin}%
+
+## Market Data
+- Sector: {data.get('sector', 'General')}
+- Industry: {data.get('industry', 'General')}
+- Country: {country}
+
+# INTERNATIONAL GUIDELINES
+- Developed Markets (US, UK, Germany, Japan):
+  - ERP: 4.5% - 6.0%
+  - CRP: 0% - 0.5%
+  - Terminal Growth: 1.5% - 2.5%
+  - Multiples: Market-appropriate (Tech 12-15x, Industrials 8-12x, etc.)
+
+- Emerging Markets (China, India, Brazil, etc.):
+  - ERP: 6.0% - 8.0%
+  - CRP: 1.5% - 5.0%+
+  - Terminal Growth: 3.0% - 6.0%
+  - Multiples: Typically 20-30% discount to developed markets
+
+# OUTPUT REQUIREMENTS
+Return ONLY valid JSON:
+{{
+    "equity_risk_premium": <number>,
+    "country_risk_premium": <number>,
+    "terminal_growth_rate": <number>,
+    "terminal_ebitda_multiple": <number>,
+    "rationale": "<string explaining all 4 choices with international context>"
 }}
 
 Now generate the JSON response for {ticker}:
@@ -377,9 +611,9 @@ Now generate the JSON response for {ticker}:
             raise
 
     def _parse_response(self, json_str: str, model_type: str) -> Dict[str, Any]:
-        """Parse and validate the JSON response.
+        """Parse and validate the JSON response based on model type.
         
-        Expected format from AI:
+        DCF/Vietnamese/International format from AI:
         {
             "equity_risk_premium": <number>,
             "country_risk_premium": <number>,
@@ -388,10 +622,18 @@ Now generate the JSON response for {ticker}:
             "rationale": "<string>"
         }
         
+        DuPont/Comps format from AI:
+        {}  (empty - no AI inputs needed)
+        
         Returns formatted data with value/rationale/sources structure for each field.
         """
         try:
             data = json.loads(json_str)
+            
+            # For DuPont and Comps, return empty dict (no AI inputs needed)
+            if model_type in ['DuPont', 'Comps']:
+                logger.info(f"Model {model_type} requires no AI inputs. Returning empty dict.")
+                return {}
             
             # Helper function to wrap values in standard format
             def wrap_value(key, default_value=None):
@@ -411,7 +653,7 @@ Now generate the JSON response for {ticker}:
             
             formatted_data = {}
             
-            # Parse the 4 AI-only inputs
+            # Parse the 4 AI-only inputs (for DCF, Vietnamese, International models)
             erp = wrap_value('equity_risk_premium', 5.5)
             if erp:
                 formatted_data['equity_risk_premium'] = erp
@@ -445,14 +687,16 @@ Now generate the JSON response for {ticker}:
     def _deterministic_fallback(self, data: Dict[str, Any], model_type: str) -> Dict[str, Any]:
         """Rule-based fallback when all APIs fail.
         
-        Returns ONLY the 4 AI-only inputs with sensible defaults:
-        1. Equity Risk Premium
-        2. Country Risk Premium
-        3. Terminal Growth Rate
-        4. Terminal EBITDA Multiple
+        Returns ONLY the 4 AI-only inputs for DCF/Vietnamese/International models.
+        Returns empty dict for DuPont/Comps (no AI inputs needed).
         
         All other inputs are calculated from API data, not generated here.
         """
+        # DuPont and Comps require NO AI inputs
+        if model_type in ['DuPont', 'Comps']:
+            logger.info(f"Model {model_type} requires no AI inputs. Returning empty fallback.")
+            return {}
+        
         financials = data.get('financials', {})
         market_data = data.get('market_data', {})
         country = data.get('country', 'US')
@@ -463,7 +707,7 @@ Now generate the JSON response for {ticker}:
         tem = 10.0  # Neutral EBITDA multiple
         
         # Adjust CRP based on country (simplified logic)
-        emerging_markets = ['BR', 'IN', 'CN', 'RU', 'ZA', 'MX', 'ID', 'TR', 'AR']
+        emerging_markets = ['BR', 'IN', 'CN', 'RU', 'ZA', 'MX', 'ID', 'TR', 'AR', 'VN']
         crp = 2.0 if any(code in country.upper() for code in emerging_markets) else 0.0
         
         return {
