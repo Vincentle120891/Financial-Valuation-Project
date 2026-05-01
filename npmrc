@@ -1,7 +1,0 @@
-# Redirect cache to kataShared (188GB) — away from 504MB root
-cache=/.dockerenv/npm-cache
-
-# Lean installs
-prefer-offline=true
-audit=false
-fund=false

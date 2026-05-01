@@ -1,3 +1,37 @@
 backend/app/api/routes/valuation_routes.py appears to be a source code file (Python file with .py extension). Since only source/config files are being modified and there are no build artifacts, dependencies, or temporary files in the changes, no additional ignore rules are needed.
 
-The modification of a single Python source file does not warrant adding any new ignore patterns to .gitignore.
+# Environment
+.env
+.env.local
+.env.*
+
+# Editors
+.vscode/
+
+# Logs and temp files
+*.log
+*.tmp
+*.swp
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+
+# Virtual environments
+venv/
+.venv/
+```
