@@ -551,10 +551,10 @@ async def select_models(request: ModelSelectRequest):
     }
 
 
-@router.post("/step-5-6-prepare-inputs", response_model=PrepareInputsResponse)
+@router.post("/step-5-prepare-inputs", response_model=PrepareInputsResponse)
 async def prepare_inputs(request: dict = Body(...)):
     """
-    Step 5 & 6: Show required inputs for the selected model.
+    Step 5: Show required inputs for the selected model.
     
     Args:
         request: Request containing session_id
@@ -612,20 +612,28 @@ async def prepare_inputs(request: dict = Body(...)):
     )
 
 
-@router.post("/step-7-8-fetch-data", response_model=FetchDataResponse)
-async def fetch_data(request: SessionFetchRequest):
+@router.post("/step-6-fetch-api-data", response_model=FetchDataResponse)
+async def fetch_api_data(request: SessionFetchRequest):
     """
-    Step 7 & 8: Fetch financial data from external sources.
+    Step 6: Fetch financial data from external APIs.
+    
+    This endpoint handles ONLY API data retrieval:
+    - Historical financials from yFinance
+    - Forecast drivers from historical data
+    - Peer comparison data
+    - DCF inputs (WACC, terminal growth)
+    - DuPont analysis results
+    - Comps analysis results
     
     Args:
         request: Session fetch request
         
     Returns:
-        Financial data
+        Financial data retrieved from APIs
     """
     from app.main import get_session_store
     
-    logger.info(f"Fetching data for session='{request.session_id}'")
+    logger.info(f"Fetching API data for session='{request.session_id}'")
     
     sessions = get_session_store()
     session = get_session(request.session_id, sessions)
@@ -634,27 +642,37 @@ async def fetch_data(request: SessionFetchRequest):
     session['financial_data'] = financial_data
     session['status'] = "data_fetched"
     
-    logger.info(f"Data fetched successfully for session='{request.session_id}'")
+    logger.info(f"API data fetched successfully for session='{request.session_id}'")
     
     return FetchDataResponse(
         status="data_ready",
         data=financial_data,
-        message="Financial data retrieved successfully."
+        message="Financial data retrieved successfully from APIs."
     )
 
 
-@router.post("/step-9-generate-ai", response_model=AIAssumptionsResponse)
-async def generate_ai(request: Request):
+@router.post("/step-7-generate-ai-assumptions", response_model=AIAssumptionsResponse)
+async def generate_ai_assumptions_endpoint(request: Request):
     """
-    Step 9: Generate AI assumptions for valuation.
+    Step 7: Generate AI assumptions for valuation.
+    
+    This endpoint handles ONLY AI generation:
+    - WACC with rationale
+    - Terminal Growth Rate with rationale
+    - Revenue Growth Forecast
+    - EBITDA Margin Forecast
+    
+    Includes proper timeout handling and fallback logic.
     
     Args:
         request: Request containing session_id
         
     Returns:
-        AI-generated assumptions
+        AI-generated assumptions with detailed error information if fallback was used
     """
     from app.main import get_session_store
+    import asyncio
+    from concurrent.futures import TimeoutError as FuturesTimeoutError
     
     data = await request.json()
     session_id = data.get('session_id')
@@ -664,11 +682,42 @@ async def generate_ai(request: Request):
     if not session['financial_data']:
         raise HTTPException(status_code=400, detail="Financial data missing")
     
-    ai_results = await generate_ai_assumptions(session['financial_data'], session['selected_model'])
-    session['ai_suggestions'] = ai_results
-    session['status'] = "ai_generated"
-    
-    logger.info(f"AI assumptions generated for session='{session_id}'")
+    try:
+        # Add timeout wrapper for AI generation (90 seconds max)
+        logger.info(f"Starting AI generation for session='{session_id}' with 90s timeout...")
+        
+        # Run AI generation with timeout
+        ai_results = await asyncio.wait_for(
+            generate_ai_assumptions(session['financial_data'], session['selected_model']),
+            timeout=90.0
+        )
+        
+        session['ai_suggestions'] = ai_results
+        session['status'] = "ai_generated"
+        
+        logger.info(f"AI assumptions generated successfully for session='{session_id}'")
+        
+    except asyncio.TimeoutError:
+        logger.error(f"AI generation timed out for session='{session_id}' after 90 seconds")
+        # Return a structured error response instead of throwing
+        return AIAssumptionsResponse(
+            status="ai_timeout",
+            suggestions={
+                "_metadata": {
+                    "provider_status": {},
+                    "available_providers": [],
+                    "used_fallback": True,
+                    "ai_success": False,
+                    "provider_used": None,
+                    "provider_errors": {"timeout": "AI generation exceeded 90 second timeout"},
+                    "fallback_reason": "Request timeout - AI providers did not respond within time limit"
+                }
+            },
+            message="⚠️ AI generation timed out after 90 seconds. Using deterministic fallback assumptions based on historical data and standard formulas."
+        )
+    except Exception as e:
+        logger.error(f"AI generation failed for session='{session_id}': {str(e)}")
+        raise HTTPException(status_code=500, detail=f"AI generation failed: {str(e)}")
     
     return AIAssumptionsResponse(
         status="ai_ready",
