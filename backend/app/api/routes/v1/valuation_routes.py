@@ -593,10 +593,10 @@ async def select_models(request: ModelSelectRequest):
     }
 
 
-@router.post("/step-5-6-prepare-inputs", response_model=PrepareInputsResponse)
+@router.post("/step-5-prepare-inputs", response_model=PrepareInputsResponse)
 async def prepare_inputs(request: dict = Body(...)):
     """
-    Step 5 & 6: Show required inputs for the selected model.
+    Step 5: Show required inputs for the selected model.
     
     Args:
         request: Request containing session_id
@@ -714,20 +714,28 @@ async def prepare_inputs(request: dict = Body(...)):
     )
 
 
-@router.post("/step-7-8-fetch-data", response_model=FetchDataResponse)
-async def fetch_data(request: SessionFetchRequest):
+@router.post("/step-6-fetch-api-data", response_model=FetchDataResponse)
+async def fetch_api_data(request: SessionFetchRequest):
     """
-    Step 7 & 8: Fetch financial data from external sources.
+    Step 6: Fetch financial data from external sources (yFinance, etc.).
+    
+    Returns API-retrieved data only:
+    - Historical financials
+    - Forecast drivers from historical data
+    - Peer comparison data
+    - DCF inputs (WACC, terminal growth)
+    - DuPont analysis results
+    - Comps analysis results
     
     Args:
         request: Session fetch request
         
     Returns:
-        Financial data
+        Financial data from APIs
     """
     from app.main import get_session_store
     
-    logger.info(f"Fetching data for session='{request.session_id}'")
+    logger.info(f"Fetching API data for session='{request.session_id}'")
     
     sessions = get_session_store()
     session = get_session(request.session_id, sessions)
@@ -811,25 +819,33 @@ async def fetch_data(request: SessionFetchRequest):
     
     session['status'] = "data_fetched"
     
-    logger.info(f"Data fetched successfully for session='{request.session_id}'")
+    logger.info(f"API data fetched successfully for session='{request.session_id}'")
     
     return FetchDataResponse(
         status="data_ready",
         data=financial_data,
-        message="Financial data retrieved successfully."
+        message="Financial data retrieved successfully from APIs."
     )
 
 
-@router.post("/step-9-generate-ai", response_model=AIAssumptionsResponse)
-async def generate_ai(request: Request):
+@router.post("/step-7-generate-ai-assumptions", response_model=AIAssumptionsResponse)
+async def generate_ai_assumptions_endpoint(request: Request):
     """
-    Step 9: Generate AI assumptions for valuation.
+    Step 7: Generate AI assumptions for valuation.
+    
+    Only handles AI generation:
+    - WACC with rationale
+    - Terminal Growth Rate with rationale
+    - Revenue Growth Forecast
+    - EBITDA Margin Forecast
+    
+    Includes proper timeout handling and fallback logic.
     
     Args:
         request: Request containing session_id
         
     Returns:
-        AI-generated assumptions
+        AI-generated assumptions with rationale
     """
     from app.main import get_session_store
     
@@ -862,6 +878,12 @@ async def generate_ai(request: Request):
             "used_fallback": ai_metadata.get("provider_used") is None
         }
     )
+
+
+# Legacy endpoints - DEPRECATED, use new separated endpoints instead
+# @router.post("/step-5-6-prepare-inputs") -> Use /step-5-prepare-inputs
+# @router.post("/step-7-8-fetch-data") -> Use /step-6-fetch-api-data
+# @router.post("/step-9-generate-ai") -> Use /step-7-generate-ai-assumptions
 
 
 @router.post("/step-10-confirm-assumptions")

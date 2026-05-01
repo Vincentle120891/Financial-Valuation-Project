@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { searchCompanies, selectCompany, selectModels, prepareInputs, fetchData, generateAI, confirmAssumptions, runValuation } from '../services/api';
+import { searchCompanies, selectCompany, selectModels, prepareInputs, fetchApiData, generateAI, confirmAssumptions, runValuation } from '../services/api';
 import SearchStep from './valuation-flow/SearchStep';
 import ModelSelectionStep from './valuation-flow/ModelSelectionStep';
 import RequirementsStep from './valuation-flow/RequirementsStep';
@@ -198,8 +198,8 @@ const ValuationFlow = () => {
     setLoading(true);
     setAiError(null); // Clear previous AI errors
     try {
-      const fetchDataResponse = await fetchData(sessionId);
-      console.log('Fetch data response:', fetchDataResponse);
+      const fetchDataResponse = await fetchApiData(sessionId);
+      console.log('Fetch API data response:', fetchDataResponse);
 
       // Set financial data first
       if (fetchDataResponse.data) {
