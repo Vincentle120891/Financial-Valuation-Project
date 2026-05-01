@@ -1,6 +1,4 @@
-```
-# Dependencies
-node_modules/
+backend/app/api/routes/valuation_routes.py appears to be a source code file (Python file with .py extension). Since only source/config files are being modified and there are no build artifacts, dependencies, or temporary files in the changes, no additional ignore rules are needed.
 
 # Environment
 .env
