@@ -4,12 +4,14 @@ import React from 'react';
  * AiAssumptionsStep Component
  * Step 7: Review AI-Generated Assumptions
  * 
- * Features:
- * - Display AI-generated assumptions with confidence scores
- * - Show AI rationale for each assumption
- * - Allow manual override of AI suggestions
- * - Display warnings when AI generation failed/timed out
- * - Navigate to Step 8 (Forecast Drivers) or back to Step 6
+ * AI ONLY generates 4 inputs that cannot be fetched from APIs:
+ * 1. Equity Risk Premium (ERP)
+ * 2. Country Risk Premium (CRP)
+ * 3. Terminal Growth Rate
+ * 4. Terminal EBITDA Multiple
+ * 
+ * All other inputs (Risk-Free Rate, Beta, Cost of Debt, WACC, Forecast Drivers)
+ * are calculated from API data or user-provided scenario drivers.
  */
 const AiAssumptionsStep = ({
   aiData,
@@ -60,40 +62,95 @@ const AiAssumptionsStep = ({
     );
   };
 
-  // Render WACC assumption
-  const renderWaccAssumption = () => {
-    const aiValue = aiData?.wacc || aiData?.wacc_percent?.value;
-    const confirmedValue = confirmedValues?.wacc?.value;
+  // Helper to extract value from AI data structure
+  const getAiValue = (field) => {
+    // Check multiple possible field names
+    const possibleKeys = [
+      field,
+      `${field}_value`,
+      `${field}_percent`,
+      `${field}_rate`
+    ];
+    
+    for (const key of possibleKeys) {
+      if (aiData?.[key]) {
+        const item = aiData[key];
+        if (typeof item === 'object' && 'value' in item) {
+          return item.value;
+        }
+        return item;
+      }
+    }
+    return undefined;
+  };
+
+  // Helper to extract rationale from AI data structure
+  const getAiRationale = (field) => {
+    const item = aiData?.[field];
+    if (item && typeof item === 'object' && 'rationale' in item) {
+      return item.rationale;
+    }
+    return aiData?.[`${field}_rationale`];
+  };
+
+  // Render single assumption field
+  const renderAssumptionField = ({ 
+    fieldKey, 
+    label, 
+    step = 0.01, 
+    isPercentage = true,
+    min,
+    max,
+    description
+  }) => {
+    const aiValue = getAiValue(fieldKey);
+    const confirmedValue = confirmedValues?.[fieldKey]?.value;
     const displayValue = confirmedValue !== undefined ? confirmedValue : aiValue;
+    const rationale = getAiRationale(fieldKey);
+
+    // Convert to percentage for display if needed
+    const displayPercent = displayValue !== undefined 
+      ? (displayValue > 1 ? displayValue / 100 : displayValue) * 100 
+      : '';
 
     return (
       <div style={{ background: 'white', padding: '16px', borderRadius: '8px', marginBottom: '16px', border: '1px solid #ddd' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-          <h4 style={{ margin: 0, color: '#1976d2' }}>WACC (Weighted Average Cost of Capital)</h4>
-          {aiData?.wacc && (
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+          <h4 style={{ margin: 0, color: '#1976d2' }}>{label}</h4>
+          {aiValue !== undefined && (
             <span style={{ fontSize: '12px', padding: '4px 8px', background: '#e3f2fd', borderRadius: '4px', color: '#1565c0' }}>
               🤖 AI Suggested
             </span>
           )}
         </div>
         
+        {description && (
+          <p style={{ fontSize: '13px', color: '#666', marginBottom: '12px' }}>{description}</p>
+        )}
+        
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
           <input
             type="number"
-            step="0.01"
-            value={displayValue !== undefined ? (displayValue > 1 ? displayValue / 100 : displayValue) * 100 : ''}
-            onChange={(e) => handleManualInputChange('wacc', parseFloat(e.target.value) / 100)}
-            placeholder="Enter WACC %"
+            step={step}
+            min={min}
+            max={max}
+            value={displayPercent || ''}
+            onChange={(e) => {
+              const val = parseFloat(e.target.value);
+              const rawValue = isPercentage ? val / 100 : val;
+              handleManualInputChange(fieldKey, rawValue);
+            }}
+            placeholder={`Enter ${label}`}
             style={{ flex: 1, padding: '10px', borderRadius: '6px', border: '1px solid #ccc', fontSize: '14px' }}
           />
-          <span style={{ fontWeight: 600, color: '#333' }}>%</span>
+          {isPercentage && <span style={{ fontWeight: 600, color: '#333' }}>%</span>}
           
-          {aiData?.wacc && (
+          {aiValue !== undefined && (
             <button
-              onClick={() => handleUseAiSuggestion('wacc', aiData.wacc)}
+              onClick={() => handleUseAiSuggestion(fieldKey, aiValue)}
               style={{
                 padding: '10px 16px',
-                background: confirmedValues?.wacc?.source === 'ai' ? '#4caf50' : '#2196f3',
+                background: confirmedValues?.[fieldKey]?.source === 'ai' ? '#4caf50' : '#2196f3',
                 color: 'white',
                 border: 'none',
                 borderRadius: '6px',
@@ -101,137 +158,70 @@ const AiAssumptionsStep = ({
                 fontWeight: 600
               }}
             >
-              {confirmedValues?.wacc?.source === 'ai' ? '✓ Using AI' : 'Use AI'}
+              {confirmedValues?.[fieldKey]?.source === 'ai' ? '✓ Using AI' : 'Use AI'}
             </button>
           )}
         </div>
         
-        {aiData?.wacc_rationale && (
+        {rationale && (
           <p style={{ marginTop: '8px', fontSize: '13px', color: '#666', fontStyle: 'italic' }}>
-            <strong>Rationale:</strong> {aiData.wacc_rationale}
+            <strong>Rationale:</strong> {rationale}
           </p>
         )}
       </div>
     );
   };
 
-  // Render Terminal Growth assumption
-  const renderTerminalGrowthAssumption = () => {
-    const aiValue = aiData?.terminal_growth || aiData?.terminal_growth_rate_percent?.value;
-    const confirmedValue = confirmedValues?.terminal_growth?.value;
-    const displayValue = confirmedValue !== undefined ? confirmedValue : aiValue;
-
+  // Render the 4 AI-only inputs
+  const renderAiOnlyInputs = () => {
     return (
-      <div style={{ background: 'white', padding: '16px', borderRadius: '8px', marginBottom: '16px', border: '1px solid #ddd' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-          <h4 style={{ margin: 0, color: '#1976d2' }}>Terminal Growth Rate</h4>
-          {aiData?.terminal_growth && (
-            <span style={{ fontSize: '12px', padding: '4px 8px', background: '#e3f2fd', borderRadius: '4px', color: '#1565c0' }}>
-              🤖 AI Suggested
-            </span>
-          )}
-        </div>
+      <>
+        {renderAssumptionField({
+          fieldKey: 'equity_risk_premium',
+          label: 'Equity Risk Premium (ERP)',
+          description: 'Expected excess return of the market over the risk-free rate. Typical range: 4.5% - 6.5% for developed markets.',
+          min: 0,
+          max: 15
+        })}
         
-        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-          <input
-            type="number"
-            step="0.01"
-            value={displayValue !== undefined ? (displayValue > 1 ? displayValue / 100 : displayValue) * 100 : ''}
-            onChange={(e) => handleManualInputChange('terminal_growth', parseFloat(e.target.value) / 100)}
-            placeholder="Enter Terminal Growth %"
-            style={{ flex: 1, padding: '10px', borderRadius: '6px', border: '1px solid #ccc', fontSize: '14px' }}
-          />
-          <span style={{ fontWeight: 600, color: '#333' }}>%</span>
-          
-          {aiData?.terminal_growth && (
-            <button
-              onClick={() => handleUseAiSuggestion('terminal_growth', aiData.terminal_growth)}
-              style={{
-                padding: '10px 16px',
-                background: confirmedValues?.terminal_growth?.source === 'ai' ? '#4caf50' : '#2196f3',
-                color: 'white',
-                border: 'none',
-                borderRadius: '6px',
-                cursor: 'pointer',
-                fontWeight: 600
-              }}
-            >
-              {confirmedValues?.terminal_growth?.source === 'ai' ? '✓ Using AI' : 'Use AI'}
-            </button>
-          )}
-        </div>
+        {renderAssumptionField({
+          fieldKey: 'country_risk_premium',
+          label: 'Country Risk Premium (CRP)',
+          description: 'Additional risk premium for the company\'s primary operating country. 0% for stable developed markets like US.',
+          min: 0,
+          max: 10
+        })}
         
-        {aiData?.terminal_growth_rationale && (
-          <p style={{ marginTop: '8px', fontSize: '13px', color: '#666', fontStyle: 'italic' }}>
-            <strong>Rationale:</strong> {aiData.terminal_growth_rationale}
-          </p>
-        )}
-      </div>
+        {renderAssumptionField({
+          fieldKey: 'terminal_growth_rate',
+          label: 'Terminal Growth Rate',
+          description: 'Perpetual growth rate for terminal value calculation. Should not exceed long-term GDP growth (typically 2-3%).',
+          min: 0,
+          max: 5
+        })}
+        
+        {renderAssumptionField({
+          fieldKey: 'terminal_ebitda_multiple',
+          label: 'Terminal EBITDA Multiple',
+          description: 'Expected exit multiple at end of forecast period. Varies by sector: Tech (10-15x), Consumer (10-14x), Industrials (8-12x).',
+          isPercentage: false,
+          step: 0.5,
+          min: 0,
+          max: 30
+        })}
+      </>
     );
   };
 
-  // Render Revenue Growth Forecast
-  const renderRevenueGrowthForecast = () => {
-    const aiForecast = aiData?.revenue_growth_forecast;
-    
-    if (!aiForecast) return null;
+  // Render AI rationale summary
+  const renderAiRationaleSummary = () => {
+    const rationale = aiData?.ai_rationale?.value || aiData?.rationale;
+    if (!rationale) return null;
 
     return (
-      <div style={{ background: 'white', padding: '16px', borderRadius: '8px', marginBottom: '16px', border: '1px solid #ddd' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-          <h4 style={{ margin: 0, color: '#1976d2' }}>Revenue Growth Forecast</h4>
-          <span style={{ fontSize: '12px', padding: '4px 8px', background: '#e3f2fd', borderRadius: '4px', color: '#1565c0' }}>
-            🤖 AI Generated
-          </span>
-        </div>
-        
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: '8px' }}>
-          {aiForecast.map((growth, idx) => (
-            <div key={idx} style={{ textAlign: 'center', padding: '8px', background: '#f5f5f5', borderRadius: '4px' }}>
-              <div style={{ fontSize: '12px', color: '#666' }}>Year {idx + 1}</div>
-              <div style={{ fontWeight: 600, color: '#1976d2' }}>{(growth * 100).toFixed(1)}%</div>
-            </div>
-          ))}
-        </div>
-        
-        {aiData?.revenue_growth_rationale && (
-          <p style={{ marginTop: '8px', fontSize: '13px', color: '#666', fontStyle: 'italic' }}>
-            <strong>Rationale:</strong> {aiData.revenue_growth_rationale}
-          </p>
-        )}
-      </div>
-    );
-  };
-
-  // Render EBITDA Margin Forecast
-  const renderEbitdaMarginForecast = () => {
-    const aiForecast = aiData?.ebitda_margin_forecast;
-    
-    if (!aiForecast) return null;
-
-    return (
-      <div style={{ background: 'white', padding: '16px', borderRadius: '8px', marginBottom: '16px', border: '1px solid #ddd' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-          <h4 style={{ margin: 0, color: '#1976d2' }}>EBITDA Margin Forecast</h4>
-          <span style={{ fontSize: '12px', padding: '4px 8px', background: '#e3f2fd', borderRadius: '4px', color: '#1565c0' }}>
-            🤖 AI Generated
-          </span>
-        </div>
-        
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: '8px' }}>
-          {aiForecast.map((margin, idx) => (
-            <div key={idx} style={{ textAlign: 'center', padding: '8px', background: '#f5f5f5', borderRadius: '4px' }}>
-              <div style={{ fontSize: '12px', color: '#666' }}>Year {idx + 1}</div>
-              <div style={{ fontWeight: 600, color: '#1976d2' }}>{(margin * 100).toFixed(1)}%</div>
-            </div>
-          ))}
-        </div>
-        
-        {aiData?.ebitda_margin_rationale && (
-          <p style={{ marginTop: '8px', fontSize: '13px', color: '#666', fontStyle: 'italic' }}>
-            <strong>Rationale:</strong> {aiData.ebitda_margin_rationale}
-          </p>
-        )}
+      <div style={{ background: '#f5f5f5', padding: '16px', borderRadius: '8px', marginBottom: '20px', border: '1px solid #ddd' }}>
+        <h4 style={{ margin: '0 0 8px 0', color: '#333' }}>🤖 AI Analysis Summary</h4>
+        <p style={{ margin: 0, fontSize: '14px', lineHeight: '1.6', color: '#555' }}>{rationale}</p>
       </div>
     );
   };
@@ -247,8 +237,8 @@ const AiAssumptionsStep = ({
       
       <div style={{ marginBottom: '20px', padding: '16px', background: '#e3f2fd', borderRadius: '8px' }}>
         <p style={{ margin: 0, color: '#1565c0' }}>
-          <strong>ℹ️ About this step:</strong> Review AI-generated assumptions for your valuation model. 
-          You can accept AI suggestions or manually override them with your own inputs.
+          <strong>ℹ️ About this step:</strong> AI generates ONLY 4 forward-looking assumptions that cannot be fetched from financial APIs.
+          All other inputs (Risk-Free Rate, Beta, Cost of Debt, WACC, Forecast Drivers) are calculated from API data or provided in Scenario Drivers.
         </p>
       </div>
 
@@ -256,10 +246,8 @@ const AiAssumptionsStep = ({
 
       {selectedModel === 'DCF' && (
         <>
-          {renderWaccAssumption()}
-          {renderTerminalGrowthAssumption()}
-          {renderRevenueGrowthForecast()}
-          {renderEbitdaMarginForecast()}
+          {renderAiOnlyInputs()}
+          {renderAiRationaleSummary()}
         </>
       )}
 

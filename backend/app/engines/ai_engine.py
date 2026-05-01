@@ -125,83 +125,118 @@ class AIFallbackEngine:
         """
         Construct a detailed, well-structured prompt for the LLM.
         Enhanced with clear instructions, context, and output format requirements.
+        
+        NOTE: AI ONLY generates 4 inputs that cannot be fetched from APIs:
+        1. Equity Risk Premium
+        2. Country Risk Premium  
+        3. Terminal Growth Rate
+        4. Terminal EBITDA Multiple
+        
+        All other inputs (Risk-Free Rate, Beta, Cost of Debt, WACC, Forecast Drivers)
+        are calculated from API data or user-provided scenario drivers.
         """
         ticker = data.get('ticker', 'UNKNOWN')
         company_name = data.get('company_name', 'Unknown Company')
         financials = data.get('financials', {})
         market_data = data.get('market_data', {})
+        sector = data.get('sector', 'General')
+        industry = data.get('industry', 'General')
+        country = data.get('country', 'US')
+        
+        # Extract key metrics for context
+        revenue_growth = financials.get('revenue_growth_avg', 'N/A')
+        ebitda_margin = financials.get('ebitda_margin_avg', 'N/A')
+        net_margin = financials.get('net_margin_avg', 'N/A')
+        beta = market_data.get('beta', 'N/A')
+        risk_free_rate = market_data.get('risk_free_rate', 4.5)
+        debt_to_equity = financials.get('debt_to_equity', 'N/A')
         
         return f"""
 # ROLE
 You are a senior financial analyst at a top investment bank, specializing in Discounted Cash Flow (DCF) valuation.
 
 # TASK
-Generate professional DCF assumptions for {company_name} ({ticker}).
+Generate ONLY the 4 forward-looking assumptions that CANNOT be fetched from financial APIs for {company_name} ({ticker}).
 
-# INPUT DATA
+# CRITICAL: AI-ONLY INPUTS
+You must provide ONLY these 4 inputs. All other DCF inputs are already calculated from API data:
+1. **Equity Risk Premium (ERP)**: Market risk premium over risk-free rate
+2. **Country Risk Premium (CRP)**: Additional premium for {country} (0% for US/stable markets)
+3. **Terminal Growth Rate**: Perpetual growth rate for terminal value (should not exceed long-term GDP growth)
+4. **Terminal EBITDA Multiple**: Exit multiple at end of forecast period
 
-## Historical Financials
-- Revenue (TTM): ${financials.get('revenue_ttm', 'N/A')}
-- EBITDA Margin (Avg 3Y): {financials.get('ebitda_margin_avg', 'N/A')}%
-- Net Income Margin (Avg 3Y): {financials.get('net_margin_avg', 'N/A')}%
-- Revenue Growth (Avg 3Y): {financials.get('revenue_growth_avg', 'N/A')}%
+# DO NOT PROVIDE
+- Risk-Free Rate (already provided: {risk_free_rate}%)
+- Beta (already calculated: {beta})
+- Cost of Debt (calculated from interest expense / debt)
+- WACC (calculated from CAPM formula)
+- Revenue Growth Forecasts (from user scenario drivers or historical averages)
+- Margins (calculated from financials)
+- Working Capital Days (calculated from balance sheet)
+- Capex % (from historical cash flow)
+
+# COMPANY CONTEXT
+## Historical Performance
+- Revenue Growth (Avg 3Y): {revenue_growth}%
+- EBITDA Margin (Avg 3Y): {ebitda_margin}%
+- Net Margin (Avg 3Y): {net_margin}%
+- Debt-to-Equity: {debt_to_equity}
 
 ## Market Data
-- Beta: {market_data.get('beta', 'N/A')}
-- Risk Free Rate: {market_data.get('risk_free_rate', 4.5)}%
-- Sector: {data.get('sector', 'General')}
-- Industry: {data.get('industry', 'General')}
+- Beta: {beta}
+- Risk-Free Rate: {risk_free_rate}%
+- Sector: {sector}
+- Industry: {industry}
+- Country: {country}
 
 # OUTPUT REQUIREMENTS
-
-For EACH field below, provide a JSON object with EXACTLY these three keys:
-1. "value": The numerical assumption (number only, no text)
-2. "rationale": A concise 1-sentence explanation of WHY this number was chosen
-3. "sources": The specific data point, formula, or methodology used
-
-# REQUIRED FIELDS
-
-## Forecast Drivers (5-Year Projections - arrays of 5 values each)
-- sales_volume_growth: Array of 5 yearly growth rates (%)
-- inflation_rate: Array of 5 yearly inflation rates (%)
-- opex_growth: Array of 5 yearly OpEx growth rates (%)
-- capital_expenditure: Array of 5 yearly CapEx as % of revenue
-- ar_days: Array of 5 yearly Accounts Receivable days
-- inv_days: Array of 5 yearly Inventory days
-- ap_days: Array of 5 yearly Accounts Payable days
-- tax_rate: Array of 5 yearly tax rates (%)
-
-## DCF Model Inputs (single values)
-- risk_free_rate: Current risk-free rate (%)
-- equity_risk_premium: Equity risk premium (%)
-- beta: Company beta
-- cost_of_debt: Cost of debt (%)
-- wacc: Weighted Average Cost of Capital (%)
-- terminal_growth_rate: Terminal growth rate (%)
-- terminal_ebitda_multiple: Terminal EBITDA multiple
-- useful_life_existing: Useful life of existing assets (years)
-
-# CRITICAL INSTRUCTIONS
-- Return ONLY valid JSON. No markdown, no code blocks, no explanatory text.
-- All numeric values must be numbers (not strings).
-- Arrays must contain exactly 5 elements.
-- Base assumptions on the provided historical data and industry standards.
-- Use conservative, realistic estimates suitable for professional valuation.
-
-# OUTPUT FORMAT EXAMPLE
+Return ONLY valid JSON with exactly these 4 keys plus rationale:
 {{
-    "sales_volume_growth": [
-        {{ "value": 5.2, "rationale": "Based on 3-year historical average with modest moderation", "sources": "Historical Avg 3Y" }},
-        {{ "value": 4.8, "rationale": "Gradual slowdown as company matures", "sources": "Trend Analysis" }},
-        {{ "value": 4.5, "rationale": "Continued moderation in growth", "sources": "Trend Analysis" }},
-        {{ "value": 4.2, "rationale": "Approaching steady-state growth", "sources": "Trend Analysis" }},
-        {{ "value": 4.0, "rationale": "Final forecast year before terminal period", "sources": "Trend Analysis" }}
-    ],
-    "wacc": {{ "value": 8.5, "rationale": "Calculated using CAPM with 60/40 debt-equity structure", "sources": "CAPM Formula" }},
-    "terminal_growth_rate": {{ "value": 2.0, "rationale": "Aligned with long-term inflation target", "sources": "Fed Target 2%" }}
+    "equity_risk_premium": <number>,
+    "country_risk_premium": <number>,
+    "terminal_growth_rate": <number>,
+    "terminal_ebitda_multiple": <number>,
+    "rationale": "<string explaining all 4 choices>"
 }}
 
-Now generate the complete JSON response for {ticker}:
+# GUIDELINES FOR EACH INPUT
+
+## 1. Equity Risk Premium (ERP)
+- Typical range: 4.5% - 6.5% for developed markets
+- Use higher end for volatile markets or uncertain economic conditions
+- Consider current market volatility and economic outlook
+
+## 2. Country Risk Premium (CRP)
+- US, UK, Germany, Japan: 0% - 0.5%
+- Emerging markets: 1% - 5%+ depending on risk
+- For {country}: assess political stability, currency risk, economic development
+
+## 3. Terminal Growth Rate
+- Should not exceed long-term GDP growth (typically 2% - 3% for developed markets)
+- Must be less than WACC (otherwise terminal value is infinite)
+- Consider company's mature growth prospects and industry lifecycle
+
+## 4. Terminal EBITDA Multiple
+- Based on industry peers and company's competitive position
+- Typical ranges by sector:
+  - Technology: 10x - 15x
+  - Consumer Staples: 10x - 14x
+  - Healthcare: 10x - 14x
+  - Industrials: 8x - 12x
+  - Energy: 6x - 10x
+  - Financials: Not typically used (use P/B instead)
+- Consider company's growth profile vs peers (higher growth = higher multiple)
+
+# EXAMPLE RESPONSE
+{{
+    "equity_risk_premium": 5.5,
+    "country_risk_premium": 0.0,
+    "terminal_growth_rate": 2.0,
+    "terminal_ebitda_multiple": 10.5,
+    "rationale": "ERP of 5.5% reflects current market conditions with moderate volatility. CRP of 0% as company operates primarily in US stable market. Terminal growth of 2.0% aligns with long-term Fed inflation target and GDP growth expectations. Terminal EBITDA multiple of 10.5x is based on sector peer average, adjusted for company's mature market position and stable cash flows."
+}}
+
+Now generate the JSON response for {ticker}:
 """.strip()
 
     def _call_groq(self, prompt: str) -> Optional[str]:
@@ -342,120 +377,120 @@ Now generate the complete JSON response for {ticker}:
             raise
 
     def _parse_response(self, json_str: str, model_type: str) -> Dict[str, Any]:
-        """Parse and validate the JSON response."""
+        """Parse and validate the JSON response.
+        
+        Expected format from AI:
+        {
+            "equity_risk_premium": <number>,
+            "country_risk_premium": <number>,
+            "terminal_growth_rate": <number>,
+            "terminal_ebitda_multiple": <number>,
+            "rationale": "<string>"
+        }
+        
+        Returns formatted data with value/rationale/sources structure for each field.
+        """
         try:
             data = json.loads(json_str)
-            # Ensure structure compliance
+            
+            # Helper function to wrap values in standard format
+            def wrap_value(key, default_value=None):
+                if key in data:
+                    return {
+                        "value": float(data[key]),
+                        "rationale": data.get('rationale', 'AI-generated assumption'),
+                        "sources": "AI Analysis"
+                    }
+                elif default_value is not None:
+                    return {
+                        "value": default_value,
+                        "rationale": "Default fallback value",
+                        "sources": "System Default"
+                    }
+                return None
+            
             formatted_data = {}
-            for key, item in data.items():
-                if isinstance(item, dict) and 'value' in item:
-                    formatted_data[key] = item
-                elif isinstance(item, list):
-                    # Handle lists like revenue_growth_forecast
-                    formatted_data[key] = [
-                        {"value": v, "rationale": "AI Forecast", "sources": "Trend Extrapolation"} 
-                        if not isinstance(v, dict) else v 
-                        for v in item
-                    ]
-                else:
-                    # Fallback for malformed items
-                    formatted_data[key] = {"value": item, "rationale": "Default", "sources": "System"}
+            
+            # Parse the 4 AI-only inputs
+            erp = wrap_value('equity_risk_premium', 5.5)
+            if erp:
+                formatted_data['equity_risk_premium'] = erp
+                
+            crp = wrap_value('country_risk_premium', 0.0)
+            if crp:
+                formatted_data['country_risk_premium'] = crp
+                
+            tgr = wrap_value('terminal_growth_rate', 2.0)
+            if tgr:
+                formatted_data['terminal_growth_rate'] = tgr
+                
+            tem = wrap_value('terminal_ebitda_multiple', 10.0)
+            if tem:
+                formatted_data['terminal_ebitda_multiple'] = tem
+            
+            # Include rationale at top level if present
+            if 'rationale' in data:
+                formatted_data['ai_rationale'] = {
+                    "value": data['rationale'],
+                    "rationale": "Complete AI rationale for all 4 assumptions",
+                    "sources": "AI Analysis"
+                }
+            
             return formatted_data
+            
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse AI JSON: {e}")
             raise ValueError("Invalid JSON from AI")
 
     def _deterministic_fallback(self, data: Dict[str, Any], model_type: str) -> Dict[str, Any]:
-        """Rule-based fallback when all APIs fail."""
+        """Rule-based fallback when all APIs fail.
+        
+        Returns ONLY the 4 AI-only inputs with sensible defaults:
+        1. Equity Risk Premium
+        2. Country Risk Premium
+        3. Terminal Growth Rate
+        4. Terminal EBITDA Multiple
+        
+        All other inputs are calculated from API data, not generated here.
+        """
         financials = data.get('financials', {})
         market_data = data.get('market_data', {})
+        country = data.get('country', 'US')
         
-        beta = market_data.get('beta', 1.0)
-        rf = market_data.get('risk_free_rate', 4.5)
-        erp = 5.5  # Standard Equity Risk Premium
+        # Standard defaults for the 4 AI-only inputs
+        erp = 5.5  # Standard Equity Risk Premium for developed markets
+        tgr = 2.0  # Conservative terminal growth (aligned with inflation target)
+        tem = 10.0  # Neutral EBITDA multiple
         
-        # CAPM Calculation
-        cost_of_equity = rf + (beta * erp)
-        cost_of_debt = 5.0  # Assumed
-        tax_rate = 21.0
-        wacc = (0.6 * cost_of_equity) + (0.4 * cost_of_debt * (1 - tax_rate/100))
-        
-        hist_growth = financials.get('revenue_growth_avg', 5.0)
+        # Adjust CRP based on country (simplified logic)
+        emerging_markets = ['BR', 'IN', 'CN', 'RU', 'ZA', 'MX', 'ID', 'TR', 'AR']
+        crp = 2.0 if any(code in country.upper() for code in emerging_markets) else 0.0
         
         return {
-            # Forecast Drivers (5-year arrays)
-            "sales_volume_growth": [
-                {"value": round(hist_growth * (0.95 - i*0.03), 1), "rationale": "Gradual moderation from historical growth", "sources": "Historical Trend Adj."}
-                for i in range(5)
-            ],
-            "inflation_rate": [
-                {"value": 2.5, "rationale": "Stable inflation assumption", "sources": "Central Bank Target"}
-                for _ in range(5)
-            ],
-            "opex_growth": [
-                {"value": round(hist_growth * 0.9, 1), "rationale": "OpEx grows slightly slower than revenue", "sources": "Efficiency Improvement"}
-                for _ in range(5)
-            ],
-            "capital_expenditure": [
-                {"value": 5.0, "rationale": "Standard maintenance CapEx", "sources": "Industry Average"}
-                for _ in range(5)
-            ],
-            "ar_days": [
-                {"value": 45, "rationale": "Standard credit terms", "sources": "Industry Norm"}
-                for _ in range(5)
-            ],
-            "inv_days": [
-                {"value": 60, "rationale": "Standard inventory turnover", "sources": "Industry Norm"}
-                for _ in range(5)
-            ],
-            "ap_days": [
-                {"value": 30, "rationale": "Standard payment terms", "sources": "Industry Norm"}
-                for _ in range(5)
-            ],
-            "tax_rate": [
-                {"value": 21.0, "rationale": "Statutory corporate rate", "sources": "US Tax Code"}
-                for _ in range(5)
-            ],
-            # DCF Model Inputs (single values)
-            "risk_free_rate": {
-                "value": rf,
-                "rationale": "Current government bond yield",
-                "sources": "Market Data"
-            },
             "equity_risk_premium": {
                 "value": erp,
-                "rationale": "Standard equity risk premium",
-                "sources": "Damodaran Data"
+                "rationale": "Standard equity risk premium for developed markets",
+                "sources": "Damodaran Data (Fallback)"
             },
-            "beta": {
-                "value": beta,
-                "rationale": "Company's market beta",
-                "sources": "Market Data"
-            },
-            "cost_of_debt": {
-                "value": cost_of_debt,
-                "rationale": "Estimated borrowing cost",
-                "sources": "Credit Rating Estimate"
-            },
-            "wacc": {
-                "value": round(wacc, 2),
-                "rationale": "Calculated via CAPM (Fallback Mode)",
-                "sources": f"Formula: {rf}% + ({beta} × {erp}%)"
+            "country_risk_premium": {
+                "value": crp,
+                "rationale": f"Country risk adjustment for {country} ({'emerging market' if crp > 0 else 'developed market'})",
+                "sources": "Country Risk Classification (Fallback)"
             },
             "terminal_growth_rate": {
-                "value": 2.0,
-                "rationale": "Conservative long-term inflation target",
-                "sources": "Fed Target (2%)"
+                "value": tgr,
+                "rationale": "Conservative long-term growth aligned with central bank inflation targets",
+                "sources": "Fed/ECB Target 2% (Fallback)"
             },
             "terminal_ebitda_multiple": {
-                "value": 10.0,
-                "rationale": "Industry average multiple",
-                "sources": "Sector Comparables"
+                "value": tem,
+                "rationale": "Neutral industry average multiple",
+                "sources": "Sector Comparables Average (Fallback)"
             },
-            "useful_life_existing": {
-                "value": 10,
-                "rationale": "Standard asset useful life",
-                "sources": "Accounting Standard"
+            "ai_rationale": {
+                "value": f"Deterministic fallback: ERP={erp}%, CRP={crp}% for {country}, Terminal Growth={tgr}%, Terminal EBITDA Multiple={tem}x. These are conservative default values used when AI providers are unavailable.",
+                "rationale": "Fallback mode - all AI providers exhausted",
+                "sources": "System Defaults"
             }
         }
 
