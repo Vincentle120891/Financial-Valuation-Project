@@ -1,11 +1,18 @@
 """
-Resilient AI Engine with 3-Tier Fallback (Groq -> Gemini -> Qwen)
-Generates structured DCF assumptions with rationale and sources.
+AI Engine with Strategy Pattern for No-Hallucination Logic
+Implements strict separation between AI-generated inputs and calculated/fetched data.
+
+Strategy Pattern:
+- PromptStrategy Interface: Defines standard contract for building prompts
+- DCFStrategy: Generates 4 forward-looking inputs (ERP, CRP, Terminal Growth, Terminal Multiple)
+- VietnamDCFStrategy: Specialized for Vietnam (higher CRP logic, VND context, emerging market risks)
+- DuPontStrategy: Returns NULL (all inputs calculated from financials)
+- CompsStrategy: Returns NULL (all inputs fetched/calculated from peer data)
 """
 import os
 import json
 import logging
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Protocol
 from dotenv import load_dotenv
 
 # Load .env file explicitly
@@ -15,8 +22,322 @@ logger = logging.getLogger(__name__)
 
 # --- Configuration ---
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-GEMINI_API_KEY = os.getenv("GOOGLE_GEMINI_API_KEY")  # Match .env variable name
-QWEN_API_KEY = os.getenv("DASHSCOPE_API_KEY")  # Alibaba Cloud DashScope key
+GEMINI_API_KEY = os.getenv("GOOGLE_GEMINI_API_KEY")
+QWEN_API_KEY = os.getenv("DASHSCOPE_API_KEY")
+
+
+# === Strategy Pattern Interface ===
+class PromptStrategy(Protocol):
+    """Interface for prompt generation strategies."""
+    
+    def build_prompt(self, data: Dict[str, Any]) -> str:
+        """Build the prompt for the LLM."""
+        ...
+    
+    def get_ai_inputs(self) -> Dict[str, Any]:
+        """Return the AI-generated inputs structure. Returns NULL for strategies that don't use AI."""
+        ...
+
+
+# === Concrete Strategies ===
+
+class DuPontStrategy:
+    """
+    DuPont Analysis Strategy - NO AI INPUTS
+    All metrics are calculated from historical financial statements:
+    - Net Profit Margin (from income statement)
+    - Asset Turnover (from balance sheet and income statement)
+    - Equity Multiplier (from balance sheet)
+    """
+    
+    def build_prompt(self, data: Dict[str, Any]) -> str:
+        """No prompt needed - AI is bypassed for DuPont."""
+        return ""
+    
+    def get_ai_inputs(self) -> Dict[str, Any]:
+        """Return NULL - no AI assumptions for DuPont."""
+        return None
+
+
+class CompsStrategy:
+    """
+    Comparable Company Analysis Strategy - NO AI INPUTS
+    All valuation multiples are CALCULATED from peer company data:
+    - EV/EBITDA, P/E, EV/Revenue, P/B (all fetched from yfinance)
+    """
+    
+    def build_prompt(self, data: Dict[str, Any]) -> str:
+        """No prompt needed - AI is bypassed for Comps."""
+        return ""
+    
+    def get_ai_inputs(self) -> Dict[str, Any]:
+        """Return NULL - no AI assumptions for Comps."""
+        return None
+
+
+class DCFStrategy:
+    """
+    DCF Strategy - AI generates ONLY 4 forward-looking inputs:
+    1. Equity Risk Premium (ERP)
+    2. Country Risk Premium (CRP)
+    3. Terminal Growth Rate
+    4. Terminal EBITDA Multiple
+    
+    AI is EXPLICITLY FORBIDDEN from guessing:
+    - Beta, Risk-Free Rate, Cost of Debt, WACC (calculated from data)
+    - Historical Margins, Working Capital Days, Capex % (from financials)
+    """
+    
+    def __init__(self, country: str = "US"):
+        self.country = country
+    
+    def build_prompt(self, data: Dict[str, Any]) -> str:
+        """Build DCF prompt restricted to 4 macro/forward inputs."""
+        ticker = data.get('ticker', 'UNKNOWN')
+        company_name = data.get('company_name', 'Unknown Company')
+        financials = data.get('financials', {})
+        market_data = data.get('market_data', {})
+        sector = data.get('sector', 'General')
+        industry = data.get('industry', 'General')
+        
+        # Extract key metrics for context
+        revenue_growth = financials.get('revenue_growth_avg', 'N/A')
+        ebitda_margin = financials.get('ebitda_margin_avg', 'N/A')
+        net_margin = financials.get('net_margin_avg', 'N/A')
+        beta = market_data.get('beta', 'N/A')
+        risk_free_rate = market_data.get('risk_free_rate', 4.5)
+        debt_to_equity = financials.get('debt_to_equity', 'N/A')
+        
+        return f"""
+# ROLE
+You are a senior financial analyst at a top investment bank, specializing in Discounted Cash Flow (DCF) valuation.
+
+# TASK
+Generate ONLY the 4 forward-looking assumptions that CANNOT be fetched from financial APIs for {company_name} ({ticker}).
+
+# CRITICAL: AI-ONLY INPUTS
+You must provide ONLY these 4 inputs. All other DCF inputs are already calculated from API data:
+1. **Equity Risk Premium (ERP)**: Market risk premium over risk-free rate
+2. **Country Risk Premium (CRP)**: Additional premium for {self.country} (0% for US/stable markets)
+3. **Terminal Growth Rate**: Perpetual growth rate for terminal value (should not exceed long-term GDP growth)
+4. **Terminal EBITDA Multiple**: Exit multiple at end of forecast period
+
+# DO NOT PROVIDE
+- Risk-Free Rate (already provided: {risk_free_rate}%)
+- Beta (already calculated: {beta})
+- Cost of Debt (calculated from interest expense / debt)
+- WACC (calculated from CAPM formula)
+- Revenue Growth Forecasts (from user scenario drivers or historical averages)
+- Margins (calculated from financials)
+- Working Capital Days (calculated from balance sheet)
+- Capex % (from historical cash flow)
+
+# COMPANY CONTEXT
+## Historical Performance
+- Revenue Growth (Avg 3Y): {revenue_growth}%
+- EBITDA Margin (Avg 3Y): {ebitda_margin}%
+- Net Margin (Avg 3Y): {net_margin}%
+- Debt-to-Equity: {debt_to_equity}
+
+## Market Data
+- Beta: {beta}
+- Risk-Free Rate: {risk_free_rate}%
+- Sector: {sector}
+- Industry: {industry}
+- Country: {self.country}
+
+# OUTPUT REQUIREMENTS
+Return ONLY valid JSON with exactly these 4 keys plus rationale:
+{{
+    "equity_risk_premium": <number>,
+    "country_risk_premium": <number>,
+    "terminal_growth_rate": <number>,
+    "terminal_ebitda_multiple": <number>,
+    "rationale": "<string explaining all 4 choices>"
+}}
+
+# GUIDELINES FOR EACH INPUT
+
+## 1. Equity Risk Premium (ERP)
+- Typical range: 4.5% - 6.5% for developed markets
+- Use higher end for volatile markets or uncertain economic conditions
+- Consider current market volatility and economic outlook
+
+## 2. Country Risk Premium (CRP)
+- US, UK, Germany, Japan: 0% - 0.5%
+- Emerging markets: 1% - 5%+ depending on risk
+- For {self.country}: assess political stability, currency risk, economic development
+
+## 3. Terminal Growth Rate
+- Should not exceed long-term GDP growth (typically 2% - 3% for developed markets)
+- Must be less than WACC (otherwise terminal value is infinite)
+- Consider company's mature growth prospects and industry lifecycle
+
+## 4. Terminal EBITDA Multiple
+- Based on industry peers and company's competitive position
+- Typical ranges by sector:
+  - Technology: 10x - 15x
+  - Consumer Staples: 10x - 14x
+  - Healthcare: 10x - 14x
+  - Industrials: 8x - 12x
+  - Energy: 6x - 10x
+  - Financials: Not typically used (use P/B instead)
+- Consider company's growth profile vs peers (higher growth = higher multiple)
+
+# EXAMPLE RESPONSE
+{{
+    "equity_risk_premium": 5.5,
+    "country_risk_premium": 0.0,
+    "terminal_growth_rate": 2.0,
+    "terminal_ebitda_multiple": 10.5,
+    "rationale": "ERP of 5.5% reflects current market conditions with moderate volatility. CRP of 0% as company operates primarily in US stable market. Terminal growth of 2.0% aligns with long-term Fed inflation target and GDP growth expectations. Terminal EBITDA multiple of 10.5x is based on sector peer average, adjusted for company's mature market position and stable cash flows."
+}}
+
+Now generate the JSON response for {ticker}:
+""".strip()
+    
+    def get_ai_inputs(self) -> Dict[str, Any]:
+        """Return structure for 4 AI inputs."""
+        return {
+            "equity_risk_premium": None,
+            "country_risk_premium": None,
+            "terminal_growth_rate": None,
+            "terminal_ebitda_multiple": None,
+            "rationale": None
+        }
+
+
+class VietnamDCFStrategy:
+    """
+    Vietnam DCF Strategy - AI generates 4 inputs with Emerging Market constraints:
+    1. Equity Risk Premium (ERP): 6.0% - 8.0% (higher than developed markets)
+    2. Country Risk Premium (CRP): 2.0% - 5.0% (Vietnam-specific emerging market risk)
+    3. Terminal Growth Rate: 4.0% - 6.0% (aligned with Vietnam's GDP growth)
+    4. Terminal EBITDA Multiple: 8x - 12x (generally lower than developed markets)
+    
+    Includes Vietnam-specific context: FOL, VND currency, VNINDEX volatility, liquidity discounts.
+    """
+    
+    def build_prompt(self, data: Dict[str, Any]) -> str:
+        """Build Vietnam-specific DCF prompt with emerging market constraints."""
+        ticker = data.get('ticker', 'UNKNOWN')
+        company_name = data.get('company_name', 'Unknown Company')
+        financials = data.get('financials', {})
+        sector = data.get('sector', 'General')
+        industry = data.get('industry', 'General')
+        
+        revenue_growth = financials.get('revenue_growth_avg', 'N/A')
+        ebitda_margin = financials.get('ebitda_margin_avg', 'N/A')
+        
+        return f"""
+# ROLE
+You are a senior financial analyst specializing in Vietnamese market valuations.
+
+# TASK
+Generate ONLY the 4 forward-looking assumptions for Vietnamese market company {company_name} ({ticker}).
+
+# CRITICAL: AI-ONLY INPUTS (with Vietnam-specific constraints)
+1. **Equity Risk Premium (ERP)**: 6.0% - 8.0% (Vietnam emerging market premium)
+2. **Country Risk Premium (CRP)**: 2.0% - 5.0% (Vietnam-specific political/economic/currency risk)
+3. **Terminal Growth Rate**: 4.0% - 6.0% (aligned with Vietnam's long-term GDP growth ~5-6%)
+4. **Terminal EBITDA Multiple**: 8x - 12x (Vietnamese market conditions, liquidity discount)
+
+# DO NOT PROVIDE
+- Risk-Free Rate (use Vietnamese government bond rate, typically 3-4%)
+- Beta (calculated from VNINDEX historical prices)
+- Cost of Debt (calculated from interest expense / debt)
+- WACC (calculated from CAPM with Vietnam adjustments)
+- Margins, Growth Rates, Working Capital Days (all calculated from financials)
+
+# COMPANY CONTEXT
+## Historical Performance
+- Revenue Growth (Avg 3Y): {revenue_growth}%
+- EBITDA Margin (Avg 3Y): {ebitda_margin}%
+
+## Market Data
+- Sector: {sector}
+- Industry: {industry}
+- Country: Vietnam
+- Currency: VND
+
+# VIETNAM-SPECIFIC GUIDELINES
+
+## 1. Equity Risk Premium (ERP)
+- Range: 6.0% - 8.0% (higher than developed markets due to emerging market risk)
+- Consider VNINDEX volatility (historically 25-35% annualized)
+- Factor in foreign ownership limits (FOL) impact on liquidity
+
+## 2. Country Risk Premium (CRP)
+- Range: 2.0% - 5.0%
+- Consider: Political stability, currency risk (VND/USD), economic development stage
+- Vietnam specific: Strong GDP growth but emerging market institutional risks
+
+## 3. Terminal Growth Rate
+- Range: 4.0% - 6.0%
+- Aligned with Vietnam's long-term GDP growth potential (~5-6%)
+- Must be less than WACC (otherwise terminal value is infinite)
+- Consider company's position in high-growth emerging market
+
+## 4. Terminal EBITDA Multiple
+- Range: 8x - 12x (generally lower than developed markets)
+- Apply liquidity discount for Vietnamese market (smaller investor base)
+- Consider sector peer multiples on HOSE/HNX exchanges
+
+# OUTPUT REQUIREMENTS
+Return ONLY valid JSON:
+{{
+    "equity_risk_premium": <number>,
+    "country_risk_premium": <number>,
+    "terminal_growth_rate": <number>,
+    "terminal_ebitda_multiple": <number>,
+    "rationale": "<string explaining all 4 choices with Vietnam context>"
+}}
+
+# EXAMPLE RESPONSE
+{{
+    "equity_risk_premium": 7.0,
+    "country_risk_premium": 3.0,
+    "terminal_growth_rate": 5.0,
+    "terminal_ebitda_multiple": 9.5,
+    "rationale": "ERP of 7.0% reflects Vietnam's emerging market status with VNINDEX volatility. CRP of 3.0% accounts for Vietnam-specific political and currency risks. Terminal growth of 5.0% aligns with Vietnam's strong GDP growth trajectory. Terminal EBITDA multiple of 9.5x reflects Vietnamese market liquidity discount and sector peer averages on HOSE."
+}}
+
+Now generate the JSON response for {ticker}:
+""".strip()
+    
+    def get_ai_inputs(self) -> Dict[str, Any]:
+        """Return structure for 4 AI inputs with Vietnam context."""
+        return {
+            "equity_risk_premium": None,
+            "country_risk_premium": None,
+            "terminal_growth_rate": None,
+            "terminal_ebitda_multiple": None,
+            "rationale": None
+        }
+
+
+# === Strategy Factory ===
+
+def get_strategy(model_type: str, market: str = "US") -> PromptStrategy:
+    """
+    Factory function to select the appropriate strategy based on model type and market.
+    
+    Dynamic Routing Logic:
+    - DuPont → DuPontStrategy (NULL AI inputs)
+    - Comps → CompsStrategy (NULL AI inputs)
+    - DCF + Vietnam → VietnamDCFStrategy (4 inputs with EM constraints)
+    - DCF + US/International → DCFStrategy (4 inputs standard)
+    """
+    if model_type == "DuPont":
+        return DuPontStrategy()
+    elif model_type == "Comps":
+        return CompsStrategy()
+    elif model_type == "Vietnamese" or (model_type == "DCF" and market == "Vietnam"):
+        return VietnamDCFStrategy()
+    else:
+        # Default to standard DCF for US/International
+        return DCFStrategy(country=market)
+
 
 class AIFallbackEngine:
     def __init__(self):
@@ -52,24 +373,47 @@ class AIFallbackEngine:
             status["qwen"] = "missing_key"
         return status
 
-    def generate_assumptions(self, company_data: Dict[str, Any], model_type: str) -> Dict[str, Any]:
+    def generate_assumptions(self, company_data: Dict[str, Any], model_type: str, market: str = "US") -> Dict[str, Any]:
         """
-        Generate assumptions with fallback logic.
+        Generate assumptions with strategy pattern and fallback logic.
         Returns structured data with value, rationale, and sources.
-        Includes detailed error tracking for each provider attempt.
         
-        Provider Priority Order:
+        Strategy Pattern Implementation:
+        - DuPont/Comps: Returns NULL immediately (no AI call made)
+        - DCF/Vietnam: Uses VietnamDCFStrategy (EM constraints)
+        - DCF/US/International: Uses DCFStrategy (standard)
+        
+        Provider Priority Order (for DCF strategies):
         1. Groq (Primary) - Fastest, most reliable for financial analysis
         2. Gemini (Secondary) - Latest gemini-2.0-flash-lite model
         3. Qwen (Tertiary) - Alibaba Cloud backup
         
-        Detailed logging shows waiting time and response status for each provider.
+        No-Hallucination Guarantee:
+        - If model is DuPont or Comps, AI is completely bypassed
+        - If model is DCF, AI is restricted to only 4 macro/forward inputs
         """
-        prompt = self._build_prompt(company_data, model_type)
-        last_error = None
-        provider_errors = {}  # Track errors from each provider
+        # Select strategy based on model type and market
+        strategy = get_strategy(model_type, market)
         
-        logger.info("🚀 Starting AI assumption generation...")
+        # Check if strategy returns NULL (DuPont or Comps)
+        if isinstance(strategy, (DuPontStrategy, CompsStrategy)):
+            logger.info(f"ℹ️ {model_type} model: AI bypassed. All inputs calculated/fetched from data.")
+            return {
+                "ai_assumptions": None,
+                "_ai_status": {
+                    "success": True,
+                    "provider_used": None,
+                    "strategy": model_type,
+                    "message": f"No AI assumptions required for {model_type} model. All inputs are calculated from financial data."
+                }
+            }
+        
+        # For DCF strategies, build prompt using strategy
+        prompt = strategy.build_prompt(company_data)
+        last_error = None
+        provider_errors = {}
+        
+        logger.info(f"🚀 Starting AI assumption generation with {strategy.__class__.__name__}...")
         logger.info(f"📊 Provider priority order: {[name for name, _ in self.providers]}")
         
         # Try each provider in order
@@ -87,6 +431,7 @@ class AIFallbackEngine:
                         "_ai_status": {
                             "success": True,
                             "provider_used": provider_name,
+                            "strategy": strategy.__class__.__name__,
                             "errors": provider_errors
                         }
                     }
@@ -110,6 +455,7 @@ class AIFallbackEngine:
         fallback_result["_ai_status"] = {
             "success": False,
             "provider_used": None,
+            "strategy": strategy.__class__.__name__,
             "errors": provider_errors,
             "fallback_reason": last_error or "No AI providers configured"
         }
@@ -120,32 +466,6 @@ class AIFallbackEngine:
             logger.warning("⚠️ All AI providers failed. Using deterministic fallback rules.")
             
         return fallback_result
-
-    def _build_prompt(self, data: Dict[str, Any], model_type: str) -> str:
-        """
-        Construct a detailed, well-structured prompt for the LLM based on model type.
-        
-        Different valuation models require different AI-generated inputs:
-        - DCF: 4 forward-looking assumptions (ERP, CRP, Terminal Growth, Terminal Multiple)
-        - DuPont: NO AI inputs needed (purely historical calculation)
-        - Comps: Peer company suggestions only (multiples calculated from data)
-        - Vietnamese/International: Market-specific assumptions
-        
-        All other inputs (Risk-Free Rate, Beta, Cost of Debt, WACC, Forecast Drivers,
-        Margins, Working Capital Days, Capex %) are calculated from API data or 
-        user-provided scenario drivers.
-        """
-        if model_type == "DuPont":
-            return self._build_dupont_prompt(data)
-        elif model_type == "Comps":
-            return self._build_comps_prompt(data)
-        elif model_type == "Vietnamese":
-            return self._build_vietnamese_prompt(data)
-        elif model_type == "International":
-            return self._build_international_prompt(data)
-        else:
-            # Default to DCF
-            return self._build_dcf_prompt(data)
     
     def _build_dcf_prompt(self, data: Dict[str, Any]) -> str:
         ticker = data.get('ticker', 'UNKNOWN')
