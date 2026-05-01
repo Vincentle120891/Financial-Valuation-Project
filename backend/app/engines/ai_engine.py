@@ -282,6 +282,19 @@ Now generate the complete JSON response for {ticker}:
             elapsed = time.time() - start_time
             logger.error(f"❌ Gemini failed after {elapsed:.2f}s: {str(e)}")
             raise
+        genai.configure(api_key=GEMINI_API_KEY)
+        # Use available model - gemini-pro or gemini-1.5-pro
+        try:
+            model = genai.GenerativeModel('gemini-pro')
+        except Exception:
+            # Fallback to default available model
+            model = genai.GenerativeModel()
+        response = model.generate_content(prompt + "\n\nRespond ONLY with valid JSON.")
+        # Clean up markdown code blocks if present
+        text = response.text
+        if text.startswith("```json"):
+            text = text.replace("```json", "").replace("```", "")
+        return text
 
     def _call_qwen(self, prompt: str) -> Optional[str]:
         """
