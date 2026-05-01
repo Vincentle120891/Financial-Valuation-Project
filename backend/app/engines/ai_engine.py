@@ -99,6 +99,7 @@ class DCFStrategy:
         market_data = data.get('market_data', {})
         sector = data.get('sector', 'General')
         industry = data.get('industry', 'General')
+        country = data.get('country', self.country)
         
         # Extract key metrics for context
         revenue_growth = financials.get('revenue_growth_avg', 'N/A')
@@ -108,92 +109,42 @@ class DCFStrategy:
         risk_free_rate = market_data.get('risk_free_rate', 4.5)
         debt_to_equity = financials.get('debt_to_equity', 'N/A')
         
-        return f"""
-# ROLE
-You are a senior financial analyst at a top investment bank, specializing in Discounted Cash Flow (DCF) valuation.
+        return f"""SYSTEM:
+You are a financial analyst assistant. You output ONLY raw JSON. No markdown. No explanation outside the JSON. No preamble. No trailing text. If you cannot comply, return {{"error": "<reason>"}}.
 
-# TASK
-Generate ONLY the 4 forward-looking assumptions that CANNOT be fetched from financial APIs for {company_name} ({ticker}).
+USER:
+Generate the 4 forward-looking DCF assumptions that cannot be sourced from financial APIs for {company_name} ({ticker}).
 
-# CRITICAL: AI-ONLY INPUTS
-You must provide ONLY these 4 inputs. All other DCF inputs are already calculated from API data:
-1. **Equity Risk Premium (ERP)**: Market risk premium over risk-free rate
-2. **Country Risk Premium (CRP)**: Additional premium for {self.country} (0% for US/stable markets)
-3. **Terminal Growth Rate**: Perpetual growth rate for terminal value (should not exceed long-term GDP growth)
-4. **Terminal EBITDA Multiple**: Exit multiple at end of forecast period
-
-# DO NOT PROVIDE
-- Risk-Free Rate (already provided: {risk_free_rate}%)
-- Beta (already calculated: {beta})
-- Cost of Debt (calculated from interest expense / debt)
-- WACC (calculated from CAPM formula)
-- Revenue Growth Forecasts (from user scenario drivers or historical averages)
-- Margins (calculated from financials)
-- Working Capital Days (calculated from balance sheet)
-- Capex % (from historical cash flow)
-
-# COMPANY CONTEXT
-## Historical Performance
-- Revenue Growth (Avg 3Y): {revenue_growth}%
-- EBITDA Margin (Avg 3Y): {ebitda_margin}%
-- Net Margin (Avg 3Y): {net_margin}%
-- Debt-to-Equity: {debt_to_equity}
-
-## Market Data
-- Beta: {beta}
-- Risk-Free Rate: {risk_free_rate}%
+## Context
 - Sector: {sector}
 - Industry: {industry}
-- Country: {self.country}
+- Country: {country}
+- Beta: {beta}
+- Risk-Free Rate: {risk_free_rate}%
+- Avg 3Y Revenue Growth: {revenue_growth}%
+- Avg 3Y EBITDA Margin: {ebitda_margin}%
+- Avg 3Y Net Margin: {net_margin}%
+- Debt-to-Equity: {debt_to_equity}
 
-# OUTPUT REQUIREMENTS
-Return ONLY valid JSON with exactly these 4 keys plus rationale:
+## Do NOT return
+Risk-free rate, beta, cost of debt, WACC, revenue growth forecasts, margins, working capital days, capex %. These are already sourced from API data.
+
+## Return exactly this JSON structure
 {{
-    "equity_risk_premium": <number>,
-    "country_risk_premium": <number>,
-    "terminal_growth_rate": <number>,
-    "terminal_ebitda_multiple": <number>,
-    "rationale": "<string explaining all 4 choices>"
+  "equity_risk_premium": <number>,
+  "country_risk_premium": <number>,
+  "terminal_growth_rate": <number>,
+  "terminal_ebitda_multiple": <number>,
+  "rationale": "<one paragraph explaining all 4 choices>"
 }}
 
-# GUIDELINES FOR EACH INPUT
+## Reference ranges
+- ERP: 4.5–6.5% developed markets; higher for volatility or uncertainty
+- CRP: 0–0.5% (US/UK/DE/JP); 1–5%+ emerging markets; assess {country} for political/currency risk
+- Terminal growth: ≤ long-term GDP growth (2–3% developed); must be < WACC
+- Terminal EBITDA multiple by sector: Tech 10–15x | Consumer Staples 10–14x | Healthcare 10–14x | Industrials 8–12x | Energy 6–10x | Financials: N/A (use P/B)
 
-## 1. Equity Risk Premium (ERP)
-- Typical range: 4.5% - 6.5% for developed markets
-- Use higher end for volatile markets or uncertain economic conditions
-- Consider current market volatility and economic outlook
-
-## 2. Country Risk Premium (CRP)
-- US, UK, Germany, Japan: 0% - 0.5%
-- Emerging markets: 1% - 5%+ depending on risk
-- For {self.country}: assess political stability, currency risk, economic development
-
-## 3. Terminal Growth Rate
-- Should not exceed long-term GDP growth (typically 2% - 3% for developed markets)
-- Must be less than WACC (otherwise terminal value is infinite)
-- Consider company's mature growth prospects and industry lifecycle
-
-## 4. Terminal EBITDA Multiple
-- Based on industry peers and company's competitive position
-- Typical ranges by sector:
-  - Technology: 10x - 15x
-  - Consumer Staples: 10x - 14x
-  - Healthcare: 10x - 14x
-  - Industrials: 8x - 12x
-  - Energy: 6x - 10x
-  - Financials: Not typically used (use P/B instead)
-- Consider company's growth profile vs peers (higher growth = higher multiple)
-
-# EXAMPLE RESPONSE
-{{
-    "equity_risk_premium": 5.5,
-    "country_risk_premium": 0.0,
-    "terminal_growth_rate": 2.0,
-    "terminal_ebitda_multiple": 10.5,
-    "rationale": "ERP of 5.5% reflects current market conditions with moderate volatility. CRP of 0% as company operates primarily in US stable market. Terminal growth of 2.0% aligns with long-term Fed inflation target and GDP growth expectations. Terminal EBITDA multiple of 10.5x is based on sector peer average, adjusted for company's mature market position and stable cash flows."
-}}
-
-Now generate the JSON response for {ticker}:
+Now return the JSON for {ticker}:
 """.strip()
     
     def get_ai_inputs(self) -> Dict[str, Any]:
