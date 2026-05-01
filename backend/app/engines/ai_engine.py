@@ -180,81 +180,46 @@ class VietnamDCFStrategy:
         revenue_growth = financials.get('revenue_growth_avg', 'N/A')
         ebitda_margin = financials.get('ebitda_margin_avg', 'N/A')
         
-        return f"""
-# ROLE
-You are a senior financial analyst specializing in Vietnamese market valuations.
+        return f"""SYSTEM:
+You are a senior financial analyst specializing in Vietnamese market valuations. You output ONLY raw JSON. No markdown. No explanation outside the JSON. No preamble. No trailing text. If you cannot comply, return {{"error": "<reason>"}}.
 
-# TASK
+USER:
 Generate ONLY the 4 forward-looking assumptions for Vietnamese market company {company_name} ({ticker}).
 
-# CRITICAL: AI-ONLY INPUTS (with Vietnam-specific constraints)
+## CRITICAL: AI-ONLY INPUTS (with Vietnam-specific constraints)
 1. **Equity Risk Premium (ERP)**: 6.0% - 8.0% (Vietnam emerging market premium)
 2. **Country Risk Premium (CRP)**: 2.0% - 5.0% (Vietnam-specific political/economic/currency risk)
 3. **Terminal Growth Rate**: 4.0% - 6.0% (aligned with Vietnam's long-term GDP growth ~5-6%)
 4. **Terminal EBITDA Multiple**: 8x - 12x (Vietnamese market conditions, liquidity discount)
 
-# DO NOT PROVIDE
-- Risk-Free Rate (use Vietnamese government bond rate, typically 3-4%)
-- Beta (calculated from VNINDEX historical prices)
-- Cost of Debt (calculated from interest expense / debt)
-- WACC (calculated from CAPM with Vietnam adjustments)
-- Margins, Growth Rates, Working Capital Days (all calculated from financials)
+## DO NOT PROVIDE
+Risk-free rate, beta, cost of debt, WACC, margins, growth rates, working capital days. These are calculated from financials or sourced from VNINDEX data.
 
-# COMPANY CONTEXT
-## Historical Performance
-- Revenue Growth (Avg 3Y): {revenue_growth}%
-- EBITDA Margin (Avg 3Y): {ebitda_margin}%
-
-## Market Data
+## COMPANY CONTEXT
 - Sector: {sector}
 - Industry: {industry}
 - Country: Vietnam
 - Currency: VND
+- Revenue Growth (Avg 3Y): {revenue_growth}%
+- EBITDA Margin (Avg 3Y): {ebitda_margin}%
 
-# VIETNAM-SPECIFIC GUIDELINES
+## VIETNAM-SPECIFIC GUIDELINES
+- ERP: 6.0% - 8.0% (consider VNINDEX volatility 25-35%, FOL liquidity impact)
+- CRP: 2.0% - 5.0% (political stability, VND/USD currency risk, emerging market institutional risks)
+- Terminal Growth: 4.0% - 6.0% (aligned with Vietnam GDP ~5-6%, must be < WACC)
+- Terminal EBITDA Multiple: 8x - 12x (liquidity discount, HOSE/HNX peer comparisons)
 
-## 1. Equity Risk Premium (ERP)
-- Range: 6.0% - 8.0% (higher than developed markets due to emerging market risk)
-- Consider VNINDEX volatility (historically 25-35% annualized)
-- Factor in foreign ownership limits (FOL) impact on liquidity
-
-## 2. Country Risk Premium (CRP)
-- Range: 2.0% - 5.0%
-- Consider: Political stability, currency risk (VND/USD), economic development stage
-- Vietnam specific: Strong GDP growth but emerging market institutional risks
-
-## 3. Terminal Growth Rate
-- Range: 4.0% - 6.0%
-- Aligned with Vietnam's long-term GDP growth potential (~5-6%)
-- Must be less than WACC (otherwise terminal value is infinite)
-- Consider company's position in high-growth emerging market
-
-## 4. Terminal EBITDA Multiple
-- Range: 8x - 12x (generally lower than developed markets)
-- Apply liquidity discount for Vietnamese market (smaller investor base)
-- Consider sector peer multiples on HOSE/HNX exchanges
-
-# OUTPUT REQUIREMENTS
+## OUTPUT REQUIREMENTS
 Return ONLY valid JSON:
 {{
-    "equity_risk_premium": <number>,
-    "country_risk_premium": <number>,
-    "terminal_growth_rate": <number>,
-    "terminal_ebitda_multiple": <number>,
-    "rationale": "<string explaining all 4 choices with Vietnam context>"
+  "equity_risk_premium": <number>,
+  "country_risk_premium": <number>,
+  "terminal_growth_rate": <number>,
+  "terminal_ebitda_multiple": <number>,
+  "rationale": "<one paragraph explaining all 4 choices with Vietnam context>"
 }}
 
-# EXAMPLE RESPONSE
-{{
-    "equity_risk_premium": 7.0,
-    "country_risk_premium": 3.0,
-    "terminal_growth_rate": 5.0,
-    "terminal_ebitda_multiple": 9.5,
-    "rationale": "ERP of 7.0% reflects Vietnam's emerging market status with VNINDEX volatility. CRP of 3.0% accounts for Vietnam-specific political and currency risks. Terminal growth of 5.0% aligns with Vietnam's strong GDP growth trajectory. Terminal EBITDA multiple of 9.5x reflects Vietnamese market liquidity discount and sector peer averages on HOSE."
-}}
-
-Now generate the JSON response for {ticker}:
-""".strip()
+Now return the JSON for {ticker}:""".strip()
     
     def get_ai_inputs(self) -> Dict[str, Any]:
         """Return structure for 4 AI inputs with Vietnam context."""

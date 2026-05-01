@@ -18,6 +18,10 @@ DATA LIMITATIONS (CANNOT be fetched from yfinance):
     - Forward-looking Beta - Must be calculated from historical prices or use default
     - Segment Data - Not available in yfinance free tier
     - Management Guidance - Not available, requires SEC filings or company reports
+
+VIETNAM MARKET ENHANCEMENT:
+    For Vietnamese stocks, this service now integrates with VietnamDataAggregator
+    which provides cascading fallback: vnstock (primary) -> yfinance (fallback).
 """
 
 import logging
@@ -42,6 +46,9 @@ class YFinanceService:
         """
         Fetch all available financial data from yfinance.
         
+        For Vietnamese markets, uses VietnamDataAggregator with cascading fallback:
+        vnstock (primary) -> yfinance (fallback).
+        
         Args:
             ticker_symbol: Stock ticker symbol
             market: Market type (vietnamese or international)
@@ -54,7 +61,11 @@ class YFinanceService:
         try:
             logger.info(f"Fetching all yfinance data for ticker='{ticker_symbol}', market='{market}'")
             
-            # Append .VN for Vietnamese stocks if not already present
+            # For Vietnamese market, use enhanced aggregator with vnstock integration
+            if market == "vietnamese":
+                return self._fetch_vietnamese_enhanced(ticker_symbol)
+            
+            # Append .VN for Vietnamese stocks if not already present (legacy support)
             if market == "vietnamese" and not ticker_symbol.endswith(".VN"):
                 ticker_symbol += ".VN"
             
@@ -85,6 +96,99 @@ class YFinanceService:
         except Exception as e:
             logger.error(f"Failed to fetch yfinance data for ticker='{ticker_symbol}': {str(e)}")
             raise
+    
+    def _fetch_vietnamese_enhanced(self, ticker_symbol: str) -> Dict[str, Any]:
+        """
+        Enhanced fetch for Vietnamese stocks using VietnamDataAggregator.
+        
+        Implements cascading fallback:
+        1. vnstock (primary - local VAS-compliant data)
+        2. yfinance (fallback - international format)
+        
+        Args:
+            ticker_symbol: Vietnamese ticker (without suffix)
+            
+        Returns:
+            Merged data package with quality scoring
+        """
+        try:
+            from .vietnam_data_aggregator import VietnamDataAggregator
+            
+            logger.info(f"Using VietnamDataAggregator for {ticker_symbol}")
+            
+            aggregator = VietnamDataAggregator()
+            result = aggregator.fetch_comprehensive_data(ticker_symbol, market="VN")
+            
+            if result['success']:
+                # Extract merged data for compatibility with existing code
+                merged = result.get('merged_data', {})
+                
+                # Map to standard yfinance_service structure
+                data_package = {
+                    "symbol": f"{ticker_symbol}.VN",
+                    "fetch_timestamp": result['fetch_timestamp'],
+                    "market": "vietnamese",
+                    "data_sources_used": result['data_sources_used'],
+                    "data_quality_score": result['data_quality_score'],
+                    "warnings": result.get('warnings', []),
+                    "key_stats": {
+                        "company_name": merged.get('company_info', {}).get('company_name'),
+                        "sector": merged.get('company_info', {}).get('sector'),
+                        "industry": merged.get('company_info', {}).get('industry'),
+                        "currency": "VND",
+                        "current_price": merged.get('trading_data', {}).get('current_price'),
+                        "market_cap": merged.get('ratios', {}).get('market_cap'),
+                        "beta": merged.get('ratios', {}).get('beta', 1.0),
+                        **merged.get('ratios', {})
+                    },
+                    "income_statement": merged.get('financials', {}).get('income_statement', {}),
+                    "balance_sheet": merged.get('financials', {}).get('balance_sheet', {}),
+                    "cash_flow": merged.get('financials', {}).get('cash_flow', {}),
+                    "ownership": merged.get('ownership', {}),
+                    "analyst_estimates": {},  # Not available for Vietnamese stocks typically
+                }
+                
+                logger.info(f"Vietnamese data aggregated successfully. Quality: {result['data_quality_score']:.2f}, Sources: {result['data_sources_used']}")
+                return data_package
+            else:
+                logger.warning(f"VietnamDataAggregator failed, falling back to direct yfinance: {result.get('warnings', [])}")
+                # Fallback to direct yfinance
+                return self._fetch_direct_yfinance(ticker_symbol)
+                
+        except ImportError as e:
+            logger.warning(f"VietnamDataAggregator not available, using direct yfinance: {e}")
+            return self._fetch_direct_yfinance(ticker_symbol)
+        except Exception as e:
+            logger.error(f"Error in Vietnamese enhanced fetch: {e}")
+            return self._fetch_direct_yfinance(ticker_symbol)
+    
+    def _fetch_direct_yfinance(self, ticker_symbol: str) -> Dict[str, Any]:
+        """Direct yfinance fetch for Vietnamese stocks (fallback method)."""
+        import yfinance as yf
+        
+        # Append .VN suffix
+        full_ticker = f"{ticker_symbol}.VN" if not ticker_symbol.endswith(".VN") else ticker_symbol
+        self.ticker = yf.Ticker(full_ticker)
+        
+        info = self._fetch_key_stats()
+        financials = self._fetch_income_statement()
+        balance_sheet = self._fetch_balance_sheet()
+        cashflow = self._fetch_cash_flow()
+        estimates = self._fetch_analyst_estimates()
+        
+        return {
+            "symbol": full_ticker,
+            "fetch_timestamp": datetime.now().isoformat(),
+            "market": "vietnamese",
+            "data_sources_used": ["yfinance"],
+            "data_quality_score": 0.5,  # Lower score for fallback
+            "warnings": ["Using yfinance fallback - vnstock data not available"],
+            "key_stats": info,
+            "income_statement": financials,
+            "balance_sheet": balance_sheet,
+            "cash_flow": cashflow,
+            "analyst_estimates": estimates,
+        }
     
     def _fetch_key_stats(self) -> Dict[str, Any]:
         """Fetch key statistics and company info."""
