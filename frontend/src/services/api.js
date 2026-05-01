@@ -38,22 +38,22 @@ export const selectModels = async (sessionId, model) => {
   return response.data;
 };
 
-// Step 5-6: Prepare Inputs
+// Step 5: Prepare Inputs
 export const prepareInputs = async (sessionId) => {
-  const response = await api.post('/step-5-6-prepare-inputs', { session_id: sessionId });
+  const response = await api.post('/step-5-prepare-inputs', { session_id: sessionId });
   return response.data;
 };
 
-// Step 7-8: Fetch Data
-export const fetchData = async (sessionId) => {
-  const response = await api.post('/step-7-8-fetch-data', { session_id: sessionId });
+// Step 6: Fetch API Data
+export const fetchApiData = async (sessionId) => {
+  const response = await api.post('/step-6-fetch-api-data', { session_id: sessionId });
   return response.data;
 };
 
-// Step 9: Generate AI Suggestions (uses longer timeout)
+// Step 7: Generate AI Assumptions (uses longer timeout)
 export const generateAI = async (sessionId) => {
   try {
-    const response = await aiApi.post('/step-9-generate-ai', { session_id: sessionId });
+    const response = await aiApi.post('/step-7-generate-ai-assumptions', { session_id: sessionId });
     return response.data;
   } catch (error) {
     if (error.code === 'ECONNABORTED') {
