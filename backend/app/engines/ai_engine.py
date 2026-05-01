@@ -174,6 +174,7 @@ For EACH field below, provide a JSON object with EXACTLY these three keys:
 ## DCF Model Inputs (single values)
 - risk_free_rate: Current risk-free rate (%)
 - equity_risk_premium: Equity risk premium (%)
+- country_risk_premium: Country risk premium (%)
 - beta: Company beta
 - cost_of_debt: Cost of debt (%)
 - wacc: Weighted Average Cost of Capital (%)
@@ -426,6 +427,11 @@ Now generate the complete JSON response for {ticker}:
                 "value": erp,
                 "rationale": "Standard equity risk premium",
                 "sources": "Damodaran Data"
+            },
+            "country_risk_premium": {
+                "value": 0.0,
+                "rationale": "No country risk for developed markets",
+                "sources": "Default (adjust for emerging markets)"
             },
             "beta": {
                 "value": beta,
