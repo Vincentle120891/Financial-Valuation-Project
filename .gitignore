@@ -2,25 +2,18 @@
 # Dependencies
 node_modules/
 
-# Build artifacts
-dist/
-build/
-*.js.map
-
 # Environment
 .env
 .env.local
-*.env.*
+.env.*
 
 # Editors
 .vscode/
-.idea/
-*.swp
-*.swo
 
 # Logs and temp files
 *.log
 *.tmp
+*.swp
 
 # Python
 __pycache__/
@@ -28,12 +21,19 @@ __pycache__/
 *.pyo
 *.pyd
 
-# Coverage
-coverage/
-htmlcov/
-.coverage
+# Build artifacts
+dist/
+build/
+*.egg-info/
 
-# OS
+# OS generated files
 .DS_Store
 Thumbs.db
+
+# IDE
+.idea/
+
+# Virtual environments
+venv/
+.venv/
 ```
