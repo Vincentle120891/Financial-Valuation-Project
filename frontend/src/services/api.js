@@ -7,6 +7,17 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  // Add timeout configuration (60 seconds for regular calls, 120 for AI)
+  timeout: 60000,
+});
+
+// Create separate instance for AI calls with longer timeout
+const aiApi = axios.create({
+  baseURL: API_BASE_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  timeout: 120000, // 2 minutes for AI generation
 });
 
 // Step 1: Search Company
@@ -39,10 +50,17 @@ export const fetchData = async (sessionId) => {
   return response.data;
 };
 
-// Step 9: Generate AI Suggestions
+// Step 9: Generate AI Suggestions (uses longer timeout)
 export const generateAI = async (sessionId) => {
-  const response = await api.post('/step-9-generate-ai', { session_id: sessionId });
-  return response.data;
+  try {
+    const response = await aiApi.post('/step-9-generate-ai', { session_id: sessionId });
+    return response.data;
+  } catch (error) {
+    if (error.code === 'ECONNABORTED') {
+      throw new Error('AI generation timed out. The request took too long to complete. Please try again or proceed with manual inputs.');
+    }
+    throw error;
+  }
 };
 
 // Step 10: Confirm Assumptions

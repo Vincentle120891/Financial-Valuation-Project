@@ -172,12 +172,13 @@ class AIFallbackEngine:
 
     def _call_groq(self, prompt: str) -> Optional[str]:
         from groq import Groq
-        client = Groq(api_key=GROQ_API_KEY)
+        client = Groq(api_key=GROQ_API_KEY, timeout=60000)  # 60 second timeout for Groq
         completion = client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.3,
-            response_format={"type": "json_object"}
+            response_format={"type": "json_object"},
+            timeout=50  # 50 second timeout at request level
         )
         return completion.choices[0].message.content
 
@@ -185,7 +186,11 @@ class AIFallbackEngine:
         import google.generativeai as genai
         genai.configure(api_key=GEMINI_API_KEY)
         model = genai.GenerativeModel('gemini-1.5-flash')
-        response = model.generate_content(prompt + "\n\nRespond ONLY with valid JSON.")
+        # Set generation config with timeout
+        response = model.generate_content(
+            prompt + "\n\nRespond ONLY with valid JSON.",
+            request_options={'timeout': 50}  # 50 second timeout
+        )
         # Clean up markdown code blocks if present
         text = response.text
         if text.startswith("```json"):
@@ -200,7 +205,8 @@ class AIFallbackEngine:
         response = Generation.call(
             model='qwen-turbo',
             messages=[{'role': 'user', 'content': prompt}],
-            result_format='message'
+            result_format='message',
+            timeout=50  # 50 second timeout
         )
         
         if response.status_code == 200:
