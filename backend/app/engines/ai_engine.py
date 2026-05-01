@@ -57,16 +57,29 @@ class AIFallbackEngine:
         Generate assumptions with fallback logic.
         Returns structured data with value, rationale, and sources.
         Includes detailed error tracking for each provider attempt.
+        
+        Provider Priority Order:
+        1. Groq (Primary) - Fastest, most reliable for financial analysis
+        2. Gemini (Secondary) - Latest gemini-2.0-flash-lite model
+        3. Qwen (Tertiary) - Alibaba Cloud backup
+        
+        Detailed logging shows waiting time and response status for each provider.
         """
         prompt = self._build_prompt(company_data, model_type)
         last_error = None
         provider_errors = {}  # Track errors from each provider
         
+        logger.info("🚀 Starting AI assumption generation...")
+        logger.info(f"📊 Provider priority order: {[name for name, _ in self.providers]}")
+        
         # Try each provider in order
         for provider_name, provider_func in self.providers:
             try:
                 logger.info(f"🤖 Attempting AI generation via {provider_name.upper()}...")
+                logger.info(f"⏳ Waiting for {provider_name.upper()} response (timeout: 50s)...")
+                
                 response = provider_func(prompt)
+                
                 if response:
                     logger.info(f"✅ Successfully generated assumptions via {provider_name.upper()}")
                     return {
@@ -77,14 +90,20 @@ class AIFallbackEngine:
                             "errors": provider_errors
                         }
                     }
+                else:
+                    logger.warning(f"⚠️ {provider_name.upper()} returned empty response")
+                    provider_errors[provider_name] = "Empty response"
+                    
             except Exception as e:
                 error_msg = f"{provider_name.upper()}: {str(e)}"
                 logger.error(f"❌ {error_msg}")
                 provider_errors[provider_name] = str(e)
                 last_error = error_msg
+                logger.info(f"🔄 Falling back to next provider...")
                 continue
         
         # Final fallback: Deterministic rules-based engine
+        logger.warning("⚠️ All AI providers exhausted, using deterministic fallback...")
         fallback_result = self._deterministic_fallback(company_data, model_type)
         
         # Add detailed error information
@@ -103,87 +122,166 @@ class AIFallbackEngine:
         return fallback_result
 
     def _build_prompt(self, data: Dict[str, Any], model_type: str) -> str:
-        """Construct a detailed prompt for the LLM."""
+        """
+        Construct a detailed, well-structured prompt for the LLM.
+        Enhanced with clear instructions, context, and output format requirements.
+        """
         ticker = data.get('ticker', 'UNKNOWN')
+        company_name = data.get('company_name', 'Unknown Company')
         financials = data.get('financials', {})
         market_data = data.get('market_data', {})
         
         return f"""
-        You are a senior financial analyst. Generate DCF assumptions for {ticker}.
-        
-        HISTORICAL DATA:
-        - Revenue (TTM): ${financials.get('revenue_ttm', 'N/A')}
-        - EBITDA Margin (Avg 3Y): {financials.get('ebitda_margin_avg', 'N/A')}%
-        - Net Income Margin (Avg 3Y): {financials.get('net_margin_avg', 'N/A')}%
-        - Beta: {market_data.get('beta', 'N/A')}
-        - Risk Free Rate: {market_data.get('risk_free_rate', 4.5)}%
-        - Sector: {data.get('sector', 'General')}
-        
-        TASK:
-        Return a JSON object with these fields. For EACH field, provide:
-        1. "value": The numerical assumption.
-        2. "rationale": A simple 1-sentence explanation of WHY this number was chosen.
-        3. "sources": The specific data point or formula used (e.g., "Historical Avg 3Y", "CAPM Formula").
-        
-        FORECAST DRIVERS (5-Year Projections - provide arrays of 5 values each):
-        - sales_volume_growth: Array of 5 yearly growth rates (%)
-        - inflation_rate: Array of 5 yearly inflation rates (%)
-        - opex_growth: Array of 5 yearly OpEx growth rates (%)
-        - capital_expenditure: Array of 5 yearly CapEx as % of revenue
-        - ar_days: Array of 5 yearly Accounts Receivable days
-        - inv_days: Array of 5 yearly Inventory days
-        - ap_days: Array of 5 yearly Accounts Payable days
-        - tax_rate: Array of 5 yearly tax rates (%)
-        
-        DCF MODEL INPUTS (single values):
-        - risk_free_rate: Current risk-free rate (%)
-        - equity_risk_premium: Equity risk premium (%)
-        - beta: Company beta
-        - cost_of_debt: Cost of debt (%)
-        - wacc: Weighted Average Cost of Capital (%)
-        - terminal_growth_rate: Terminal growth rate (%)
-        - terminal_ebitda_multiple: Terminal EBITDA multiple
-        - useful_life_existing: Useful life of existing assets (years)
-        
-        OUTPUT FORMAT (STRICT JSON):
-        {{
-            "sales_volume_growth": [
-                {{ "value": 5.2, "rationale": "...", "sources": "..." }},
-                {{ "value": 4.8, "rationale": "...", "sources": "..." }},
-                ... (5 years total)
-            ],
-            "inflation_rate": [ ... ],
-            "opex_growth": [ ... ],
-            "capital_expenditure": [ ... ],
-            "ar_days": [ ... ],
-            "inv_days": [ ... ],
-            "ap_days": [ ... ],
-            "tax_rate": [ ... ],
-            "risk_free_rate": {{ "value": 4.5, "rationale": "...", "sources": "..." }},
-            "equity_risk_premium": {{ "value": 5.5, "rationale": "...", "sources": "..." }},
-            "beta": {{ "value": 1.2, "rationale": "...", "sources": "..." }},
-            "cost_of_debt": {{ "value": 5.0, "rationale": "...", "sources": "..." }},
-            "wacc": {{ "value": 8.5, "rationale": "...", "sources": "..." }},
-            "terminal_growth_rate": {{ "value": 2.0, "rationale": "...", "sources": "..." }},
-            "terminal_ebitda_multiple": {{ "value": 10.0, "rationale": "...", "sources": "..." }},
-            "useful_life_existing": {{ "value": 10, "rationale": "...", "sources": "..." }}
-        }}
-        """
+# ROLE
+You are a senior financial analyst at a top investment bank, specializing in Discounted Cash Flow (DCF) valuation.
+
+# TASK
+Generate professional DCF assumptions for {company_name} ({ticker}).
+
+# INPUT DATA
+
+## Historical Financials
+- Revenue (TTM): ${financials.get('revenue_ttm', 'N/A')}
+- EBITDA Margin (Avg 3Y): {financials.get('ebitda_margin_avg', 'N/A')}%
+- Net Income Margin (Avg 3Y): {financials.get('net_margin_avg', 'N/A')}%
+- Revenue Growth (Avg 3Y): {financials.get('revenue_growth_avg', 'N/A')}%
+
+## Market Data
+- Beta: {market_data.get('beta', 'N/A')}
+- Risk Free Rate: {market_data.get('risk_free_rate', 4.5)}%
+- Sector: {data.get('sector', 'General')}
+- Industry: {data.get('industry', 'General')}
+
+# OUTPUT REQUIREMENTS
+
+For EACH field below, provide a JSON object with EXACTLY these three keys:
+1. "value": The numerical assumption (number only, no text)
+2. "rationale": A concise 1-sentence explanation of WHY this number was chosen
+3. "sources": The specific data point, formula, or methodology used
+
+# REQUIRED FIELDS
+
+## Forecast Drivers (5-Year Projections - arrays of 5 values each)
+- sales_volume_growth: Array of 5 yearly growth rates (%)
+- inflation_rate: Array of 5 yearly inflation rates (%)
+- opex_growth: Array of 5 yearly OpEx growth rates (%)
+- capital_expenditure: Array of 5 yearly CapEx as % of revenue
+- ar_days: Array of 5 yearly Accounts Receivable days
+- inv_days: Array of 5 yearly Inventory days
+- ap_days: Array of 5 yearly Accounts Payable days
+- tax_rate: Array of 5 yearly tax rates (%)
+
+## DCF Model Inputs (single values)
+- risk_free_rate: Current risk-free rate (%)
+- equity_risk_premium: Equity risk premium (%)
+- beta: Company beta
+- cost_of_debt: Cost of debt (%)
+- wacc: Weighted Average Cost of Capital (%)
+- terminal_growth_rate: Terminal growth rate (%)
+- terminal_ebitda_multiple: Terminal EBITDA multiple
+- useful_life_existing: Useful life of existing assets (years)
+
+# CRITICAL INSTRUCTIONS
+- Return ONLY valid JSON. No markdown, no code blocks, no explanatory text.
+- All numeric values must be numbers (not strings).
+- Arrays must contain exactly 5 elements.
+- Base assumptions on the provided historical data and industry standards.
+- Use conservative, realistic estimates suitable for professional valuation.
+
+# OUTPUT FORMAT EXAMPLE
+{{
+    "sales_volume_growth": [
+        {{ "value": 5.2, "rationale": "Based on 3-year historical average with modest moderation", "sources": "Historical Avg 3Y" }},
+        {{ "value": 4.8, "rationale": "Gradual slowdown as company matures", "sources": "Trend Analysis" }},
+        {{ "value": 4.5, "rationale": "Continued moderation in growth", "sources": "Trend Analysis" }},
+        {{ "value": 4.2, "rationale": "Approaching steady-state growth", "sources": "Trend Analysis" }},
+        {{ "value": 4.0, "rationale": "Final forecast year before terminal period", "sources": "Trend Analysis" }}
+    ],
+    "wacc": {{ "value": 8.5, "rationale": "Calculated using CAPM with 60/40 debt-equity structure", "sources": "CAPM Formula" }},
+    "terminal_growth_rate": {{ "value": 2.0, "rationale": "Aligned with long-term inflation target", "sources": "Fed Target 2%" }}
+}}
+
+Now generate the complete JSON response for {ticker}:
+""".strip()
 
     def _call_groq(self, prompt: str) -> Optional[str]:
+        """
+        Call Groq API with detailed logging and timeout handling.
+        Groq is the PRIMARY provider - fastest and most reliable for financial analysis.
+        """
         from groq import Groq
-        client = Groq(api_key=GROQ_API_KEY, timeout=60000)  # 60 second timeout for Groq
-        completion = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.3,
-            response_format={"type": "json_object"},
-            timeout=50  # 50 second timeout at request level
-        )
-        return completion.choices[0].message.content
+        import time
+        
+        start_time = time.time()
+        logger.info("⏳ Connecting to Groq API (Primary Provider)...")
+        
+        try:
+            client = Groq(api_key=GROQ_API_KEY, timeout=60000)
+            logger.info("📡 Sending request to Groq (llama-3.3-70b-versatile)...")
+            
+            completion = client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[
+                    {"role": "system", "content": "You are a senior financial analyst specializing in DCF valuation. Always respond with valid JSON only, no markdown formatting."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.3,
+                response_format={"type": "json_object"},
+                timeout=50
+            )
+            
+            elapsed = time.time() - start_time
+            logger.info(f"✅ Groq response received in {elapsed:.2f}s")
+            
+            return completion.choices[0].message.content
+            
+        except Exception as e:
+            elapsed = time.time() - start_time
+            logger.error(f"❌ Groq failed after {elapsed:.2f}s: {str(e)}")
+            raise
 
     def _call_gemini(self, prompt: str) -> Optional[str]:
+        """
+        Call Gemini API with latest gemini-2.0-flash-lite model.
+        Secondary fallback provider with detailed logging.
+        """
         import google.generativeai as genai
+        import time
+        
+        start_time = time.time()
+        logger.info("⏳ Connecting to Google Gemini API (Secondary Provider - gemini-2.0-flash-lite)...")
+        
+        try:
+            genai.configure(api_key=GEMINI_API_KEY)
+            # Use the latest lite version for speed and cost efficiency
+            model = genai.GenerativeModel('gemini-2.0-flash-lite')
+            logger.info("📡 Sending request to Gemini...")
+            
+            response = model.generate_content(
+                prompt + "\n\nIMPORTANT: Respond ONLY with valid JSON. Do not include markdown code blocks or any explanatory text outside the JSON.",
+                generation_config=genai.GenerationConfig(
+                    temperature=0.3,
+                    response_mime_type="application/json"
+                ),
+                request_options={'timeout': 50}
+            )
+            
+            elapsed = time.time() - start_time
+            logger.info(f"✅ Gemini response received in {elapsed:.2f}s")
+            
+            # Clean up markdown code blocks if present
+            text = response.text
+            if text.startswith("```json"):
+                text = text.replace("```json", "").replace("```", "")
+            elif text.startswith("```"):
+                text = text.replace("```", "")
+            
+            return text.strip()
+            
+        except Exception as e:
+            elapsed = time.time() - start_time
+            logger.error(f"❌ Gemini failed after {elapsed:.2f}s: {str(e)}")
+            raise
         genai.configure(api_key=GEMINI_API_KEY)
         # Use available model - gemini-pro or gemini-1.5-pro
         try:
@@ -199,25 +297,49 @@ class AIFallbackEngine:
         return text
 
     def _call_qwen(self, prompt: str) -> Optional[str]:
+        """
+        Call Qwen API as tertiary fallback with detailed logging.
+        """
         import dashscope
         from dashscope import Generation
-        dashscope.api_key = QWEN_API_KEY
+        import time
         
-        response = Generation.call(
-            model='qwen-turbo',
-            messages=[{'role': 'user', 'content': prompt}],
-            result_format='message',
-            timeout=50  # 50 second timeout
-        )
+        start_time = time.time()
+        logger.info("⏳ Connecting to Alibaba Qwen API (Tertiary Provider - qwen-turbo)...")
         
-        if response.status_code == 200:
-            text = response.output.choices[0].message.content
-            # Clean up markdown code blocks if present
-            if text.startswith("```json"):
-                text = text.replace("```json", "").replace("```", "")
-            return text
-        else:
-            raise Exception(f"Qwen API Error: {response.code} - {response.message}")
+        try:
+            dashscope.api_key = QWEN_API_KEY
+            
+            response = Generation.call(
+                model='qwen-turbo',
+                messages=[
+                    {'role': 'system', 'content': 'You are a senior financial analyst. Respond ONLY with valid JSON.'},
+                    {'role': 'user', 'content': prompt}
+                ],
+                result_format='message',
+                timeout=50
+            )
+            
+            if response.status_code == 200:
+                elapsed = time.time() - start_time
+                logger.info(f"✅ Qwen response received in {elapsed:.2f}s")
+                
+                text = response.output.choices[0].message.content
+                # Clean up markdown code blocks if present
+                if text.startswith("```json"):
+                    text = text.replace("```json", "").replace("```", "")
+                elif text.startswith("```"):
+                    text = text.replace("```", "")
+                return text.strip()
+            else:
+                elapsed = time.time() - start_time
+                logger.error(f"❌ Qwen failed after {elapsed:.2f}s: {response.code} - {response.message}")
+                raise Exception(f"Qwen API Error: {response.code} - {response.message}")
+                
+        except Exception as e:
+            elapsed = time.time() - start_time
+            logger.error(f"❌ Qwen failed after {elapsed:.2f}s: {str(e)}")
+            raise
 
     def _parse_response(self, json_str: str, model_type: str) -> Dict[str, Any]:
         """Parse and validate the JSON response."""

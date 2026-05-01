@@ -219,7 +219,9 @@ async def generate_ai_assumptions(data: Dict, model: str) -> Dict:
     
     company_data = {
         "ticker": profile.get('ticker', 'UNKNOWN'),
+        "company_name": profile.get('company_name', profile.get('ticker', 'Unknown Company')),
         "sector": profile.get('sector', 'General'),
+        "industry": profile.get('industry', 'General'),
         "financials": {
             "revenue_ttm": revenue_history[0] if revenue_history else 0,
             "ebitda_margin_avg": round(sum(ebitda_margins)/len(ebitda_margins)*100, 1) if ebitda_margins else 15.0,
