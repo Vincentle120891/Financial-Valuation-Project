@@ -326,8 +326,10 @@ async def generate_ai_assumptions(data: Dict, model: str) -> Dict:
     provider_status = ai_engine.get_provider_status()
     available_providers = [k for k, v in provider_status.items() if v == "configured"]
     
-    # Generate AI assumptions - now focused on only 4 key inputs
-    ai_results = ai_engine.generate_assumptions(company_data, model)
+    # Generate AI assumptions with strategy pattern
+    # Pass market parameter for proper strategy routing (Vietnam vs US/International)
+    market = session_data.get('market', 'US')
+    ai_results = ai_engine.generate_assumptions(company_data, model, market)
     
     formatted_results = {"model": model.upper()}
     
