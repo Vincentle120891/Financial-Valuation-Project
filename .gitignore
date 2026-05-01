@@ -1,39 +1,7 @@
-```
-# Dependencies
-node_modules/
+Nothing should be ignored in this case, as the changes only include Python source files (.py) which are core project files and not build artifacts, dependencies, or temporary files.
 
-# Build artifacts
-dist/
-build/
-*.js.map
+The modified files are:
+- backend/app/api/routes/v1/valuation_routes.py
+- backend/app/engines/ai_engine.py
 
-# Environment
-.env
-.env.local
-*.env.*
-
-# Editors
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# Logs and temp files
-*.log
-*.tmp
-
-# Python
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-
-# Coverage
-coverage/
-htmlcov/
-.coverage
-
-# OS
-.DS_Store
-Thumbs.db
-```
+These are both source code files that should be tracked in version control.
