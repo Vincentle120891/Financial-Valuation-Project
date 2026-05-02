@@ -1,21 +1,11 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
-
-export default defineConfig({
-  plugins: [react({
-    jsxRuntime: 'automatic'
-  })],
+export default {
   server: {
+    host: true,
     port: 3000,
+    strictPort: true,
+    allowedHosts: 'all',
     proxy: {
-      '/api': {
-        target: 'http://localhost:8000',
-        changeOrigin: true
-      }
+      '/api': 'http://localhost:8000'
     }
-  },
-  build: {
-    outDir: 'build',
-    sourcemap: true
   }
-})
+}
