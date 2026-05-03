@@ -141,11 +141,13 @@ def fetch_financial_data(ticker_symbol: str, market: str) -> Dict:
         # Build historical financials object with all available data
         historical_financials = {
             "revenue": {str(year): sanitize_value(income_stmt.loc['Total Revenue', year]) for year in revenue_years} if 'Total Revenue' in income_stmt.index else {},
+            "cogs": {str(year): sanitize_value(income_stmt.loc['Cost Of Revenue', year]) for year in revenue_years} if 'Cost Of Revenue' in income_stmt.index else {},
             "ebitda": {str(year): sanitize_value(income_stmt.loc['EBITDA', year]) for year in revenue_years} if 'EBITDA' in income_stmt.index else {},
             "net_income": {str(year): sanitize_value(income_stmt.loc['Net Income', year]) for year in revenue_years} if 'Net Income' in income_stmt.index else {},
             "operating_expenses": {str(year): sanitize_value(income_stmt.loc['Operating Expenses', year]) for year in revenue_years} if 'Operating Expenses' in income_stmt.index else {},
-            "capex": {str(year): sanitize_value(cashflow.loc['Capital Expenditure', year]) for year in revenue_years} if 'Capital Expenditure' in cashflow.index else {},
+            "sg_and_a": {str(year): sanitize_value(income_stmt.loc['Selling General And Administration', year]) for year in revenue_years} if 'Selling General And Administration' in income_stmt.index else {},
             "depreciation": {str(year): sanitize_value(cashflow.loc['Depreciation', year]) for year in revenue_years} if 'Depreciation' in cashflow.index else {},
+            "capex": {str(year): sanitize_value(cashflow.loc['Capital Expenditure', year]) for year in revenue_years} if 'Capital Expenditure' in cashflow.index else {},
             "total_assets": {str(year): sanitize_value(balance_sheet.loc['Total Assets', year]) for year in revenue_years} if 'Total Assets' in balance_sheet.index else {},
             "total_debt": {str(year): sanitize_value(balance_sheet.loc['Total Debt', year]) for year in revenue_years} if 'Total Debt' in balance_sheet.index else {},
             "free_cash_flow": {str(year): sanitize_value(cashflow.loc['Free Cash Flow', year]) for year in revenue_years} if 'Free Cash Flow' in cashflow.index else {},
