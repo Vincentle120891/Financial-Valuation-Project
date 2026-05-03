@@ -1,4 +1,1 @@
-```gitignore
-__pycache__/
-*.pyc
-```
+(frontend/src/components/valuation-flow/ApiDataStep.jsx is a source file, so no .gitignore rules needed)

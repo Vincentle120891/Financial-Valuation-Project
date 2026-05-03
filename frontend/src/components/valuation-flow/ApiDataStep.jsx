@@ -58,7 +58,7 @@ const ApiDataStep = ({
         {/* Revenue Table */}
         {historicalData.revenue && Object.keys(historicalData.revenue).length > 0 && (
           <div style={{ marginTop: '16px' }}>
-            <h4 style={{ color: '#1565c0', marginBottom: '8px' }}>Revenue</h4>
+            <h4 style={{ color: '#1565c0', marginBottom: '8px' }}>Revenue (3-5 years) <span style={{ background: '#4caf50', color: 'white', padding: '2px 8px', borderRadius: '4px', fontSize: '12px', marginLeft: '8px' }}>✓ Auto-Fetched</span></h4>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '8px' }}>
               {Object.entries(historicalData.revenue).map(([year, value]) => (
                 <div key={year} style={{ background: 'white', padding: '12px', borderRadius: '6px', textAlign: 'center' }}>
@@ -70,10 +70,25 @@ const ApiDataStep = ({
           </div>
         )}
 
+        {/* COGS Table */}
+        {historicalData.cogs && Object.keys(historicalData.cogs).length > 0 && (
+          <div style={{ marginTop: '16px' }}>
+            <h4 style={{ color: '#1565c0', marginBottom: '8px' }}>COGS <span style={{ background: '#4caf50', color: 'white', padding: '2px 8px', borderRadius: '4px', fontSize: '12px', marginLeft: '8px' }}>✓ Auto-Fetched</span></h4>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '8px' }}>
+              {Object.entries(historicalData.cogs).map(([year, value]) => (
+                <div key={year} style={{ background: 'white', padding: '12px', borderRadius: '6px', textAlign: 'center' }}>
+                  <strong style={{ display: 'block', marginBottom: '4px', color: '#666' }}>{year}</strong>
+                  <span style={{ color: '#ff9800', fontWeight: 600 }}>{formatCurrency(value)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* EBITDA Table */}
         {historicalData.ebitda && Object.keys(historicalData.ebitda).length > 0 && (
           <div style={{ marginTop: '16px' }}>
-            <h4 style={{ color: '#1565c0', marginBottom: '8px' }}>EBITDA</h4>
+            <h4 style={{ color: '#1565c0', marginBottom: '8px' }}>EBITDA (3-5 years) <span style={{ background: '#4caf50', color: 'white', padding: '2px 8px', borderRadius: '4px', fontSize: '12px', marginLeft: '8px' }}>✓ Auto-Fetched</span></h4>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '8px' }}>
               {Object.entries(historicalData.ebitda).map(([year, value]) => (
                 <div key={year} style={{ background: 'white', padding: '12px', borderRadius: '6px', textAlign: 'center' }}>
@@ -88,7 +103,7 @@ const ApiDataStep = ({
         {/* Net Income Table */}
         {historicalData.net_income && Object.keys(historicalData.net_income).length > 0 && (
           <div style={{ marginTop: '16px' }}>
-            <h4 style={{ color: '#1565c0', marginBottom: '8px' }}>Net Income</h4>
+            <h4 style={{ color: '#1565c0', marginBottom: '8px' }}>Net Income (3-5 years) <span style={{ background: '#4caf50', color: 'white', padding: '2px 8px', borderRadius: '4px', fontSize: '12px', marginLeft: '8px' }}>✓ Auto-Fetched</span></h4>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '8px' }}>
               {Object.entries(historicalData.net_income).map(([year, value]) => (
                 <div key={year} style={{ background: 'white', padding: '12px', borderRadius: '6px', textAlign: 'center' }}>
@@ -100,12 +115,12 @@ const ApiDataStep = ({
           </div>
         )}
 
-        {/* Operating Expenses Table */}
-        {historicalData.operating_expenses && Object.keys(historicalData.operating_expenses).length > 0 && (
+        {/* SG&A / OpEx Table */}
+        {(historicalData.operating_expenses || historicalData.sg_and_a) && (
           <div style={{ marginTop: '16px' }}>
-            <h4 style={{ color: '#1565c0', marginBottom: '8px' }}>Operating Expenses</h4>
+            <h4 style={{ color: '#1565c0', marginBottom: '8px' }}>SG&A / OpEx <span style={{ background: '#4caf50', color: 'white', padding: '2px 8px', borderRadius: '4px', fontSize: '12px', marginLeft: '8px' }}>✓ Auto-Fetched</span></h4>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '8px' }}>
-              {Object.entries(historicalData.operating_expenses).map(([year, value]) => (
+              {Object.entries(historicalData.operating_expenses || historicalData.sg_and_a || {}).map(([year, value]) => (
                 <div key={year} style={{ background: 'white', padding: '12px', borderRadius: '6px', textAlign: 'center' }}>
                   <strong style={{ display: 'block', marginBottom: '4px', color: '#666' }}>{year}</strong>
                   <span style={{ color: '#ff9800', fontWeight: 600 }}>{formatCurrency(value)}</span>
@@ -115,25 +130,10 @@ const ApiDataStep = ({
           </div>
         )}
 
-        {/* CapEx Table */}
-        {historicalData.capex && Object.keys(historicalData.capex).length > 0 && (
-          <div style={{ marginTop: '16px' }}>
-            <h4 style={{ color: '#1565c0', marginBottom: '8px' }}>Capital Expenditure (CapEx)</h4>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '8px' }}>
-              {Object.entries(historicalData.capex).map(([year, value]) => (
-                <div key={year} style={{ background: 'white', padding: '12px', borderRadius: '6px', textAlign: 'center' }}>
-                  <strong style={{ display: 'block', marginBottom: '4px', color: '#666' }}>{year}</strong>
-                  <span style={{ color: '#9c27b0', fontWeight: 600 }}>{formatCurrency(value)}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
         {/* Depreciation & Amortization Table */}
         {historicalData.depreciation && Object.keys(historicalData.depreciation).length > 0 && (
           <div style={{ marginTop: '16px' }}>
-            <h4 style={{ color: '#1565c0', marginBottom: '8px' }}>Depreciation & Amortization</h4>
+            <h4 style={{ color: '#1565c0', marginBottom: '8px' }}>Depreciation & Amortization <span style={{ background: '#4caf50', color: 'white', padding: '2px 8px', borderRadius: '4px', fontSize: '12px', marginLeft: '8px' }}>✓ Auto-Fetched</span></h4>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '8px' }}>
               {Object.entries(historicalData.depreciation).map(([year, value]) => (
                 <div key={year} style={{ background: 'white', padding: '12px', borderRadius: '6px', textAlign: 'center' }}>
@@ -145,110 +145,72 @@ const ApiDataStep = ({
           </div>
         )}
 
-        {/* Total Assets Table */}
-        {historicalData.total_assets && Object.keys(historicalData.total_assets).length > 0 && (
+        {/* CapEx Table */}
+        {historicalData.capex && Object.keys(historicalData.capex).length > 0 && (
           <div style={{ marginTop: '16px' }}>
-            <h4 style={{ color: '#1565c0', marginBottom: '8px' }}>Total Assets</h4>
+            <h4 style={{ color: '#1565c0', marginBottom: '8px' }}>CapEx <span style={{ background: '#4caf50', color: 'white', padding: '2px 8px', borderRadius: '4px', fontSize: '12px', marginLeft: '8px' }}>✓ Auto-Fetched</span></h4>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '8px' }}>
-              {Object.entries(historicalData.total_assets).map(([year, value]) => (
+              {Object.entries(historicalData.capex).map(([year, value]) => (
                 <div key={year} style={{ background: 'white', padding: '12px', borderRadius: '6px', textAlign: 'center' }}>
                   <strong style={{ display: 'block', marginBottom: '4px', color: '#666' }}>{year}</strong>
-                  <span style={{ color: '#3f51b5', fontWeight: 600 }}>{formatCurrency(value)}</span>
+                  <span style={{ color: '#9c27b0', fontWeight: 600 }}>{formatCurrency(value)}</span>
                 </div>
               ))}
             </div>
           </div>
         )}
 
-        {/* Total Debt Table */}
-        {historicalData.total_debt && Object.keys(historicalData.total_debt).length > 0 && (
-          <div style={{ marginTop: '16px' }}>
-            <h4 style={{ color: '#1565c0', marginBottom: '8px' }}>Total Debt</h4>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '8px' }}>
-              {Object.entries(historicalData.total_debt).map(([year, value]) => (
-                <div key={year} style={{ background: 'white', padding: '12px', borderRadius: '6px', textAlign: 'center' }}>
-                  <strong style={{ display: 'block', marginBottom: '4px', color: '#666' }}>{year}</strong>
-                  <span style={{ color: '#f44336', fontWeight: 600 }}>{formatCurrency(value)}</span>
+        {/* Working Capital Items Group */}
+        <div style={{ marginTop: '24px', background: 'linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%)', padding: '16px', borderRadius: '8px' }}>
+          <h4 style={{ color: '#2e7d32', marginBottom: '16px' }}>Working Capital Items (AR, Inventory, AP) <span style={{ background: '#4caf50', color: 'white', padding: '2px 8px', borderRadius: '4px', fontSize: '12px', marginLeft: '8px' }}>✓ Auto-Fetched</span></h4>
+          
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
+            {/* Accounts Receivable */}
+            {historicalData.accounts_receivable && Object.keys(historicalData.accounts_receivable).length > 0 && (
+              <div style={{ background: 'white', padding: '12px', borderRadius: '6px' }}>
+                <strong style={{ display: 'block', marginBottom: '8px', color: '#666', fontSize: '14px' }}>Accounts Receivable</strong>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(80px, 1fr))', gap: '4px' }}>
+                  {Object.entries(historicalData.accounts_receivable).map(([year, value]) => (
+                    <div key={year} style={{ textAlign: 'center' }}>
+                      <small style={{ color: '#999', display: 'block' }}>{year}</small>
+                      <span style={{ color: '#673ab7', fontWeight: 600, fontSize: '13px' }}>{formatCurrency(value)}</span>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          </div>
-        )}
+              </div>
+            )}
 
-        {/* Free Cash Flow Table */}
-        {historicalData.free_cash_flow && Object.keys(historicalData.free_cash_flow).length > 0 && (
-          <div style={{ marginTop: '16px' }}>
-            <h4 style={{ color: '#1565c0', marginBottom: '8px' }}>Free Cash Flow</h4>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '8px' }}>
-              {Object.entries(historicalData.free_cash_flow).map(([year, value]) => (
-                <div key={year} style={{ background: 'white', padding: '12px', borderRadius: '6px', textAlign: 'center' }}>
-                  <strong style={{ display: 'block', marginBottom: '4px', color: '#666' }}>{year}</strong>
-                  <span style={{ color: value >= 0 ? '#4caf50' : '#f44336', fontWeight: 600 }}>{formatCurrency(value)}</span>
+            {/* Inventory */}
+            {historicalData.inventory && Object.keys(historicalData.inventory).length > 0 && (
+              <div style={{ background: 'white', padding: '12px', borderRadius: '6px' }}>
+                <strong style={{ display: 'block', marginBottom: '8px', color: '#666', fontSize: '14px' }}>Inventory</strong>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(80px, 1fr))', gap: '4px' }}>
+                  {Object.entries(historicalData.inventory).map(([year, value]) => (
+                    <div key={year} style={{ textAlign: 'center' }}>
+                      <small style={{ color: '#999', display: 'block' }}>{year}</small>
+                      <span style={{ color: '#ff5722', fontWeight: 600, fontSize: '13px' }}>{formatCurrency(value)}</span>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          </div>
-        )}
+              </div>
+            )}
 
-        {/* Cash & Equivalents Table */}
-        {historicalData.cash_and_equivalents && Object.keys(historicalData.cash_and_equivalents).length > 0 && (
-          <div style={{ marginTop: '16px' }}>
-            <h4 style={{ color: '#1565c0', marginBottom: '8px' }}>Cash & Cash Equivalents</h4>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '8px' }}>
-              {Object.entries(historicalData.cash_and_equivalents).map(([year, value]) => (
-                <div key={year} style={{ background: 'white', padding: '12px', borderRadius: '6px', textAlign: 'center' }}>
-                  <strong style={{ display: 'block', marginBottom: '4px', color: '#666' }}>{year}</strong>
-                  <span style={{ color: '#009688', fontWeight: 600 }}>{formatCurrency(value)}</span>
+            {/* Accounts Payable */}
+            {historicalData.accounts_payable && Object.keys(historicalData.accounts_payable).length > 0 && (
+              <div style={{ background: 'white', padding: '12px', borderRadius: '6px' }}>
+                <strong style={{ display: 'block', marginBottom: '8px', color: '#666', fontSize: '14px' }}>Accounts Payable</strong>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(80px, 1fr))', gap: '4px' }}>
+                  {Object.entries(historicalData.accounts_payable).map(([year, value]) => (
+                    <div key={year} style={{ textAlign: 'center' }}>
+                      <small style={{ color: '#999', display: 'block' }}>{year}</small>
+                      <span style={{ color: '#e91e63', fontWeight: 600, fontSize: '13px' }}>{formatCurrency(value)}</span>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              </div>
+            )}
           </div>
-        )}
-
-        {/* Inventory Table */}
-        {historicalData.inventory && Object.keys(historicalData.inventory).length > 0 && (
-          <div style={{ marginTop: '16px' }}>
-            <h4 style={{ color: '#1565c0', marginBottom: '8px' }}>Inventory</h4>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '8px' }}>
-              {Object.entries(historicalData.inventory).map(([year, value]) => (
-                <div key={year} style={{ background: 'white', padding: '12px', borderRadius: '6px', textAlign: 'center' }}>
-                  <strong style={{ display: 'block', marginBottom: '4px', color: '#666' }}>{year}</strong>
-                  <span style={{ color: '#ff5722', fontWeight: 600 }}>{formatCurrency(value)}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Accounts Receivable Table */}
-        {historicalData.accounts_receivable && Object.keys(historicalData.accounts_receivable).length > 0 && (
-          <div style={{ marginTop: '16px' }}>
-            <h4 style={{ color: '#1565c0', marginBottom: '8px' }}>Accounts Receivable</h4>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '8px' }}>
-              {Object.entries(historicalData.accounts_receivable).map(([year, value]) => (
-                <div key={year} style={{ background: 'white', padding: '12px', borderRadius: '6px', textAlign: 'center' }}>
-                  <strong style={{ display: 'block', marginBottom: '4px', color: '#666' }}>{year}</strong>
-                  <span style={{ color: '#673ab7', fontWeight: 600 }}>{formatCurrency(value)}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Accounts Payable Table */}
-        {historicalData.accounts_payable && Object.keys(historicalData.accounts_payable).length > 0 && (
-          <div style={{ marginTop: '16px' }}>
-            <h4 style={{ color: '#1565c0', marginBottom: '8px' }}>Accounts Payable</h4>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '8px' }}>
-              {Object.entries(historicalData.accounts_payable).map(([year, value]) => (
-                <div key={year} style={{ background: 'white', padding: '12px', borderRadius: '6px', textAlign: 'center' }}>
-                  <strong style={{ display: 'block', marginBottom: '4px', color: '#666' }}>{year}</strong>
-                  <span style={{ color: '#e91e63', fontWeight: 600 }}>{formatCurrency(value)}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+        </div>
 
         {/* Shareholders Equity Table */}
         {historicalData.shareholders_equity && Object.keys(historicalData.shareholders_equity).length > 0 && (
