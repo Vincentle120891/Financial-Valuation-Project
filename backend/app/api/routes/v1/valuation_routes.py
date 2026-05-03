@@ -60,7 +60,7 @@ def get_session(session_id: str, sessions: Dict) -> Dict:
 
 def fetch_financial_data(ticker_symbol: str, market: str) -> Dict:
     """
-    Step 7 & 8: Fetch financial data from yFinance.
+    Step 6: Fetch financial data from yFinance.
     
     Args:
         ticker_symbol: Stock ticker symbol
@@ -195,7 +195,7 @@ def fetch_financial_data(ticker_symbol: str, market: str) -> Dict:
 
 async def generate_ai_assumptions(data: Dict, model: str) -> Dict:
     """
-    Step 9: Generate AI assumptions for valuation.
+    Step 7: Generate AI assumptions for valuation.
     
     Args:
         data: Financial data dictionary
@@ -278,7 +278,7 @@ async def generate_ai_assumptions(data: Dict, model: str) -> Dict:
 
 def run_valuation_engine(session_data: Dict) -> Dict:
     """
-    Step 11: Run valuation calculations.
+    Step 10: Run valuation calculations.
     
     Args:
         session_data: Session data containing model, assumptions, and financial data
@@ -935,7 +935,7 @@ async def confirm_assumptions(request: AssumptionConfirmRequest):
 @router.post("/step-11-12-valuate", response_model=ValuationResultResponse)
 async def run_valuation(request: CalculationRequest):
     """
-    Step 11 & 12: Run valuation engine and return results.
+    Step 11: Run valuation engine and return results.
     
     Args:
         request: Calculation request
