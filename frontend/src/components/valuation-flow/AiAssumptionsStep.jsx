@@ -95,7 +95,7 @@ const AiAssumptionsStep = ({
     return aiData?.[`${field}_rationale`];
   };
 
-  // Render single assumption field
+  // Render single assumption field with enhanced AI explanation
   const renderAssumptionField = ({ 
     fieldKey, 
     label, 
@@ -103,7 +103,9 @@ const AiAssumptionsStep = ({
     isPercentage = true,
     min,
     max,
-    description
+    description,
+    industryBenchmark,
+    methodology
   }) => {
     const aiValue = getAiValue(fieldKey);
     const confirmedValue = confirmedValues?.[fieldKey]?.value;
@@ -165,10 +167,32 @@ const AiAssumptionsStep = ({
           )}
         </div>
         
-        {rationale && (
-          <p style={{ marginTop: '8px', fontSize: '13px', color: '#666', fontStyle: 'italic' }}>
-            <strong>Rationale:</strong> {rationale}
-          </p>
+        {/* Enhanced AI Explanation Section */}
+        {(rationale || industryBenchmark || methodology) && (
+          <div style={{ marginTop: '12px', padding: '12px', background: '#f5f5f5', borderRadius: '6px', borderLeft: '4px solid #2196f3' }}>
+            <strong style={{ color: '#1976d2', display: 'block', marginBottom: '8px' }}>💡 AI Analysis & Reasoning:</strong>
+            
+            {methodology && (
+              <div style={{ marginBottom: '8px' }}>
+                <strong style={{ fontSize: '12px', color: '#555' }}>Methodology:</strong>
+                <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#333', lineHeight: '1.5' }}>{methodology}</p>
+              </div>
+            )}
+            
+            {industryBenchmark && (
+              <div style={{ marginBottom: '8px' }}>
+                <strong style={{ fontSize: '12px', color: '#555' }}>Industry Benchmark:</strong>
+                <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#333', lineHeight: '1.5' }}>{industryBenchmark}</p>
+              </div>
+            )}
+            
+            {rationale && (
+              <div>
+                <strong style={{ fontSize: '12px', color: '#555' }}>Rationale:</strong>
+                <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#333', lineHeight: '1.5' }}>{rationale}</p>
+              </div>
+            )}
+          </div>
         )}
       </div>
     );

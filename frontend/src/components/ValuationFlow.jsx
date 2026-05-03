@@ -532,10 +532,11 @@ const ValuationFlow = () => {
             currentStep === 4 ? 'Select Model' :
             currentStep === 5 ? 'Review Requirements' :
             currentStep === 6 ? 'View Retrieved Inputs' :
-            currentStep === 7 ? 'Modify Forecast Drivers' :
-            currentStep === 8 ? 'Confirm Assumptions' :
-            currentStep === 9 ? 'Run Valuation' :
-            currentStep === 10 ? 'View Results' : 'In Progress'
+            currentStep === 7 ? 'AI Assumptions' :
+            currentStep === 8 ? 'Modify Forecast Drivers & DCF Inputs' :
+            currentStep === 9 ? 'Confirm Assumptions' :
+            currentStep === 10 ? 'Run Valuation' :
+            currentStep === 11 ? 'View Results' : 'In Progress'
           }
         </div>
       </header>
