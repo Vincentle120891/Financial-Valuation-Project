@@ -455,20 +455,20 @@ const RequirementsStep = ({
             className="btn-primary"
             disabled={loading}
           >
-            {loading ? 'Retrieving Data...' : 'Retrieve Data'}
+            {loading ? 'Retrieving Data...' : '📥 Retrieve Data'}
           </button>
         ) : (
           <>
             <button 
               onClick={onRetrieveData} 
-              className="btn-primary"
+              className="btn-secondary"
               disabled={loading}
             >
               {loading ? '🔄 Refreshing Data...' : '🔄 Refresh Data'}
             </button>
             <button 
               onClick={onShowInputs} 
-              className="btn-secondary"
+              className="btn-primary"
             >
               View Retrieved Inputs →
             </button>
