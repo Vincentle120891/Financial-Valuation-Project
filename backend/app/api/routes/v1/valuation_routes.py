@@ -138,10 +138,24 @@ def fetch_financial_data(ticker_symbol: str, market: str) -> Dict:
         if net_incomes and total_assets_list:
             avg_roe = sum([n/a for n,a in zip(net_incomes, total_assets_list)]) / len(net_incomes)
         
-        # Build historical financials object
+        # Build historical financials object with all available data
         historical_financials = {
             "revenue": {str(year): sanitize_value(income_stmt.loc['Total Revenue', year]) for year in revenue_years} if 'Total Revenue' in income_stmt.index else {},
+            "cogs": {str(year): sanitize_value(income_stmt.loc['Cost Of Revenue', year]) for year in revenue_years} if 'Cost Of Revenue' in income_stmt.index else {},
             "ebitda": {str(year): sanitize_value(income_stmt.loc['EBITDA', year]) for year in revenue_years} if 'EBITDA' in income_stmt.index else {},
+            "net_income": {str(year): sanitize_value(income_stmt.loc['Net Income', year]) for year in revenue_years} if 'Net Income' in income_stmt.index else {},
+            "operating_expenses": {str(year): sanitize_value(income_stmt.loc['Operating Expenses', year]) for year in revenue_years} if 'Operating Expenses' in income_stmt.index else {},
+            "sg_and_a": {str(year): sanitize_value(income_stmt.loc['Selling General And Administration', year]) for year in revenue_years} if 'Selling General And Administration' in income_stmt.index else {},
+            "depreciation": {str(year): sanitize_value(cashflow.loc['Depreciation', year]) for year in revenue_years} if 'Depreciation' in cashflow.index else {},
+            "capex": {str(year): sanitize_value(cashflow.loc['Capital Expenditure', year]) for year in revenue_years} if 'Capital Expenditure' in cashflow.index else {},
+            "total_assets": {str(year): sanitize_value(balance_sheet.loc['Total Assets', year]) for year in revenue_years} if 'Total Assets' in balance_sheet.index else {},
+            "total_debt": {str(year): sanitize_value(balance_sheet.loc['Total Debt', year]) for year in revenue_years} if 'Total Debt' in balance_sheet.index else {},
+            "free_cash_flow": {str(year): sanitize_value(cashflow.loc['Free Cash Flow', year]) for year in revenue_years} if 'Free Cash Flow' in cashflow.index else {},
+            "cash_and_equivalents": {str(year): sanitize_value(balance_sheet.loc['Cash And Cash Equivalents', year]) for year in revenue_years} if 'Cash And Cash Equivalents' in balance_sheet.index else {},
+            "inventory": {str(year): sanitize_value(balance_sheet.loc['Inventory', year]) for year in revenue_years} if 'Inventory' in balance_sheet.index else {},
+            "accounts_receivable": {str(year): sanitize_value(balance_sheet.loc['Accounts Receivable', year]) for year in revenue_years} if 'Accounts Receivable' in balance_sheet.index else {},
+            "accounts_payable": {str(year): sanitize_value(balance_sheet.loc['Accounts Payable', year]) for year in revenue_years} if 'Accounts Payable' in balance_sheet.index else {},
+            "shareholders_equity": {str(year): sanitize_value(balance_sheet.loc['Stockholders Equity', year]) for year in revenue_years} if 'Stockholders Equity' in balance_sheet.index else {},
             "revenue_cagr": revenue_cagr,
             "avg_ebitda_margin": avg_ebitda_margin,
             "avg_roe": avg_roe
