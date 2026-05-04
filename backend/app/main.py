@@ -18,9 +18,9 @@ import uuid
 from app.core.config import settings
 from app.core.logging_config import setup_logging, get_logger
 from app.core.exceptions import ValuationException
-from app.api.routes.v1.search_routes import router as search_router_v1
-from app.api.routes.v1.valuation_routes import router as valuation_router_v1
-from app.api.routes.v1.pdf_extraction_routes import router as pdf_extraction_router_v1
+from app.api.routes.search_routes import router as search_router
+from app.api.routes.valuation_routes import router as valuation_router
+from app.api.routes.pdf_extraction_routes import router as pdf_extraction_router
 from app.api.routes.vietnamese_reports_routes import router as vietnamese_reports_router
 from app.api.routes.international_routes import router as international_router
 
@@ -209,15 +209,15 @@ def get_session_store() -> dict:
 
 # Include routers with API versioning
 # Version 1 routes
-app.include_router(search_router_v1, prefix="/api/v1")
-app.include_router(valuation_router_v1, prefix="/api/v1")
-app.include_router(pdf_extraction_router_v1, prefix="/api/v1/pdf")
+app.include_router(search_router, prefix="/api/v1")
+app.include_router(valuation_router, prefix="/api/v1")
+app.include_router(pdf_extraction_router, prefix="/api/v1/pdf")
 app.include_router(vietnamese_reports_router, prefix="/api/v1")
 app.include_router(international_router, prefix="/api/v1")
 
 # Legacy routes (for backward compatibility)
-app.include_router(search_router_v1, prefix="/api")
-app.include_router(valuation_router_v1, prefix="/api")
+app.include_router(search_router, prefix="/api")
+app.include_router(valuation_router, prefix="/api")
 app.include_router(international_router, prefix="/api")
 
 
