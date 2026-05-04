@@ -144,6 +144,9 @@ class InputRequirement(BaseModel):
     category: str
     name: str
     requiresInput: bool = False
+    defaultValue: Optional[Any] = None
+    unit: Optional[str] = None
+    description: Optional[str] = None
 
 
 class PrepareInputsResponse(BaseModel):

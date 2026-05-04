@@ -77,26 +77,56 @@ class CompsStrategy:
 
 class DCFStrategy:
     """
-    DCF Strategy - AI generates ONLY 4 forward-looking inputs:
+    DCF Strategy - AI generates comprehensive forward-looking inputs for DCF valuation:
+    
+    WACC Components:
     1. Equity Risk Premium (ERP)
     2. Country Risk Premium (CRP)
-    3. Terminal Growth Rate
-    4. Terminal EBITDA Multiple
+    3. Pre-Tax Cost of Debt
+    4. Target Debt Weight
+    5. Target Equity Weight
+    6. Tax Rate
     
-    AI is EXPLICITLY FORBIDDEN from guessing:
-    - Beta, Risk-Free Rate, Cost of Debt, WACC (calculated from data)
-    - Historical Margins, Working Capital Days, Capex % (from financials)
+    Terminal Value:
+    7. Terminal Growth Rate
+    8. Terminal EBITDA Multiple
+    
+    Forecast Drivers (5-year forecast + terminal):
+    9. Revenue Volume Growth (annual %)
+    10. Revenue Price Growth (annual %)
+    11. Inflation Rate (annual %)
+    12. Capital Expenditure (USD thousands)
+    13. Accounts Receivable Days
+    14. Inventory Days
+    15. Accounts Payable Days
+    
+    Depreciation Parameters:
+    16. Useful Life - Existing Assets (years)
+    17. Useful Life - New Assets (years)
+    18. First Year Tax Depreciation Rate (%)
+    19. Blended Tax Depreciation Rate (%)
+    20. First Year Accounting Depreciation Rate (%)
+    
+    Other:
+    21. Projected Interest Expense (USD thousands)
+    
+    AI is FORBIDDEN from guessing:
+    - Beta, Risk-Free Rate (from market data)
+    - Historical Margins, Working Capital Days, Capex (from financials)
     """
     
     def __init__(self, country: str = "US"):
         self.country = country
     
     def build_prompt(self, data: Dict[str, Any]) -> str:
-        """Build DCF prompt restricted to 4 macro/forward inputs."""
+        """Build comprehensive DCF prompt for all required inputs."""
         ticker = data.get('ticker', 'UNKNOWN')
         company_name = data.get('company_name', 'Unknown Company')
         financials = data.get('financials', {})
         market_data = data.get('market_data', {})
+        working_capital = data.get('working_capital', {})
+        capex = data.get('capex', {})
+        debt_cost = data.get('debt_cost', {})
         sector = data.get('sector', 'General')
         industry = data.get('industry', 'General')
         country = data.get('country', self.country)
@@ -109,11 +139,22 @@ class DCFStrategy:
         risk_free_rate = market_data.get('risk_free_rate', 4.5)
         debt_to_equity = financials.get('debt_to_equity', 'N/A')
         
+        # Historical working capital days for reference
+        dso_latest = working_capital.get('dso_latest', 'N/A')
+        dio_latest = working_capital.get('dio_latest', 'N/A')
+        dpo_latest = working_capital.get('dpo_latest', 'N/A')
+        
+        # Historical capex ratio
+        capex_to_revenue = capex.get('capex_to_revenue_latest', 'N/A')
+        
+        # Historical cost of debt
+        implied_cost_of_debt = debt_cost.get('implied_cost_of_debt_latest', 'N/A')
+        
         return f"""SYSTEM:
 You are a financial analyst assistant. You output ONLY raw JSON. No markdown. No explanation outside the JSON. No preamble. No trailing text. If you cannot comply, return {{"error": "<reason>"}}.
 
 USER:
-Generate the 4 forward-looking DCF assumptions that cannot be sourced from financial APIs for {company_name} ({ticker}).
+Generate comprehensive DCF assumptions for {company_name} ({ticker}).
 
 ## Context
 - Sector: {sector}
@@ -125,35 +166,115 @@ Generate the 4 forward-looking DCF assumptions that cannot be sourced from finan
 - Avg 3Y EBITDA Margin: {ebitda_margin}%
 - Avg 3Y Net Margin: {net_margin}%
 - Debt-to-Equity: {debt_to_equity}
+- Historical DSO: {dso_latest} days
+- Historical DIO: {dio_latest} days
+- Historical DPO: {dpo_latest} days
+- Historical Capex/Revenue: {capex_to_revenue}%
+- Implied Cost of Debt: {implied_cost_of_debt}%
 
-## Do NOT return
-Risk-free rate, beta, cost of debt, WACC, revenue growth forecasts, margins, working capital days, capex %. These are already sourced from API data.
-
-## Return exactly this JSON structure
+## Return exactly this JSON structure with ALL fields
 {{
-  "equity_risk_premium": <number>,
-  "country_risk_premium": <number>,
-  "terminal_growth_rate": <number>,
-  "terminal_ebitda_multiple": <number>,
-  "rationale": "<one paragraph explaining all 4 choices>"
+  "wacc_inputs": {{
+    "equity_risk_premium": <number in %>,
+    "country_risk_premium": <number in %>,
+    "pre_tax_cost_of_debt": <number in %>,
+    "target_debt_weight": <number in %>,
+    "target_equity_weight": <number in %>,
+    "tax_rate": <number in %>
+  }},
+  "terminal_assumptions": {{
+    "terminal_growth_rate": <number in %>,
+    "terminal_ebitda_multiple": <number as multiple>
+  }},
+  "forecast_drivers": {{
+    "revenue_volume_growth": [<number in % for FY1>, <FY2>, <FY3>, <FY4>, <FY5>],
+    "revenue_price_growth": [<number in % for FY1>, <FY2>, <FY3>, <FY4>, <FY5>],
+    "inflation_rate": [<number in % for FY1>, <FY2>, <FY3>, <FY4>, <FY5>, <Terminal>],
+    "capital_expenditure": [<USD thousands for FY1>, <FY2>, <FY3>, <FY4>, <FY5>],
+    "ar_days": <number>,
+    "inv_days": <number>,
+    "ap_days": <number>
+  }},
+  "depreciation_parameters": {{
+    "useful_life_existing_assets": <years>,
+    "useful_life_new_assets": <years>,
+    "first_year_tax_dep_rate": <percentage>,
+    "blended_tax_dep_rate": <percentage>,
+    "first_year_acctg_dep_rate": <percentage>
+  }},
+  "other_inputs": {{
+    "projected_interest_expense": <USD thousands>
+  }},
+  "rationale": "<one paragraph explaining key choices>"
 }}
 
-## Reference ranges
-- ERP: 4.5–6.5% developed markets; higher for volatility or uncertainty
-- CRP: 0–0.5% (US/UK/DE/JP); 1–5%+ emerging markets; assess {country} for political/currency risk
-- Terminal growth: ≤ long-term GDP growth (2–3% developed); must be < WACC
-- Terminal EBITDA multiple by sector: Tech 10–15x | Consumer Staples 10–14x | Healthcare 10–14x | Industrials 8–12x | Energy 6–10x | Financials: N/A (use P/B)
+## Reference ranges and guidelines
 
-Now return the JSON for {ticker}:
+### WACC Inputs
+- ERP: 4.5-6.5% developed markets; 6-8% emerging markets
+- CRP: 0-0.5% (US/UK/DE/JP); 1-5%+ emerging markets; assess {country} risk
+- Pre-tax cost of debt: Based on company credit profile, current rates (historical: {implied_cost_of_debt}%)
+- Target D/E weights: Typically 15%/85% to 40%/60% depending on industry
+- Tax rate: Statutory corporate tax rate for {country}
+
+### Terminal Assumptions
+- Terminal growth: ≤ long-term GDP growth (2-3% developed); must be < WACC
+- Terminal EBITDA multiple by sector: Tech 10-15x | Consumer Staples 10-14x | Healthcare 10-14x | Industrials 8-12x | Energy 6-10x
+
+### Forecast Drivers
+- Volume growth: Based on industry outlook, company position, historical growth ({revenue_growth}%)
+- Price growth: Based on inflation expectations, pricing power
+- Inflation rate: Central bank targets, typically 2-3% for developed, 3-5% emerging
+- Capex: Based on historical ({capex_to_revenue}% of revenue), growth plans, maintenance needs
+- Working capital days: Use historical as baseline (DSO:{dso_latest}, DIO:{dio_latest}, DPO:{dpo_latest})
+
+### Depreciation Parameters
+- Useful life existing: Remaining economic life of current PP&E (typically 10-20 years)
+- Useful life new: Economic life of new investments (typically 15-25 years)
+- First year tax dep rate: Half-year convention typically 50%
+- Blended tax dep rate: Declining balance rate (typically 15-25%)
+- First year acctg dep rate: Half-year convention typically 50%
+
+### Other
+- Projected interest expense: Based on debt level and pre-tax cost of debt
+
+Now return the complete JSON for {ticker}:
 """.strip()
     
     def get_ai_inputs(self) -> Dict[str, Any]:
-        """Return structure for 4 AI inputs."""
+        """Return structure for comprehensive AI inputs."""
         return {
-            "equity_risk_premium": None,
-            "country_risk_premium": None,
-            "terminal_growth_rate": None,
-            "terminal_ebitda_multiple": None,
+            "wacc_inputs": {
+                "equity_risk_premium": None,
+                "country_risk_premium": None,
+                "pre_tax_cost_of_debt": None,
+                "target_debt_weight": None,
+                "target_equity_weight": None,
+                "tax_rate": None
+            },
+            "terminal_assumptions": {
+                "terminal_growth_rate": None,
+                "terminal_ebitda_multiple": None
+            },
+            "forecast_drivers": {
+                "revenue_volume_growth": None,
+                "revenue_price_growth": None,
+                "inflation_rate": None,
+                "capital_expenditure": None,
+                "ar_days": None,
+                "inv_days": None,
+                "ap_days": None
+            },
+            "depreciation_parameters": {
+                "useful_life_existing_assets": None,
+                "useful_life_new_assets": None,
+                "first_year_tax_dep_rate": None,
+                "blended_tax_dep_rate": None,
+                "first_year_acctg_dep_rate": None
+            },
+            "other_inputs": {
+                "projected_interest_expense": None
+            },
             "rationale": None
         }
 
