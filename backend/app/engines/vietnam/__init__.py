@@ -1,37 +1,36 @@
 """
-__init__.py for Vietnam-specific valuation engines
+Vietnamese Valuation Engines Package
 
-This package provides sector-specific valuation models for Vietnamese stocks:
-
-1. sector_valuation_models.py - Specialized models by sector
-   - Banking: DDM + Residual Income + P/BV
-   - Real Estate: NAV + RNAV
-   - Manufacturing: Commodity-Adjusted DCF
-
-Usage:
-    from backend.app.engines.vietnam import valuate_vn_stock, VNSectorValuationEngine
+Calculation engines for Vietnamese market (TT99 accounting standards):
+- DCF valuation engine with Vietnam-specific WACC (6.8% Rf, 7.5% MRP, 20% tax)
+- Comparable company analysis with VNINDEX/VN30 filtering
+- DuPont ROE decomposition using TT99 financial statements
 """
 
-from .sector_valuation_models import (
-    VNSectorValuationEngine,
+from app.engines.vietnamese_dcf_engine import (
+    VietnameseDCFEngine,
+    get_vietnamese_dcf_engine,
+)
+
+from app.engines.vietnam.sector_valuation_models import (
     VNSectorValuationType,
     BankingValuationInputs,
     RealEstateValuationInputs,
     ManufacturingValuationInputs,
     SectorValuationResult,
-    valuate_vn_stock
+    VNSectorValuationEngine,
 )
 
 __all__ = [
-    'VNSectorValuationEngine',
-    'VNSectorValuationType',
-    'BankingValuationInputs',
-    'RealEstateValuationInputs',
-    'ManufacturingValuationInputs',
-    'SectorValuationResult',
-    'valuate_vn_stock'
+    # DCF Engine
+    "VietnameseDCFEngine",
+    "get_vietnamese_dcf_engine",
+    
+    # Sector Models
+    "VNSectorValuationType",
+    "BankingValuationInputs",
+    "RealEstateValuationInputs",
+    "ManufacturingValuationInputs",
+    "SectorValuationResult",
+    "VNSectorValuationEngine",
 ]
-
-# Version info
-__version__ = '1.0.0'
-__author__ = 'Vietnamese Market Team'

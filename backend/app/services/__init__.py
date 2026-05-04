@@ -1,7 +1,44 @@
-"""Services module - Business logic and orchestration."""
+"""
+Services Package - Business Logic and Orchestration
 
-from app.engines.dcf_engine import fetch_dcf_inputs
+Unified services package supporting both:
+- International markets (yfinance, IFRS/US GAAP)
+- Vietnamese market (VNDirect, CafeF, TT99)
+
+Structure:
+├── international/ - International market services
+└── vietnam/       - Vietnamese market services
+"""
+
+# Re-export from subpackages for backward compatibility
+from app.services.international import (
+    ValuationInputManager,
+    YFinanceService,
+    InternationalTickerService,
+    MetricsCalculator,
+)
+
+from app.services.vietnam import (
+    VietnameseInputManager,
+    VNStockDatabase,
+    VNDFinancialParser,
+    VietnameseTickerService,
+    VietnamDataAggregator,
+    VietnameseReportScraper,
+)
 
 __all__ = [
-    "fetch_dcf_inputs",
+    # International
+    "ValuationInputManager",
+    "YFinanceService",
+    "InternationalTickerService",
+    "MetricsCalculator",
+    
+    # Vietnamese
+    "VietnameseInputManager",
+    "VNStockDatabase",
+    "VNDFinancialParser",
+    "VietnameseTickerService",
+    "VietnamDataAggregator",
+    "VietnameseReportScraper",
 ]

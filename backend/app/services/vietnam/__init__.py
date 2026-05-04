@@ -1,89 +1,84 @@
 """
-__init__.py for Vietnam-specific modules
+Vietnamese Services Package
 
-This package provides comprehensive support for Vietnamese stock market analysis:
-
-1. vn_stock_database.py - Scalable database for 700+ HOSE stocks
-2. vnd_financial_parser.py - VND financial statement parser (VAS to IFRS)
-3. sector_valuation_models.py - Sector-specific valuation models
-
-Usage:
-    from backend.app.services.vietnam import get_vn_stock_database
-    from backend.app.engines.vietnam import valuate_vn_stock
-    from backend.app.services.vietnam import parse_vn_financials_from_dict
+Business logic and data orchestration for Vietnamese market:
+- Input validation and transformation for TT99 standards
+- Data fetching from VNDirect, CafeF, and VNStockDatabase
+- DCF, Comps, and DuPont input building for Vietnamese stocks
 """
 
-from .vn_stock_database import (
-    VNStockDatabase,
-    VNStock,
-    VNSector,
-    VNExchange,
-    get_vn_stock_database,
-    vn_stock_db
+from app.services.vietnamese_input_manager import (
+    VietnameseInputManager,
+    build_vn_dcf_request,
+    build_vn_comps_selection_request,
+    build_vn_comps_valuation_request,
+    build_vn_dupont_request,
 )
 
-from .vnd_financial_parser import (
+from app.services.vietnam.vn_stock_database import (
+    VNStockDatabase,
+    fetch_vn_financials,
+    get_vn_company_info,
+    query_vnindex_constituents,
+)
+
+from app.services.vietnam.vnd_financial_parser import (
     VNDFinancialParser,
-    ParsedVNFinancials,
-    VNFinancialItem,
-    VNStatementType,
-    VNAccountCode,
-    parse_vn_financials_from_dict,
-    convert_vnd_to_usd,
-    get_vas_account_mapping
+    parse_tt99_balance_sheet,
+    parse_tt99_income_statement,
+)
+
+from app.services.vietnamese_ticker_service import (
+    VietnameseTickerService,
+    validate_vn_ticker_format,
+    get_vn_exchange,
+    parse_ticker_suffix,
+)
+
+from app.services.vietnam_data_aggregator import (
+    VietnamDataAggregator,
+    aggregate_vn_financials,
+    fetch_vn_market_data,
+)
+
+from app.services.vietnamese_report_scraper import (
+    VietnameseReportScraper,
+    fetch_vn_annual_report,
+    scrape_cafef_data,
 )
 
 __all__ = [
-    # Database
-    'VNStockDatabase',
-    'VNStock',
-    'VNSector',
-    'VNExchange',
-    'get_vn_stock_database',
-    'vn_stock_db',
+    # Input Manager
+    "VietnameseInputManager",
+    "build_vn_dcf_request",
+    "build_vn_comps_selection_request",
+    "build_vn_comps_valuation_request",
+    "build_vn_dupont_request",
     
-    # Financial Parser
-    'VNDFinancialParser',
-    'ParsedVNFinancials',
-    'VNFinancialItem',
-    'VNStatementType',
-    'VNAccountCode',
-    'parse_vn_financials_from_dict',
-    'convert_vnd_to_usd',
-    'get_vas_account_mapping',
+    # VNStock Database
+    "VNStockDatabase",
+    "fetch_vn_financials",
+    "get_vn_company_info",
+    "query_vnindex_constituents",
+    
+    # VND Financial Parser
+    "VNDFinancialParser",
+    "parse_tt99_balance_sheet",
+    "parse_tt99_income_statement",
+    
+    # Ticker Service
+    "VietnameseTickerService",
+    "validate_vn_ticker_format",
+    "get_vn_exchange",
+    "parse_ticker_suffix",
+    
+    # Data Aggregator
+    "VietnamDataAggregator",
+    "aggregate_vn_financials",
+    "fetch_vn_market_data",
+    
+    # Report Scraper
+    "VietnameseReportScraper",
+    "fetch_vn_annual_report",
+    "scrape_cafef_data",
 ]
-
-# Version info
-__version__ = '1.0.0'
-__author__ = 'Vietnamese Market Team'
-
-# Quick start guide
-QUICK_START = """
-Vietnamese Stock Analysis Package
-==================================
-
-1. Get stock database:
-   db = get_vn_stock_database()
-   stock = db.get_stock('VNM')
-   all_banks = db.get_by_sector(VNSector.BANKING)
-
-2. Parse Vietnamese financials:
-   parsed = parse_vn_financials_from_dict(vn_data)
-   standard_dict = parsed.to_standard_dict()
-
-3. Sector-specific valuation:
-   result = valuate_vn_stock(
-       ticker='VCB',
-       company_name='Vietcombank',
-       sector='Banking',
-       inputs={...},
-       current_price_vnd=85000
-   )
-
-Supported Sectors:
-- Banking (DDM + Residual Income + P/BV)
-- Real Estate (NAV + RNAV)
-- Manufacturing (Commodity-Adjusted DCF)
-
-For more information, see individual module docstrings.
-"""
