@@ -49,11 +49,11 @@ const ValuationFlow = () => {
   // Enhanced data states
   const [historicalData, setHistoricalData] = useState(null);
   const [forecastDrivers, setForecastDrivers] = useState(null);
-  const [peerData, setPeerData] = useState([]);
+  const [peerData, setPeerData] = useState(null);
   const [dupontResults, setDupontResults] = useState(null);
   const [compsResults, setCompsResults] = useState(null);
   const [dcfInputs, setDcfInputs] = useState(null);
-  const [aiData, setAiData] = useState({});
+  const [aiData, setAiData] = useState(null);
 
   // ==================== STEP 1: SEARCH COMPANY ====================
   const handleSearch = useCallback(async () => {
@@ -122,11 +122,11 @@ const ValuationFlow = () => {
     setSelectedModel(null);
     setRequiredFields([]);
     setConfirmedValues({});
-    setAiData({});
+    setAiData(null);
     setAiError(null); // Clear AI errors
     setHistoricalData(null);
     setForecastDrivers(null);
-    setPeerData([]);
+    setPeerData(null);
     setDupontResults(null);
     setCompsResults(null);
     setDcfInputs(null);
@@ -362,7 +362,7 @@ const ValuationFlow = () => {
     setSelectedModel(null);
     setSessionId(null);
     setRequiredFields([]);
-    setAiData({});
+    setAiData(null);
     setAiError(null); // Clear AI errors on reset
     setConfirmedValues({});
     setSelectedScenario('base_case');
@@ -371,7 +371,7 @@ const ValuationFlow = () => {
     setMarket('international');
     setHistoricalData(null);
     setForecastDrivers(null);
-    setPeerData([]);
+    setPeerData(null);
     setDupontResults(null);
     setCompsResults(null);
     setDcfInputs(null);
