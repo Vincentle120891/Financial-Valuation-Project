@@ -2,12 +2,258 @@
 International Financial Report Inputs Model
 Standard IFRS/US GAAP format for non-Vietnamese markets
 Used when market selection is 'international'
+
+This module defines Pydantic models for:
+1. API validation - expected fields and formats for frontend requests
+2. Data standardization - consistent structures for international markets
+3. Input separation - clear boundary between input validation and engine logic
 """
 
 from pydantic import BaseModel, Field
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from datetime import date
 
+
+# =============================================================================
+# DCF MODEL INPUTS
+# =============================================================================
+
+class DCFHistoricalFinancials(BaseModel):
+    """
+    Historical financial data (3-5 years) for DCF model
+    Typically auto-fetched from yFinance API
+    """
+    
+    # Income Statement History
+    revenue: Optional[Dict[str, float]] = Field(None, description="Revenue by year (e.g., {'2023': 1000000, '2022': 950000})")
+    cogs: Optional[Dict[str, float]] = Field(None, description="Cost of goods sold by year")
+    ebitda: Optional[Dict[str, float]] = Field(None, description="EBITDA by year")
+    net_income: Optional[Dict[str, float]] = Field(None, description="Net income by year")
+    operating_expenses: Optional[Dict[str, float]] = Field(None, description="Operating expenses by year")
+    sg_and_a: Optional[Dict[str, float]] = Field(None, description="SG&A expenses by year")
+    depreciation: Optional[Dict[str, float]] = Field(None, description="Depreciation & amortization by year")
+    
+    # Cash Flow History
+    capex: Optional[Dict[str, float]] = Field(None, description="Capital expenditures by year")
+    free_cash_flow: Optional[Dict[str, float]] = Field(None, description="Free cash flow by year")
+    
+    # Balance Sheet History
+    total_assets: Optional[Dict[str, float]] = Field(None, description="Total assets by year")
+    total_debt: Optional[Dict[str, float]] = Field(None, description="Total debt by year")
+    cash_and_equivalents: Optional[Dict[str, float]] = Field(None, description="Cash & equivalents by year")
+    inventory: Optional[Dict[str, float]] = Field(None, description="Inventory by year")
+    accounts_receivable: Optional[Dict[str, float]] = Field(None, description="Accounts receivable by year")
+    accounts_payable: Optional[Dict[str, float]] = Field(None, description="Accounts payable by year")
+    shareholders_equity: Optional[Dict[str, float]] = Field(None, description="Shareholders' equity by year")
+    
+    # Calculated Metrics
+    revenue_cagr: Optional[float] = Field(None, description="Revenue CAGR (calculated)")
+    avg_ebitda_margin: Optional[float] = Field(None, description="Average EBITDA margin (calculated)")
+    avg_roe: Optional[float] = Field(None, description="Average ROE (calculated)")
+
+
+class DCFForecastDrivers(BaseModel):
+    """
+    Forecast drivers for DCF model
+    Requires user input or AI generation
+    """
+    
+    # Revenue Growth (6 periods: FY1-FY5 + Terminal)
+    revenue_growth_forecast: Optional[List[float]] = Field(None, description="Revenue growth rates for 5 forecast years + terminal (as decimals, e.g., 0.05 for 5%)")
+    volume_growth_split: Optional[float] = Field(0.6, description="Split between volume vs price growth (0.0-1.0)")
+    
+    # Inflation & Margins
+    inflation_rate: Optional[float] = Field(0.02, description="Inflation rate assumption for COGS/OpEx")
+    ebitda_margin_forecast: Optional[List[float]] = Field(None, description="EBITDA margin forecast by year")
+    
+    # Tax & CapEx
+    tax_rate: Optional[float] = Field(0.21, description="Corporate tax rate (as decimal)")
+    capex_pct_of_revenue: Optional[float] = Field(0.05, description="CapEx as percentage of revenue")
+    
+    # Working Capital Days
+    ar_days: Optional[float] = Field(45, description="Accounts receivable days")
+    inv_days: Optional[float] = Field(60, description="Inventory days")
+    ap_days: Optional[float] = Field(30, description="Accounts payable days")
+    
+    # DCF-Specific Parameters
+    risk_free_rate: Optional[float] = Field(0.045, description="Risk-free rate (e.g., 10Y treasury)")
+    equity_risk_premium: Optional[float] = Field(0.055, description="Equity risk premium")
+    beta: Optional[float] = Field(1.0, description="Company beta")
+    cost_of_debt: Optional[float] = Field(0.05, description="Pre-tax cost of debt")
+    wacc: Optional[float] = Field(None, description="WACC (calculated if not provided)")
+    terminal_growth_rate: Optional[float] = Field(0.023, description="Terminal growth rate (perpetuity method)")
+    terminal_ebitda_multiple: Optional[float] = Field(8.0, description="Terminal EBITDA multiple (exit multiple method)")
+    
+    # Depreciation Parameters
+    useful_life_existing: Optional[float] = Field(10.0, description="Useful life of existing assets (years)")
+    useful_life_new: Optional[float] = Field(10.0, description="Useful life of new assets (years)")
+    
+    # Peer Comparison (Optional)
+    peer_tickers: Optional[List[str]] = Field(None, description="List of peer ticker symbols for WACC calculation")
+
+
+class DCFMarketData(BaseModel):
+    """
+    Market data for DCF model
+    Typically auto-fetched from yFinance API
+    """
+    
+    current_stock_price: Optional[float] = Field(None, description="Current stock price")
+    shares_outstanding: Optional[float] = Field(None, description="Shares outstanding")
+    market_cap: Optional[float] = Field(None, description="Market capitalization")
+    beta: Optional[float] = Field(None, description="Stock beta")
+    total_debt: Optional[float] = Field(None, description="Total debt")
+    cash: Optional[float] = Field(None, description="Cash & equivalents")
+    currency: Optional[str] = Field("USD", description="Reporting currency")
+
+
+class DCFValuationRequest(BaseModel):
+    """
+    Complete DCF valuation request combining all inputs
+    Used for API endpoint validation
+    """
+    
+    session_id: str = Field(..., description="Session identifier")
+    
+    # Company identification
+    ticker: str = Field(..., description="Stock ticker symbol")
+    company_name: Optional[str] = Field(None, description="Company name")
+    sector: Optional[str] = Field(None, description="Sector")
+    industry: Optional[str] = Field(None, description="Industry")
+    
+    # Input data sources
+    historical_financials: Optional[DCFHistoricalFinancials] = Field(None, description="Historical financial data (auto-fetched)")
+    market_data: Optional[DCFMarketData] = Field(None, description="Market data (auto-fetched)")
+    forecast_drivers: Optional[DCFForecastDrivers] = Field(None, description="Forecast assumptions (user/AI provided)")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "session_id": "abc123",
+                "ticker": "AAPL",
+                "company_name": "Apple Inc.",
+                "sector": "Technology",
+                "industry": "Consumer Electronics",
+                "forecast_drivers": {
+                    "revenue_growth_forecast": [0.05, 0.05, 0.04, 0.04, 0.03, 0.02],
+                    "volume_growth_split": 0.6,
+                    "inflation_rate": 0.02,
+                    "tax_rate": 0.21,
+                    "capex_pct_of_revenue": 0.05,
+                    "ar_days": 45,
+                    "inv_days": 60,
+                    "ap_days": 30,
+                    "terminal_growth_rate": 0.023,
+                    "terminal_ebitda_multiple": 8.0
+                }
+            }
+        }
+
+
+# =============================================================================
+# COMPARABLE COMPANIES (COMPS) MODEL INPUTS
+# =============================================================================
+
+class CompsTargetCompany(BaseModel):
+    """
+    Target company data for comparable companies analysis
+    """
+    
+    ticker: str = Field(..., description="Stock ticker symbol")
+    company_name: Optional[str] = Field(None, description="Company name")
+    market_cap: Optional[float] = Field(None, description="Market capitalization")
+    enterprise_value: Optional[float] = Field(None, description="Enterprise value")
+    
+    # Financial metrics (LTM = Last Twelve Months)
+    revenue_ltm: Optional[float] = Field(None, description="Revenue LTM")
+    ebitda_ltm: Optional[float] = Field(None, description="EBITDA LTM")
+    ebit_ltm: Optional[float] = Field(None, description="EBIT LTM")
+    net_income_ltm: Optional[float] = Field(None, description="Net income LTM")
+    free_cash_flow_ltm: Optional[float] = Field(None, description="Free cash flow LTM")
+    book_equity: Optional[float] = Field(None, description="Book value of equity")
+    
+    # Share data
+    shares_outstanding: Optional[float] = Field(None, description="Shares outstanding")
+    share_price: Optional[float] = Field(None, description="Current share price")
+    currency: Optional[str] = Field("USD", description="Currency")
+
+
+class CompsPeerCompany(BaseModel):
+    """
+    Peer company data for comparable companies analysis
+    """
+    
+    ticker: str = Field(..., description="Peer ticker symbol")
+    company_name: Optional[str] = Field(None, description="Peer company name")
+    
+    # Financial metrics
+    ebitda_ltm: Optional[float] = Field(None, description="EBITDA LTM")
+    ebitda_fy2023: Optional[float] = Field(None, description="EBITDA FY2023 estimate")
+    ebitda_fy2024: Optional[float] = Field(None, description="EBITDA FY2024 estimate")
+    
+    eps_ltm: Optional[float] = Field(None, description="EPS LTM")
+    eps_fy2023: Optional[float] = Field(None, description="EPS FY2023 estimate")
+    eps_fy2024: Optional[float] = Field(None, description="EPS FY2024 estimate")
+    
+    # Valuation metrics
+    market_cap: Optional[float] = Field(None, description="Market capitalization")
+    enterprise_value: Optional[float] = Field(None, description="Enterprise value")
+    share_price: Optional[float] = Field(None, description="Share price")
+    shares_outstanding: Optional[float] = Field(None, description="Shares outstanding")
+    
+    # Classification
+    sector: Optional[str] = Field(None, description="Sector")
+    industry: Optional[str] = Field(None, description="Industry")
+    selection_reason: Optional[str] = Field(None, description="Reason for peer selection")
+
+
+class CompsAnalysisRequest(BaseModel):
+    """
+    Comparable companies analysis request
+    """
+    
+    session_id: str = Field(..., description="Session identifier")
+    target: CompsTargetCompany = Field(..., description="Target company data")
+    peers: Optional[List[CompsPeerCompany]] = Field(None, description="Peer companies (auto-generated if not provided)")
+    
+    # Analysis options
+    apply_outlier_filtering: Optional[bool] = Field(True, description="Apply IQR-based outlier filtering")
+    include_football_field: Optional[bool] = Field(True, description="Include football field chart data")
+
+
+# =============================================================================
+# DU PONT ANALYSIS INPUTS
+# =============================================================================
+
+class DuPontCustomInputs(BaseModel):
+    """
+    Custom inputs for DuPont analysis
+    """
+    
+    net_profit_margin: Optional[float] = Field(None, description="Net profit margin override")
+    asset_turnover: Optional[float] = Field(None, description="Asset turnover override")
+    equity_multiplier: Optional[float] = Field(None, description="Equity multiplier override")
+    
+    # Or provide raw financials for calculation
+    net_income: Optional[float] = Field(None, description="Net income")
+    revenue: Optional[float] = Field(None, description="Revenue")
+    total_assets: Optional[float] = Field(None, description="Total assets")
+    shareholders_equity: Optional[float] = Field(None, description="Shareholders' equity")
+
+
+class DuPontAnalysisRequest(BaseModel):
+    """
+    DuPont analysis request
+    """
+    
+    session_id: str = Field(..., description="Session identifier")
+    ticker: str = Field(..., description="Stock ticker symbol")
+    custom_inputs: Optional[DuPontCustomInputs] = Field(None, description="Custom input overrides")
+
+
+# =============================================================================
+# BALANCE SHEET (IFRS/US GAAP FORMAT)
+# =============================================================================
 
 class InternationalBalanceSheet(BaseModel):
     """
@@ -58,6 +304,10 @@ class InternationalBalanceSheet(BaseModel):
     non_controlling_interest: Optional[float] = Field(None, description="Non-controlling interest")
     other_equity: Optional[float] = Field(None, description="Other equity reserves")
 
+
+# =============================================================================
+# INCOME STATEMENT (IFRS/US GAAP FORMAT)
+# =============================================================================
 
 class InternationalIncomeStatement(BaseModel):
     """
@@ -120,6 +370,10 @@ class InternationalIncomeStatement(BaseModel):
     weighted_average_shares_outstanding: Optional[float] = Field(None, description="Weighted average shares outstanding")
 
 
+# =============================================================================
+# CASH FLOW STATEMENT (IAS 7 / US GAAP)
+# =============================================================================
+
 class InternationalCashFlowStatement(BaseModel):
     """
     International Cash Flow Statement (IAS 7 / US GAAP)
@@ -152,6 +406,10 @@ class InternationalCashFlowStatement(BaseModel):
     cash_beginning_of_period: Optional[float] = Field(None, description="Cash at beginning of period")
     cash_end_of_period: Optional[float] = Field(None, description="Cash at end of period")
 
+
+# =============================================================================
+# COMPLETE FINANCIAL INPUTS PACKAGE
+# =============================================================================
 
 class InternationalFinancialInputs(BaseModel):
     """
@@ -216,7 +474,10 @@ class InternationalFinancialInputs(BaseModel):
         }
 
 
-# Mapping helpers for converting Vietnamese TT99 to International format
+# =============================================================================
+# VIETNAMESE TO INTERNATIONAL MAPPING HELPER
+# =============================================================================
+
 class VN_to_International_Mapping:
     """
     Helper class to map Vietnamese TT99 fields to International format

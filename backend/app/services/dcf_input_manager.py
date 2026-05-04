@@ -1,10 +1,23 @@
 """
 DCF Input Manager - Handles inputs from API, AI, or Manual sources
 Provides unified interface for building DCFInputs with full source tracking
+
+This service layer bridges the gap between:
+1. Pydantic input models (international_inputs.py) - API validation
+2. Engine dataclasses (dcf_engine.py) - Calculation logic
+3. Multiple data sources (API, AI, Manual)
+
+All inputs are tracked with source metadata for auditability.
 """
 
 from typing import Dict, Any, List, Optional, Union
 from datetime import date
+from app.models.international_inputs import (
+    DCFHistoricalFinancials,
+    DCFForecastDrivers,
+    DCFMarketData,
+    InternationalFinancialInputs
+)
 from app.engines.dcf_engine import (
     DCFInputs, ScenarioDrivers, ComparableCompany, 
     InputWithMetadata, InputSource
@@ -30,7 +43,7 @@ class DCFInputManager:
         """
         Load financial data from API (yFinance, Alpha Vantage, etc.)
         
-        Expected structure:
+        Expected structure matches fetch_financial_data() output:
         {
             "profile": {
                 "symbol": "AAPL",
@@ -46,6 +59,11 @@ class DCFInputManager:
                 "ebitda": {...},
                 "net_income": {...},
                 ...
+            },
+            "historical_financials": {
+                "revenue": {...},
+                "cogs": {...},
+                ...
             }
         }
         """
@@ -56,7 +74,7 @@ class DCFInputManager:
         """
         Load AI-generated assumptions with rationale and sources.
         
-        Expected structure:
+        Expected structure from generate_ai_assumptions():
         {
             "wacc_percent": {"value": 8.5, "rationale": "...", "sources": "..."},
             "terminal_growth_rate_percent": {"value": 2.0, ...},
@@ -130,55 +148,46 @@ class DCFInputManager:
             sources="Default Configuration"
         )
     
-    def _extract_historical_from_api(self) -> Dict[str, List[float]]:
-        """Extract 3-year historical financials from API data."""
-        financials = self.api_data.get("financials", {})
+    def _extract_historical_from_api(self) -> DCFHistoricalFinancials:
+        """Extract historical financials from API data into Pydantic model."""
+        historical = self.api_data.get("historical_financials", {})
         
-        def extract_series(data_dict: Dict) -> List[float]:
-            """Extract values sorted by year (most recent first)."""
-            if not data_dict:
-                return [0.0, 0.0, 0.0]
-            values = list(data_dict.values())
-            # Pad or truncate to 3 years
-            while len(values) < 3:
-                values.append(0.0)
-            return [float(v) if v else 0.0 for v in values[:3]]
-        
-        return {
-            "revenue": extract_series(financials.get("revenue", {})),
-            "cogs": extract_series(financials.get("cogs", financials.get("cost_of_revenue", {}))),
-            "sga": extract_series(financials.get("operating_expenses", {})),
-            "depreciation": extract_series(financials.get("depreciation", {})),
-            "interest": extract_series(financials.get("interest_expense", {})),
-            "capex": extract_series(financials.get("capital_expenditures", financials.get("capex", {})))
-        }
+        return DCFHistoricalFinancials(
+            revenue=historical.get("revenue", {}),
+            cogs=historical.get("cogs", {}),
+            ebitda=historical.get("ebitda", {}),
+            net_income=historical.get("net_income", {}),
+            operating_expenses=historical.get("operating_expenses", {}),
+            sg_and_a=historical.get("sg_and_a", {}),
+            depreciation=historical.get("depreciation", {}),
+            capex=historical.get("capex", {}),
+            free_cash_flow=historical.get("free_cash_flow", {}),
+            total_assets=historical.get("total_assets", {}),
+            total_debt=historical.get("total_debt", {}),
+            cash_and_equivalents=historical.get("cash_and_equivalents", {}),
+            inventory=historical.get("inventory", {}),
+            accounts_receivable=historical.get("accounts_receivable", {}),
+            accounts_payable=historical.get("accounts_payable", {}),
+            shareholders_equity=historical.get("shareholders_equity", {}),
+            revenue_cagr=historical.get("revenue_cagr"),
+            avg_ebitda_margin=historical.get("avg_ebitda_margin"),
+            avg_roe=historical.get("avg_roe")
+        )
     
-    def _extract_balance_sheet_from_api(self) -> Dict[str, float]:
-        """Extract opening balance sheet items from API data."""
+    def _extract_market_data_from_api(self) -> DCFMarketData:
+        """Extract market data from API into Pydantic model."""
         profile = self.api_data.get("profile", {})
-        financials = self.api_data.get("financials", {})
-        balance_sheet = financials.get("balance_sheet", {})
+        info = profile.get("raw_info", {})
         
-        # Get most recent values
-        def get_latest(data_dict: Dict, default: float = 0.0) -> float:
-            if not data_dict:
-                return default
-            values = [v for v in data_dict.values() if v]
-            return float(values[0]) if values else default
-        
-        total_debt = get_latest(balance_sheet.get("total_debt", {}))
-        cash = get_latest(balance_sheet.get("cash", balance_sheet.get("cash_and_equivalents", {})))
-        
-        return {
-            "net_debt": total_debt - cash,
-            "ppe": get_latest(balance_sheet.get("property_plant_equipment", {}), 
-                             profile.get("totalAssets", 0.0) * 0.3),  # Estimate if not available
-            "ar": get_latest(balance_sheet.get("accounts_receivable", {})),
-            "inventory": get_latest(balance_sheet.get("inventory", {})),
-            "ap": get_latest(balance_sheet.get("accounts_payable", {})),
-            "shares_outstanding": profile.get("sharesOutstanding", 1000000.0),
-            "current_price": profile.get("currentPrice", profile.get("current_price", 100.0))
-        }
+        return DCFMarketData(
+            current_stock_price=profile.get("current_price"),
+            shares_outstanding=info.get("sharesOutstanding"),
+            market_cap=profile.get("market_cap"),
+            beta=profile.get("beta"),
+            total_debt=info.get("totalDebt"),
+            cash=info.get("cash", info.get("totalCash")),
+            currency=profile.get("currency", "USD")
+        )
     
     def _build_scenario_drivers_from_ai(self) -> ScenarioDrivers:
         """Build ScenarioDrivers from AI assumptions."""
@@ -263,10 +272,13 @@ class DCFInputManager:
         Build complete DCFInputs object with all sources integrated.
         
         Priority: Manual Override > AI > API > Default
+        
+        This method is used when you want to use the Input Manager pattern.
+        For direct usage from valuation_routes.py, see build_inputs_from_confirmed_assumptions()
         """
         # Extract data from sources
         historical = self._extract_historical_from_api()
-        balance_sheet = self._extract_balance_sheet_from_api()
+        market_data = self._extract_market_data_from_api()
         
         # Build scenario drivers
         base_scenario = self._build_scenario_drivers_from_ai()
@@ -284,21 +296,21 @@ class DCFInputManager:
         # Build DCFInputs
         inputs = DCFInputs(
             # Historical financials from API
-            historical_revenue=historical["revenue"],
-            historical_cogs=historical["cogs"],
-            historical_sga=historical["sga"],
-            historical_other_opex=[h * 0.3 for h in historical["sga"]],  # Estimate
-            historical_depreciation=historical["depreciation"],
-            historical_interest=historical["interest"],
-            historical_capex=historical["capex"],
+            historical_revenue=list(historical.revenue.values()) if historical.revenue else [0.0, 0.0, 0.0],
+            historical_cogs=list(historical.cogs.values()) if historical.cogs else [0.0, 0.0, 0.0],
+            historical_sga=list(historical.sg_and_a.values()) if historical.sg_and_a else [0.0, 0.0, 0.0],
+            historical_other_opex=[h * 0.3 for h in (list(historical.sg_and_a.values()) if historical.sg_and_a else [0.0, 0.0, 0.0])],
+            historical_depreciation=list(historical.depreciation.values()) if historical.depreciation else [0.0, 0.0, 0.0],
+            historical_interest=[0.0, 0.0, 0.0],  # Would need to extract from financials
+            historical_capex=list(historical.capex.values()) if historical.capex else [0.0, 0.0, 0.0],
             
             # Balance sheet from API
-            historical_ar=balance_sheet["ar"],
-            historical_inventory=balance_sheet["inventory"],
-            historical_ap=balance_sheet["ap"],
-            net_debt_opening=balance_sheet["net_debt"],
-            shares_outstanding=balance_sheet["shares_outstanding"],
-            current_stock_price=balance_sheet["current_price"],
+            historical_ar=historical.accounts_receivable.get(list(historical.accounts_receivable.keys())[0], 0.0) if historical.accounts_receivable else 0.0,
+            historical_inventory=historical.inventory.get(list(historical.inventory.keys())[0], 0.0) if historical.inventory else 0.0,
+            historical_ap=historical.accounts_payable.get(list(historical.accounts_payable.keys())[0], 0.0) if historical.accounts_payable else 0.0,
+            net_debt_opening=market_data.total_debt - (market_data.cash or 0.0) if market_data.total_debt else 0.0,
+            shares_outstanding=market_data.shares_outstanding or 1000000.0,
+            current_stock_price=market_data.current_stock_price or 100.0,
             
             # Tax rate from AI/API
             statutory_tax_rate=tax_rate_value,
@@ -333,6 +345,129 @@ class DCFInputManager:
             }
         }
         return audit
+
+
+def build_dcf_inputs_from_confirmed_assumptions(
+    confirmed_assumptions: Dict[str, Any],
+    financial_data: Dict[str, Any],
+    profile: Dict[str, Any],
+    market: str = "international"
+) -> DCFInputs:
+    """
+    Build DCFInputs directly from confirmed_assumptions (as used in valuation_routes.py).
+    
+    This function mirrors the logic currently in run_valuation_engine() but makes it
+    reusable and testable as a separate service function.
+    
+    Args:
+        confirmed_assumptions: AI/user confirmed assumptions from session
+        financial_data: Financial data from yFinance
+        profile: Company profile information
+        market: Market type (vietnamese or international)
+    
+    Returns:
+        DCFInputs object ready for DCFEngine
+    """
+    financials = financial_data.get('financials', {})
+    
+    # Extract historical data
+    revenue_history = list(financials.get('revenue', {}).values())
+    ebitda_history = list(financials.get('ebitda', {}).values())
+    net_income_history = list(financials.get('net_income', {}).values())
+    
+    info = profile.get('raw_info', {})
+    shares_outstanding = info.get('sharesOutstanding', 1000000) or 1000000
+    current_price = profile.get('current_price', 100) or 100
+    
+    total_debt = info.get('totalDebt', 0) or 0
+    cash = info.get('cash', info.get('totalCash', 0)) or 0
+    net_debt = total_debt - cash
+    ppe_net = info.get('totalAssets', 0) or 0
+    
+    def build_historical_year(rev, ebitda, ni):
+        return {
+            'revenue': rev or 0,
+            'ebitda': ebitda or 0,
+            'net_income': ni or 0,
+            'cogs': (rev or 0) * 0.6 if rev else 0,
+            'sga': (rev or 0) * 0.25 if rev else 0,
+            'other_opex': (rev or 0) * 0.05 if rev else 0,
+            'accounts_receivable': (rev or 0) * 0.1 if rev else 0,
+            'inventory': (rev or 0) * 0.08 if rev else 0,
+            'accounts_payable': (rev or 0) * 0.07 if rev else 0
+        }
+    
+    hist_fy_minus_1 = build_historical_year(
+        revenue_history[0] if len(revenue_history) > 0 else None,
+        ebitda_history[0] if len(ebitda_history) > 0 else None,
+        net_income_history[0] if len(net_income_history) > 0 else None
+    )
+    hist_fy_minus_2 = build_historical_year(
+        revenue_history[1] if len(revenue_history) > 1 else None,
+        ebitda_history[1] if len(ebitda_history) > 1 else None,
+        net_income_history[1] if len(net_income_history) > 1 else None
+    )
+    hist_fy_minus_3 = build_historical_year(
+        revenue_history[2] if len(revenue_history) > 2 else None,
+        ebitda_history[2] if len(ebitda_history) > 2 else None,
+        net_income_history[2] if len(net_income_history) > 2 else None
+    )
+    
+    # Get forecast drivers from assumptions
+    revenue_growth = confirmed_assumptions.get('revenue_growth_forecast', [0.05, 0.05, 0.04, 0.04, 0.03, 0.02])
+    while len(revenue_growth) < 6:
+        revenue_growth.append(0.02)
+    
+    wacc = confirmed_assumptions.get('wacc', 0.08)
+    terminal_growth = confirmed_assumptions.get('terminal_growth_rate', 0.023)
+    terminal_multiple = confirmed_assumptions.get('terminal_ebitda_multiple', 8.0)
+    
+    volume_split = confirmed_assumptions.get('volume_growth_split', 0.6)
+    base_volume_growth = [g * volume_split for g in revenue_growth[:6]]
+    base_price_growth = [g * (1 - volume_split) for g in revenue_growth[:6]]
+    
+    base_drivers = ScenarioDrivers(
+        volume_growth=base_volume_growth,
+        price_growth=base_price_growth,
+        inflation_rate=[confirmed_assumptions.get('inflation_rate', 0.02)] * 6 if not isinstance(confirmed_assumptions.get('inflation_rate'), list) else confirmed_assumptions.get('inflation_rate', [0.02]*6)[:6],
+        capex=[hist_fy_minus_1['revenue'] * confirmed_assumptions.get('capex_pct_of_revenue', 0.05)] * 6,
+        ar_days=[confirmed_assumptions.get('ar_days', 45)] * 5,
+        inv_days=[confirmed_assumptions.get('inv_days', 60)] * 5,
+        ap_days=[confirmed_assumptions.get('ap_days', 30)] * 5,
+        terminal_ebitda_multiple=terminal_multiple,
+        terminal_growth_rate=terminal_growth
+    )
+    
+    dcf_inputs = DCFInputs(
+        valuation_date=date.today().isoformat(),
+        currency="VND" if market == "vietnamese" else profile.get('currency', 'USD'),
+        historical_fy_minus_1=hist_fy_minus_1,
+        historical_fy_minus_2=hist_fy_minus_2,
+        historical_fy_minus_3=hist_fy_minus_3,
+        net_debt=net_debt,
+        ppe_net=ppe_net,
+        tax_basis_ppe=ppe_net * 0.8,
+        tax_losses_nol=0,
+        shares_outstanding=shares_outstanding,
+        current_stock_price=current_price,
+        projected_interest_expense=net_debt * 0.05 if net_debt > 0 else 0,
+        useful_life_existing=confirmed_assumptions.get('useful_life_existing', 10.0),
+        useful_life_new=confirmed_assumptions.get('useful_life_new', 10.0),
+        forecast_drivers={
+            "base_case": base_drivers,
+            "best_case": base_drivers,
+            "worst_case": base_drivers
+        },
+        wacc=wacc,
+        risk_free_rate=confirmed_assumptions.get('risk_free_rate', 0.045),
+        equity_risk_premium=confirmed_assumptions.get('equity_risk_premium', 0.055),
+        beta=confirmed_assumptions.get('beta', 1.0),
+        cost_of_debt=confirmed_assumptions.get('cost_of_debt', 0.05),
+        tax_rate_statutory=confirmed_assumptions.get('tax_rate', 0.21),
+        tax_loss_utilization_limit_pct=confirmed_assumptions.get('tax_loss_utilization_limit_pct', 0.80)
+    )
+    
+    return dcf_inputs
 
 
 # Convenience function for quick input creation
