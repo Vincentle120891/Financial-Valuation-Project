@@ -243,23 +243,31 @@ class Step6EnhancedProcessor:
         forecast: ForecastDriversDisplay, 
         market: MarketDataDisplay
     ) -> CalculatedMetricsDisplay:
-        """Calculate WACC, FCF, Terminal Value, and Fair Value."""
-        fields = []
-
+        """Calculate WACC, FCF, Terminal Value, Enterprise Value, Equity Value, and Fair Value."""
+        
         # Extract values for calculation
         beta = next((f.value for f in market.data_fields if f.field_name == "Beta"), 1.0)
         rf = next((f.value for f in market.data_fields if f.field_name == "Risk-Free Rate"), 0.045)
         growth = next((f.value for f in forecast.data_fields if f.field_name == "Revenue Growth Rate"), 0.05)
         term_growth = next((f.value for f in forecast.data_fields if f.field_name == "Terminal Growth Rate"), 0.025)
 
+        # Get historical financials for calculations
+        latest_revenue = None
+        latest_ebitda = None
+        for field in hist.data_fields:
+            if field.field_name.startswith("Revenue_") and field.value:
+                latest_revenue = field.value
+            if field.field_name.startswith("EBITDA_") and field.value:
+                latest_ebitda = field.value
+
         # Calculate WACC (Simplified)
         # WACC = Re * E/V + Rd * D/V * (1-T)
         # Re = Rf + Beta * MRP
-        mrp = 0.055 # Market Risk Premium
+        mrp = 0.055  # Market Risk Premium
         cost_of_equity = rf + beta * mrp
-        wacc = cost_of_equity * 0.8 + 0.04 * 0.2 * (1-0.21) # Simplified capital structure
+        wacc = cost_of_equity * 0.8 + 0.04 * 0.2 * (1-0.21)  # Simplified capital structure
         
-        fields.append(DataField(
+        wacc_field = DataField(
             field_name="WACC",
             value=wacc,
             unit="%",
@@ -267,27 +275,128 @@ class Step6EnhancedProcessor:
             source="DCF Engine",
             formula=f"WACC = (Re: {cost_of_equity:.2%}) * 0.8 + (Rd * (1-T)) * 0.2",
             is_critical=True
-        ))
+        )
 
-        # Calculate Fair Value (Mock calculation if no real financials)
-        # In real impl, this calls self.dcf_engine
-        fair_value = None
-        if hist.data_fields:
-             # Mock logic for demonstration
-             fair_value = 150.0 # Placeholder
-             
-        status_fv = DataStatus.CALCULATED if fair_value else DataStatus.MISSING
-        fields.append(DataField(
-            field_name="Fair Value per Share",
-            value=fair_value,
-            unit="USD",
-            status=status_fv,
-            source="DCF Model",
-            formula="PV(FCF) + PV(Terminal Value) - Net Debt / Shares",
-            is_critical=True
-        ))
-
-        return CalculatedMetricsDisplay(data_fields=fields)
+        # Project FCF for 5 years (simplified: FCF = EBITDA * (1 - tax_rate) - CapEx approx 3% of revenue)
+        tax_rate = 0.21
+        capex_pct = 0.03
+        fcf_projections = []
+        if latest_revenue and latest_ebitda:
+            base_fcf = latest_ebitda * (1 - tax_rate) - (latest_revenue * capex_pct)
+            for year in range(1, 6):
+                fcf = base_fcf * ((1 + growth) ** year)
+                fcf_projections.append(fcf)
+        
+        # Calculate Terminal Value (Perpetuity Growth Method)
+        terminal_value = None
+        terminal_value_field = None
+        if fcf_projections:
+            final_fcf = fcf_projections[-1]
+            if wacc > term_growth:
+                terminal_value = final_fcf * (1 + term_growth) / (wacc - term_growth)
+                terminal_value_field = DataField(
+                    field_name="Terminal Value",
+                    value=terminal_value,
+                    unit="USD",
+                    status=DataStatus.CALCULATED,
+                    source="DCF Engine",
+                    formula=f"TV = FCF[n] * (1 + g) / (WACC - g) where g={term_growth:.2%}",
+                    is_critical=True
+                )
+        
+        # Calculate Present Value of FCF Projections
+        pv_fcf = 0
+        if fcf_projections:
+            for i, fcf in enumerate(fcf_projections, 1):
+                pv_fcf += fcf / ((1 + wacc) ** i)
+        
+        # Calculate Present Value of Terminal Value
+        pv_terminal = None
+        if terminal_value:
+            pv_terminal = terminal_value / ((1 + wacc) ** 5)
+        
+        # Calculate Enterprise Value
+        enterprise_value = None
+        enterprise_value_field = None
+        if pv_fcf and pv_terminal:
+            enterprise_value = pv_fcf + pv_terminal
+            enterprise_value_field = DataField(
+                field_name="Enterprise Value",
+                value=enterprise_value,
+                unit="USD",
+                status=DataStatus.CALCULATED,
+                source="DCF Engine",
+                formula="EV = PV(FCF Projections) + PV(Terminal Value)",
+                is_critical=True
+            )
+        
+        # Estimate Net Debt (simplified: assume 10% of latest revenue if not available)
+        net_debt = latest_revenue * 0.1 if latest_revenue else 0
+        
+        # Calculate Equity Value
+        equity_value = None
+        equity_value_field = None
+        if enterprise_value:
+            equity_value = enterprise_value - net_debt
+            equity_value_field = DataField(
+                field_name="Equity Value",
+                value=equity_value,
+                unit="USD",
+                status=DataStatus.CALCULATED,
+                source="DCF Engine",
+                formula="Equity Value = Enterprise Value - Net Debt",
+                is_critical=True
+            )
+        
+        # Estimate Shares Outstanding (simplified: assume 1% of latest revenue as proxy)
+        shares_outstanding = latest_revenue * 0.01 / 100 if latest_revenue else None
+        
+        # Calculate Fair Value per Share
+        fair_value_per_share = None
+        fair_value_field = None
+        if equity_value and shares_outstanding:
+            fair_value_per_share = equity_value / shares_outstanding
+            fair_value_field = DataField(
+                field_name="Fair Value per Share",
+                value=fair_value_per_share,
+                unit="USD",
+                status=DataStatus.CALCULATED,
+                source="DCF Model",
+                formula="Fair Value per Share = Equity Value / Shares Outstanding",
+                is_critical=True
+            )
+        
+        # Calculate Implied Upside/Downside (need current stock price)
+        # For now, use a placeholder or fetch from yfinance
+        current_price = None
+        try:
+            info = await self.yfinance_service.get_company_info(ticker)
+            current_price = info.get('currentPrice', info.get('regularMarketPrice', None))
+        except:
+            pass
+        
+        implied_upside_downside = None
+        upside_field = None
+        if fair_value_per_share and current_price:
+            implied_upside_downside = (fair_value_per_share - current_price) / current_price
+            upside_field = DataField(
+                field_name="Implied Upside/Downside",
+                value=implied_upside_downside,
+                unit="%",
+                status=DataStatus.CALCULATED,
+                source="DCF Model",
+                formula="Upside/Downside = (Fair Value - Current Price) / Current Price",
+                is_critical=False
+            )
+        
+        return CalculatedMetricsDisplay(
+            wacc=wacc_field,
+            terminal_value=terminal_value_field,
+            enterprise_value=enterprise_value_field,
+            equity_value=equity_value_field,
+            fair_value_per_share=fair_value_field,
+            implied_upside_downside=upside_field
+        )
 
     # ========================================================================
     # COMPS PROCESSING (Simplified Structure)
