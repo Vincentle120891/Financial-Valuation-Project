@@ -105,12 +105,13 @@ const AiAssumptionsStep = ({
     max,
     description,
     industryBenchmark,
-    methodology
+    methodology,
+    showRationale = false  // Only show rationale in the first field
   }) => {
     const aiValue = getAiValue(fieldKey);
     const confirmedValue = confirmedValues?.[fieldKey]?.value;
     const displayValue = confirmedValue !== undefined ? confirmedValue : aiValue;
-    const rationale = getAiRationale(fieldKey);
+    const rationale = showRationale ? (getAiRationale(fieldKey) || aiData?.ai_rationale?.value) : null;
 
     // Convert to percentage for display if needed
     const displayPercent = displayValue !== undefined 
@@ -207,7 +208,8 @@ const AiAssumptionsStep = ({
           label: 'Equity Risk Premium (ERP)',
           description: 'Expected excess return of the market over the risk-free rate. Typical range: 4.5% - 6.5% for developed markets.',
           min: 0,
-          max: 15
+          max: 15,
+          showRationale: true
         })}
         
         {renderAssumptionField({
@@ -215,6 +217,7 @@ const AiAssumptionsStep = ({
           label: 'Country Risk Premium (CRP)',
           description: 'Additional risk premium for the company\'s primary operating country. 0% for stable developed markets like US.',
           min: 0,
+          showRationale: false,
           max: 10
         })}
         
@@ -222,6 +225,7 @@ const AiAssumptionsStep = ({
           fieldKey: 'terminal_growth_rate',
           label: 'Terminal Growth Rate',
           description: 'Perpetual growth rate for terminal value calculation. Should not exceed long-term GDP growth (typically 2-3%).',
+          showRationale: false,
           min: 0,
           max: 5
         })}
@@ -232,6 +236,7 @@ const AiAssumptionsStep = ({
           description: 'Expected exit multiple at end of forecast period. Varies by sector: Tech (10-15x), Consumer (10-14x), Industrials (8-12x).',
           isPercentage: false,
           step: 0.5,
+          showRationale: false,
           min: 0,
           max: 30
         })}
@@ -248,7 +253,8 @@ const AiAssumptionsStep = ({
           label: 'Equity Risk Premium (ERP)',
           description: 'Vietnam emerging market premium. Typical range: 6.0% - 8.0%. Consider VNINDEX volatility (25-35% annualized) and FOL liquidity impact.',
           min: 0,
-          max: 15
+          max: 15,
+          showRationale: true
         })}
         
         {renderAssumptionField({
@@ -256,7 +262,8 @@ const AiAssumptionsStep = ({
           label: 'Country Risk Premium (CRP)',
           description: 'Vietnam-specific political/economic/currency risk. Range: 2.0% - 5.0%. Consider VND/USD exchange risk and emerging market institutional factors.',
           min: 0,
-          max: 10
+          max: 10,
+          showRationale: false
         })}
         
         {renderAssumptionField({
@@ -264,7 +271,8 @@ const AiAssumptionsStep = ({
           label: 'Terminal Growth Rate',
           description: 'Aligned with Vietnam\'s long-term GDP growth (~5-6%). Range: 4.0% - 6.0%. Must be less than WACC.',
           min: 0,
-          max: 10
+          max: 10,
+          showRationale: false
         })}
         
         {renderAssumptionField({
