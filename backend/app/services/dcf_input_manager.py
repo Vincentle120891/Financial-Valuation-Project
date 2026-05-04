@@ -20,7 +20,19 @@ from app.models.international_inputs import (
     DCFHistoricalFinancials,
     DCFForecastDrivers,
     DCFMarketData,
-    InternationalFinancialInputs
+    InternationalFinancialInputs,
+    # DuPont models
+    DuPontRequest,
+    DuPontComponents,
+    DuPontAnalysisRequest,
+    DuPontCustomInputs,
+    # Comps models
+    CompsSelectionRequest,
+    CompsValuationRequest,
+    CompsAnalysisRequest,
+    PeerMultiple,
+    CompsTargetCompany,
+    CompsPeerCompany
 )
 from app.engines.dcf_engine import (
     DCFInputs, ScenarioDrivers, ComparableCompany, 
@@ -509,13 +521,161 @@ def create_dcf_inputs(
 # COMPS INPUT BUILDER FUNCTIONS
 # =============================================================================
 
+def build_comps_selection_inputs(
+    target_ticker: str,
+    peer_list: Optional[List[str]] = None,
+    sector: Optional[str] = None,
+    industry: Optional[str] = None,
+    max_peers: int = 10
+) -> CompsSelectionRequest:
+    """
+    Validates peer lists and target data for comps selection.
+    Returns a typed CompsSelectionRequest for peer selection logic.
+    
+    Args:
+        target_ticker: Target company ticker symbol
+        peer_list: Explicit list of peer tickers (optional)
+        sector: Sector filter for auto-peer selection
+        industry: Industry filter for auto-peer selection
+        max_peers: Maximum number of peers to select
+    
+    Returns:
+        CompsSelectionRequest object for peer selection
+    """
+    return CompsSelectionRequest(
+        target_ticker=target_ticker,
+        peer_list=peer_list,
+        sector=sector,
+        industry=industry,
+        max_peers=max_peers
+    )
+
+
+def build_comps_valuation_inputs(
+    session_id: str,
+    target_ticker: str,
+    financial_data: Dict[str, Any],
+    peer_multiples: Optional[List[Dict[str, Any]]] = None,
+    apply_outlier_filtering: bool = True,
+    iqr_multiplier: float = 1.5
+) -> CompsValuationRequest:
+    """
+    Validates peer lists and target data, integrates IQR outlier filtering logic,
+    and structures data into CompsValuationRequest before passing to Comps engine.
+    
+    Args:
+        session_id: Session identifier
+        target_ticker: Target company ticker symbol
+        financial_data: Financial data from yFinance
+        peer_multiples: List of peer multiple dictionaries
+        apply_outlier_filtering: Whether to apply IQR-based outlier filtering
+        iqr_multiplier: IQR multiplier for outlier detection
+    
+    Returns:
+        CompsValuationRequest object ready for TradingCompsAnalyzer
+    """
+    info = financial_data.get('raw_info', {})
+    profile = financial_data.get('profile', {})
+    
+    # Calculate target company metrics
+    market_cap = info.get('marketCap', 1000000000) or 1000000000
+    enterprise_value = market_cap + (info.get('totalDebt', 0) or 0) - (info.get('cash', 0) or 0)
+    
+    financials = financial_data.get('financials', {})
+    revenue_values = list(financials.get('revenue', {}).values())
+    ebitda_values = list(financials.get('ebitda', {}).values())
+    
+    revenue_ltm = revenue_values[0] if revenue_values else 100000000
+    ebitda_ltm = ebitda_values[0] if ebitda_values else revenue_ltm * 0.2
+    net_income_ltm = revenue_ltm * 0.1
+    eps_ltm = net_income_ltm / (info.get('sharesOutstanding', 1000000) or 1000000) * 1000000
+    
+    # Parse peer multiples into PeerMultiple objects
+    parsed_peer_multiples: List[PeerMultiple] = []
+    if peer_multiples:
+        for peer in peer_multiples:
+            parsed_peer_multiples.append(PeerMultiple(**peer))
+    
+    return CompsValuationRequest(
+        session_id=session_id,
+        target_ticker=target_ticker,
+        target_company_name=profile.get('name', target_ticker),
+        target_market_cap=market_cap,
+        target_enterprise_value=enterprise_value,
+        target_revenue_ltm=revenue_ltm,
+        target_ebitda_ltm=ebitda_ltm,
+        target_net_income_ltm=net_income_ltm,
+        target_eps_ltm=eps_ltm,
+        peer_multiples=parsed_peer_multiples,
+        apply_outlier_filtering=apply_outlier_filtering,
+        iqr_multiplier=iqr_multiplier,
+        include_football_field=True
+    )
+
+
+def apply_iqr_outlier_filtering(
+    peer_multiples: List[PeerMultiple],
+    metric: str = 'ev_ebitda_ltm',
+    iqr_multiplier: float = 1.5
+) -> List[PeerMultiple]:
+    """
+    Applies IQR-based outlier filtering to peer multiples.
+    Moved from route layer to service layer for reusability.
+    
+    Args:
+        peer_multiples: List of peer multiples
+        metric: Metric name to filter on (e.g., 'ev_ebitda_ltm', 'pe_ratio_ltm')
+        iqr_multiplier: IQR multiplier for outlier detection
+    
+    Returns:
+        Filtered list of peer multiples with outliers removed
+    """
+    if not peer_multiples:
+        return []
+    
+    # Extract metric values
+    values = []
+    for peer in peer_multiples:
+        value = getattr(peer, metric, None)
+        if value is not None:
+            values.append(value)
+    
+    if len(values) < 4:  # Need at least 4 data points for meaningful IQR
+        return peer_multiples
+    
+    # Sort values for quartile calculation
+    sorted_values = sorted(values)
+    n = len(sorted_values)
+    
+    # Calculate Q1 (25th percentile) and Q3 (75th percentile)
+    q1_idx = n // 4
+    q3_idx = (3 * n) // 4
+    
+    q1 = sorted_values[q1_idx]
+    q3 = sorted_values[q3_idx]
+    iqr = q3 - q1
+    
+    # Calculate bounds
+    lower_bound = q1 - (iqr_multiplier * iqr)
+    upper_bound = q3 + (iqr_multiplier * iqr)
+    
+    # Filter peers
+    filtered_peers = []
+    for peer in peer_multiples:
+        value = getattr(peer, metric, None)
+        if value is not None and lower_bound <= value <= upper_bound:
+            filtered_peers.append(peer)
+    
+    return filtered_peers if filtered_peers else peer_multiples
+
+
 def build_comps_inputs(
     target_ticker: str,
     financial_data: Dict[str, Any],
     peer_tickers: Optional[List[str]] = None,
     apply_outlier_filtering: bool = True,
     iqr_multiplier: float = 1.5
-) -> 'CompsAnalysisRequest':
+) -> CompsAnalysisRequest:
     """
     Build CompsAnalysisRequest from financial data and peer selection.
     
@@ -531,8 +691,6 @@ def build_comps_inputs(
     Returns:
         CompsAnalysisRequest object ready for TradingCompsAnalyzer
     """
-    from app.models.international_inputs import CompsTargetCompany, CompsPeerCompany, CompsAnalysisRequest
-    
     info = financial_data.get('raw_info', {})
     profile = financial_data.get('profile', {})
     
@@ -624,11 +782,41 @@ def build_comps_inputs(
 # DU PONT INPUT BUILDER FUNCTIONS
 # =============================================================================
 
+def build_dupont_request(
+    ticker: str,
+    years: List[int],
+    custom_ratios: Optional[Dict[str, Any]] = None
+) -> DuPontRequest:
+    """
+    Validates raw API data against DuPontRequest, calculates missing ratios if needed,
+    and returns a typed object for the DuPont engine.
+    
+    Args:
+        ticker: Company ticker symbol
+        years: List of years for analysis
+        custom_ratios: Optional custom ratio overrides (net_profit_margin, asset_turnover, equity_multiplier)
+    
+    Returns:
+        DuPontRequest object ready for DuPont analysis
+    """
+    # Parse custom ratios into DuPontComponents if provided
+    components = None
+    if custom_ratios:
+        components = DuPontComponents(**custom_ratios)
+    
+    return DuPontRequest(
+        ticker=ticker,
+        years=years,
+        custom_ratios=components
+    )
+
+
 def build_dupont_inputs(
     ticker: str,
     financial_data: Dict[str, Any],
-    custom_inputs: Optional['DuPontCustomInputs'] = None
-) -> 'DuPontAnalysisRequest':
+    years: Optional[List[int]] = None,
+    custom_ratios: Optional[Dict[str, Any]] = None
+) -> DuPontAnalysisRequest:
     """
     Build DuPontAnalysisRequest from financial data.
     
@@ -638,23 +826,36 @@ def build_dupont_inputs(
     Args:
         ticker: Company ticker symbol
         financial_data: Financial data from yFinance
-        custom_inputs: Optional custom input overrides
+        years: List of years for analysis (auto-extracted if not provided)
+        custom_ratios: Optional custom ratio overrides
     
     Returns:
         DuPontAnalysisRequest object ready for DuPont engine
     """
-    from app.models.international_inputs import DuPontAnalysisRequest, DuPontCustomInputs
-    
     # Validate that we have the required financial data
     financials = financial_data.get('financials', {})
+    
+    # Extract years from financial data if not provided
+    if years is None:
+        years = list(financials.get('revenue', {}).keys())
+        # Convert to int if they're strings
+        try:
+            years = [int(y) for y in years]
+        except (ValueError, TypeError):
+            years = list(range(2020, 2024))  # Default fallback
     
     # Check for required historical data (8 years preferred)
     revenue_history = financials.get('revenue', {})
     if not revenue_history or len(revenue_history) < 3:
         logger.warning(f"Insufficient historical revenue data for {ticker}: {len(revenue_history)} years")
     
+    # Parse custom ratios into DuPontCustomInputs if provided
+    custom_inputs_obj = None
+    if custom_ratios:
+        custom_inputs_obj = DuPontCustomInputs(**custom_ratios)
+    
     return DuPontAnalysisRequest(
         session_id="",  # Will be set by caller
         ticker=ticker,
-        custom_inputs=custom_inputs
+        custom_inputs=custom_inputs_obj
     )
