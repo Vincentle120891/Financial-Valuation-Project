@@ -1,4 +1,10 @@
-"""Step 7: Sensitivity Analysis Processor"""
+"""Step 7: Sensitivity Analysis Processor
+
+Supports sensitivity analysis for all three valuation models:
+- DCF: WACC vs Terminal Growth Rate
+- COMPS: P/E Multiple vs EV/EBITDA Multiple  
+- DUPONT: Net Margin vs Asset Turnover
+"""
 import logging
 from typing import Dict, List, Optional, Any
 from pydantic import BaseModel
@@ -17,36 +23,92 @@ class Step7Response(BaseModel):
     sensitivity_matrices: List[SensitivityMatrix]
     tornado_data: List[Dict]
     key_insights: List[str]
+    model_type: str = "DCF"  # DCF, COMPS, or DUPONT
 
 class Step7SensitivityProcessor:
     """
-    Performs sensitivity analysis by recalculating the full DCF model
-    for each combination of WACC and Terminal Growth Rate.
+    Performs sensitivity analysis by recalculating the full valuation model
+    for each combination of key variables based on the selected model type.
+    
+    Model-specific variables:
+    - DCF: WACC vs Terminal Growth Rate
+    - COMPS: P/E Multiple vs EV/EBITDA Multiple
+    - DUPONT: Net Margin vs Asset Turnover
     """
     
     def process_sensitivity_analysis(
         self, 
         assumptions: Dict[str, float],
         historical_data: Optional[Dict[str, Any]] = None,
+        model_type: str = "DCF",
+        wacc_range_override: Optional[List[float]] = None,
+        terminal_growth_range_override: Optional[List[float]] = None,
+        pe_range_override: Optional[List[float]] = None,
+        ev_ebitda_range_override: Optional[List[float]] = None,
+        margin_range_override: Optional[List[float]] = None,
+        turnover_range_override: Optional[List[float]] = None
+    ) -> Step7Response:
+        """
+        Generate sensitivity matrices by recalculating valuation for each scenario.
+        
+        Args:
+            assumptions: Complete assumptions from Step 5 including model-specific parameters:
+                For DCF:
+                    - wacc: Base WACC
+                    - terminal_growth: Base terminal growth rate
+                    - revenue_growth: Revenue growth rate
+                    - latest_revenue: Latest revenue
+                    - latest_ebitda: Latest EBITDA
+                    - tax_rate: Tax rate (default 0.21)
+                    - capex_pct: CapEx as % of revenue (default 0.03)
+                For COMPS:
+                    - base_pe: Base P/E multiple
+                    - base_ev_ebitda: Base EV/EBITDA multiple
+                    - target_earnings: Target company earnings
+                    - target_ebitda: Target company EBITDA
+                For DUPONT:
+                    - net_margin: Base net profit margin
+                    - asset_turnover: Base asset turnover
+                    - equity_multiplier: Base equity multiplier
+                    - total_assets: Total assets
+            historical_data: Optional historical financial data
+            model_type: One of "DCF", "COMPS", or "DUPONT"
+            wacc_range_override: Optional custom WACC range (DCF only)
+            terminal_growth_range_override: Optional custom terminal growth range (DCF only)
+            pe_range_override: Optional custom P/E range (COMPS only)
+            ev_ebitda_range_override: Optional custom EV/EBITDA range (COMPS only)
+            margin_range_override: Optional custom margin range (DUPONT only)
+            turnover_range_override: Optional custom turnover range (DUPONT only)
+        """
+        # Route to appropriate model-specific analysis
+        if model_type.upper() == "COMPS":
+            return self._process_comps_sensitivity(
+                assumptions=assumptions,
+                pe_range_override=pe_range_override,
+                ev_ebitda_range_override=ev_ebitda_range_override
+            )
+        elif model_type.upper() == "DUPONT":
+            return self._process_dupont_sensitivity(
+                assumptions=assumptions,
+                margin_range_override=margin_range_override,
+                turnover_range_override=turnover_range_override
+            )
+        else:  # Default to DCF
+            return self._process_dcf_sensitivity(
+                assumptions=assumptions,
+                historical_data=historical_data,
+                wacc_range_override=wacc_range_override,
+                terminal_growth_range_override=terminal_growth_range_override
+            )
+    
+    def _process_dcf_sensitivity(
+        self,
+        assumptions: Dict[str, float],
+        historical_data: Optional[Dict[str, Any]] = None,
         wacc_range_override: Optional[List[float]] = None,
         terminal_growth_range_override: Optional[List[float]] = None
     ) -> Step7Response:
-        """
-        Generate sensitivity matrices by recalculating DCF for each scenario.
-        
-        Args:
-            assumptions: Complete DCF assumptions from Step 5 including:
-                - wacc: Base WACC
-                - terminal_growth: Base terminal growth rate
-                - revenue_growth: Revenue growth rate
-                - latest_revenue: Latest revenue (optional)
-                - latest_ebitda: Latest EBITDA (optional)
-                - tax_rate: Tax rate (default 0.21)
-                - capex_pct: CapEx as % of revenue (default 0.03)
-            historical_data: Optional historical financial data
-            wacc_range_override: Optional custom WACC range
-            terminal_growth_range_override: Optional custom terminal growth range
-        """
+        """Process DCF sensitivity analysis (WACC vs Terminal Growth)."""
         # Extract base assumptions
         base_wacc = assumptions.get("wacc", 0.10)
         base_terminal_growth = assumptions.get("terminal_growth", 0.025)
@@ -145,7 +207,172 @@ class Step7SensitivityProcessor:
                 )
             ],
             tornado_data=tornado,
-            key_insights=insights
+            key_insights=insights,
+            model_type="DCF"
+        )
+    
+    def _process_comps_sensitivity(
+        self,
+        assumptions: Dict[str, float],
+        pe_range_override: Optional[List[float]] = None,
+        ev_ebitda_range_override: Optional[List[float]] = None
+    ) -> Step7Response:
+        """Process COMPS sensitivity analysis (P/E vs EV/EBITDA)."""
+        # Extract base assumptions
+        base_pe = assumptions.get("base_pe", 15.0)
+        base_ev_ebitda = assumptions.get("base_ev_ebitda", 10.0)
+        target_earnings = assumptions.get("target_earnings", 1000)  # $1B
+        target_ebitda = assumptions.get("target_ebitda", 2000)      # $2B
+        
+        # Calculate base case implied valuation
+        base_implied_value = target_earnings * base_pe
+        
+        # Generate P/E range
+        if pe_range_override:
+            pe_range = pe_range_override
+        else:
+            pe_range = [
+                round(base_pe - 4, 2),
+                round(base_pe - 2, 2),
+                round(base_pe, 2),
+                round(base_pe + 2, 2),
+                round(base_pe + 4, 2)
+            ]
+        
+        # Generate EV/EBITDA range
+        if ev_ebitda_range_override:
+            ev_ebitda_range = ev_ebitda_range_override
+        else:
+            ev_ebitda_range = [
+                round(base_ev_ebitda - 3, 2),
+                round(base_ev_ebitda - 1.5, 2),
+                round(base_ev_ebitda, 2),
+                round(base_ev_ebitda + 1.5, 2),
+                round(base_ev_ebitda + 3, 2)
+            ]
+        
+        # Calculate sensitivity matrix
+        matrix = []
+        for pe in pe_range:
+            row = []
+            for ev_eb in ev_ebitda_range:
+                # Implied valuation using P/E multiple
+                implied_by_pe = target_earnings * pe
+                # Implied valuation using EV/EBITDA (simplified, assuming net debt = 0)
+                implied_by_ev_ebitda = target_ebitda * ev_eb
+                # Average of both methods
+                avg_value = (implied_by_pe + implied_by_ev_ebitda) / 2
+                row.append(round(avg_value, 2))
+            matrix.append(row)
+        
+        # Generate Tornado data
+        tornado = [
+            {"variable": "P/E Multiple", "low_value": round(target_earnings * pe_range[0], 2), "high_value": round(target_earnings * pe_range[-1], 2)},
+            {"variable": "EV/EBITDA Multiple", "low_value": round(target_ebitda * ev_ebitda_range[0], 2), "high_value": round(target_ebitda * ev_ebitda_range[-1], 2)}
+        ]
+        
+        # Generate insights
+        insights = [
+            f"Base case implied valuation: ${base_implied_value:,.2f}M using P/E of {base_pe:.1f}x",
+            f"P/E sensitivity: Valuation ranges from ${target_earnings * pe_range[0]:,.2f}M to ${target_earnings * pe_range[-1]:,.2f}M",
+            f"EV/EBITDA sensitivity: Valuation ranges from ${target_ebitda * ev_ebitda_range[0]:,.2f}M to ${target_ebitda * ev_ebitda_range[-1]:,.2f}M",
+            "COMPS valuation is highly sensitive to peer group selection and market conditions"
+        ]
+        
+        return Step7Response(
+            base_case_value=round(base_implied_value, 2),
+            sensitivity_matrices=[
+                SensitivityMatrix(
+                    variable_x="P/E Multiple",
+                    variable_y="EV/EBITDA Multiple",
+                    x_values=pe_range,
+                    y_values=ev_ebitda_range,
+                    results=matrix
+                )
+            ],
+            tornado_data=tornado,
+            key_insights=insights,
+            model_type="COMPS"
+        )
+    
+    def _process_dupont_sensitivity(
+        self,
+        assumptions: Dict[str, float],
+        margin_range_override: Optional[List[float]] = None,
+        turnover_range_override: Optional[List[float]] = None
+    ) -> Step7Response:
+        """Process DUPONT sensitivity analysis (Net Margin vs Asset Turnover)."""
+        # Extract base assumptions
+        base_margin = assumptions.get("net_margin", 0.15)  # 15%
+        base_turnover = assumptions.get("asset_turnover", 1.2)
+        base_multiplier = assumptions.get("equity_multiplier", 2.0)
+        total_assets = assumptions.get("total_assets", 10000)  # $10B
+        
+        # Calculate base case ROE
+        base_roe = base_margin * base_turnover * base_multiplier
+        
+        # Generate Net Margin range
+        if margin_range_override:
+            margin_range = margin_range_override
+        else:
+            margin_range = [
+                round(base_margin - 0.06, 4),
+                round(base_margin - 0.03, 4),
+                round(base_margin, 4),
+                round(base_margin + 0.03, 4),
+                round(base_margin + 0.06, 4)
+            ]
+        
+        # Generate Asset Turnover range
+        if turnover_range_override:
+            turnover_range = turnover_range_override
+        else:
+            turnover_range = [
+                round(base_turnover - 0.4, 2),
+                round(base_turnover - 0.2, 2),
+                round(base_turnover, 2),
+                round(base_turnover + 0.2, 2),
+                round(base_turnover + 0.4, 2)
+            ]
+        
+        # Calculate sensitivity matrix (ROE for each combination)
+        matrix = []
+        for margin in margin_range:
+            row = []
+            for turnover in turnover_range:
+                roe = margin * turnover * base_multiplier
+                row.append(round(roe, 4))
+            matrix.append(row)
+        
+        # Generate Tornado data
+        tornado = [
+            {"variable": "Net Profit Margin", "low_value": round(margin_range[0] * base_turnover * base_multiplier, 4), "high_value": round(margin_range[-1] * base_turnover * base_multiplier, 4)},
+            {"variable": "Asset Turnover", "low_value": round(base_margin * turnover_range[0] * base_multiplier, 4), "high_value": round(base_margin * turnover_range[-1] * base_multiplier, 4)},
+            {"variable": "Equity Multiplier", "low_value": round(base_margin * base_turnover * (base_multiplier - 0.5), 4), "high_value": round(base_margin * base_turnover * (base_multiplier + 0.5), 4)}
+        ]
+        
+        # Generate insights
+        insights = [
+            f"Base case ROE: {base_roe:.2%} driven by {base_margin:.2%} margin, {base_turnover:.2f} turnover, {base_multiplier:.2f} multiplier",
+            f"Margin sensitivity: ROE ranges from {margin_range[0] * base_turnover * base_multiplier:.2%} to {margin_range[-1] * base_turnover * base_multiplier:.2%}",
+            f"Turnover sensitivity: ROE ranges from {base_margin * turnover_range[0] * base_multiplier:.2%} to {base_margin * turnover_range[-1] * base_multiplier:.2%}",
+            "DuPont analysis reveals the primary drivers of ROE changes"
+        ]
+        
+        return Step7Response(
+            base_case_value=round(base_roe, 4),
+            sensitivity_matrices=[
+                SensitivityMatrix(
+                    variable_x="Net Profit Margin",
+                    variable_y="Asset Turnover",
+                    x_values=margin_range,
+                    y_values=turnover_range,
+                    results=matrix
+                )
+            ],
+            tornado_data=tornado,
+            key_insights=insights,
+            model_type="DUPONT"
         )
     
     def _calculate_fair_value(
