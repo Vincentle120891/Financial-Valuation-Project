@@ -21,15 +21,15 @@ from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
 import logging
 
-from app.models.vietnamese_inputs import (
+from app.models.vietnamese import (
     VietnameseDCFRequest,
     VietnameseCompsSelectionRequest,
     VietnameseCompsValuationRequest,
     VietnameseDuPontRequest,
     VNFinancialData
 )
-from app.services.vietnamese_input_manager import get_vietnamese_input_manager
-from app.engines.vietnamese_dcf_engine import get_vietnamese_dcf_engine
+from app.services.vietnamese import get_vietnamese_input_manager
+from app.engines.vietnamese import get_vietnamese_dcf_engine
 
 logger = logging.getLogger(__name__)
 
