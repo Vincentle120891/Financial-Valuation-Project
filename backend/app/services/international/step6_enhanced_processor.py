@@ -22,7 +22,7 @@ from app.models.international.international_inputs import (
     DuPontComponentsDisplay, DuPontTrendAnalysisDisplay, Step6DuPontEnhancedResponse
 )
 from app.services.international.yfinance_service import YFinanceService
-from app.services.international.dcf_input_manager import ValuationInputManager
+from app.services.international.dcf_input_manager import DCFInputManager
 from app.engines.international.dcf_engine import DCFEngine
 
 
@@ -37,7 +37,7 @@ class Step6EnhancedProcessor:
 
     def __init__(self):
         self.yfinance_service = YFinanceService()
-        self.input_manager = ValuationInputManager()
+        self.input_manager = DCFInputManager()
         self.dcf_engine = DCFEngine()
 
     # ========================================================================

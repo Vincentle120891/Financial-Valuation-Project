@@ -30,6 +30,18 @@ from app.services.international.metrics_calculator import (
     fetch_and_calculate_all_metrics,
 )
 
+# Step Processors - Complete 10-Step Workflow
+from app.services.international.step1_ticker_processor import Step1TickerProcessor
+from app.services.international.step2_market_data_processor import Step2MarketDataProcessor
+from app.services.international.step3_historical_processor import Step3HistoricalProcessor
+from app.services.international.step4_forecast_processor import Step4ForecastProcessor
+from app.services.international.step5_assumptions_processor import Step5AssumptionsProcessor
+from app.services.international.step6_enhanced_processor import Step6EnhancedProcessor
+from app.services.international.step7_sensitivity_processor import Step7SensitivityProcessor
+from app.services.international.step8_comps_processor import Step8CompsProcessor
+from app.services.international.step9_dupont_processor import Step9DuPontProcessor
+from app.services.international.step10_valuation_processor import Step10ValuationProcessor
+
 __all__ = [
     # Input Manager
     "DCFInputManager",
@@ -49,4 +61,16 @@ __all__ = [
     "MetricsCalculator",
     "calculate_metrics",
     "fetch_and_calculate_all_metrics",
+    
+    # Step Processors - Complete 10-Step Workflow
+    "Step1TickerProcessor",
+    "Step2MarketDataProcessor",
+    "Step3HistoricalProcessor",
+    "Step4ForecastProcessor",
+    "Step5AssumptionsProcessor",
+    "Step6EnhancedProcessor",
+    "Step7SensitivityProcessor",
+    "Step8CompsProcessor",
+    "Step9DuPontProcessor",
+    "Step10ValuationProcessor",
 ]
