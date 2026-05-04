@@ -1,4 +1,3 @@
---- backend/app/api/routes/v1/valuation_routes.py (原始)
 """
 Valuation Routes - Version 1
 
@@ -968,42 +967,6 @@ async def run_valuation(request: CalculationRequest):
         result=results,
         inputs_used=session['confirmed_assumptions']
     )
-
-+++ backend/app/api/routes/v1/valuation_routes.py (修改后)
-"""
-Valuation Routes - Version 1
-
-Handles model selection, data fetching, AI assumptions, and valuation calculation.
-"""
-
-import os
-import logging
-from datetime import date
-from typing import Dict, Any, List
-from fastapi import APIRouter, HTTPException, Request, Body
-from pydantic import BaseModel, Field, validator
-
-from app.core.logging_config import get_logger
-from app.core.exceptions import (
-    SessionNotFoundException,
-    DataFetchException,
-    CalculationException,
-    ValidationException,
-)
-from app.api.schemas import (
-    ModelSelectRequest,
-    AssumptionConfirmRequest,
-    CalculationRequest,
-    SessionFetchRequest,
-    FetchDataResponse,
-    AIAssumptionsResponse,
-    ValuationResultResponse,
-    InputRequirement,
-    PrepareInputsResponse,
-)
-
-logger = get_logger(__name__)
-
 router = APIRouter(tags=["Valuation"])
 
 
@@ -2121,4 +2084,3 @@ async def run_valuation(request: CalculationRequest):
         status="completed",
         result=results,
         inputs_used=session['confirmed_assumptions']
-    )
