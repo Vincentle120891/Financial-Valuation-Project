@@ -20,7 +20,7 @@ import logging
 from typing import Optional, Dict, Any, List, Tuple
 from datetime import date
 
-from app.models.vietnamese_inputs import (
+from app.models.vietnamese.vietnamese_inputs import (
     VietnameseDCFRequest,
     VNDuPontComponents,
     VNSector

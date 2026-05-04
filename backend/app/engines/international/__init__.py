@@ -16,20 +16,20 @@ from app.engines.international.dcf_engine import (
     # Note: calculate_dcf_valuation is a method of DCFEngine class
 )
 
-from app.engines.comps_engine import (
+from app.engines.international.comps_engine import (
     TradingCompsAnalyzer,
     TargetCompanyData,
     PeerCompanyData,
     # Note: calculate_comps_valuation is a method of TradingCompsAnalyzer class
 )
 
-from app.engines.dupont_engine import (
+from app.engines.international.dupont_engine import (
     DuPontAnalyzer,
     DuPontResult,
     # Note: analyze_dupont_roe is a method of DuPontAnalyzer class
 )
 
-from app.engines.ai_engine import (
+from app.engines.international.ai_engine import (
     ai_engine,
     AIFallbackEngine,
     suggest_peer_companies,
