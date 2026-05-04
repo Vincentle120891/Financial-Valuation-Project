@@ -1,54 +1,30 @@
 ```
+# Logs and temp files
+*.log
+*.tmp
+*.swp
+
 # Python
 __pycache__/
-*.py[cod]
-*$py.class
-*.so
+*.pyc
+*.pyo
+*.pyd
 .Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-
-# Virtual environments
+env/
 venv/
-ENV/
-env.bak/
 .venv/
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*.tmp
-
-# Environment
-.env
-.env.local
-*.env.*
-
-# Logs
-*.log
-
-# Coverage
+.ENV
+.python-version
+*.pot
+*.po
+*~
+.pytest_cache/
+.mypy_cache/
 .coverage
 htmlcov/
 .coverage.*
-.cache
 
-# OS
-.DS_Store
-Thumbs.db
+# Files specific to your changes
+verification_output.txt
+verification_results.json
 ```

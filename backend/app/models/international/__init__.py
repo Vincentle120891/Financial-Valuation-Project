@@ -7,7 +7,7 @@ Contains Pydantic models for international markets (IFRS/US GAAP):
 - Balance sheet and income statement models
 """
 
-from app.models.international_inputs import (
+from app.models.international.international_inputs import (
     # DuPont Models
     DuPontRequest,
     DuPontComponents,
