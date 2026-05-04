@@ -1,29 +1,40 @@
-"""Engines module - Valuation calculation engines."""
+"""
+Engines Package - Valuation Calculation Engines
 
-from .dcf_engine import DCFEngine, DCFInputs, ScenarioDrivers, fetch_dcf_inputs, ComparableCompany
-from .comps_engine import TradingCompsAnalyzer, TargetCompanyData, PeerCompanyData
-from .dupont_engine import DuPontAnalyzer, DuPontResult
-from .ai_engine import ai_engine, suggest_peer_companies, AIFallbackEngine
+Unified engines package supporting both:
+- International markets (IFRS/US GAAP)
+- Vietnamese market (TT99 accounting standards)
+
+Structure:
+├── international/ - International market engines
+└── vietnam/       - Vietnamese market engines
+"""
+
+# Re-export from subpackages for backward compatibility
+from app.engines.international import (
+    DCFEngine,
+    TradingCompsAnalyzer,
+    DuPontAnalyzer,
+    ai_engine,
+    AIFallbackEngine,
+)
+
+from app.engines.vietnam import (
+    VietnameseDCFEngine,
+    VNSectorValuationEngine,
+    SectorValuationResult,
+)
 
 __all__ = [
-    # DCF Engine
+    # International Engines
     "DCFEngine",
-    "DCFInputs",
-    "ScenarioDrivers",
-    "fetch_dcf_inputs",
-    "ComparableCompany",
-    
-    # Comps Engine
     "TradingCompsAnalyzer",
-    "TargetCompanyData",
-    "PeerCompanyData",
-    
-    # DuPont Engine
     "DuPontAnalyzer",
-    "DuPontResult",
-    
-    # AI Engine
     "ai_engine",
-    "suggest_peer_companies",
     "AIFallbackEngine",
+    
+    # Vietnamese Engines
+    "VietnameseDCFEngine",
+    "VNSectorValuationEngine",
+    "SectorValuationResult",
 ]

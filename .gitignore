@@ -9,39 +9,20 @@ env/
 venv/
 .venv/
 .ENV
-.ENV.local
-
-# Logs
+.python-version
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
 *.log
-
-# IDE
-.vscode/
-.idea/
+*.tmp
 *.swp
 *.swo
-
-# Build artifacts
-build/
-dist/
-*.egg-info/
-
-# Coverage
-.coverage
-coverage/
-htmlcov/
-
-# Environment files
-.env
-.env.local
-*.env.*
-
-# MyPy
-.mypy_cache/
-
-# PyTest
-.pytest_cache/
-
-# OS
 .DS_Store
 Thumbs.db
 ```

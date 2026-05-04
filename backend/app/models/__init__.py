@@ -1,37 +1,66 @@
 """
-Financial Inputs Models Package
+Financial Models Package
 
-This package contains financial data models for different market standards:
-- Vietnamese market: Thông Tư 99/2025/TT-BTC (TT99) standard
-- International market: IFRS/US GAAP standard
+Unified package for financial models supporting both:
+- International markets (IFRS/US GAAP)
+- Vietnamese market (TT99 accounting standards)
+
+Structure:
+├── international/ - International market models
+└── vietnamese/  - Vietnamese market models (TT99)
 """
 
-from app.models.vietnamese_inputs_tt99 import (
-    VNBalanceSheet_B01_DN,
-    VNIncomeStatement_B02_DN,
-    VNFinancialInputs_TT99,
-    TT99_Calculations,
-)
-
-from app.models.international_inputs import (
+# Re-export from subpackages for backward compatibility
+from app.models.international import (
+    DuPontRequest,
+    DuPontComponents,
+    CompsSelectionRequest,
+    CompsValuationRequest,
+    PeerMultiple,
     InternationalBalanceSheet,
     InternationalIncomeStatement,
     InternationalCashFlowStatement,
     InternationalFinancialInputs,
-    VN_to_International_Mapping,
+)
+
+from app.models.vietnamese import (
+    VNExchange,
+    VNSector,
+    VietnameseDCFRequest,
+    VNPeerMultiple,
+    VietnameseCompsSelectionRequest,
+    VietnameseCompsValuationRequest,
+    VNDuPontComponents,
+    VietnameseDuPontRequest,
+    VNFinancialData,
+    VNBalanceSheet_B01_DN,
+    VNIncomeStatement_B02_DN,
+    VNFinancialInputs_TT99,
 )
 
 __all__ = [
-    # Vietnamese TT99 models
-    "VNBalanceSheet_B01_DN",
-    "VNIncomeStatement_B02_DN",
-    "VNFinancialInputs_TT99",
-    "TT99_Calculations",
-    
-    # International models
+    # International
+    "DuPontRequest",
+    "DuPontComponents",
+    "CompsSelectionRequest",
+    "CompsValuationRequest",
+    "PeerMultiple",
     "InternationalBalanceSheet",
     "InternationalIncomeStatement",
     "InternationalCashFlowStatement",
     "InternationalFinancialInputs",
-    "VN_to_International_Mapping",
+    
+    # Vietnamese
+    "VNExchange",
+    "VNSector",
+    "VietnameseDCFRequest",
+    "VNPeerMultiple",
+    "VietnameseCompsSelectionRequest",
+    "VietnameseCompsValuationRequest",
+    "VNDuPontComponents",
+    "VietnameseDuPontRequest",
+    "VNFinancialData",
+    "VNBalanceSheet_B01_DN",
+    "VNIncomeStatement_B02_DN",
+    "VNFinancialInputs_TT99",
 ]
