@@ -154,6 +154,120 @@ class DCFValuationRequest(BaseModel):
 # COMPARABLE COMPANIES (COMPS) MODEL INPUTS
 # =============================================================================
 
+class PeerMultiple(BaseModel):
+    """
+    Standardized schema for individual peer data (EV/EBITDA, P/E, etc.).
+    Used for consistent validation across comps workflows.
+    """
+    
+    ticker: str = Field(..., description="Peer ticker symbol")
+    company_name: Optional[str] = Field(None, description="Peer company name")
+    
+    # Valuation Multiples
+    ev_ebitda_ltm: Optional[float] = Field(None, description="Enterprise Value / EBITDA (LTM)")
+    ev_ebitda_fy1: Optional[float] = Field(None, description="Enterprise Value / EBITDA (FY1 Estimate)")
+    ev_ebitda_fy2: Optional[float] = Field(None, description="Enterprise Value / EBITDA (FY2 Estimate)")
+    
+    pe_ratio_ltm: Optional[float] = Field(None, description="Price / Earnings (LTM)")
+    pe_ratio_fy1: Optional[float] = Field(None, description="Price / Earnings (FY1 Estimate)")
+    pe_ratio_fy2: Optional[float] = Field(None, description="Price / Earnings (FY2 Estimate)")
+    
+    ev_revenue_ltm: Optional[float] = Field(None, description="Enterprise Value / Revenue (LTM)")
+    pb_ratio: Optional[float] = Field(None, description="Price / Book Value")
+    
+    # Classification
+    sector: Optional[str] = Field(None, description="Sector")
+    industry: Optional[str] = Field(None, description="Industry")
+    selection_reason: Optional[str] = Field(None, description="Reason for peer selection")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "ticker": "MSFT",
+                "company_name": "Microsoft Corporation",
+                "ev_ebitda_ltm": 18.5,
+                "pe_ratio_ltm": 28.3,
+                "sector": "Technology",
+                "industry": "Software"
+            }
+        }
+
+
+class CompsSelectionRequest(BaseModel):
+    """
+    Handles target_ticker, peer_list, sector, and industry filters.
+    Separates peer selection criteria from valuation logic.
+    """
+    
+    target_ticker: str = Field(..., description="Target company ticker symbol")
+    peer_list: Optional[List[str]] = Field(None, description="Explicit list of peer tickers")
+    sector: Optional[str] = Field(None, description="Sector filter for auto-peer selection")
+    industry: Optional[str] = Field(None, description="Industry filter for auto-peer selection")
+    max_peers: Optional[int] = Field(10, description="Maximum number of peers to select", ge=1, le=50)
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "target_ticker": "AAPL",
+                "peer_list": ["MSFT", "GOOGL", "META"],
+                "sector": "Technology",
+                "industry": "Consumer Electronics",
+                "max_peers": 10
+            }
+        }
+
+
+class CompsValuationRequest(BaseModel):
+    """
+    Includes target financials, peer multiples, and outlier filtering parameters (IQR settings).
+    Complete request structure for comps valuation engine.
+    """
+    
+    session_id: str = Field(..., description="Session identifier")
+    
+    # Target company data
+    target_ticker: str = Field(..., description="Target company ticker")
+    target_company_name: Optional[str] = Field(None, description="Target company name")
+    target_market_cap: Optional[float] = Field(None, description="Target market cap")
+    target_enterprise_value: Optional[float] = Field(None, description="Target enterprise value")
+    
+    # Target financials (LTM)
+    target_revenue_ltm: Optional[float] = Field(None, description="Target revenue LTM")
+    target_ebitda_ltm: Optional[float] = Field(None, description="Target EBITDA LTM")
+    target_net_income_ltm: Optional[float] = Field(None, description="Target net income LTM")
+    target_eps_ltm: Optional[float] = Field(None, description="Target EPS LTM")
+    
+    # Peer multiples
+    peer_multiples: List[PeerMultiple] = Field(default_factory=list, description="List of peer company multiples")
+    
+    # Outlier filtering parameters
+    apply_outlier_filtering: Optional[bool] = Field(True, description="Apply IQR-based outlier filtering")
+    iqr_multiplier: Optional[float] = Field(1.5, description="IQR multiplier for outlier detection (default 1.5)")
+    
+    # Analysis options
+    include_football_field: Optional[bool] = Field(True, description="Include football field chart data")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "session_id": "abc123",
+                "target_ticker": "AAPL",
+                "target_company_name": "Apple Inc.",
+                "target_market_cap": 2800000000000,
+                "target_ebitda_ltm": 120000000000,
+                "peer_multiples": [
+                    {
+                        "ticker": "MSFT",
+                        "ev_ebitda_ltm": 18.5,
+                        "pe_ratio_ltm": 28.3
+                    }
+                ],
+                "apply_outlier_filtering": True,
+                "iqr_multiplier": 1.5
+            }
+        }
+
+
 class CompsTargetCompany(BaseModel):
     """
     Target company data for comparable companies analysis
@@ -224,6 +338,63 @@ class CompsAnalysisRequest(BaseModel):
 # =============================================================================
 # DU PONT ANALYSIS INPUTS
 # =============================================================================
+
+class DuPontComponents(BaseModel):
+    """
+    Strict schema for DuPont analysis component breakdowns.
+    Separates validation from calculation logic.
+    """
+    
+    # Net Profit Margin breakdown
+    net_profit_margin: Optional[float] = Field(None, description="Net Profit Margin (Net Income / Revenue)")
+    net_income: Optional[float] = Field(None, description="Net Income")
+    revenue: Optional[float] = Field(None, description="Revenue")
+    
+    # Asset Turnover breakdown
+    asset_turnover: Optional[float] = Field(None, description="Asset Turnover (Revenue / Total Assets)")
+    total_assets: Optional[float] = Field(None, description="Total Assets")
+    
+    # Equity Multiplier breakdown
+    equity_multiplier: Optional[float] = Field(None, description="Equity Multiplier (Total Assets / Shareholders' Equity)")
+    shareholders_equity: Optional[float] = Field(None, description="Shareholders' Equity")
+    
+    # Calculated ROE
+    roe: Optional[float] = Field(None, description="Return on Equity (calculated as NPM × AT × EM)")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "net_profit_margin": 0.25,
+                "asset_turnover": 1.2,
+                "equity_multiplier": 2.0,
+                "roe": 0.60
+            }
+        }
+
+
+class DuPontRequest(BaseModel):
+    """
+    Captures ticker, years, and optional custom_ratios for DuPont analysis.
+    Strict input validation separated from engine logic.
+    """
+    
+    ticker: str = Field(..., description="Stock ticker symbol")
+    years: List[int] = Field(..., description="List of years for analysis (e.g., [2023, 2022, 2021])", min_length=1)
+    custom_ratios: Optional[DuPontComponents] = Field(None, description="Optional custom ratio overrides")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "ticker": "AAPL",
+                "years": [2023, 2022, 2021],
+                "custom_ratios": {
+                    "net_profit_margin": 0.25,
+                    "asset_turnover": 1.2,
+                    "equity_multiplier": 2.0
+                }
+            }
+        }
+
 
 class DuPontCustomInputs(BaseModel):
     """
