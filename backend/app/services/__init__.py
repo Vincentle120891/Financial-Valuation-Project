@@ -12,13 +12,13 @@ Structure:
 
 # Re-export from subpackages for backward compatibility
 from app.services.international import (
-    ValuationInputManager,
+    DCFInputManager,
     YFinanceService,
     InternationalTickerService,
     MetricsCalculator,
 )
 
-from app.services.vietnam import (
+from app.services.vietnamese import (
     VietnameseInputManager,
     VNStockDatabase,
     VNDFinancialParser,
@@ -29,7 +29,7 @@ from app.services.vietnam import (
 
 __all__ = [
     # International
-    "ValuationInputManager",
+    "DCFInputManager",
     "YFinanceService",
     "InternationalTickerService",
     "MetricsCalculator",
