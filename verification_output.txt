@@ -1,0 +1,14 @@
+================================================================================
+EXCEL MODEL ALIGNMENT VERIFICATION
+================================================================================
+
+Reference Files:
+  - /workspace/excel models/DCF_Model_Documentation.txt
+  - /workspace/excel models/Comps_Model_Documentation.txt
+  - /workspace/excel models/dupont.txt
+
+Verifying input models against Excel specifications...
+
+✗ Failed to import models: No module named 'app'
+
+✓ Verification results saved to /workspace/verification_results.json

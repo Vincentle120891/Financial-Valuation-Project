@@ -23,6 +23,7 @@ from app.api.routes.valuation_routes import router as valuation_router
 from app.api.routes.pdf_extraction_routes import router as pdf_extraction_router
 from app.api.routes.vietnamese_reports_routes import router as vietnamese_reports_router
 from app.api.routes.international_routes import router as international_router
+from app.api.routes.vietnamese_routes import router as vietnamese_valuation_router
 
 # Setup structured logging at application startup
 setup_logging(
@@ -214,6 +215,7 @@ app.include_router(valuation_router, prefix="/api/v1")
 app.include_router(pdf_extraction_router, prefix="/api/v1/pdf")
 app.include_router(vietnamese_reports_router, prefix="/api/v1")
 app.include_router(international_router, prefix="/api/v1")
+app.include_router(vietnamese_valuation_router, prefix="/api/v1")
 
 # Legacy routes (for backward compatibility)
 app.include_router(search_router, prefix="/api")

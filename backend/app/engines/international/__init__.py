@@ -8,7 +8,7 @@ Calculation engines for international markets (IFRS/US GAAP):
 - AI-powered suggestions and fallbacks
 """
 
-from app.engines.dcf_engine import (
+from app.engines.international.dcf_engine import (
     DCFEngine,
     DCFInputs,
     ScenarioDrivers,
