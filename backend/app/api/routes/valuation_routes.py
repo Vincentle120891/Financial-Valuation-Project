@@ -723,12 +723,50 @@ async def prepare_inputs(request: dict = Body(...)):
     
     if selected_model == 'dcf':
         required_inputs.extend([
-            {"category": "Market Structure", "name": "Current Price", "requiresInput": False},
-            {"category": "Market Structure", "name": "Shares Outstanding", "requiresInput": False},
-            {"category": "Market Structure", "name": "Total Debt", "requiresInput": False},
-            {"category": "Forecast Assumptions", "name": "WACC", "requiresInput": True},
-            {"category": "Forecast Assumptions", "name": "Terminal Growth Rate", "requiresInput": True},
-            {"category": "Forecast Assumptions", "name": "Revenue Growth Forecast", "requiresInput": True},
+            # Market Structure (from API)
+            {"category": "Market Structure", "name": "Current Price", "requiresInput": False, "unit": "USD", "description": "Current stock price"},
+            {"category": "Market Structure", "name": "Shares Outstanding", "requiresInput": False, "unit": "thousands", "description": "Number of shares outstanding"},
+            {"category": "Market Structure", "name": "Total Debt", "requiresInput": False, "unit": "USD thousands", "description": "Total debt from balance sheet"},
+            {"category": "Market Structure", "name": "Cash & Equivalents", "requiresInput": False, "unit": "USD thousands", "description": "Cash and cash equivalents"},
+            {"category": "Market Structure", "name": "Net Debt", "requiresInput": False, "unit": "USD thousands", "description": "Total debt minus cash"},
+            
+            # WACC Inputs (requires user/AI input)
+            {"category": "WACC Calculation", "name": "Risk-Free Rate", "requiresInput": True, "defaultValue": 2.4, "unit": "%", "description": "Government bond yield (e.g., 10Y Treasury)"},
+            {"category": "WACC Calculation", "name": "Market Risk Premium", "requiresInput": True, "defaultValue": 4.7, "unit": "%", "description": "Expected excess return of market over risk-free rate"},
+            {"category": "WACC Calculation", "name": "Country Risk Premium", "requiresInput": True, "defaultValue": 3.6, "unit": "%", "description": "Additional premium for country-specific risk"},
+            {"category": "WACC Calculation", "name": "Pre-Tax Cost of Debt", "requiresInput": True, "defaultValue": 5.2, "unit": "%", "description": "Interest rate on company debt before tax"},
+            {"category": "WACC Calculation", "name": "Target Debt Weight", "requiresInput": True, "defaultValue": 15.0, "unit": "%", "description": "Target proportion of debt in capital structure"},
+            {"category": "WACC Calculation", "name": "Target Equity Weight", "requiresInput": True, "defaultValue": 85.0, "unit": "%", "description": "Target proportion of equity in capital structure"},
+            {"category": "WACC Calculation", "name": "Tax Rate", "requiresInput": True, "defaultValue": 30.0, "unit": "%", "description": "Corporate income tax rate"},
+            
+            # Forecast Assumptions (requires user/AI input)
+            {"category": "Forecast Assumptions", "name": "Terminal Growth Rate", "requiresInput": True, "defaultValue": 2.0, "unit": "%", "description": "Perpetual growth rate for terminal value calculation"},
+            {"category": "Forecast Assumptions", "name": "Terminal EBITDA Multiple", "requiresInput": True, "defaultValue": 7.0, "unit": "x", "description": "Exit multiple for terminal value calculation"},
+            {"category": "Forecast Assumptions", "name": "Revenue Volume Growth (FY1-FY5)", "requiresInput": True, "defaultValue": [2.0, 1.0, 1.0, 0.5, 0.5], "unit": "%", "description": "Annual sales volume growth rates for 5 forecast years"},
+            {"category": "Forecast Assumptions", "name": "Revenue Price Growth (FY1-FY5)", "requiresInput": True, "defaultValue": [3.0, 1.0, 1.0, 1.0, 0.5], "unit": "%", "description": "Annual pricing increase rates for 5 forecast years"},
+            {"category": "Forecast Assumptions", "name": "Inflation Rate (FY1-FY5)", "requiresInput": True, "defaultValue": [3.5, 3.0, 3.0, 2.5, 2.5], "unit": "%", "description": "Projected cost inflation rates for COGS and OpEx"},
+            {"category": "Forecast Assumptions", "name": "Capital Expenditure (FY1-FY5)", "requiresInput": True, "defaultValue": [4550, 4700, 4850, 5000, 5125], "unit": "USD thousands", "description": "Planned capital expenditures for each forecast year"},
+            {"category": "Forecast Assumptions", "name": "Accounts Receivable Days", "requiresInput": True, "defaultValue": 45.0, "unit": "days", "description": "Average collection period for receivables"},
+            {"category": "Forecast Assumptions", "name": "Inventory Days", "requiresInput": True, "defaultValue": 25.0, "unit": "days", "description": "Average days inventory is held"},
+            {"category": "Forecast Assumptions", "name": "Accounts Payable Days", "requiresInput": True, "defaultValue": 40.0, "unit": "days", "description": "Average payment period for payables"},
+            
+            # Depreciation Parameters
+            {"category": "Depreciation Parameters", "name": "Useful Life - Existing Assets", "requiresInput": True, "defaultValue": 16.0, "unit": "years", "description": "Remaining useful life of existing PP&E"},
+            {"category": "Depreciation Parameters", "name": "Useful Life - New Assets", "requiresInput": True, "defaultValue": 20.0, "unit": "years", "description": "Useful life of new capital assets"},
+            {"category": "Depreciation Parameters", "name": "First Year Tax Depreciation Rate", "requiresInput": True, "defaultValue": 50.0, "unit": "%", "description": "Half-year convention rate for first year tax depreciation"},
+            {"category": "Depreciation Parameters", "name": "Blended Tax Depreciation Rate", "requiresInput": True, "defaultValue": 15.0, "unit": "%", "description": "Declining balance depreciation rate for tax purposes"},
+            {"category": "Depreciation Parameters", "name": "First Year Accounting Depreciation Rate", "requiresInput": True, "defaultValue": 50.0, "unit": "%", "description": "Half-year convention for accounting depreciation"},
+            
+            # Opening Balance Sheet
+            {"category": "Opening Balance Sheet", "name": "PP&E Gross Book Value", "requiresInput": False, "unit": "USD thousands", "description": "Gross book value of property, plant & equipment"},
+            {"category": "Opening Balance Sheet", "name": "Tax Basis of PP&E", "requiresInput": False, "unit": "USD thousands", "description": "Tax basis of PP&E for depreciation calculations"},
+            {"category": "Opening Balance Sheet", "name": "Tax Losses Carried Forward", "requiresInput": False, "unit": "USD thousands", "description": "Net operating losses available for carryforward"},
+            {"category": "Opening Balance Sheet", "name": "Projected Interest Expense", "requiresInput": True, "defaultValue": 2520.0, "unit": "USD thousands", "description": "Annual interest expense on debt"},
+            
+            # Dates
+            {"category": "Valuation Dates", "name": "Valuation Date", "requiresInput": False, "unit": "date", "description": "Date of valuation"},
+            {"category": "Valuation Dates", "name": "First Cash Flow Date", "requiresInput": False, "unit": "date", "description": "Expected date of first cash flow"},
+            {"category": "Valuation Dates", "name": "First Fiscal Year End", "requiresInput": False, "unit": "date", "description": "End date of first forecast fiscal year"},
         ])
     elif selected_model in ['comparable', 'comps']:
         required_inputs.extend([

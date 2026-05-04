@@ -694,31 +694,214 @@ async def prepare_inputs(request: dict = Body(...)):
         ])
         
     elif selected_model in ['comparable', 'comps']:
+        # Market Data (auto-fetched from yFinance)
         required_inputs.extend([
-            {"category": "Market Data", "name": "Current Price", "requiresInput": False},
+            {"category": "Market Data", "name": "Current Stock Price", "requiresInput": False},
+            {"category": "Market Data", "name": "Shares Outstanding", "requiresInput": False},
             {"category": "Market Data", "name": "Market Capitalization", "requiresInput": False},
+            {"category": "Market Data", "name": "Total Debt", "requiresInput": False},
+            {"category": "Market Data", "name": "Cash & Equivalents", "requiresInput": False},
             {"category": "Market Data", "name": "Enterprise Value", "requiresInput": False},
-            {"category": "Market Data", "name": "EBITDA (TTM)", "requiresInput": False},
-            {"category": "Market Data", "name": "Net Income (TTM)", "requiresInput": False},
-            {"category": "Peer Selection", "name": "Peer Group Tickers", "requiresInput": True},
-            {"category": "Peer Selection", "name": "Selected Multiples (EV/EBITDA, P/E, EV/Sales)", "requiresInput": True},
-            {"category": "Peer Selection", "name": "Premium/Discount Justification", "requiresInput": True},
+        ])
+        
+        # Historical Financials (auto-fetched from yFinance)
+        required_inputs.extend([
+            {"category": "Historical Financials", "name": "Revenue (LTM)", "requiresInput": False},
+            {"category": "Historical Financials", "name": "EBITDA (LTM)", "requiresInput": False},
+            {"category": "Historical Financials", "name": "EBIT / Operating Income (LTM)", "requiresInput": False},
+            {"category": "Historical Financials", "name": "Net Income (LTM)", "requiresInput": False},
+            {"category": "Historical Financials", "name": "EPS (LTM)", "requiresInput": False},
+            {"category": "Historical Financials", "name": "Free Cash Flow (LTM)", "requiresInput": False},
+            {"category": "Historical Financials", "name": "Book Equity", "requiresInput": False},
+        ])
+        
+        # Forward Estimates (user input or analyst consensus)
+        required_inputs.extend([
+            {"category": "Forward Estimates", "name": "EBITDA FY2023 Estimate", "requiresInput": True},
+            {"category": "Forward Estimates", "name": "EBITDA FY2024 Estimate", "requiresInput": True},
+            {"category": "Forward Estimates", "name": "EPS FY2023 Estimate", "requiresInput": True},
+            {"category": "Forward Estimates", "name": "EPS FY2024 Estimate", "requiresInput": True},
+        ])
+        
+        # Peer Selection (user input required)
+        required_inputs.extend([
+            {"category": "Peer Selection", "name": "Peer Group Tickers (5-10 companies)", "requiresInput": True},
+            {"category": "Peer Selection", "name": "Peer Selection Rationale", "requiresInput": True},
+            {"category": "Peer Selection", "name": "Primary Comparable Company", "requiresInput": True},
+        ])
+        
+        # Multiple Selection & Analysis
+        required_inputs.extend([
+            {"category": "Multiple Analysis", "name": "Select Primary Multiple (EV/EBITDA, P/E, etc.)", "requiresInput": True},
+            {"category": "Multiple Analysis", "name": "EV/EBITDA LTM", "requiresInput": False},
+            {"category": "Multiple Analysis", "name": "EV/EBITDA FY2023", "requiresInput": False},
+            {"category": "Multiple Analysis", "name": "EV/EBITDA FY2024", "requiresInput": False},
+            {"category": "Multiple Analysis", "name": "P/E LTM", "requiresInput": False},
+            {"category": "Multiple Analysis", "name": "P/E FY2023", "requiresInput": False},
+            {"category": "Multiple Analysis", "name": "P/E FY2024", "requiresInput": False},
+            {"category": "Multiple Analysis", "name": "EV/Sales LTM", "requiresInput": False},
+            {"category": "Multiple Analysis", "name": "EV/EBIT LTM", "requiresInput": False},
+            {"category": "Multiple Analysis", "name": "P/B LTM", "requiresInput": False},
+            {"category": "Multiple Analysis", "name": "P/FCF LTM", "requiresInput": False},
+        ])
+        
+        # Statistical Analysis
+        required_inputs.extend([
+            {"category": "Statistical Analysis", "name": "Apply Outlier Filtering (IQR method)", "requiresInput": True},
+            {"category": "Statistical Analysis", "name": "IQR Multiplier (default 1.5)", "requiresInput": True},
+            {"category": "Statistical Analysis", "name": "Calculate Min/Avg/Max Multiples", "requiresInput": False},
+        ])
+        
+        # Implied Valuation
+        required_inputs.extend([
+            {"category": "Implied Valuation", "name": "Implied Share Price (Average Multiple)", "requiresInput": False},
+            {"category": "Implied Valuation", "name": "Implied Share Price (Maximum Multiple)", "requiresInput": False},
+            {"category": "Implied Valuation", "name": "Implied Share Price (Minimum Multiple)", "requiresInput": False},
+            {"category": "Implied Valuation", "name": "Premium/Discount to Current Price", "requiresInput": True},
+        ])
+        
+        # Football Field Chart
+        required_inputs.extend([
+            {"category": "Football Field Chart", "name": "Include DCF Range", "requiresInput": True},
+            {"category": "Football Field Chart", "name": "Include Precedent Transactions Range", "requiresInput": True},
+            {"category": "Football Field Chart", "name": "Include 52-Week High/Low", "requiresInput": True},
         ])
         
     elif selected_model == 'dupont':
+        # Income Statement (8 years historical - auto-fetched)
         required_inputs.extend([
-            {"category": "Income Statement", "name": "Revenue (TTM)", "requiresInput": False},
-            {"category": "Income Statement", "name": "Net Income (TTM)", "requiresInput": False},
-            {"category": "Income Statement", "name": "EBIT", "requiresInput": False},
+            {"category": "Income Statement", "name": "Revenue (8 years)", "requiresInput": False},
+            {"category": "Income Statement", "name": "COGS (Gross)", "requiresInput": False},
+            {"category": "Income Statement", "name": "Depreciation (in COGS)", "requiresInput": False},
+            {"category": "Income Statement", "name": "SG&A Expenses", "requiresInput": False},
+            {"category": "Income Statement", "name": "Other Operating Expenses", "requiresInput": False},
+            {"category": "Income Statement", "name": "Depreciation & Amortization", "requiresInput": False},
             {"category": "Income Statement", "name": "Interest Expense", "requiresInput": False},
-            {"category": "Balance Sheet", "name": "Total Assets", "requiresInput": False},
-            {"category": "Balance Sheet", "name": "Total Equity", "requiresInput": False},
-            {"category": "Balance Sheet", "name": "Total Liabilities", "requiresInput": False},
-            {"category": "Balance Sheet", "name": "Working Capital", "requiresInput": False},
-            {"category": "Balance Sheet", "name": "Fixed Assets", "requiresInput": False},
-            {"category": "DuPont Analysis", "name": "Net Profit Margin Target", "requiresInput": True},
-            {"category": "DuPont Analysis", "name": "Asset Turnover Target", "requiresInput": True},
-            {"category": "DuPont Analysis", "name": "Equity Multiplier Target", "requiresInput": True},
+            {"category": "Income Statement", "name": "Interest Income", "requiresInput": False},
+            {"category": "Income Statement", "name": "Tax (Current)", "requiresInput": False},
+            {"category": "Income Statement", "name": "Tax (Other)", "requiresInput": False},
+        ])
+        
+        # Balance Sheet (8 years historical - auto-fetched)
+        required_inputs.extend([
+            {"category": "Balance Sheet", "name": "Cash & Equivalents", "requiresInput": False},
+            {"category": "Balance Sheet", "name": "Accounts Receivable", "requiresInput": False},
+            {"category": "Balance Sheet", "name": "Inventories", "requiresInput": False},
+            {"category": "Balance Sheet", "name": "PPE (Component 1)", "requiresInput": False},
+            {"category": "Balance Sheet", "name": "PPE (Component 2)", "requiresInput": False},
+            {"category": "Balance Sheet", "name": "Accounts Payable", "requiresInput": False},
+            {"category": "Balance Sheet", "name": "Revolving Credit", "requiresInput": False},
+            {"category": "Balance Sheet", "name": "Long-term Debt", "requiresInput": False},
+            {"category": "Balance Sheet", "name": "Common Equity", "requiresInput": False},
+            {"category": "Balance Sheet", "name": "Retained Earnings", "requiresInput": False},
+        ])
+        
+        # Cash Flow Statement (8 years historical - auto-fetched)
+        required_inputs.extend([
+            {"category": "Cash Flow", "name": "Capital Expenditures (CapEx)", "requiresInput": False},
+            {"category": "Cash Flow", "name": "Change in Long-term Debt", "requiresInput": False},
+            {"category": "Cash Flow", "name": "Change in Common Equity", "requiresInput": False},
+            {"category": "Cash Flow", "name": "Dividends Paid", "requiresInput": False},
+            {"category": "Cash Flow", "name": "Beginning Cash Balance", "requiresInput": False},
+        ])
+        
+        # Derived Metrics (calculated automatically)
+        required_inputs.extend([
+            {"category": "Derived Metrics", "name": "Net COGS", "requiresInput": False},
+            {"category": "Derived Metrics", "name": "Gross Profit", "requiresInput": False},
+            {"category": "Derived Metrics", "name": "EBITDA", "requiresInput": False},
+            {"category": "Derived Metrics", "name": "EBIT", "requiresInput": False},
+            {"category": "Derived Metrics", "name": "EBT", "requiresInput": False},
+            {"category": "Derived Metrics", "name": "Net Income", "requiresInput": False},
+            {"category": "Derived Metrics", "name": "NOPAT", "requiresInput": False},
+            {"category": "Derived Metrics", "name": "Effective Tax Rate", "requiresInput": False},
+            {"category": "Derived Metrics", "name": "Net Debt", "requiresInput": False},
+            {"category": "Derived Metrics", "name": "Invested Capital", "requiresInput": False},
+            {"category": "Derived Metrics", "name": "Net Assets", "requiresInput": False},
+        ])
+        
+        # DuPont 3-Step Analysis (calculated automatically)
+        required_inputs.extend([
+            {"category": "DuPont 3-Step", "name": "Net Profit Margin", "requiresInput": False},
+            {"category": "DuPont 3-Step", "name": "Asset Turnover", "requiresInput": False},
+            {"category": "DuPont 3-Step", "name": "Equity Multiplier", "requiresInput": False},
+            {"category": "DuPont 3-Step", "name": "ROE (3-Step)", "requiresInput": False},
+            {"category": "DuPont 3-Step", "name": "3-Step Check (Net Margin × Asset Turnover × Equity Multiplier)", "requiresInput": False},
+        ])
+        
+        # DuPont 5-Step Analysis (calculated automatically)
+        required_inputs.extend([
+            {"category": "DuPont 5-Step", "name": "Tax Burden Ratio", "requiresInput": False},
+            {"category": "DuPont 5-Step", "name": "Interest Burden Ratio", "requiresInput": False},
+            {"category": "DuPont 5-Step", "name": "EBIT Margin", "requiresInput": False},
+            {"category": "DuPont 5-Step", "name": "Asset Turnover", "requiresInput": False},
+            {"category": "DuPont 5-Step", "name": "Equity Multiplier", "requiresInput": False},
+            {"category": "DuPont 5-Step", "name": "ROE (5-Step)", "requiresInput": False},
+            {"category": "DuPont 5-Step", "name": "5-Step Check", "requiresInput": False},
+        ])
+        
+        # Profitability Ratios
+        required_inputs.extend([
+            {"category": "Profitability Ratios", "name": "ROE (Return on Equity)", "requiresInput": False},
+            {"category": "Profitability Ratios", "name": "ROA (Return on Assets)", "requiresInput": False},
+            {"category": "Profitability Ratios", "name": "RONA (Return on Net Assets)", "requiresInput": False},
+            {"category": "Profitability Ratios", "name": "ROIC (Return on Invested Capital)", "requiresInput": False},
+            {"category": "Profitability Ratios", "name": "Gross Margin", "requiresInput": False},
+            {"category": "Profitability Ratios", "name": "EBITDA Margin", "requiresInput": False},
+            {"category": "Profitability Ratios", "name": "Net Profit Margin Target", "requiresInput": True},
+        ])
+        
+        # Asset Utilization Ratios
+        required_inputs.extend([
+            {"category": "Asset Utilization", "name": "Asset Turnover", "requiresInput": False},
+            {"category": "Asset Utilization", "name": "PPE Turnover", "requiresInput": False},
+            {"category": "Asset Utilization", "name": "Cash Turnover", "requiresInput": False},
+            {"category": "Asset Utilization", "name": "Cash Days", "requiresInput": False},
+            {"category": "Asset Utilization", "name": "AR Turnover", "requiresInput": False},
+            {"category": "Asset Utilization", "name": "Days Sales Outstanding (DSO)", "requiresInput": False},
+            {"category": "Asset Utilization", "name": "Inventory Turnover", "requiresInput": False},
+            {"category": "Asset Utilization", "name": "Days Inventory Outstanding (DIO)", "requiresInput": False},
+            {"category": "Asset Utilization", "name": "AP Turnover", "requiresInput": False},
+            {"category": "Asset Utilization", "name": "Days Payable Outstanding (DPO)", "requiresInput": False},
+            {"category": "Asset Utilization", "name": "Cash Conversion Cycle", "requiresInput": False},
+            {"category": "Asset Utilization", "name": "Asset Turnover Target", "requiresInput": True},
+        ])
+        
+        # Leverage Ratios
+        required_inputs.extend([
+            {"category": "Leverage Ratios", "name": "Total Assets to Equity", "requiresInput": False},
+            {"category": "Leverage Ratios", "name": "Total Liabilities to Equity", "requiresInput": False},
+            {"category": "Leverage Ratios", "name": "Debt to Equity", "requiresInput": False},
+            {"category": "Leverage Ratios", "name": "Debt to EBITDA", "requiresInput": False},
+            {"category": "Leverage Ratios", "name": "Net Debt to EBITDA", "requiresInput": False},
+            {"category": "Leverage Ratios", "name": "Interest Coverage Ratio", "requiresInput": False},
+            {"category": "Leverage Ratios", "name": "Equity Multiplier Target", "requiresInput": True},
+        ])
+        
+        # Liquidity Ratios
+        required_inputs.extend([
+            {"category": "Liquidity Ratios", "name": "Current Ratio", "requiresInput": False},
+            {"category": "Liquidity Ratios", "name": "Quick Ratio", "requiresInput": False},
+        ])
+        
+        # Growth Trends
+        required_inputs.extend([
+            {"category": "Growth Trends", "name": "Revenue Growth Rate", "requiresInput": False},
+            {"category": "Growth Trends", "name": "EBITDA Growth Rate", "requiresInput": False},
+            {"category": "Growth Trends", "name": "EBIT Growth Rate", "requiresInput": False},
+            {"category": "Growth Trends", "name": "Net Income Growth Rate", "requiresInput": False},
+            {"category": "Growth Trends", "name": "Total Asset Growth Rate", "requiresInput": False},
+            {"category": "Growth Trends", "name": "Degree of Operating Leverage (DOL)", "requiresInput": False},
+            {"category": "Growth Trends", "name": "Degree of Financial Leverage (DFL)", "requiresInput": False},
+            {"category": "Growth Trends", "name": "Degree of Total Leverage (DTL)", "requiresInput": False},
+        ])
+        
+        # Custom Inputs for Scenario Analysis
+        required_inputs.extend([
+            {"category": "Scenario Analysis", "name": "Target ROE Improvement", "requiresInput": True},
+            {"category": "Scenario Analysis", "name": "Margin Improvement Initiatives", "requiresInput": True},
+            {"category": "Scenario Analysis", "name": "Asset Efficiency Targets", "requiresInput": True},
+            {"category": "Scenario Analysis", "name": "Leverage Optimization Strategy", "requiresInput": True},
         ])
     
     logger.info(f"Prepared {len(required_inputs)} input requirements for model='{selected_model}'")

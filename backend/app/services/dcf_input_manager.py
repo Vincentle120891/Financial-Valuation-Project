@@ -184,21 +184,26 @@ class DCFInputManager:
         """Build ScenarioDrivers from AI assumptions."""
         drivers = ScenarioDrivers()
         
-        # Revenue growth forecast (convert to volume/price split)
-        revenue_forecast = self.ai_assumptions.get("revenue_growth_forecast", [])
-        if revenue_forecast:
-            # Split total growth into volume and price components (assume 60/40 split)
+        # Revenue volume growth forecast (directly from AI, not split)
+        volume_growth_forecast = self.ai_assumptions.get("revenue_volume_growth", [])
+        if volume_growth_forecast:
             volume_growth = []
-            price_growth = []
-            for item in revenue_forecast[:5]:
-                total_growth = item.get("value", 0.0) / 100 if isinstance(item, dict) else item / 100
-                volume_growth.append(total_growth * 0.6)
-                price_growth.append(total_growth * 0.4)
-            # Add terminal year
-            volume_growth.append(volume_growth[-1] * 0.5)
-            price_growth.append(price_growth[-1] * 0.5)
-            
+            for item in volume_growth_forecast[:5]:
+                growth_rate = item.get("value", 0.0) / 100 if isinstance(item, dict) else item / 100
+                volume_growth.append(growth_rate)
+            # Add terminal year (half of last year)
+            volume_growth.append(volume_growth[-1] * 0.5 if volume_growth else 0.005)
             drivers.volume_growth = volume_growth
+        
+        # Revenue price growth forecast (directly from AI)
+        price_growth_forecast = self.ai_assumptions.get("revenue_price_growth", [])
+        if price_growth_forecast:
+            price_growth = []
+            for item in price_growth_forecast[:5]:
+                growth_rate = item.get("value", 0.0) / 100 if isinstance(item, dict) else item / 100
+                price_growth.append(growth_rate)
+            # Add terminal year (half of last year)
+            price_growth.append(price_growth[-1] * 0.5 if price_growth else 0.005)
             drivers.price_growth = price_growth
         
         # Terminal growth rate
@@ -215,30 +220,41 @@ class DCFInputManager:
         elif isinstance(mult_item, (int, float)):
             drivers.terminal_ebitda_multiple = mult_item
         
-        # Capex as % of revenue
-        capex_pct = self.ai_assumptions.get("capex_percent_of_revenue", {})
-        if isinstance(capex_pct, dict) and "value" in capex_pct:
-            capex_rate = capex_pct["value"] / 100
-        else:
-            capex_rate = 0.05  # Default 5%
+        # Capital expenditure (absolute values in USD thousands)
+        capex_forecast = self.ai_assumptions.get("capital_expenditure", [])
+        if capex_forecast:
+            capex_values = []
+            for item in capex_forecast[:5]:
+                capex_val = item.get("value", 4500.0) if isinstance(item, dict) else item
+                capex_values.append(float(capex_val))
+            # Add terminal year (slight increase)
+            capex_values.append(capex_values[-1] * 1.03 if capex_values else 4500.0)
+            drivers.capex = capex_values
         
-        # Inflation rate for COGS/OpEx
-        inflation_item = self.ai_assumptions.get("inflation_rate", {})
-        if isinstance(inflation_item, dict) and "value" in inflation_item:
-            inflation_rate = inflation_item["value"] / 100
-        else:
-            inflation_rate = 0.025  # Default 2.5%
-        
-        drivers.inflation_rate = [inflation_rate] * 6
+        # Inflation rate for COGS/OpEx (array of rates per year)
+        inflation_forecast = self.ai_assumptions.get("inflation_rate", [])
+        if inflation_forecast:
+            inflation_rates = []
+            for item in inflation_forecast[:6]:
+                inf_rate = item.get("value", 2.5) / 100 if isinstance(item, dict) else item / 100
+                inflation_rates.append(inf_rate)
+            # Ensure we have 6 periods (5 forecast + terminal)
+            while len(inflation_rates) < 6:
+                inflation_rates.append(inflation_rates[-1] if inflation_rates else 0.025)
+            drivers.inflation_rate = inflation_rates
         
         # Working capital days
-        ar_days = self.ai_assumptions.get("working_capital_days_receivables", {})
-        inv_days = self.ai_assumptions.get("working_capital_days_inventory", {})
-        ap_days = self.ai_assumptions.get("working_capital_days_payables", {})
+        ar_days_item = self.ai_assumptions.get("ar_days", {})
+        inv_days_item = self.ai_assumptions.get("inv_days", {})
+        ap_days_item = self.ai_assumptions.get("ap_days", {})
         
-        drivers.ar_days = [ar_days.get("value", 45) if isinstance(ar_days, dict) else ar_days] * 5
-        drivers.inv_days = [inv_days.get("value", 25) if isinstance(inv_days, dict) else inv_days] * 5
-        drivers.ap_days = [ap_days.get("value", 40) if isinstance(ap_days, dict) else ap_days] * 5
+        ar_days_val = ar_days_item.get("value", 45) if isinstance(ar_days_item, dict) else ar_days_item
+        inv_days_val = inv_days_item.get("value", 25) if isinstance(inv_days_item, dict) else inv_days_item
+        ap_days_val = ap_days_item.get("value", 40) if isinstance(ap_days_item, dict) else ap_days_item
+        
+        drivers.ar_days = [float(ar_days_val)] * 5
+        drivers.inv_days = [float(inv_days_val)] * 5
+        drivers.ap_days = [float(ap_days_val)] * 5
         
         return drivers
     
