@@ -12,6 +12,10 @@ All inputs are tracked with source metadata for auditability.
 
 from typing import Dict, Any, List, Optional, Union
 from datetime import date
+import logging
+
+logger = logging.getLogger(__name__)
+
 from app.models.international_inputs import (
     DCFHistoricalFinancials,
     DCFForecastDrivers,
@@ -499,3 +503,158 @@ def create_dcf_inputs(
             manager.apply_manual_override(key, value)
     
     return manager.build_inputs()
+
+
+# =============================================================================
+# COMPS INPUT BUILDER FUNCTIONS
+# =============================================================================
+
+def build_comps_inputs(
+    target_ticker: str,
+    financial_data: Dict[str, Any],
+    peer_tickers: Optional[List[str]] = None,
+    apply_outlier_filtering: bool = True,
+    iqr_multiplier: float = 1.5
+) -> 'CompsAnalysisRequest':
+    """
+    Build CompsAnalysisRequest from financial data and peer selection.
+    
+    This function mirrors the logic in fetch_api_data() for comps analysis.
+    
+    Args:
+        target_ticker: Target company ticker symbol
+        financial_data: Financial data from yFinance (includes profile, financials, raw_info)
+        peer_tickers: List of peer ticker symbols (auto-generated if None)
+        apply_outlier_filtering: Whether to apply IQR-based outlier filtering
+        iqr_multiplier: IQR multiplier for outlier detection (default 1.5)
+    
+    Returns:
+        CompsAnalysisRequest object ready for TradingCompsAnalyzer
+    """
+    from app.models.international_inputs import CompsTargetCompany, CompsPeerCompany, CompsAnalysisRequest
+    
+    info = financial_data.get('raw_info', {})
+    profile = financial_data.get('profile', {})
+    
+    # Calculate target company metrics
+    market_cap = info.get('marketCap', 1000000000) or 1000000000
+    enterprise_value = market_cap + (info.get('totalDebt', 0) or 0) - (info.get('cash', 0) or 0)
+    
+    financials = financial_data.get('financials', {})
+    revenue_values = list(financials.get('revenue', {}).values())
+    ebitda_values = list(financials.get('ebitda', {}).values())
+    
+    revenue_ltm = revenue_values[0] if revenue_values else 100000000
+    ebitda_ltm = ebitda_values[0] if ebitda_values else revenue_ltm * 0.2
+    
+    shares_outstanding = info.get('sharesOutstanding', 1000000) or 1000000
+    share_price = profile.get('current_price', 100) or 100
+    
+    # Build target company
+    target = CompsTargetCompany(
+        ticker=target_ticker,
+        company_name=profile.get('name', target_ticker),
+        market_cap=market_cap,
+        enterprise_value=enterprise_value,
+        revenue_ltm=revenue_ltm,
+        ebitda_ltm=ebitda_ltm,
+        ebit_ltm=ebitda_ltm * 0.75,
+        net_income_ltm=revenue_ltm * 0.1,
+        free_cash_flow_ltm=ebitda_ltm * 0.7,
+        book_equity=market_cap * 0.4,
+        shares_outstanding=shares_outstanding,
+        share_price=share_price,
+        currency=profile.get('currency', 'USD')
+    )
+    
+    # Generate or use provided peers
+    peers: List[CompsPeerCompany] = []
+    
+    if peer_tickers:
+        # Use provided peer tickers
+        for ticker in peer_tickers[:10]:  # Limit to 10 peers
+            peers.append(CompsPeerCompany(
+                ticker=ticker,
+                company_name=f"{ticker} Corp",
+                sector=info.get('sector', 'Technology'),
+                industry=info.get('industry', 'Software'),
+                selection_reason="User selected"
+            ))
+    else:
+        # Auto-generate peers (similar to fetch_api_data logic)
+        import random
+        random.seed(42)
+        
+        sector = info.get('sector', 'Technology')
+        industry = info.get('industry', 'Software')
+        
+        peer_names = ['Peer A', 'Peer B', 'Peer C', 'Peer D', 'Peer E']
+        peer_tickers_auto = ['PEERA', 'PEERB', 'PEERC', 'PEERD', 'PEERE']
+        
+        for name, ticker_sym in zip(peer_names, peer_tickers_auto):
+            variation = 0.8 + (random.random() * 0.4)
+            peers.append(CompsPeerCompany(
+                ticker=ticker_sym,
+                company_name=f"{name} Corp",
+                market_cap=market_cap * variation,
+                enterprise_value=enterprise_value * variation,
+                ebitda_ltm=ebitda_ltm * variation,
+                ebitda_fy2023=ebitda_ltm * 1.05 * variation,
+                ebitda_fy2024=ebitda_ltm * 1.10 * variation,
+                eps_ltm=(revenue_ltm * 0.1 * variation) / 1000000,
+                eps_fy2023=(revenue_ltm * 0.105 * variation) / 1000000,
+                eps_fy2024=(revenue_ltm * 0.110 * variation) / 1000000,
+                share_price=100 * variation,
+                shares_outstanding=1000000 * variation,
+                industry=industry,
+                sector=sector,
+                selection_reason=f"Same {sector} sector"
+            ))
+    
+    return CompsAnalysisRequest(
+        session_id="",  # Will be set by caller
+        target=target,
+        peers=peers if peers else None,
+        apply_outlier_filtering=apply_outlier_filtering,
+        include_football_field=True
+    )
+
+
+# =============================================================================
+# DU PONT INPUT BUILDER FUNCTIONS
+# =============================================================================
+
+def build_dupont_inputs(
+    ticker: str,
+    financial_data: Dict[str, Any],
+    custom_inputs: Optional['DuPontCustomInputs'] = None
+) -> 'DuPontAnalysisRequest':
+    """
+    Build DuPontAnalysisRequest from financial data.
+    
+    This function prepares inputs for DuPont analysis based on the requirements
+    defined in valuation_routes.py prepare_inputs() endpoint.
+    
+    Args:
+        ticker: Company ticker symbol
+        financial_data: Financial data from yFinance
+        custom_inputs: Optional custom input overrides
+    
+    Returns:
+        DuPontAnalysisRequest object ready for DuPont engine
+    """
+    from app.models.international_inputs import DuPontAnalysisRequest, DuPontCustomInputs
+    
+    # Validate that we have the required financial data
+    financials = financial_data.get('financials', {})
+    
+    # Check for required historical data (8 years preferred)
+    revenue_history = financials.get('revenue', {})
+    if not revenue_history or len(revenue_history) < 3:
+        logger.warning(f"Insufficient historical revenue data for {ticker}: {len(revenue_history)} years")
+    
+    return DuPontAnalysisRequest(
+        session_id="",  # Will be set by caller
+        ticker=ticker,
+        custom_inputs=custom_inputs
+    )
