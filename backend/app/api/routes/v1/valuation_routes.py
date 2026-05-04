@@ -233,7 +233,7 @@ async def generate_ai_assumptions(data: Dict, model: str) -> Dict:
     
     company_data = {
         "ticker": profile.get('ticker', 'UNKNOWN'),
-        "company_name": profile.get('company_name', profile.get('ticker', 'Unknown Company')),
+        "company_name": profile.get('name', profile.get('ticker', 'Unknown Company')),
         "sector": profile.get('sector', 'General'),
         "industry": profile.get('industry', 'General'),
         "financials": {

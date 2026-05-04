@@ -19,7 +19,7 @@ router = APIRouter(tags=["Search & Ticker"])
 
 def search_tickers_yahoo(query: str, market: str) -> List[Dict]:
     """Search tickers by symbol or company name"""
-    import yfinance as yf
+    from yfinance.search import Search
     
     results = []
     
@@ -70,15 +70,31 @@ def search_tickers_yahoo(query: str, market: str) -> List[Dict]:
                     "market": "vietnamese"
                 })
             else:
+                # Use Yahoo Finance Search API for Vietnamese stocks
                 search_term = query if ".VN" in query else f"{query}.VN"
-                ticker = yf.Ticker(search_term)
-                if ticker.info and ticker.info.get('symbol'):
-                    results.append({
-                        "symbol": ticker.info.get('symbol'),
-                        "name": ticker.info.get('longName', ticker.info.get('shortName', 'N/A')),
-                        "exchange": ticker.info.get('exchange', 'HOSE/HNX'),
-                        "market": "vietnamese"
-                    })
+                search_obj = Search(query=search_term, max_results=10)
+                for quote in search_obj.quotes:
+                    if quote.get('symbol') and '.VN' in quote.get('symbol', ''):
+                        results.append({
+                            "symbol": quote.get('symbol'),
+                            "name": quote.get('longName', quote.get('shortname', 'N/A')),
+                            "exchange": quote.get('exchDisp', 'HOSE/HNX'),
+                            "market": "vietnamese"
+                        })
+                        break  # Only take the first Vietnamese match
+                
+                # If no results with .VN suffix, try without it
+                if not results:
+                    search_obj = Search(query=query, max_results=10)
+                    for quote in search_obj.quotes:
+                        if quote.get('symbol') and '.VN' in quote.get('symbol', ''):
+                            results.append({
+                                "symbol": quote.get('symbol'),
+                                "name": quote.get('longName', quote.get('shortname', 'N/A')),
+                                "exchange": quote.get('exchDisp', 'HOSE/HNX'),
+                                "market": "vietnamese"
+                            })
+                            break
         else:
             if query_upper in international_companies:
                 company = international_companies[query_upper]
@@ -89,14 +105,16 @@ def search_tickers_yahoo(query: str, market: str) -> List[Dict]:
                     "market": "international"
                 })
             else:
-                ticker = yf.Ticker(query)
-                if ticker.info and ticker.info.get('symbol'):
-                    results.append({
-                        "symbol": ticker.info.get('symbol'),
-                        "name": ticker.info.get('longName', ticker.info.get('shortName', 'N/A')),
-                        "exchange": ticker.info.get('exchange', 'US'),
-                        "market": "international"
-                    })
+                # Use Yahoo Finance Search API for international stocks
+                search_obj = Search(query=query, max_results=10)
+                for quote in search_obj.quotes:
+                    if quote.get('symbol') and quote.get('quoteType') == 'EQUITY':
+                        results.append({
+                            "symbol": quote.get('symbol'),
+                            "name": quote.get('longName', quote.get('shortname', 'N/A')),
+                            "exchange": quote.get('exchDisp', 'US'),
+                            "market": "international"
+                        })
         
     except Exception as e:
         logger.error(f"Search error for query='{query}', market='{market}': {str(e)}")
