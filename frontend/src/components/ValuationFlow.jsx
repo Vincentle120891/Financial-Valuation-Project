@@ -48,11 +48,7 @@ const ValuationFlow = () => {
 
   // Enhanced data states
   const [historicalData, setHistoricalData] = useState(null);
-  const [forecastDrivers, setForecastDrivers] = useState({
-    best_case: { sales_volume_growth: [], inflation_rate: [], opex_growth: [], capital_expenditure: [], ar_days: [], inv_days: [], ap_days: [], tax_rate: [] },
-    base_case: { sales_volume_growth: [], inflation_rate: [], opex_growth: [], capital_expenditure: [], ar_days: [], inv_days: [], ap_days: [], tax_rate: [] },
-    worst_case: { sales_volume_growth: [], inflation_rate: [], opex_growth: [], capital_expenditure: [], ar_days: [], inv_days: [], ap_days: [], tax_rate: [] }
-  });
+  const [forecastDrivers, setForecastDrivers] = useState(null);
   const [peerData, setPeerData] = useState([]);
   const [dupontResults, setDupontResults] = useState(null);
   const [compsResults, setCompsResults] = useState(null);
@@ -129,11 +125,7 @@ const ValuationFlow = () => {
     setAiData({});
     setAiError(null); // Clear AI errors
     setHistoricalData(null);
-    setForecastDrivers({
-      best_case: { sales_volume_growth: [], inflation_rate: [], opex_growth: [], capital_expenditure: [], ar_days: [], inv_days: [], ap_days: [], tax_rate: [] },
-      base_case: { sales_volume_growth: [], inflation_rate: [], opex_growth: [], capital_expenditure: [], ar_days: [], inv_days: [], ap_days: [], tax_rate: [] },
-      worst_case: { sales_volume_growth: [], inflation_rate: [], opex_growth: [], capital_expenditure: [], ar_days: [], inv_days: [], ap_days: [], tax_rate: [] }
-    });
+    setForecastDrivers(null);
     setPeerData([]);
     setDupontResults(null);
     setCompsResults(null);
@@ -378,11 +370,7 @@ const ValuationFlow = () => {
     setError(null);
     setMarket('international');
     setHistoricalData(null);
-    setForecastDrivers({
-      best_case: { sales_volume_growth: [], inflation_rate: [], opex_growth: [], capital_expenditure: [], ar_days: [], inv_days: [], ap_days: [], tax_rate: [] },
-      base_case: { sales_volume_growth: [], inflation_rate: [], opex_growth: [], capital_expenditure: [], ar_days: [], inv_days: [], ap_days: [], tax_rate: [] },
-      worst_case: { sales_volume_growth: [], inflation_rate: [], opex_growth: [], capital_expenditure: [], ar_days: [], inv_days: [], ap_days: [], tax_rate: [] }
-    });
+    setForecastDrivers(null);
     setPeerData([]);
     setDupontResults(null);
     setCompsResults(null);
