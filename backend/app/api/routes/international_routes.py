@@ -8,9 +8,9 @@ from typing import Optional, Dict, Any
 from pydantic import BaseModel
 import logging
 
-from app.services.international_ticker_service import InternationalTickerService
-from app.services.vietnamese_ticker_service import VietnameseTickerService
-from app.services.metrics_calculator import MetricsCalculator
+from app.services.international import InternationalTickerService
+from app.services.vietnamese import VietnameseTickerService
+from app.services.international import MetricsCalculator
 
 logger = logging.getLogger(__name__)
 
