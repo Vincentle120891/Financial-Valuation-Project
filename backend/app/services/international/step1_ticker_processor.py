@@ -8,7 +8,6 @@ from typing import Dict, List, Optional, Tuple
 from pydantic import BaseModel
 
 from app.services.international.yfinance_service import YFinanceService
-from app.models.international.international_inputs import TickerSelectionRequest
 
 logger = logging.getLogger(__name__)
 
