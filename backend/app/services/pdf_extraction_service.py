@@ -39,7 +39,7 @@ logger = logging.getLogger(__name__)
 
 # Import TT99 models for validation and mapping
 try:
-    from app.models.vietnamese_financial_model import (
+    from app.models.vietnamese.vietnamese_financial_model import (
         BalanceSheetTT99,
         IncomeStatementTT99,
         CashFlowStatementTT99,

@@ -8,7 +8,7 @@ from typing import Dict, List, Optional, Any
 from datetime import datetime, timedelta
 import pandas as pd
 import logging
-from .international_ticker_service import InternationalTickerService
+from app.services.international.international_ticker_service import InternationalTickerService
 
 logger = logging.getLogger(__name__)
 
