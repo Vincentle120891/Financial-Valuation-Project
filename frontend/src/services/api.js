@@ -63,9 +63,9 @@ export const generateAI = async (sessionId) => {
   }
 };
 
-// Step 10: Confirm Assumptions
+// Step 9: Confirm Assumptions
 export const confirmAssumptions = async (sessionId, assumptions, scenario = 'base_case') => {
-  const response = await api.post('/step-10-confirm-assumptions', { 
+  const response = await api.post('/step-9-confirm-assumptions', { 
     session_id: sessionId, 
     assumptions, 
     scenario 
@@ -73,9 +73,9 @@ export const confirmAssumptions = async (sessionId, assumptions, scenario = 'bas
   return response.data;
 };
 
-// Step 11-12: Run Valuation
+// Step 10: Run Valuation
 export const runValuation = async (sessionId, model, scenario = 'base_case') => {
-  const response = await api.post('/step-11-12-valuate', { 
+  const response = await api.post('/step-10-valuate', { 
     session_id: sessionId, 
     model, 
     scenario 

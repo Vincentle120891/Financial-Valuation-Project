@@ -902,10 +902,10 @@ async def generate_ai_assumptions_endpoint(request: Request):
 # @router.post("/step-9-generate-ai") -> Use /step-7-generate-ai-assumptions
 
 
-@router.post("/step-10-confirm-assumptions")
+@router.post("/step-9-confirm-assumptions")
 async def confirm_assumptions(request: AssumptionConfirmRequest):
     """
-    Step 10: User confirms or modifies AI assumptions.
+    Step 9: User confirms or modifies AI assumptions.
     
     Args:
         request: Assumption confirmation request
@@ -932,10 +932,10 @@ async def confirm_assumptions(request: AssumptionConfirmRequest):
     }
 
 
-@router.post("/step-11-12-valuate", response_model=ValuationResultResponse)
+@router.post("/step-10-valuate", response_model=ValuationResultResponse)
 async def run_valuation(request: CalculationRequest):
     """
-    Step 11: Run valuation engine and return results.
+    Step 10: Run valuation engine and return results.
     
     Args:
         request: Calculation request
