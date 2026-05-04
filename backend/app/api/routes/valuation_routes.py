@@ -204,7 +204,7 @@ async def generate_ai_assumptions(data: Dict, model: str) -> Dict:
     Returns:
         Dictionary containing AI-generated assumptions
     """
-    from app.engines.ai_engine import ai_engine
+    from app.engines.international.ai_engine import ai_engine
 
     logger.info(f"Generating AI assumptions for model='{model}'")
 
@@ -286,7 +286,7 @@ def run_valuation_engine(session_data: Dict) -> Dict:
     Returns:
         Dictionary containing valuation results
     """
-    from app.engines.dcf_engine import DCFEngine, DCFInputs, ScenarioDrivers, fetch_dcf_inputs
+    from app.engines.international.dcf_engine import DCFEngine, DCFInputs, ScenarioDrivers, fetch_dcf_inputs
 
     model = session_data.get('selected_model', 'DCF')
     market = session_data.get('market', 'international')
@@ -442,7 +442,7 @@ def run_valuation_engine(session_data: Dict) -> Dict:
 
     elif selected_model in ['dupont', 'dupont analysis']:
         try:
-            from app.engines.dupont_engine import DuPontAnalyzer
+            from app.engines.international.dupont_engine import DuPontAnalyzer
 
             api_key = os.getenv('GROQ_API_KEY', '')
             engine = DuPontAnalyzer(api_key=api_key)
@@ -480,7 +480,7 @@ def run_valuation_engine(session_data: Dict) -> Dict:
 
     elif selected_model in ['comps', 'comparable', 'trading comps']:
         try:
-            from app.engines.comps_engine import TradingCompsAnalyzer, TargetCompanyData, PeerCompanyData
+            from app.engines.international.comps_engine import TradingCompsAnalyzer, TargetCompanyData, PeerCompanyData
 
             info = profile.get('raw_info', {})
             market_cap = info.get('marketCap', 1000000000) or 1000000000
@@ -945,7 +945,7 @@ async def fetch_api_data(request: SessionFetchRequest):
     # Generate peer data and comps results for DCF model
     if session.get('selected_model') == 'DCF':
         try:
-            from app.engines.comps_engine import TradingCompsAnalyzer, TargetCompanyData, PeerCompanyData
+            from app.engines.international.comps_engine import TradingCompsAnalyzer, TargetCompanyData, PeerCompanyData
 
             info = financial_data.get('raw_info', {})
             market_cap = info.get('marketCap', 1000000000) or 1000000000

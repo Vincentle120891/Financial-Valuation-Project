@@ -19,7 +19,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 # Import AI engine for peer suggestions
-from app.engines.ai_engine import suggest_peer_companies
+from app.engines.international.ai_engine import suggest_peer_companies
 
 
 # =============================================================================

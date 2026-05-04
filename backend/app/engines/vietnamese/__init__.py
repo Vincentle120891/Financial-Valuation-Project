@@ -7,12 +7,12 @@ Calculation engines for Vietnamese market (TT99 accounting standards):
 - DuPont ROE decomposition using TT99 financial statements
 """
 
-from app.engines.vietnamese_dcf_engine import (
+from app.engines.vietnamese.vietnamese_dcf_engine import (
     VietnameseDCFEngine,
     get_vietnamese_dcf_engine,
 )
 
-from app.engines.sector_valuation_models import (
+from app.engines.vietnamese.sector_valuation_models import (
     VNSectorValuationType,
     BankingValuationInputs,
     RealEstateValuationInputs,
