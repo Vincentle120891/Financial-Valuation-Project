@@ -1,5 +1,5 @@
 """
-Search and Ticker Routes
+Search and Ticker Routes - Version 1
 
 Handles ticker search and selection functionality.
 """
@@ -14,12 +14,12 @@ from app.api.schemas import SearchRequest, TickerSelectRequest, SearchResponse, 
 
 logger = get_logger(__name__)
 
-router = APIRouter(prefix="/api", tags=["Search & Ticker"])
+router = APIRouter(tags=["Search & Ticker"])
 
 
 def search_tickers_yahoo(query: str, market: str) -> List[Dict]:
     """Search tickers by symbol or company name"""
-    import yfinance as yf
+    from yfinance.search import Search
     
     results = []
     
@@ -70,15 +70,31 @@ def search_tickers_yahoo(query: str, market: str) -> List[Dict]:
                     "market": "vietnamese"
                 })
             else:
+                # Use Yahoo Finance Search API for Vietnamese stocks
                 search_term = query if ".VN" in query else f"{query}.VN"
-                ticker = yf.Ticker(search_term)
-                if ticker.info and ticker.info.get('symbol'):
-                    results.append({
-                        "symbol": ticker.info.get('symbol'),
-                        "name": ticker.info.get('longName', ticker.info.get('shortName', 'N/A')),
-                        "exchange": ticker.info.get('exchange', 'HOSE/HNX'),
-                        "market": "vietnamese"
-                    })
+                search_obj = Search(query=search_term, max_results=10)
+                for quote in search_obj.quotes:
+                    if quote.get('symbol') and '.VN' in quote.get('symbol', ''):
+                        results.append({
+                            "symbol": quote.get('symbol'),
+                            "name": quote.get('longName', quote.get('shortname', 'N/A')),
+                            "exchange": quote.get('exchDisp', 'HOSE/HNX'),
+                            "market": "vietnamese"
+                        })
+                        break  # Only take the first Vietnamese match
+                
+                # If no results with .VN suffix, try without it
+                if not results:
+                    search_obj = Search(query=query, max_results=10)
+                    for quote in search_obj.quotes:
+                        if quote.get('symbol') and '.VN' in quote.get('symbol', ''):
+                            results.append({
+                                "symbol": quote.get('symbol'),
+                                "name": quote.get('longName', quote.get('shortname', 'N/A')),
+                                "exchange": quote.get('exchDisp', 'HOSE/HNX'),
+                                "market": "vietnamese"
+                            })
+                            break
         else:
             if query_upper in international_companies:
                 company = international_companies[query_upper]
@@ -89,14 +105,22 @@ def search_tickers_yahoo(query: str, market: str) -> List[Dict]:
                     "market": "international"
                 })
             else:
-                ticker = yf.Ticker(query)
-                if ticker.info and ticker.info.get('symbol'):
-                    results.append({
-                        "symbol": ticker.info.get('symbol'),
-                        "name": ticker.info.get('longName', ticker.info.get('shortName', 'N/A')),
-                        "exchange": ticker.info.get('exchange', 'US'),
-                        "market": "international"
-                    })
+                # Use Yahoo Finance Search API for international stocks
+                search_obj = Search(query=query, max_results=10)
+                seen_symbols = set()  # Track symbols to avoid duplicates
+                for quote in search_obj.quotes:
+                    symbol = quote.get('symbol')
+                    if symbol and quote.get('quoteType') == 'EQUITY' and symbol not in seen_symbols:
+                        # Handle both camelCase and lowercase field names
+                        name = quote.get('longName') or quote.get('longname') or quote.get('shortname') or quote.get('shortName') or 'N/A'
+                        exchange = quote.get('exchDisp') or quote.get('exchange', 'US')
+                        results.append({
+                            "symbol": symbol,
+                            "name": name,
+                            "exchange": exchange,
+                            "market": "international"
+                        })
+                        seen_symbols.add(symbol)
         
     except Exception as e:
         logger.error(f"Search error for query='{query}', market='{market}': {str(e)}")
