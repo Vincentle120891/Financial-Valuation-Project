@@ -83,6 +83,7 @@ class Step6EnhancedProcessor:
         )
 
         return Step6EnhancedResponse(
+            session_id="session_" + ticker,
             ticker=ticker,
             timestamp=datetime.now(),
             historical_financials=historical_display,
@@ -90,7 +91,7 @@ class Step6EnhancedProcessor:
             market_data=market_display,
             calculated_metrics=calculated_display,
             missing_data_summary=missing_summary,
-            valuation_ready=missing_summary.critical_missing_count == 0
+            valuation_ready=len(missing_summary.critical_missing) == 0
         )
 
     async def _fetch_dcf_raw_data(self, ticker: str) -> Dict:
@@ -196,8 +197,40 @@ class Step6EnhancedProcessor:
 
     def _process_market_data(self, ticker: str, raw_data: Dict, overrides: Dict) -> MarketDataDisplay:
         """Process market data like Beta, Risk-Free Rate."""
-        fields = []
         info = raw_data.get("info", {})
+
+        # Current Stock Price
+        current_price = info.get('currentPrice', info.get('regularMarketPrice', None))
+        price_field = DataField(
+            field_name="Current Stock Price",
+            value=current_price,
+            unit="USD",
+            status=DataStatus.RETRIEVED if current_price else DataStatus.MISSING,
+            source="yfinance" if current_price else None,
+            is_critical=True
+        ) if current_price else None
+
+        # Shares Outstanding
+        shares = info.get('sharesOutstanding', None)
+        shares_field = DataField(
+            field_name="Shares Outstanding",
+            value=shares,
+            unit="shares",
+            status=DataStatus.RETRIEVED if shares else DataStatus.MISSING,
+            source="yfinance" if shares else None,
+            is_critical=True
+        ) if shares else None
+
+        # Market Cap
+        market_cap = info.get('marketCap', None)
+        mcap_field = DataField(
+            field_name="Market Cap",
+            value=market_cap,
+            unit="USD",
+            status=DataStatus.RETRIEVED if market_cap else DataStatus.MISSING,
+            source="yfinance" if market_cap else None,
+            is_critical=False
+        ) if market_cap else None
 
         # Beta
         beta = info.get('beta', None)
@@ -213,7 +246,7 @@ class Step6EnhancedProcessor:
             status = DataStatus.ESTIMATED
             source = "Default (Market)"
 
-        fields.append(DataField(
+        beta_field = DataField(
             field_name="Beta",
             value=beta,
             status=status,
@@ -221,21 +254,53 @@ class Step6EnhancedProcessor:
             formula="Regression vs S&P 500",
             is_critical=True,
             allow_override=True
-        ))
+        )
 
-        # Risk-Free Rate (10Y Treasury)
-        rf_rate = overrides.get("risk_free_rate", 0.045) # Default 4.5%
-        fields.append(DataField(
-            field_name="Risk-Free Rate",
-            value=rf_rate,
-            unit="%",
-            status=DataStatus.MANUAL_OVERRIDE if "risk_free_rate" in overrides else DataStatus.ESTIMATED,
-            source="User Input" if "risk_free_rate" in overrides else "US 10Y Bond",
-            is_critical=True,
-            allow_override=True
-        ))
+        # Total Debt
+        balance_sheet = raw_data.get("balance_sheet")
+        total_debt = None
+        if balance_sheet is not None:
+            # Try to get latest total debt
+            for col in balance_sheet.columns:
+                if 'Total Debt' in balance_sheet.index:
+                    total_debt = balance_sheet.loc['Total Debt', col]
+                    break
+        
+        debt_field = DataField(
+            field_name="Total Debt",
+            value=total_debt,
+            unit="USD",
+            status=DataStatus.RETRIEVED if total_debt else DataStatus.MISSING,
+            source="yfinance" if total_debt else None,
+            is_critical=True
+        ) if total_debt else None
 
-        return MarketDataDisplay(data_fields=fields)
+        # Cash
+        cash = None
+        if balance_sheet is not None:
+            for col in balance_sheet.columns:
+                if 'Cash And Cash Equivalents' in balance_sheet.index:
+                    cash = balance_sheet.loc['Cash And Cash Equivalents', col]
+                    break
+        
+        cash_field = DataField(
+            field_name="Cash",
+            value=cash,
+            unit="USD",
+            status=DataStatus.RETRIEVED if cash else DataStatus.MISSING,
+            source="yfinance" if cash else None,
+            is_critical=True
+        ) if cash else None
+
+        return MarketDataDisplay(
+            current_stock_price=price_field,
+            shares_outstanding=shares_field,
+            market_cap=mcap_field,
+            beta=beta_field,
+            total_debt=debt_field,
+            cash=cash_field,
+            currency=DataField(field_name="Currency", value="USD", status=DataStatus.RETRIEVED, source="yfinance")
+        )
 
     async def _calculate_dcf_metrics(
         self, 
@@ -246,26 +311,27 @@ class Step6EnhancedProcessor:
     ) -> CalculatedMetricsDisplay:
         """Calculate WACC, FCF, Terminal Value, Enterprise Value, Equity Value, and Fair Value."""
         
-        # Extract values for calculation
-        beta = next((f.value for f in market.data_fields if f.field_name == "Beta"), 1.0)
-        rf = next((f.value for f in market.data_fields if f.field_name == "Risk-Free Rate"), 0.045)
-        growth = next((f.value for f in forecast.data_fields if f.field_name == "Revenue Growth Rate"), 0.05)
-        term_growth = next((f.value for f in forecast.data_fields if f.field_name == "Terminal Growth Rate"), 0.025)
+        # Extract values from Market Data Display model (uses individual fields, not data_fields list)
+        beta = market.beta.value if market.beta else 1.0
+        current_price = market.current_stock_price.value if market.current_stock_price else None
+        shares_outstanding = market.shares_outstanding.value if market.shares_outstanding else None
+        total_debt = market.total_debt.value if market.total_debt else 0
+        cash = market.cash.value if market.cash else 0
+        
+        # Extract forecast drivers from individual fields (not data_fields list)
+        growth = forecast.revenue_growth_forecast.value if forecast.revenue_growth_forecast else 0.05
+        term_growth = forecast.terminal_growth_rate.value if forecast.terminal_growth_rate else 0.025
 
-        # Get historical financials for calculations
-        latest_revenue = None
-        latest_ebitda = None
-        for field in hist.data_fields:
-            if field.field_name.startswith("Revenue_") and field.value:
-                latest_revenue = field.value
-            if field.field_name.startswith("EBITDA_") and field.value:
-                latest_ebitda = field.value
+        # Get historical financials from individual fields (HistoricalFinancialsDisplay uses named fields, not data_fields list)
+        latest_revenue = hist.revenue.value if hist.revenue else None
+        latest_ebitda = hist.ebitda.value if hist.ebitda else None
 
         # Calculate WACC (Simplified)
         # WACC = Re * E/V + Rd * D/V * (1-T)
         # Re = Rf + Beta * MRP
+        rf_rate = 0.045  # Default risk-free rate
         mrp = 0.055  # Market Risk Premium
-        cost_of_equity = rf + beta * mrp
+        cost_of_equity = rf_rate + beta * mrp
         wacc = cost_of_equity * 0.8 + 0.04 * 0.2 * (1-0.21)  # Simplified capital structure
         
         wacc_field = DataField(
@@ -331,8 +397,10 @@ class Step6EnhancedProcessor:
                 is_critical=True
             )
         
-        # Estimate Net Debt (simplified: assume 10% of latest revenue if not available)
-        net_debt = latest_revenue * 0.1 if latest_revenue else 0
+        # Calculate Net Debt
+        net_debt = (total_debt or 0) - (cash or 0)
+        if net_debt == 0 and latest_revenue:
+            net_debt = latest_revenue * 0.1  # Fallback estimate
         
         # Calculate Equity Value
         equity_value = None
@@ -349,13 +417,10 @@ class Step6EnhancedProcessor:
                 is_critical=True
             )
         
-        # Estimate Shares Outstanding (simplified: assume 1% of latest revenue as proxy)
-        shares_outstanding = latest_revenue * 0.01 / 100 if latest_revenue else None
-        
         # Calculate Fair Value per Share
         fair_value_per_share = None
         fair_value_field = None
-        if equity_value and shares_outstanding:
+        if equity_value and shares_outstanding and shares_outstanding > 0:
             fair_value_per_share = equity_value / shares_outstanding
             fair_value_field = DataField(
                 field_name="Fair Value per Share",
@@ -367,18 +432,10 @@ class Step6EnhancedProcessor:
                 is_critical=True
             )
         
-        # Calculate Implied Upside/Downside (need current stock price)
-        # For now, use a placeholder or fetch from yfinance
-        current_price = None
-        try:
-            info = await self.yfinance_service.get_company_info(ticker)
-            current_price = info.get('currentPrice', info.get('regularMarketPrice', None))
-        except:
-            pass
-        
+        # Calculate Implied Upside/Downside
         implied_upside_downside = None
         upside_field = None
-        if fair_value_per_share and current_price:
+        if fair_value_per_share and current_price and current_price > 0:
             implied_upside_downside = (fair_value_per_share - current_price) / current_price
             upside_field = DataField(
                 field_name="Implied Upside/Downside",
@@ -434,7 +491,7 @@ class Step6EnhancedProcessor:
             peer_data=peer_display,
             calculated_metrics=calculated_display,
             missing_data_summary=missing_summary,
-            valuation_ready=missing_summary.critical_missing_count == 0
+            valuation_ready=len(missing_summary.critical_missing) == 0
         )
     
     async def _fetch_comps_raw_data(self, target_ticker: str, peer_list: List[str]) -> Dict:
@@ -775,7 +832,7 @@ class Step6EnhancedProcessor:
             components=components_display,
             trend_analysis=trend_display,
             missing_data_summary=missing_summary,
-            valuation_ready=missing_summary.critical_missing_count == 0
+            valuation_ready=len(missing_summary.critical_missing) == 0
         )
     
     async def _fetch_dupont_raw_data(self, ticker: str) -> Dict:
