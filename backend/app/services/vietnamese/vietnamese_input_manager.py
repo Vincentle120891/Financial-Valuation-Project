@@ -30,8 +30,8 @@ from app.models.vietnamese_inputs import (
     VNExchange,
     VNSector
 )
-from app.services.vietnam.vn_stock_database import get_vn_stock_database, VNStockDatabase
-from app.services.vietnam.vnd_financial_parser import parse_vn_financials_from_dict
+from app.services.vn_stock_database import get_vn_stock_database, VNStockDatabase
+from app.services.vnd_financial_parser import parse_vn_financials_from_dict
 
 logger = logging.getLogger(__name__)
 
