@@ -967,30 +967,6 @@ async def run_valuation(request: CalculationRequest):
         result=results,
         inputs_used=session['confirmed_assumptions']
     )
-router = APIRouter(tags=["Valuation"])
-
-
-def get_session(session_id: str, sessions: Dict) -> Dict:
-    """
-    Get session by ID with validation.
-
-    Args:
-        session_id: Session identifier
-        sessions: Session store dictionary
-
-    Returns:
-        Session data dictionary
-
-    Raises:
-        HTTPException: If session not found
-    """
-    if session_id not in sessions:
-        logger.warning(f"Session not found: {session_id}")
-        raise SessionNotFoundException(
-            session_id=session_id,
-            details={"hint": "Please create a new session by selecting a ticker"}
-        )
-    return sessions[session_id]
 
 
 def fetch_financial_data(ticker_symbol: str, market: str) -> Dict:
@@ -2084,3 +2060,4 @@ async def run_valuation(request: CalculationRequest):
         status="completed",
         result=results,
         inputs_used=session['confirmed_assumptions']
+    )
