@@ -12,11 +12,115 @@ This module defines Pydantic models for:
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
 from datetime import date
+from enum import Enum
 
 
 # =============================================================================
 # DCF MODEL INPUTS
 # =============================================================================
+
+class DataStatus(str, Enum):
+    """Status of data retrieval and calculation"""
+    RETRIEVED = "RETRIEVED"
+    CALCULATED = "CALCULATED"
+    ESTIMATED = "ESTIMATED"
+    MISSING = "MISSING"
+    MANUAL_OVERRIDE = "MANUAL_OVERRIDE"
+
+
+class DataField(BaseModel):
+    """Individual field with status tracking"""
+    value: Optional[Any] = Field(None, description="Field value")
+    status: DataStatus = Field(..., description="Data retrieval/calculation status")
+    source: Optional[str] = Field(None, description="Data source (yfinance, calculated, user_input, etc.)")
+    formula: Optional[str] = Field(None, description="Calculation formula if calculated")
+    confidence_score: Optional[float] = Field(None, description="Confidence score 0-100")
+    is_missing: bool = Field(False, description="Flag if data is missing")
+    can_override: bool = Field(False, description="Whether manual override is allowed")
+
+
+class MissingDataSummary(BaseModel):
+    """Comprehensive summary of missing data"""
+    total_fields: int = Field(..., description="Total number of fields")
+    retrieved_count: int = Field(0, description="Number of retrieved fields")
+    calculated_count: int = Field(0, description="Number of calculated fields")
+    estimated_count: int = Field(0, description="Number of estimated fields")
+    missing_count: int = Field(0, description="Number of missing fields")
+    manual_override_count: int = Field(0, description="Number of manually overridden fields")
+    completion_percentage: float = Field(0.0, description="Overall completion percentage")
+    critical_missing: List[str] = Field(default_factory=list, description="Critical missing fields")
+    optional_missing: List[str] = Field(default_factory=list, description="Optional missing fields")
+    valuation_ready: bool = Field(False, description="Whether sufficient data exists for valuation")
+    data_quality_score: float = Field(0.0, description="Overall data quality score 0-100")
+    warnings: List[str] = Field(default_factory=list, description="Data quality warnings")
+    recommendations: List[str] = Field(default_factory=list, description="Recommendations for improvement")
+
+
+class HistoricalFinancialsDisplay(BaseModel):
+    """Display model for historical financials with status tracking"""
+    revenue: Optional[DataField] = Field(None, description="Revenue with status")
+    cogs: Optional[DataField] = Field(None, description="COGS with status")
+    ebitda: Optional[DataField] = Field(None, description="EBITDA with status")
+    net_income: Optional[DataField] = Field(None, description="Net income with status")
+    operating_expenses: Optional[DataField] = Field(None, description="Operating expenses with status")
+    sg_and_a: Optional[DataField] = Field(None, description="SG&A with status")
+    depreciation: Optional[DataField] = Field(None, description="Depreciation with status")
+    capex: Optional[DataField] = Field(None, description="CapEx with status")
+    free_cash_flow: Optional[DataField] = Field(None, description="Free cash flow with status")
+    total_assets: Optional[DataField] = Field(None, description="Total assets with status")
+    total_debt: Optional[DataField] = Field(None, description="Total debt with status")
+    cash_and_equivalents: Optional[DataField] = Field(None, description="Cash with status")
+    inventory: Optional[DataField] = Field(None, description="Inventory with status")
+    accounts_receivable: Optional[DataField] = Field(None, description="AR with status")
+    accounts_payable: Optional[DataField] = Field(None, description="AP with status")
+    shareholders_equity: Optional[DataField] = Field(None, description="Shareholders' equity with status")
+    revenue_cagr: Optional[DataField] = Field(None, description="Revenue CAGR with status")
+    avg_ebitda_margin: Optional[DataField] = Field(None, description="Average EBITDA margin with status")
+    avg_roe: Optional[DataField] = Field(None, description="Average ROE with status")
+
+
+class ForecastDriversDisplay(BaseModel):
+    """Display model for forecast drivers with status tracking"""
+    revenue_growth_forecast: Optional[DataField] = Field(None, description="Revenue growth forecast with status", can_override=True)
+    volume_growth_split: Optional[DataField] = Field(None, description="Volume growth split with status", can_override=True)
+    inflation_rate: Optional[DataField] = Field(None, description="Inflation rate with status", can_override=True)
+    ebitda_margin_forecast: Optional[DataField] = Field(None, description="EBITDA margin forecast with status", can_override=True)
+    tax_rate: Optional[DataField] = Field(None, description="Tax rate with status", can_override=True)
+    capex_pct_of_revenue: Optional[DataField] = Field(None, description="CapEx % of revenue with status", can_override=True)
+    ar_days: Optional[DataField] = Field(None, description="AR days with status", can_override=True)
+    inv_days: Optional[DataField] = Field(None, description="Inventory days with status", can_override=True)
+    ap_days: Optional[DataField] = Field(None, description="AP days with status", can_override=True)
+    risk_free_rate: Optional[DataField] = Field(None, description="Risk-free rate with status", can_override=True)
+    equity_risk_premium: Optional[DataField] = Field(None, description="Equity risk premium with status", can_override=True)
+    beta: Optional[DataField] = Field(None, description="Beta with status", can_override=True)
+    cost_of_debt: Optional[DataField] = Field(None, description="Cost of debt with status", can_override=True)
+    wacc: Optional[DataField] = Field(None, description="WACC with status", can_override=True)
+    terminal_growth_rate: Optional[DataField] = Field(None, description="Terminal growth rate with status", can_override=True)
+    terminal_ebitda_multiple: Optional[DataField] = Field(None, description="Terminal EBITDA multiple with status", can_override=True)
+    useful_life_existing: Optional[DataField] = Field(None, description="Useful life existing with status", can_override=True)
+    useful_life_new: Optional[DataField] = Field(None, description="Useful life new with status", can_override=True)
+
+
+class MarketDataDisplay(BaseModel):
+    """Display model for market data with status tracking"""
+    current_stock_price: Optional[DataField] = Field(None, description="Current stock price with status")
+    shares_outstanding: Optional[DataField] = Field(None, description="Shares outstanding with status")
+    market_cap: Optional[DataField] = Field(None, description="Market cap with status")
+    beta: Optional[DataField] = Field(None, description="Beta with status")
+    total_debt: Optional[DataField] = Field(None, description="Total debt with status")
+    cash: Optional[DataField] = Field(None, description="Cash with status")
+    currency: Optional[DataField] = Field(None, description="Currency with status")
+
+
+class CalculatedMetricsDisplay(BaseModel):
+    """Display model for calculated metrics with formulas"""
+    wacc: Optional[DataField] = Field(None, description="WACC with formula")
+    terminal_value: Optional[DataField] = Field(None, description="Terminal value with formula")
+    enterprise_value: Optional[DataField] = Field(None, description="Enterprise value with formula")
+    equity_value: Optional[DataField] = Field(None, description="Equity value with formula")
+    fair_value_per_share: Optional[DataField] = Field(None, description="Fair value per share with formula")
+    implied_upside_downside: Optional[DataField] = Field(None, description="Implied upside/downside with formula")
+
 
 class DCFHistoricalFinancials(BaseModel):
     """
@@ -150,6 +254,70 @@ class DCFValuationRequest(BaseModel):
         }
 
 
+class Step6EnhancedResponse(BaseModel):
+    """
+    Enhanced Step 6 response showing retrieved inputs, calculated values, missing data flags, and manual override options
+    """
+    session_id: str = Field(..., description="Session identifier")
+    ticker: str = Field(..., description="Stock ticker symbol")
+    company_name: Optional[str] = Field(None, description="Company name")
+    
+    # Data with status tracking
+    historical_financials: Optional[HistoricalFinancialsDisplay] = Field(None, description="Historical financials with retrieval status")
+    forecast_drivers: Optional[ForecastDriversDisplay] = Field(None, description="Forecast drivers with override capability")
+    market_data: Optional[MarketDataDisplay] = Field(None, description="Market data with retrieval status")
+    calculated_metrics: Optional[CalculatedMetricsDisplay] = Field(None, description="Calculated metrics with formulas")
+    
+    # Missing data summary
+    missing_data_summary: MissingDataSummary = Field(..., description="Comprehensive missing data analysis")
+    
+    # Manual override inputs (user can provide these to fill gaps)
+    allowed_manual_overrides: Dict[str, bool] = Field(default_factory=dict, description="Fields that can be manually overridden")
+    
+    # Data quality indicators
+    data_quality_score: float = Field(0.0, description="Overall data quality score 0-100")
+    valuation_ready: bool = Field(False, description="Whether sufficient data exists for valuation")
+    warnings: List[str] = Field(default_factory=list, description="Data quality warnings")
+    recommendations: List[str] = Field(default_factory=list, description="Recommendations for improvement")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "session_id": "abc123",
+                "ticker": "AAPL",
+                "historical_financials": {
+                    "revenue": {"value": 394328000000, "status": "RETRIEVED", "source": "yfinance"},
+                    "net_income": {"value": 99803000000, "status": "RETRIEVED", "source": "yfinance"},
+                    "total_debt": {"value": 111088000000, "status": "MISSING", "is_missing": True}
+                },
+                "forecast_drivers": {
+                    "revenue_growth_forecast": {"value": [0.05, 0.05, 0.04, 0.04, 0.03, 0.02], "status": "MANUAL_OVERRIDE", "can_override": True},
+                    "tax_rate": {"value": 0.21, "status": "ESTIMATED", "formula": "Corporate tax rate applied to EBIT", "can_override": True}
+                },
+                "calculated_metrics": {
+                    "wacc": {"value": 0.095, "status": "CALCULATED", "formula": "WACC = (E/V × Re) + (D/V × Rd × (1-T))"},
+                    "fair_value_per_share": {"value": 180.50, "status": "CALCULATED", "formula": "Equity Value / Shares Outstanding"}
+                },
+                "missing_data_summary": {
+                    "total_fields": 37,
+                    "retrieved_count": 12,
+                    "calculated_count": 8,
+                    "missing_count": 11,
+                    "completion_percentage": 54.1,
+                    "critical_missing": ["capex", "free_cash_flow"],
+                    "valuation_ready": True,
+                    "data_quality_score": 72.5
+                },
+                "allowed_manual_overrides": {
+                    "revenue_growth_forecast": True,
+                    "tax_rate": True,
+                    "beta": True,
+                    "terminal_growth_rate": True
+                }
+            }
+        }
+
+
 # =============================================================================
 # COMPARABLE COMPANIES (COMPS) MODEL INPUTS
 # =============================================================================
@@ -215,6 +383,60 @@ class CompsSelectionRequest(BaseModel):
                 "max_peers": 10
             }
         }
+
+
+class CompsPeerDataDisplay(BaseModel):
+    """Display model for peer data with status tracking"""
+    peer_multiples: Optional[List[DataField]] = Field(None, description="Peer multiples with status")
+    median_ev_ebitda: Optional[DataField] = Field(None, description="Median EV/EBITDA with formula")
+    mean_ev_ebitda: Optional[DataField] = Field(None, description="Mean EV/EBITDA with formula")
+    median_pe: Optional[DataField] = Field(None, description="Median P/E with formula")
+    mean_pe: Optional[DataField] = Field(None, description="Mean P/E with formula")
+    outliers_removed: Optional[DataField] = Field(None, description="Outliers removed flag")
+
+
+class CompsTargetDataDisplay(BaseModel):
+    """Display model for target company data with status tracking"""
+    market_cap: Optional[DataField] = Field(None, description="Market cap with status")
+    enterprise_value: Optional[DataField] = Field(None, description="Enterprise value with status")
+    revenue_ltm: Optional[DataField] = Field(None, description="Revenue LTM with status")
+    ebitda_ltm: Optional[DataField] = Field(None, description="EBITDA LTM with status")
+    net_income_ltm: Optional[DataField] = Field(None, description="Net income LTM with status")
+    eps_ltm: Optional[DataField] = Field(None, description="EPS LTM with status")
+
+
+class CompsCalculatedMetricsDisplay(BaseModel):
+    """Display model for comps calculated metrics with formulas"""
+    implied_ev: Optional[DataField] = Field(None, description="Implied Enterprise Value with formula")
+    implied_equity_value: Optional[DataField] = Field(None, description="Implied Equity Value with formula")
+    implied_share_price: Optional[DataField] = Field(None, description="Implied Share Price with formula")
+    upside_downside: Optional[DataField] = Field(None, description="Upside/Downside with formula")
+
+
+class Step6CompsEnhancedResponse(BaseModel):
+    """
+    Enhanced Step 6 Comps response showing retrieved inputs, calculated values, missing data flags, and manual override options
+    """
+    session_id: str = Field(..., description="Session identifier")
+    target_ticker: str = Field(..., description="Target ticker symbol")
+    target_company_name: Optional[str] = Field(None, description="Target company name")
+    
+    # Data with status tracking
+    target_data: Optional[CompsTargetDataDisplay] = Field(None, description="Target data with retrieval status")
+    peer_data: Optional[CompsPeerDataDisplay] = Field(None, description="Peer data with status")
+    calculated_metrics: Optional[CompsCalculatedMetricsDisplay] = Field(None, description="Calculated metrics with formulas")
+    
+    # Missing data summary
+    missing_data_summary: MissingDataSummary = Field(..., description="Comprehensive missing data analysis")
+    
+    # Manual override inputs
+    allowed_manual_overrides: Dict[str, bool] = Field(default_factory=dict, description="Fields that can be manually overridden")
+    
+    # Data quality indicators
+    data_quality_score: float = Field(0.0, description="Overall data quality score 0-100")
+    valuation_ready: bool = Field(False, description="Whether sufficient data exists for valuation")
+    warnings: List[str] = Field(default_factory=list, description="Data quality warnings")
+    recommendations: List[str] = Field(default_factory=list, description="Recommendations for improvement")
 
 
 class CompsValuationRequest(BaseModel):
@@ -370,6 +592,48 @@ class DuPontComponents(BaseModel):
                 "roe": 0.60
             }
         }
+
+
+class DuPontComponentsDisplay(BaseModel):
+    """Display model for DuPont components with status tracking"""
+    net_profit_margin: Optional[DataField] = Field(None, description="Net profit margin with status and formula")
+    asset_turnover: Optional[DataField] = Field(None, description="Asset turnover with status and formula")
+    equity_multiplier: Optional[DataField] = Field(None, description="Equity multiplier with status and formula")
+    roe: Optional[DataField] = Field(None, description="ROE with status and formula (NPM × AT × EM)")
+
+
+class DuPontTrendAnalysisDisplay(BaseModel):
+    """Display model for DuPont trend analysis"""
+    yoy_npm_change: Optional[DataField] = Field(None, description="YoY NPM change")
+    yoy_at_change: Optional[DataField] = Field(None, description="YoY AT change")
+    yoy_em_change: Optional[DataField] = Field(None, description="YoY EM change")
+    yoy_roe_change: Optional[DataField] = Field(None, description="YoY ROE change")
+    primary_driver: Optional[DataField] = Field(None, description="Primary ROE driver")
+
+
+class Step6DuPontEnhancedResponse(BaseModel):
+    """
+    Enhanced Step 6 DuPont response showing retrieved inputs, calculated values, missing data flags, and manual override options
+    """
+    session_id: str = Field(..., description="Session identifier")
+    ticker: str = Field(..., description="Stock ticker symbol")
+    company_name: Optional[str] = Field(None, description="Company name")
+    
+    # Data with status tracking
+    duPont_components: Optional[DuPontComponentsDisplay] = Field(None, description="DuPont components with retrieval status")
+    trend_analysis: Optional[DuPontTrendAnalysisDisplay] = Field(None, description="Trend analysis with status")
+    
+    # Missing data summary
+    missing_data_summary: MissingDataSummary = Field(..., description="Comprehensive missing data analysis")
+    
+    # Manual override inputs
+    allowed_manual_overrides: Dict[str, bool] = Field(default_factory=dict, description="Fields that can be manually overridden")
+    
+    # Data quality indicators
+    data_quality_score: float = Field(0.0, description="Overall data quality score 0-100")
+    valuation_ready: bool = Field(False, description="Whether sufficient data exists for valuation")
+    warnings: List[str] = Field(default_factory=list, description="Data quality warnings")
+    recommendations: List[str] = Field(default_factory=list, description="Recommendations for improvement")
 
 
 class DuPontRequest(BaseModel):
