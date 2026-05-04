@@ -28,6 +28,13 @@ class DataStatus(str, Enum):
     MANUAL_OVERRIDE = "MANUAL_OVERRIDE"
 
 
+class ValuationModel(str, Enum):
+    """Type of valuation model to use"""
+    DCF = "DCF"
+    DUPONT = "DUPONT"
+    COMPS = "COMPS"
+
+
 class DataField(BaseModel):
     """Individual field with status tracking"""
     value: Optional[Any] = Field(None, description="Field value")
@@ -218,6 +225,7 @@ class DCFValuationRequest(BaseModel):
     """
     
     session_id: str = Field(..., description="Session identifier")
+    valuation_model: ValuationModel = Field(ValuationModel.DCF, description="Selected valuation model")
     
     # Company identification
     ticker: str = Field(..., description="Stock ticker symbol")
