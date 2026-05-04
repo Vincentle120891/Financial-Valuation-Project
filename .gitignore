@@ -1,2 +1,85 @@
-# Documentation
-BACKEND_WORKFLOW_DOCUMENTATION.md
+```markdown
+# Examples
+*.example
+*.sample
+*.template
+*.bak
+*.backup
+*.orig
+*.rej
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Documentation drafts and temporary files
+*.draft.md
+*.tmp.md
+*.temp.md
+*_DRAFT.md
+*_TEMP.md
+temp_*.md
+draft_*.md
+
+# Log files
+*.log
+logs/
+log/
+
+# Environment files
+.env
+.env.local
+.env.*
+!.env.example
+!.env.sample
+
+# Dependencies
+node_modules/
+vendor/
+lib/
+deps/
+
+# Build outputs
+dist/
+build/
+target/
+out/
+_output/
+coverage/
+htmlcov/
+.nyc_output/
+.mypy_cache/
+.pytest_cache/
+.tox/
+.coverage
+
+# IDE specific
+.vscode/
+.idea/
+*.iml
+*.ipr
+*.iws
+.settings/
+.project
+.classpath
+.pydevproject
+
+# OS generated
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Icon?
+```
+
+Wait, I need to reconsider this. Looking at the actual changes, only documentation files were added and there are no build artifacts, dependencies, or temporary files in the change list. The current .gitignore has some content but the changes don't indicate any files that should be ignored.
+
+Actually, since the changes are only documentation files (.md) and Python source files, and no build artifacts or temporary files are present in the change list, this should result in an empty .gitignore according to rule #6.
+
+```markdown
+
+```
