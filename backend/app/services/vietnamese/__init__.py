@@ -15,14 +15,14 @@ from app.services.vietnamese_input_manager import (
     build_vn_dupont_request,
 )
 
-from app.services.vietnam.vn_stock_database import (
+from app.services.vn_stock_database import (
     VNStockDatabase,
     fetch_vn_financials,
     get_vn_company_info,
     query_vnindex_constituents,
 )
 
-from app.services.vietnam.vnd_financial_parser import (
+from app.services.vnd_financial_parser import (
     VNDFinancialParser,
     parse_tt99_balance_sheet,
     parse_tt99_income_statement,

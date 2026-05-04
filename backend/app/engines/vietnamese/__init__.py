@@ -12,7 +12,7 @@ from app.engines.vietnamese_dcf_engine import (
     get_vietnamese_dcf_engine,
 )
 
-from app.engines.vietnam.sector_valuation_models import (
+from app.engines.sector_valuation_models import (
     VNSectorValuationType,
     BankingValuationInputs,
     RealEstateValuationInputs,
