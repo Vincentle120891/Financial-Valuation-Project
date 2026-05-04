@@ -1,5 +1,5 @@
 """
-Valuation Routes
+Valuation Routes - Version 1
 
 Handles model selection, data fetching, AI assumptions, and valuation calculation.
 """
@@ -32,20 +32,20 @@ from app.api.schemas import (
 
 logger = get_logger(__name__)
 
-router = APIRouter(prefix="/api", tags=["Valuation"])
+router = APIRouter(tags=["Valuation"])
 
 
 def get_session(session_id: str, sessions: Dict) -> Dict:
     """
     Get session by ID with validation.
-    
+
     Args:
         session_id: Session identifier
         sessions: Session store dictionary
-        
+
     Returns:
         Session data dictionary
-        
+
     Raises:
         HTTPException: If session not found
     """
@@ -54,66 +54,34 @@ def get_session(session_id: str, sessions: Dict) -> Dict:
         raise SessionNotFoundException(
             session_id=session_id,
             details={"hint": "Please create a new session by selecting a ticker"}
-        ).to_dict()
+        )
     return sessions[session_id]
-
-
-def fetch_and_calculate_all_metrics(ticker_symbol: str, market: str) -> Dict[str, Any]:
-    """
-    Step 5A + 5B: Unified function that fetches raw data AND calculates all metrics.
-    
-    Executes Step 5A → Step 5B sequentially:
-    - Step 5A: Fetch ALL raw data from yfinance (income statement, balance sheet, cash flow, key stats, analyst estimates)
-    - Step 5B: Calculate ALL derived metrics (margins, growth rates, working capital days, capex ratios, cost of debt, debt ratios, ROE, ROIC, market multiples)
-    
-    Args:
-        ticker_symbol: Stock ticker symbol
-        market: Market type (vietnamese or international)
-        
-    Returns:
-        Comprehensive data package containing both raw and calculated metrics
-    """
-    from app.services.metrics_calculator import fetch_and_calculate_all_metrics as fetch_calc_metrics
-    
-    try:
-        logger.info(f"Fetching and calculating all metrics for ticker='{ticker_symbol}', market='{market}'")
-        
-        # Execute Step 5A → Step 5B sequentially
-        comprehensive_data = fetch_calc_metrics(ticker_symbol, market)
-        
-        logger.info(f"Successfully fetched and calculated all metrics for ticker='{ticker_symbol}'")
-        return comprehensive_data
-        
-    except Exception as e:
-        logger.error(f"Failed to fetch and calculate metrics for ticker='{ticker_symbol}': {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Data fetch and calculation failed: {str(e)}")
 
 
 def fetch_financial_data(ticker_symbol: str, market: str) -> Dict:
     """
-    Step 7 & 8: Fetch financial data from yFinance.
-    (Legacy function - kept for backward compatibility)
-    
+    Step 6: Fetch financial data from yFinance.
+
     Args:
         ticker_symbol: Stock ticker symbol
         market: Market type (vietnamese or international)
-        
+
     Returns:
         Dictionary containing profile and financials data
-        
+
     Raises:
         HTTPException: If data retrieval fails
     """
     import yfinance as yf
-    
+
     try:
         logger.info(f"Fetching financial data for ticker='{ticker_symbol}', market='{market}'")
-        
+
         if market == "vietnamese" and not ticker_symbol.endswith(".VN"):
             ticker_symbol += ".VN"
-            
+
         ticker = yf.Ticker(ticker_symbol)
-        
+
         info = ticker.info
         if not info or 'currentPrice' not in info:
             raise ValueError("Could not retrieve basic info. Ticker might be invalid.")
@@ -124,16 +92,75 @@ def fetch_financial_data(ticker_symbol: str, market: str) -> Dict:
             if isinstance(val, float) and (val != val):  # NaN check
                 return None
             return val
-        
+
         def sanitize_dict(d):
             if not d:
                 return {}
             return {k: sanitize_value(v) for k, v in d.items()}
-        
+
         income_stmt = ticker.financials
         balance_sheet = ticker.balance_sheet
         cashflow = ticker.cashflow
-        
+
+        # Calculate historical metrics
+        revenue_years = list(income_stmt.columns) if income_stmt is not None and not income_stmt.empty else []
+        revenue_values = [sanitize_value(income_stmt.loc['Total Revenue', year]) for year in revenue_years] if 'Total Revenue' in income_stmt.index else []
+        ebitda_values = [sanitize_value(income_stmt.loc['EBITDA', year]) for year in revenue_years] if 'EBITDA' in income_stmt.index else []
+
+        # Calculate CAGR and averages
+        revenue_cagr = None
+        avg_ebitda_margin = None
+        avg_roe = None
+
+        if len(revenue_values) >= 3 and revenue_values[0] and revenue_values[-1]:
+            n_years = len(revenue_values) - 1
+            revenue_cagr = (revenue_values[0] / revenue_values[-1]) ** (1/n_years) - 1
+
+        ebitda_margins = []
+        net_incomes = []
+        total_assets_list = []
+        for year in revenue_years:
+            rev = sanitize_value(income_stmt.loc['Total Revenue', year]) if 'Total Revenue' in income_stmt.index else None
+            ebit = sanitize_value(income_stmt.loc['EBITDA', year]) if 'EBITDA' in income_stmt.index else None
+            net = sanitize_value(income_stmt.loc['Net Income', year]) if 'Net Income' in income_stmt.index else None
+            assets = sanitize_value(balance_sheet.loc['Total Assets', year]) if 'Total Assets' in balance_sheet.index else None
+
+            if rev and ebit:
+                ebitda_margins.append(ebit / rev)
+            if rev and net:
+                net_incomes.append(net)
+            if assets and net:
+                total_assets_list.append(assets)
+
+        if ebitda_margins:
+            avg_ebitda_margin = sum(ebitda_margins) / len(ebitda_margins)
+
+        if net_incomes and total_assets_list:
+            avg_roe = sum([n/a for n,a in zip(net_incomes, total_assets_list)]) / len(net_incomes)
+
+        # Build historical financials object with all available data
+        historical_financials = {
+            "revenue": {str(year): sanitize_value(income_stmt.loc['Total Revenue', year]) for year in revenue_years} if 'Total Revenue' in income_stmt.index else {},
+            "cogs": {str(year): sanitize_value(income_stmt.loc['Cost Of Revenue', year]) for year in revenue_years} if 'Cost Of Revenue' in income_stmt.index else {},
+            "ebitda": {str(year): sanitize_value(income_stmt.loc['EBITDA', year]) for year in revenue_years} if 'EBITDA' in income_stmt.index else {},
+            "net_income": {str(year): sanitize_value(income_stmt.loc['Net Income', year]) for year in revenue_years} if 'Net Income' in income_stmt.index else {},
+            "operating_expenses": {str(year): sanitize_value(income_stmt.loc['Operating Expenses', year]) for year in revenue_years} if 'Operating Expenses' in income_stmt.index else {},
+            "sg_and_a": {str(year): sanitize_value(income_stmt.loc['Selling General And Administration', year]) for year in revenue_years} if 'Selling General And Administration' in income_stmt.index else {},
+            "depreciation": {str(year): sanitize_value(cashflow.loc['Depreciation', year]) for year in revenue_years} if 'Depreciation' in cashflow.index else {},
+            "capex": {str(year): sanitize_value(cashflow.loc['Capital Expenditure', year]) for year in revenue_years} if 'Capital Expenditure' in cashflow.index else {},
+            "total_assets": {str(year): sanitize_value(balance_sheet.loc['Total Assets', year]) for year in revenue_years} if 'Total Assets' in balance_sheet.index else {},
+            "total_debt": {str(year): sanitize_value(balance_sheet.loc['Total Debt', year]) for year in revenue_years} if 'Total Debt' in balance_sheet.index else {},
+            "free_cash_flow": {str(year): sanitize_value(cashflow.loc['Free Cash Flow', year]) for year in revenue_years} if 'Free Cash Flow' in cashflow.index else {},
+            "cash_and_equivalents": {str(year): sanitize_value(balance_sheet.loc['Cash And Cash Equivalents', year]) for year in revenue_years} if 'Cash And Cash Equivalents' in balance_sheet.index else {},
+            "inventory": {str(year): sanitize_value(balance_sheet.loc['Inventory', year]) for year in revenue_years} if 'Inventory' in balance_sheet.index else {},
+            "accounts_receivable": {str(year): sanitize_value(balance_sheet.loc['Accounts Receivable', year]) for year in revenue_years} if 'Accounts Receivable' in balance_sheet.index else {},
+            "accounts_payable": {str(year): sanitize_value(balance_sheet.loc['Accounts Payable', year]) for year in revenue_years} if 'Accounts Payable' in balance_sheet.index else {},
+            "shareholders_equity": {str(year): sanitize_value(balance_sheet.loc['Stockholders Equity', year]) for year in revenue_years} if 'Stockholders Equity' in balance_sheet.index else {},
+            "revenue_cagr": revenue_cagr,
+            "avg_ebitda_margin": avg_ebitda_margin,
+            "avg_roe": avg_roe
+        }
+
         data = {
             "profile": {
                 "symbol": ticker_symbol,
@@ -152,13 +179,15 @@ def fetch_financial_data(ticker_symbol: str, market: str) -> Dict:
                 "total_assets": sanitize_dict(balance_sheet.loc['Total Assets'].to_dict() if 'Total Assets' in balance_sheet.index else {}),
                 "total_debt": sanitize_dict(balance_sheet.loc['Total Debt'].to_dict() if 'Total Debt' in balance_sheet.index else {}),
                 "free_cash_flow": sanitize_dict(cashflow.loc['Free Cash Flow'].to_dict() if 'Free Cash Flow' in cashflow.index else {}),
+                "years": [str(year) for year in revenue_years]
             },
+            "historical_financials": historical_financials,
             "raw_info": info
         }
-        
+
         logger.info(f"Successfully fetched financial data for ticker='{ticker_symbol}'")
         return data
-        
+
     except Exception as e:
         logger.error(f"Failed to fetch financial data for ticker='{ticker_symbol}': {str(e)}")
         raise HTTPException(status_code=500, detail=f"Data retrieval failed: {str(e)}")
@@ -166,192 +195,63 @@ def fetch_financial_data(ticker_symbol: str, market: str) -> Dict:
 
 async def generate_ai_assumptions(data: Dict, model: str) -> Dict:
     """
-    Step 9: Generate AI assumptions for valuation using comprehensive Step 5 data.
-    
-    Updated to receive ALL calculated metrics from fetch_and_calculate_all_metrics().
-    
-    IMPORTANT: The following inputs CANNOT be fetched via API and MUST be AI-generated:
-        - Equity Risk Premium (ERP) - Macro/market input based on market conditions
-        - Country Risk Premium - Geographic risk adjustment
-        - Terminal EBITDA Multiple - Forward-looking exit multiple
-        - Terminal Growth Rate - Long-term sustainable growth rate
-    
-    All other inputs (margins, growth rates, working capital days, capex ratios, 
-    cost of debt, debt ratios, ROE, ROIC, market multiples) are calculated from 
-    actual financial data fetched in Step 5A.
-    
+    Step 7: Generate AI assumptions for valuation.
+
     Args:
-        data: Comprehensive financial data dictionary containing:
-            - key_stats: Market cap, enterprise value, etc.
-            - income_statement: Revenue, EBITDA, net income, interest, D&A
-            - balance_sheet: Debt, cash, equity, AR, inventory, AP
-            - cash_flow: FCF, operating CF, capex, dividends
-            - analyst_estimates: Revenue/earnings estimates, target prices
-            - calculated_metrics: Margins, growth rates, working capital days, 
-              capex ratios, cost of debt, debt ratios, ROE, ROIC, market multiples
+        data: Financial data dictionary
         model: Selected valuation model (DCF, DuPont, COMPS)
-        
+
     Returns:
-        Dictionary containing AI-generated assumptions with error info if fallback was used
+        Dictionary containing AI-generated assumptions
     """
     from app.engines.ai_engine import ai_engine
-    
+
     logger.info(f"Generating AI assumptions for model='{model}'")
-    
-    # Extract comprehensive company data from Step 5 results
-    symbol = data.get('symbol', 'UNKNOWN')
-    key_stats = data.get('key_stats', {})
-    income_stmt = data.get('income_statement', {})
-    balance_sheet = data.get('balance_sheet', {})
-    cash_flow = data.get('cash_flow', {})
-    analyst_estimates = data.get('analyst_estimates', {})
-    calculated_metrics = data.get('calculated_metrics', {})
-    
-    # Get historical values from income statement
-    revenue_dict = income_stmt.get('total_revenue', {})
-    ebitda_dict = income_stmt.get('ebitda', {})
-    net_income_dict = income_stmt.get('net_income', {})
-    interest_expense_dict = income_stmt.get('interest_expense', {})
-    
-    # Convert to sorted lists (most recent first)
-    def get_sorted_values(d: Dict) -> List[float]:
-        items = [(k, v) for k, v in d.items() if v is not None]
-        try:
-            sorted_items = sorted(items, key=lambda x: str(x[0]), reverse=True)
-        except Exception:
-            sorted_items = items
-        return [v for _, v in sorted_items]
-    
-    revenue_history = get_sorted_values(revenue_dict)
-    ebitda_history = get_sorted_values(ebitda_dict)
-    net_income_history = get_sorted_values(net_income_dict)
-    interest_expense_history = get_sorted_values(interest_expense_dict)
-    
-    # Build comprehensive company data package for AI
+
+    profile = data.get('profile', {})
+    financials = data.get('financials', {})
+
+    revenue_history = list(financials.get('revenue', {}).values())
+    ebitda_history = list(financials.get('ebitda', {}).values())
+    net_income_history = list(financials.get('net_income', {}).values())
+
+    rev_growth_rates = []
+    for i in range(min(3, len(revenue_history) - 1)):
+        if revenue_history[i] and revenue_history[i+1] and revenue_history[i+1] > 0:
+            growth = (revenue_history[i] - revenue_history[i+1]) / revenue_history[i+1]
+            rev_growth_rates.append(growth)
+
+    avg_hist_growth = sum(rev_growth_rates) / len(rev_growth_rates) if rev_growth_rates else 0.05
+
+    ebitda_margins = []
+    net_margins = []
+    for i in range(min(3, len(revenue_history))):
+        if revenue_history[i] and ebitda_history[i]:
+            ebitda_margins.append(ebitda_history[i] / revenue_history[i])
+        if revenue_history[i] and net_income_history[i]:
+            net_margins.append(net_income_history[i] / revenue_history[i])
+
     company_data = {
-        "ticker": symbol,
-        "sector": key_stats.get('sector', 'General'),
-        "industry": key_stats.get('industry', 'General'),
-        
-        # Financial metrics from calculated_metrics
+        "ticker": profile.get('ticker', 'UNKNOWN'),
+        "company_name": profile.get('name', profile.get('ticker', 'Unknown Company')),
+        "sector": profile.get('sector', 'General'),
+        "industry": profile.get('industry', 'General'),
         "financials": {
             "revenue_ttm": revenue_history[0] if revenue_history else 0,
-            "ebitda_ttm": ebitda_history[0] if ebitda_history else 0,
-            "net_income_ttm": net_income_history[0] if net_income_history else 0,
-            
-            # Margins (historical + 3Y averages)
-            "ebitda_margin_latest": calculated_metrics.get('margins', {}).get('ebitda_margin', {}).get('latest'),
-            "ebitda_margin_avg_3y": calculated_metrics.get('margins', {}).get('ebitda_margin', {}).get('avg_3y'),
-            "net_margin_latest": calculated_metrics.get('margins', {}).get('net_margin', {}).get('latest'),
-            "net_margin_avg_3y": calculated_metrics.get('margins', {}).get('net_margin', {}).get('avg_3y'),
-            "fcf_margin_latest": calculated_metrics.get('margins', {}).get('fcf_margin', {}).get('latest'),
-            "fcf_margin_avg_3y": calculated_metrics.get('margins', {}).get('fcf_margin', {}).get('avg_3y'),
-            "operating_margin_latest": calculated_metrics.get('margins', {}).get('operating_margin', {}).get('latest'),
-            
-            # Growth Rates (CAGR, YoY)
-            "revenue_growth_yoy_latest": calculated_metrics.get('growth_rates', {}).get('revenue', {}).get('latest_yoy'),
-            "revenue_cagr_3y": calculated_metrics.get('growth_rates', {}).get('revenue', {}).get('cagr_3y'),
-            "revenue_cagr_5y": calculated_metrics.get('growth_rates', {}).get('revenue', {}).get('cagr_5y'),
-            "ebitda_cagr_3y": calculated_metrics.get('growth_rates', {}).get('ebitda', {}).get('cagr_3y'),
-            "net_income_cagr_3y": calculated_metrics.get('growth_rates', {}).get('net_income', {}).get('cagr_3y'),
-            "eps_cagr_3y": calculated_metrics.get('growth_rates', {}).get('eps', {}).get('cagr_3y'),
+            "ebitda_margin_avg": round(sum(ebitda_margins)/len(ebitda_margins)*100, 1) if ebitda_margins else 15.0,
+            "net_margin_avg": round(sum(net_margins)/len(net_margins)*100, 1) if net_margins else 10.0,
+            "revenue_growth_avg": round(avg_hist_growth * 100, 1)
         },
-        
-        # Working Capital Days (AR, Inv, AP)
-        "working_capital": {
-            "dso_latest": calculated_metrics.get('working_capital_days', {}).get('dso', {}).get('latest'),
-            "dso_avg_3y": calculated_metrics.get('working_capital_days', {}).get('dso', {}).get('avg_3y'),
-            "dio_latest": calculated_metrics.get('working_capital_days', {}).get('dio', {}).get('latest'),
-            "dio_avg_3y": calculated_metrics.get('working_capital_days', {}).get('dio', {}).get('avg_3y'),
-            "dpo_latest": calculated_metrics.get('working_capital_days', {}).get('dpo', {}).get('latest'),
-            "dpo_avg_3y": calculated_metrics.get('working_capital_days', {}).get('dpo', {}).get('avg_3y'),
-            "cash_conversion_cycle_latest": calculated_metrics.get('working_capital_days', {}).get('cash_conversion_cycle', {}).get('latest'),
-        },
-        
-        # Capex Ratios
-        "capex": {
-            "capex_to_revenue_latest": calculated_metrics.get('capex_ratios', {}).get('capex_to_revenue', {}).get('latest'),
-            "capex_to_revenue_avg_3y": calculated_metrics.get('capex_ratios', {}).get('capex_to_revenue', {}).get('avg_3y'),
-            "fcf_to_revenue_latest": calculated_metrics.get('capex_ratios', {}).get('fcf_to_revenue', {}).get('latest'),
-            "capex_to_ocf_latest": calculated_metrics.get('capex_ratios', {}).get('capex_to_ocf', {}).get('latest'),
-        },
-        
-        # Cost of Debt (Implied = Interest Expense / Total Debt)
-        "debt_cost": {
-            "implied_cost_of_debt_latest": calculated_metrics.get('cost_of_debt', {}).get('implied_cost_of_debt', {}).get('latest'),
-            "implied_cost_of_debt_avg_3y": calculated_metrics.get('cost_of_debt', {}).get('implied_cost_of_debt', {}).get('avg_3y'),
-        },
-        
-        # Debt Ratios
-        "leverage": {
-            "debt_to_equity_latest": calculated_metrics.get('debt_ratios', {}).get('debt_to_equity', {}).get('latest'),
-            "debt_to_assets_latest": calculated_metrics.get('debt_ratios', {}).get('debt_to_assets', {}).get('latest'),
-            "current_ratio_latest": calculated_metrics.get('debt_ratios', {}).get('current_ratio', {}).get('latest'),
-            "quick_ratio_latest": calculated_metrics.get('debt_ratios', {}).get('quick_ratio', {}).get('latest'),
-            "net_debt_latest": calculated_metrics.get('debt_ratios', {}).get('net_debt', {}).get('latest'),
-        },
-        
-        # Profitability & Returns (ROE, ROIC)
-        "returns": {
-            "roe_latest": calculated_metrics.get('roe_roic', {}).get('roe', {}).get('latest'),
-            "roic_latest": calculated_metrics.get('roe_roic', {}).get('roic', {}).get('latest'),
-            "roa_latest": calculated_metrics.get('profitability_ratios', {}).get('roa', {}).get('latest'),
-        },
-        
-        # Market Data
         "market_data": {
-            "beta": key_stats.get('beta', 1.0),
-            "market_cap": key_stats.get('market_cap'),
-            "enterprise_value": key_stats.get('enterprise_value'),
-            "current_price": key_stats.get('current_price'),
-            "pe_ratio": key_stats.get('pe_ratio'),
-            "price_to_book": key_stats.get('price_to_book'),
-            "ev_to_ebitda": key_stats.get('ev_to_ebitda'),
-            "dividend_yield": key_stats.get('dividend_yield'),
-        },
-        
-        # Market Multiples
-        "multiples": calculated_metrics.get('market_multiples', {}),
-        
-        # Analyst Estimates
-        "analyst_estimates": {
-            "revenue_growth_estimate": analyst_estimates.get('revenue_estimates', {}).get('growth'),
-            "earnings_growth_estimate": analyst_estimates.get('earnings_estimates', {}).get('growth'),
-            "target_price_mean": analyst_estimates.get('target_prices', {}).get('mean'),
-            "num_analysts": analyst_estimates.get('revenue_estimates', {}).get('num_analysts'),
-        },
+            "beta": profile.get('beta', 1.0),
+            "risk_free_rate": 4.5
+        }
     }
-    
-    # Get provider status for transparency
-    provider_status = ai_engine.get_provider_status()
-    available_providers = [k for k, v in provider_status.items() if v == "configured"]
-    
-    # Generate AI assumptions with strategy pattern
-    # Pass market parameter for proper strategy routing (Vietnam vs US/International)
-    market = session_data.get('market', 'US')
-    ai_results = ai_engine.generate_assumptions(company_data, model, market)
-    
+
+    ai_results = ai_engine.generate_assumptions(company_data, model)
+
     formatted_results = {"model": model.upper()}
-    
-    # Extract AI status information for better error reporting
-    ai_status = ai_results.pop("_ai_status", None)
-    
-    # Add metadata about AI generation with detailed error info
-    formatted_results["_metadata"] = {
-        "provider_status": provider_status,
-        "available_providers": available_providers,
-        "used_fallback": ai_status.get("success", False) is False if ai_status else (
-            len(ai_results.get("equity_risk_premium", {}).get("sources", "").split(":")[0].strip() if isinstance(ai_results.get("equity_risk_premium", {}).get("sources"), str) else "") == 0 or 
-            "Fallback" in ai_results.get("equity_risk_premium", {}).get("rationale", "") or
-            "CAPM (Fallback" in ai_results.get("equity_risk_premium", {}).get("rationale", "")
-        ),
-        "ai_success": ai_status.get("success") if ai_status else None,
-        "provider_used": ai_status.get("provider_used") if ai_status else None,
-        "provider_errors": ai_status.get("errors", {}) if ai_status else {},
-        "fallback_reason": ai_status.get("fallback_reason") if ai_status and not ai_status.get("success") else None,
-        "comprehensive_data_used": True,  # Flag indicating Step 5 data was used
-    }
-    
+
     for key, item in ai_results.items():
         if isinstance(item, dict) and 'value' in item:
             formatted_results[key] = item
@@ -371,23 +271,23 @@ async def generate_ai_assumptions(data: Dict, model: str) -> Dict:
                         "sources": "Trend Extrapolation"
                     })
             formatted_results[key] = formatted_list
-    
-    logger.info(f"AI assumptions generated successfully for model='{model}' using comprehensive Step 5 data")
+
+    logger.info(f"AI assumptions generated successfully for model='{model}'")
     return formatted_results
 
 
 def run_valuation_engine(session_data: Dict) -> Dict:
     """
-    Step 11: Run valuation calculations.
-    
+    Step 10: Run valuation calculations.
+
     Args:
         session_data: Session data containing model, assumptions, and financial data
-        
+
     Returns:
         Dictionary containing valuation results
     """
     from app.engines.dcf_engine import DCFEngine, DCFInputs, ScenarioDrivers, fetch_dcf_inputs
-    
+
     model = session_data.get('selected_model', 'DCF')
     market = session_data.get('market', 'international')
     assumptions = session_data['confirmed_assumptions']
@@ -395,32 +295,32 @@ def run_valuation_engine(session_data: Dict) -> Dict:
     financials = financial_data['financials']
     profile = financial_data['profile']
     ticker = session_data.get('ticker', 'UNKNOWN')
-    
+
     logger.info(f"Running valuation engine for model='{model}', ticker='{ticker}', market='{market}'")
-    
+
     selected_model = model.lower() if model else 'dcf'
-    
+
     if selected_model == 'dcf':
         try:
             ticker_symbol = session_data.get('ticker', 'UNKNOWN')
             peer_tickers_from_input = assumptions.get('peer_tickers', None)
-            
+
             logger.info(f"Fetching DCF inputs for ticker='{ticker_symbol}'")
             company_info, comparables = fetch_dcf_inputs(ticker_symbol, peer_tickers_from_input)
-            
+
             revenue_history = list(financials.get('revenue', {}).values())
             ebitda_history = list(financials.get('ebitda', {}).values())
             net_income_history = list(financials.get('net_income', {}).values())
-            
+
             info = profile.get('raw_info', {})
             shares_outstanding = info.get('sharesOutstanding', 1000000) or 1000000
             current_price = profile.get('current_price', 100) or 100
-            
+
             total_debt = info.get('totalDebt', 0) or 0
             cash = info.get('cash', info.get('totalCash', 0)) or 0
             net_debt = total_debt - cash
             ppe_net = info.get('totalAssets', 0) or 0
-            
+
             def build_historical_year(rev, ebitda, ni):
                 return {
                     'revenue': rev or 0,
@@ -433,7 +333,7 @@ def run_valuation_engine(session_data: Dict) -> Dict:
                     'inventory': (rev or 0) * 0.08 if rev else 0,
                     'accounts_payable': (rev or 0) * 0.07 if rev else 0
                 }
-            
+
             hist_fy_minus_1 = build_historical_year(
                 revenue_history[0] if len(revenue_history) > 0 else None,
                 ebitda_history[0] if len(ebitda_history) > 0 else None,
@@ -449,19 +349,19 @@ def run_valuation_engine(session_data: Dict) -> Dict:
                 ebitda_history[2] if len(ebitda_history) > 2 else None,
                 net_income_history[2] if len(net_income_history) > 2 else None
             )
-            
+
             revenue_growth = assumptions.get('revenue_growth_forecast', [0.05, 0.05, 0.04, 0.04, 0.03, 0.02])
             while len(revenue_growth) < 6:
                 revenue_growth.append(0.02)
-            
+
             wacc = company_info.get('wacc', assumptions.get('wacc', 0.08))
             terminal_growth = assumptions.get('terminal_growth_rate', 0.023)
             terminal_multiple = assumptions.get('terminal_ebitda_multiple', 8.0)
-            
+
             volume_split = assumptions.get('volume_growth_split', 0.6)
             base_volume_growth = [g * volume_split for g in revenue_growth[:6]]
             base_price_growth = [g * (1 - volume_split) for g in revenue_growth[:6]]
-            
+
             base_drivers = ScenarioDrivers(
                 volume_growth=base_volume_growth,
                 price_growth=base_price_growth,
@@ -473,7 +373,7 @@ def run_valuation_engine(session_data: Dict) -> Dict:
                 terminal_ebitda_multiple=terminal_multiple,
                 terminal_growth_rate=terminal_growth
             )
-            
+
             dcf_inputs = DCFInputs(
                 valuation_date=date.today().isoformat(),
                 currency="VND" if market == "vietnamese" else profile.get('currency', 'USD'),
@@ -502,20 +402,20 @@ def run_valuation_engine(session_data: Dict) -> Dict:
                 tax_rate_statutory=assumptions.get('tax_rate', 0.21),
                 tax_loss_utilization_limit_pct=assumptions.get('tax_loss_utilization_limit_pct', 0.80)
             )
-            
+
             engine = DCFEngine(dcf_inputs)
             pv_discrete, pv_terminal_perp, ev_perpetuity = engine._calculate_dcf_perpetuity(base_drivers)
             pv_terminal_mult, ev_multiple = engine._calculate_dcf_exit_multiple(base_drivers)
-            
+
             equity_value_perp = ev_perpetuity - net_debt
             equity_value_mult = ev_multiple - net_debt
             share_price_perp = equity_value_perp / shares_outstanding
             share_price_mult = equity_value_mult / shares_outstanding
             upside_perp = (share_price_perp - current_price) / current_price * 100
             upside_mult = (share_price_mult - current_price) / current_price * 100
-            
+
             logger.info(f"DCF valuation completed: EV Perpetuity={ev_perpetuity:.2f}, Share Price={share_price_perp:.2f}")
-            
+
             return {
                 "model": "DCF",
                 "main_outputs": {
@@ -531,7 +431,7 @@ def run_valuation_engine(session_data: Dict) -> Dict:
                 },
                 "message": "DCF calculated successfully"
             }
-            
+
         except Exception as e:
             logger.error(f"DCF valuation failed: {str(e)}")
             return {
@@ -539,27 +439,27 @@ def run_valuation_engine(session_data: Dict) -> Dict:
                 "error": str(e),
                 "fallback_message": "DCF calculation failed."
             }
-    
+
     elif selected_model in ['dupont', 'dupont analysis']:
         try:
             from app.engines.dupont_engine import DuPontAnalyzer
-            
+
             api_key = os.getenv('GROQ_API_KEY', '')
             engine = DuPontAnalyzer(api_key=api_key)
             custom_inputs = session_data.get('dupont_custom_inputs', {})
-            
+
             # Note: DuPont analyze is synchronous, not async
             result = engine.analyze(ticker=ticker, custom_inputs=custom_inputs)
-            
+
             if hasattr(result, '__await__'):
                 import asyncio
                 result = asyncio.get_event_loop().run_until_complete(result)
-            
+
             if result.status == "error":
                 raise HTTPException(status_code=400, detail=result.message)
-            
+
             logger.info(f"DuPont analysis completed: ROE={result.roe:.2%}")
-            
+
             return {
                 "model": "DuPont",
                 "success": True,
@@ -571,23 +471,41 @@ def run_valuation_engine(session_data: Dict) -> Dict:
                 },
                 "message": result.message
             }
-            
+
         except HTTPException:
             raise
         except Exception as e:
             logger.error(f"DuPont analysis failed: {str(e)}")
             raise HTTPException(status_code=500, detail=f"DuPont analysis error: {str(e)}")
-    
+
     elif selected_model in ['comps', 'comparable', 'trading comps']:
         try:
             from app.engines.comps_engine import TradingCompsAnalyzer, TargetCompanyData, PeerCompanyData
-            
+
             info = profile.get('raw_info', {})
             market_cap = info.get('marketCap', 1000000000) or 1000000000
             enterprise_value = market_cap + (info.get('totalDebt', 0) or 0) - (info.get('cash', 0) or 0)
-            revenue_ltm = list(financials.get('revenue', {}).values())[0] if financials.get('revenue') else 100000000
-            ebitda_ltm = list(financials.get('ebitda', {}).values())[0] if financials.get('ebitda') else revenue_ltm * 0.2
-            
+
+            # Get the actual historical years from financial data
+            years = financials.get('years', [])
+            if len(years) >= 3:
+                # Use the 3 most recent years for LTM and forward estimates
+                revenue_dict = financials.get('revenue', {})
+                ebitda_dict = financials.get('ebitda', {})
+
+                revenue_ltm = revenue_dict.get(years[0], 100000000) if years else 100000000
+                ebitda_ltm = ebitda_dict.get(years[0], revenue_ltm * 0.2) if years else revenue_ltm * 0.2
+
+                # Calculate forward estimates based on historical growth
+                if len(years) >= 2:
+                    growth_rate = (revenue_dict.get(years[0], 0) / revenue_dict.get(years[1], 1)) - 1 if revenue_dict.get(years[1], 0) > 0 else 0.05
+                else:
+                    growth_rate = 0.05
+            else:
+                revenue_ltm = list(financials.get('revenue', {}).values())[0] if financials.get('revenue') else 100000000
+                ebitda_ltm = list(financials.get('ebitda', {}).values())[0] if financials.get('ebitda') else revenue_ltm * 0.2
+                growth_rate = 0.05
+
             target = TargetCompanyData(
                 ticker=ticker,
                 company_name=profile.get('name', ticker),
@@ -600,20 +518,20 @@ def run_valuation_engine(session_data: Dict) -> Dict:
                 free_cash_flow_ltm=ebitda_ltm * 0.7,
                 book_equity=market_cap * 0.4,
                 shares_outstanding=info.get('sharesOutstanding', 1000000) or 1000000,
-                current_stock_price=profile.get('current_price', 100) or 100,
-                currency="VND" if market == "vietnamese" else profile.get('currency', 'USD')
+                share_price=profile.get('current_price', 100) or 100,
+                currency=profile.get('currency', 'USD')
             )
-            
+
             sector = info.get('sector', 'Technology')
             industry = info.get('industry', 'Software')
-            
+
             peers = []
             peer_names = ['Peer A', 'Peer B', 'Peer C', 'Peer D', 'Peer E']
             peer_tickers = ['PEERA', 'PEERB', 'PEERC', 'PEERD', 'PEERE']
-            
+
             import random
             random.seed(42)
-            
+
             for i, (name, ticker_sym) in enumerate(zip(peer_names, peer_tickers)):
                 variation = 0.8 + (random.random() * 0.4)
                 peers.append(PeerCompanyData(
@@ -621,32 +539,31 @@ def run_valuation_engine(session_data: Dict) -> Dict:
                     company_name=f"{name} Corp",
                     market_cap=market_cap * variation,
                     enterprise_value=enterprise_value * variation,
-                    revenue_ltm=revenue_ltm * variation,
                     ebitda_ltm=ebitda_ltm * variation,
-                    ebit_ltm=ebitda_ltm * 0.75 * variation,
-                    net_income_ltm=revenue_ltm * 0.1 * variation,
-                    free_cash_flow_ltm=ebitda_ltm * 0.7 * variation,
-                    book_equity=market_cap * 0.4 * variation,
+                    ebitda_fy2023=ebitda_ltm * (1 + growth_rate) * variation,
+                    ebitda_fy2024=ebitda_ltm * (1 + growth_rate) ** 2 * variation,
+                    eps_ltm=(revenue_ltm * 0.1 * variation) / 1000000,
+                    eps_fy2023=(revenue_ltm * 0.1 * (1 + growth_rate) * variation) / 1000000,
+                    eps_fy2024=(revenue_ltm * 0.1 * (1 + growth_rate) ** 2 * variation) / 1000000,
+                    share_price=100 * variation,
                     shares_outstanding=1000000 * variation,
-                    current_stock_price=100 * variation,
                     industry=industry,
                     sector=sector,
-                    selection_reason=f"Same {sector} sector",
-                    similarity_score=0.9 - (i * 0.05)
+                    selection_reason=f"Same {sector} sector"
                 ))
-            
+
             analyzer = TradingCompsAnalyzer(target, peers)
             outputs = analyzer.run_analysis(apply_outlier_filtering=True)
-            
+
             logger.info(f"Trading Comps analysis completed with {outputs.peer_count_total} peers")
-            
+
             return {
                 "model": "Comps",
                 "success": True,
                 "result": outputs.to_json_schema_format(),
                 "message": "Trading Comps analysis completed successfully"
             }
-            
+
         except Exception as e:
             logger.error(f"Trading Comps analysis failed: {str(e)}")
             return {
@@ -654,7 +571,7 @@ def run_valuation_engine(session_data: Dict) -> Dict:
                 "error": str(e),
                 "fallback_message": "Trading Comps analysis failed."
             }
-    
+
     logger.warning(f"Unknown model requested: {selected_model}")
     return {
         "error": f"Unknown model: {selected_model}",
@@ -666,25 +583,25 @@ def run_valuation_engine(session_data: Dict) -> Dict:
 async def select_models(request: ModelSelectRequest):
     """
     Step 4: User selects valuation model.
-    
+
     Args:
         request: Model selection request
-        
+
     Returns:
         Confirmation message and next step
     """
     from app.main import get_session_store
-    
+
     logger.info(f"Selecting model='{request.model}' for session='{request.session_id}'")
-    
+
     sessions = get_session_store()
     session = get_session(request.session_id, sessions)
-    
+
     session['selected_model'] = request.model
     session['status'] = "model_selected"
-    
+
     logger.info(f"Model '{request.model}' selected for session='{request.session_id}'")
-    
+
     return {
         "message": "Model selected",
         "next_step": "fetch_data",
@@ -696,94 +613,299 @@ async def select_models(request: ModelSelectRequest):
 async def prepare_inputs(request: dict = Body(...)):
     """
     Step 5: Show required inputs for the selected model.
-    
+
     Args:
         request: Request containing session_id
-        
+
     Returns:
         List of required input fields
     """
     from app.main import get_session_store
-    
+
     session_id = request.get('session_id')
     sessions = get_session_store()
     session = get_session(session_id, sessions)
-    
+
     if not session or not session.get('selected_model'):
         raise HTTPException(status_code=400, detail="No model selected")
-    
+
     selected_model = session['selected_model'].lower()
     required_inputs: List[Dict[str, Any]] = []
-    
-    required_inputs.append({
-        "category": "General",
-        "name": "Ticker Confirmation",
-        "requiresInput": False
-    })
-    
+
+    # General inputs (auto-fetched but shown for transparency)
+    required_inputs.extend([
+        {"category": "Company Profile", "name": "Ticker Symbol", "requiresInput": False},
+        {"category": "Company Profile", "name": "Company Name", "requiresInput": False},
+        {"category": "Company Profile", "name": "Sector & Industry", "requiresInput": False},
+        {"category": "Company Profile", "name": "Currency", "requiresInput": False},
+    ])
+
     if selected_model == 'dcf':
+        # Historical Financials (auto-fetched from yFinance)
         required_inputs.extend([
-            # Market Structure (from API)
-            {"category": "Market Structure", "name": "Current Price", "requiresInput": False, "unit": "USD", "description": "Current stock price"},
-            {"category": "Market Structure", "name": "Shares Outstanding", "requiresInput": False, "unit": "thousands", "description": "Number of shares outstanding"},
-            {"category": "Market Structure", "name": "Total Debt", "requiresInput": False, "unit": "USD thousands", "description": "Total debt from balance sheet"},
-            {"category": "Market Structure", "name": "Cash & Equivalents", "requiresInput": False, "unit": "USD thousands", "description": "Cash and cash equivalents"},
-            {"category": "Market Structure", "name": "Net Debt", "requiresInput": False, "unit": "USD thousands", "description": "Total debt minus cash"},
-            
-            # WACC Inputs (requires user/AI input)
-            {"category": "WACC Calculation", "name": "Risk-Free Rate", "requiresInput": True, "defaultValue": 2.4, "unit": "%", "description": "Government bond yield (e.g., 10Y Treasury)"},
-            {"category": "WACC Calculation", "name": "Market Risk Premium", "requiresInput": True, "defaultValue": 4.7, "unit": "%", "description": "Expected excess return of market over risk-free rate"},
-            {"category": "WACC Calculation", "name": "Country Risk Premium", "requiresInput": True, "defaultValue": 3.6, "unit": "%", "description": "Additional premium for country-specific risk"},
-            {"category": "WACC Calculation", "name": "Pre-Tax Cost of Debt", "requiresInput": True, "defaultValue": 5.2, "unit": "%", "description": "Interest rate on company debt before tax"},
-            {"category": "WACC Calculation", "name": "Target Debt Weight", "requiresInput": True, "defaultValue": 15.0, "unit": "%", "description": "Target proportion of debt in capital structure"},
-            {"category": "WACC Calculation", "name": "Target Equity Weight", "requiresInput": True, "defaultValue": 85.0, "unit": "%", "description": "Target proportion of equity in capital structure"},
-            {"category": "WACC Calculation", "name": "Tax Rate", "requiresInput": True, "defaultValue": 30.0, "unit": "%", "description": "Corporate income tax rate"},
-            
-            # Forecast Assumptions (requires user/AI input)
-            {"category": "Forecast Assumptions", "name": "Terminal Growth Rate", "requiresInput": True, "defaultValue": 2.0, "unit": "%", "description": "Perpetual growth rate for terminal value calculation"},
-            {"category": "Forecast Assumptions", "name": "Terminal EBITDA Multiple", "requiresInput": True, "defaultValue": 7.0, "unit": "x", "description": "Exit multiple for terminal value calculation"},
-            {"category": "Forecast Assumptions", "name": "Revenue Volume Growth (FY1-FY5)", "requiresInput": True, "defaultValue": [2.0, 1.0, 1.0, 0.5, 0.5], "unit": "%", "description": "Annual sales volume growth rates for 5 forecast years"},
-            {"category": "Forecast Assumptions", "name": "Revenue Price Growth (FY1-FY5)", "requiresInput": True, "defaultValue": [3.0, 1.0, 1.0, 1.0, 0.5], "unit": "%", "description": "Annual pricing increase rates for 5 forecast years"},
-            {"category": "Forecast Assumptions", "name": "Inflation Rate (FY1-FY5)", "requiresInput": True, "defaultValue": [3.5, 3.0, 3.0, 2.5, 2.5], "unit": "%", "description": "Projected cost inflation rates for COGS and OpEx"},
-            {"category": "Forecast Assumptions", "name": "Capital Expenditure (FY1-FY5)", "requiresInput": True, "defaultValue": [4550, 4700, 4850, 5000, 5125], "unit": "USD thousands", "description": "Planned capital expenditures for each forecast year"},
-            {"category": "Forecast Assumptions", "name": "Accounts Receivable Days", "requiresInput": True, "defaultValue": 45.0, "unit": "days", "description": "Average collection period for receivables"},
-            {"category": "Forecast Assumptions", "name": "Inventory Days", "requiresInput": True, "defaultValue": 25.0, "unit": "days", "description": "Average days inventory is held"},
-            {"category": "Forecast Assumptions", "name": "Accounts Payable Days", "requiresInput": True, "defaultValue": 40.0, "unit": "days", "description": "Average payment period for payables"},
-            
-            # Depreciation Parameters
-            {"category": "Depreciation Parameters", "name": "Useful Life - Existing Assets", "requiresInput": True, "defaultValue": 16.0, "unit": "years", "description": "Remaining useful life of existing PP&E"},
-            {"category": "Depreciation Parameters", "name": "Useful Life - New Assets", "requiresInput": True, "defaultValue": 20.0, "unit": "years", "description": "Useful life of new capital assets"},
-            {"category": "Depreciation Parameters", "name": "First Year Tax Depreciation Rate", "requiresInput": True, "defaultValue": 50.0, "unit": "%", "description": "Half-year convention rate for first year tax depreciation"},
-            {"category": "Depreciation Parameters", "name": "Blended Tax Depreciation Rate", "requiresInput": True, "defaultValue": 15.0, "unit": "%", "description": "Declining balance depreciation rate for tax purposes"},
-            {"category": "Depreciation Parameters", "name": "First Year Accounting Depreciation Rate", "requiresInput": True, "defaultValue": 50.0, "unit": "%", "description": "Half-year convention for accounting depreciation"},
-            
-            # Opening Balance Sheet
-            {"category": "Opening Balance Sheet", "name": "PP&E Gross Book Value", "requiresInput": False, "unit": "USD thousands", "description": "Gross book value of property, plant & equipment"},
-            {"category": "Opening Balance Sheet", "name": "Tax Basis of PP&E", "requiresInput": False, "unit": "USD thousands", "description": "Tax basis of PP&E for depreciation calculations"},
-            {"category": "Opening Balance Sheet", "name": "Tax Losses Carried Forward", "requiresInput": False, "unit": "USD thousands", "description": "Net operating losses available for carryforward"},
-            {"category": "Opening Balance Sheet", "name": "Projected Interest Expense", "requiresInput": True, "defaultValue": 2520.0, "unit": "USD thousands", "description": "Annual interest expense on debt"},
-            
-            # Dates
-            {"category": "Valuation Dates", "name": "Valuation Date", "requiresInput": False, "unit": "date", "description": "Date of valuation"},
-            {"category": "Valuation Dates", "name": "First Cash Flow Date", "requiresInput": False, "unit": "date", "description": "Expected date of first cash flow"},
-            {"category": "Valuation Dates", "name": "First Fiscal Year End", "requiresInput": False, "unit": "date", "description": "End date of first forecast fiscal year"},
+            {"category": "Historical Financials", "name": "Revenue (3-5 years)", "requiresInput": False},
+            {"category": "Historical Financials", "name": "EBITDA (3-5 years)", "requiresInput": False},
+            {"category": "Historical Financials", "name": "Net Income (3-5 years)", "requiresInput": False},
+            {"category": "Historical Financials", "name": "COGS", "requiresInput": False},
+            {"category": "Historical Financials", "name": "SG&A / OpEx", "requiresInput": False},
+            {"category": "Historical Financials", "name": "Depreciation & Amortization", "requiresInput": False},
+            {"category": "Historical Financials", "name": "CapEx", "requiresInput": False},
+            {"category": "Historical Financials", "name": "Working Capital Items (AR, Inventory, AP)", "requiresInput": False},
         ])
+
+        # Market Data (auto-fetched)
+        required_inputs.extend([
+            {"category": "Market Data", "name": "Current Stock Price", "requiresInput": False},
+            {"category": "Market Data", "name": "Shares Outstanding", "requiresInput": False},
+            {"category": "Market Data", "name": "Total Debt", "requiresInput": False},
+            {"category": "Market Data", "name": "Cash & Equivalents", "requiresInput": False},
+            {"category": "Market Data", "name": "Beta", "requiresInput": False},
+            {"category": "Market Data", "name": "Market Cap", "requiresInput": False},
+        ])
+
+        # Forecast Drivers (user input required)
+        required_inputs.extend([
+            {"category": "Forecast Drivers", "name": "Revenue Growth Forecast (5-10 years)", "requiresInput": True},
+            {"category": "Forecast Drivers", "name": "Volume vs Price Growth Split", "requiresInput": True},
+            {"category": "Forecast Drivers", "name": "Inflation Rate Assumption", "requiresInput": True},
+            {"category": "Forecast Drivers", "name": "EBITDA Margin Forecast", "requiresInput": True},
+            {"category": "Forecast Drivers", "name": "Tax Rate", "requiresInput": True},
+            {"category": "Forecast Drivers", "name": "CapEx as % of Revenue", "requiresInput": True},
+            {"category": "Forecast Drivers", "name": "D&A as % of PPE", "requiresInput": True},
+            {"category": "Forecast Drivers", "name": "Working Capital Days (AR, Inv, AP)", "requiresInput": True},
+        ])
+
+        # DCF Model Inputs (user input required)
+        required_inputs.extend([
+            {"category": "DCF Model Inputs", "name": "Risk-Free Rate", "requiresInput": True},
+            {"category": "DCF Model Inputs", "name": "Equity Risk Premium", "requiresInput": True},
+            {"category": "DCF Model Inputs", "name": "Beta (or use market beta)", "requiresInput": True},
+            {"category": "DCF Model Inputs", "name": "Cost of Debt", "requiresInput": True},
+            {"category": "DCF Model Inputs", "name": "WACC (calculated or manual)", "requiresInput": True},
+            {"category": "DCF Model Inputs", "name": "Terminal Growth Rate", "requiresInput": True},
+            {"category": "DCF Model Inputs", "name": "Terminal EBITDA Multiple", "requiresInput": True},
+            {"category": "DCF Model Inputs", "name": "Useful Life of Assets (existing & new)", "requiresInput": True},
+        ])
+
+        # Peer Comparison Data (optional, auto-fetched or manual)
+        required_inputs.extend([
+            {"category": "Peer Comparison", "name": "Peer Ticker List", "requiresInput": False},
+            {"category": "Peer Comparison", "name": "Peer Multiples (EV/EBITDA, P/E)", "requiresInput": False},
+        ])
+
     elif selected_model in ['comparable', 'comps']:
+        # Market Data (auto-fetched from yFinance)
         required_inputs.extend([
-            {"category": "Market Structure", "name": "Current Price", "requiresInput": False},
-            {"category": "Market Structure", "name": "Market Capitalization", "requiresInput": False},
-            {"category": "Peer Selection", "name": "Peer Group Tickers", "requiresInput": True},
+            {"category": "Market Data", "name": "Current Stock Price", "requiresInput": False},
+            {"category": "Market Data", "name": "Shares Outstanding", "requiresInput": False},
+            {"category": "Market Data", "name": "Market Capitalization", "requiresInput": False},
+            {"category": "Market Data", "name": "Total Debt", "requiresInput": False},
+            {"category": "Market Data", "name": "Cash & Equivalents", "requiresInput": False},
+            {"category": "Market Data", "name": "Enterprise Value", "requiresInput": False},
         ])
+
+        # Historical Financials (auto-fetched from yFinance)
+        required_inputs.extend([
+            {"category": "Historical Financials", "name": "Revenue (LTM)", "requiresInput": False},
+            {"category": "Historical Financials", "name": "EBITDA (LTM)", "requiresInput": False},
+            {"category": "Historical Financials", "name": "EBIT / Operating Income (LTM)", "requiresInput": False},
+            {"category": "Historical Financials", "name": "Net Income (LTM)", "requiresInput": False},
+            {"category": "Historical Financials", "name": "EPS (LTM)", "requiresInput": False},
+            {"category": "Historical Financials", "name": "Free Cash Flow (LTM)", "requiresInput": False},
+            {"category": "Historical Financials", "name": "Book Equity", "requiresInput": False},
+        ])
+
+        # Forward Estimates (user input or analyst consensus)
+        required_inputs.extend([
+            {"category": "Forward Estimates", "name": "EBITDA FY2023 Estimate", "requiresInput": True},
+            {"category": "Forward Estimates", "name": "EBITDA FY2024 Estimate", "requiresInput": True},
+            {"category": "Forward Estimates", "name": "EPS FY2023 Estimate", "requiresInput": True},
+            {"category": "Forward Estimates", "name": "EPS FY2024 Estimate", "requiresInput": True},
+        ])
+
+        # Peer Selection (user input required)
+        required_inputs.extend([
+            {"category": "Peer Selection", "name": "Peer Group Tickers (5-10 companies)", "requiresInput": True},
+            {"category": "Peer Selection", "name": "Peer Selection Rationale", "requiresInput": True},
+            {"category": "Peer Selection", "name": "Primary Comparable Company", "requiresInput": True},
+        ])
+
+        # Multiple Selection & Analysis
+        required_inputs.extend([
+            {"category": "Multiple Analysis", "name": "Select Primary Multiple (EV/EBITDA, P/E, etc.)", "requiresInput": True},
+            {"category": "Multiple Analysis", "name": "EV/EBITDA LTM", "requiresInput": False},
+            {"category": "Multiple Analysis", "name": "EV/EBITDA FY2023", "requiresInput": False},
+            {"category": "Multiple Analysis", "name": "EV/EBITDA FY2024", "requiresInput": False},
+            {"category": "Multiple Analysis", "name": "P/E LTM", "requiresInput": False},
+            {"category": "Multiple Analysis", "name": "P/E FY2023", "requiresInput": False},
+            {"category": "Multiple Analysis", "name": "P/E FY2024", "requiresInput": False},
+            {"category": "Multiple Analysis", "name": "EV/Sales LTM", "requiresInput": False},
+            {"category": "Multiple Analysis", "name": "EV/EBIT LTM", "requiresInput": False},
+            {"category": "Multiple Analysis", "name": "P/B LTM", "requiresInput": False},
+            {"category": "Multiple Analysis", "name": "P/FCF LTM", "requiresInput": False},
+        ])
+
+        # Statistical Analysis
+        required_inputs.extend([
+            {"category": "Statistical Analysis", "name": "Apply Outlier Filtering (IQR method)", "requiresInput": True},
+            {"category": "Statistical Analysis", "name": "IQR Multiplier (default 1.5)", "requiresInput": True},
+            {"category": "Statistical Analysis", "name": "Calculate Min/Avg/Max Multiples", "requiresInput": False},
+        ])
+
+        # Implied Valuation
+        required_inputs.extend([
+            {"category": "Implied Valuation", "name": "Implied Share Price (Average Multiple)", "requiresInput": False},
+            {"category": "Implied Valuation", "name": "Implied Share Price (Maximum Multiple)", "requiresInput": False},
+            {"category": "Implied Valuation", "name": "Implied Share Price (Minimum Multiple)", "requiresInput": False},
+            {"category": "Implied Valuation", "name": "Premium/Discount to Current Price", "requiresInput": True},
+        ])
+
+        # Football Field Chart
+        required_inputs.extend([
+            {"category": "Football Field Chart", "name": "Include DCF Range", "requiresInput": True},
+            {"category": "Football Field Chart", "name": "Include Precedent Transactions Range", "requiresInput": True},
+            {"category": "Football Field Chart", "name": "Include 52-Week High/Low", "requiresInput": True},
+        ])
+
     elif selected_model == 'dupont':
+        # Income Statement (8 years historical - auto-fetched)
         required_inputs.extend([
-            {"category": "Income Statement", "name": "Revenue", "requiresInput": False},
-            {"category": "Income Statement", "name": "Net Income", "requiresInput": False},
-            {"category": "Balance Sheet", "name": "Total Assets", "requiresInput": False},
-            {"category": "Balance Sheet", "name": "Total Equity", "requiresInput": False},
+            {"category": "Income Statement", "name": "Revenue (8 years)", "requiresInput": False},
+            {"category": "Income Statement", "name": "COGS (Gross)", "requiresInput": False},
+            {"category": "Income Statement", "name": "Depreciation (in COGS)", "requiresInput": False},
+            {"category": "Income Statement", "name": "SG&A Expenses", "requiresInput": False},
+            {"category": "Income Statement", "name": "Other Operating Expenses", "requiresInput": False},
+            {"category": "Income Statement", "name": "Depreciation & Amortization", "requiresInput": False},
+            {"category": "Income Statement", "name": "Interest Expense", "requiresInput": False},
+            {"category": "Income Statement", "name": "Interest Income", "requiresInput": False},
+            {"category": "Income Statement", "name": "Tax (Current)", "requiresInput": False},
+            {"category": "Income Statement", "name": "Tax (Other)", "requiresInput": False},
         ])
-    
+
+        # Balance Sheet (8 years historical - auto-fetched)
+        required_inputs.extend([
+            {"category": "Balance Sheet", "name": "Cash & Equivalents", "requiresInput": False},
+            {"category": "Balance Sheet", "name": "Accounts Receivable", "requiresInput": False},
+            {"category": "Balance Sheet", "name": "Inventories", "requiresInput": False},
+            {"category": "Balance Sheet", "name": "PPE (Component 1)", "requiresInput": False},
+            {"category": "Balance Sheet", "name": "PPE (Component 2)", "requiresInput": False},
+            {"category": "Balance Sheet", "name": "Accounts Payable", "requiresInput": False},
+            {"category": "Balance Sheet", "name": "Revolving Credit", "requiresInput": False},
+            {"category": "Balance Sheet", "name": "Long-term Debt", "requiresInput": False},
+            {"category": "Balance Sheet", "name": "Common Equity", "requiresInput": False},
+            {"category": "Balance Sheet", "name": "Retained Earnings", "requiresInput": False},
+        ])
+
+        # Cash Flow Statement (8 years historical - auto-fetched)
+        required_inputs.extend([
+            {"category": "Cash Flow", "name": "Capital Expenditures (CapEx)", "requiresInput": False},
+            {"category": "Cash Flow", "name": "Change in Long-term Debt", "requiresInput": False},
+            {"category": "Cash Flow", "name": "Change in Common Equity", "requiresInput": False},
+            {"category": "Cash Flow", "name": "Dividends Paid", "requiresInput": False},
+            {"category": "Cash Flow", "name": "Beginning Cash Balance", "requiresInput": False},
+        ])
+
+        # Derived Metrics (calculated automatically)
+        required_inputs.extend([
+            {"category": "Derived Metrics", "name": "Net COGS", "requiresInput": False},
+            {"category": "Derived Metrics", "name": "Gross Profit", "requiresInput": False},
+            {"category": "Derived Metrics", "name": "EBITDA", "requiresInput": False},
+            {"category": "Derived Metrics", "name": "EBIT", "requiresInput": False},
+            {"category": "Derived Metrics", "name": "EBT", "requiresInput": False},
+            {"category": "Derived Metrics", "name": "Net Income", "requiresInput": False},
+            {"category": "Derived Metrics", "name": "NOPAT", "requiresInput": False},
+            {"category": "Derived Metrics", "name": "Effective Tax Rate", "requiresInput": False},
+            {"category": "Derived Metrics", "name": "Net Debt", "requiresInput": False},
+            {"category": "Derived Metrics", "name": "Invested Capital", "requiresInput": False},
+            {"category": "Derived Metrics", "name": "Net Assets", "requiresInput": False},
+        ])
+
+        # DuPont 3-Step Analysis (calculated automatically)
+        required_inputs.extend([
+            {"category": "DuPont 3-Step", "name": "Net Profit Margin", "requiresInput": False},
+            {"category": "DuPont 3-Step", "name": "Asset Turnover", "requiresInput": False},
+            {"category": "DuPont 3-Step", "name": "Equity Multiplier", "requiresInput": False},
+            {"category": "DuPont 3-Step", "name": "ROE (3-Step)", "requiresInput": False},
+            {"category": "DuPont 3-Step", "name": "3-Step Check (Net Margin × Asset Turnover × Equity Multiplier)", "requiresInput": False},
+        ])
+
+        # DuPont 5-Step Analysis (calculated automatically)
+        required_inputs.extend([
+            {"category": "DuPont 5-Step", "name": "Tax Burden Ratio", "requiresInput": False},
+            {"category": "DuPont 5-Step", "name": "Interest Burden Ratio", "requiresInput": False},
+            {"category": "DuPont 5-Step", "name": "EBIT Margin", "requiresInput": False},
+            {"category": "DuPont 5-Step", "name": "Asset Turnover", "requiresInput": False},
+            {"category": "DuPont 5-Step", "name": "Equity Multiplier", "requiresInput": False},
+            {"category": "DuPont 5-Step", "name": "ROE (5-Step)", "requiresInput": False},
+            {"category": "DuPont 5-Step", "name": "5-Step Check", "requiresInput": False},
+        ])
+
+        # Profitability Ratios
+        required_inputs.extend([
+            {"category": "Profitability Ratios", "name": "ROE (Return on Equity)", "requiresInput": False},
+            {"category": "Profitability Ratios", "name": "ROA (Return on Assets)", "requiresInput": False},
+            {"category": "Profitability Ratios", "name": "RONA (Return on Net Assets)", "requiresInput": False},
+            {"category": "Profitability Ratios", "name": "ROIC (Return on Invested Capital)", "requiresInput": False},
+            {"category": "Profitability Ratios", "name": "Gross Margin", "requiresInput": False},
+            {"category": "Profitability Ratios", "name": "EBITDA Margin", "requiresInput": False},
+            {"category": "Profitability Ratios", "name": "Net Profit Margin Target", "requiresInput": True},
+        ])
+
+        # Asset Utilization Ratios
+        required_inputs.extend([
+            {"category": "Asset Utilization", "name": "Asset Turnover", "requiresInput": False},
+            {"category": "Asset Utilization", "name": "PPE Turnover", "requiresInput": False},
+            {"category": "Asset Utilization", "name": "Cash Turnover", "requiresInput": False},
+            {"category": "Asset Utilization", "name": "Cash Days", "requiresInput": False},
+            {"category": "Asset Utilization", "name": "AR Turnover", "requiresInput": False},
+            {"category": "Asset Utilization", "name": "Days Sales Outstanding (DSO)", "requiresInput": False},
+            {"category": "Asset Utilization", "name": "Inventory Turnover", "requiresInput": False},
+            {"category": "Asset Utilization", "name": "Days Inventory Outstanding (DIO)", "requiresInput": False},
+            {"category": "Asset Utilization", "name": "AP Turnover", "requiresInput": False},
+            {"category": "Asset Utilization", "name": "Days Payable Outstanding (DPO)", "requiresInput": False},
+            {"category": "Asset Utilization", "name": "Cash Conversion Cycle", "requiresInput": False},
+            {"category": "Asset Utilization", "name": "Asset Turnover Target", "requiresInput": True},
+        ])
+
+        # Leverage Ratios
+        required_inputs.extend([
+            {"category": "Leverage Ratios", "name": "Total Assets to Equity", "requiresInput": False},
+            {"category": "Leverage Ratios", "name": "Total Liabilities to Equity", "requiresInput": False},
+            {"category": "Leverage Ratios", "name": "Debt to Equity", "requiresInput": False},
+            {"category": "Leverage Ratios", "name": "Debt to EBITDA", "requiresInput": False},
+            {"category": "Leverage Ratios", "name": "Net Debt to EBITDA", "requiresInput": False},
+            {"category": "Leverage Ratios", "name": "Interest Coverage Ratio", "requiresInput": False},
+            {"category": "Leverage Ratios", "name": "Equity Multiplier Target", "requiresInput": True},
+        ])
+
+        # Liquidity Ratios
+        required_inputs.extend([
+            {"category": "Liquidity Ratios", "name": "Current Ratio", "requiresInput": False},
+            {"category": "Liquidity Ratios", "name": "Quick Ratio", "requiresInput": False},
+        ])
+
+        # Growth Trends
+        required_inputs.extend([
+            {"category": "Growth Trends", "name": "Revenue Growth Rate", "requiresInput": False},
+            {"category": "Growth Trends", "name": "EBITDA Growth Rate", "requiresInput": False},
+            {"category": "Growth Trends", "name": "EBIT Growth Rate", "requiresInput": False},
+            {"category": "Growth Trends", "name": "Net Income Growth Rate", "requiresInput": False},
+            {"category": "Growth Trends", "name": "Total Asset Growth Rate", "requiresInput": False},
+            {"category": "Growth Trends", "name": "Degree of Operating Leverage (DOL)", "requiresInput": False},
+            {"category": "Growth Trends", "name": "Degree of Financial Leverage (DFL)", "requiresInput": False},
+            {"category": "Growth Trends", "name": "Degree of Total Leverage (DTL)", "requiresInput": False},
+        ])
+
+        # Custom Inputs for Scenario Analysis
+        required_inputs.extend([
+            {"category": "Scenario Analysis", "name": "Target ROE Improvement", "requiresInput": True},
+            {"category": "Scenario Analysis", "name": "Margin Improvement Initiatives", "requiresInput": True},
+            {"category": "Scenario Analysis", "name": "Asset Efficiency Targets", "requiresInput": True},
+            {"category": "Scenario Analysis", "name": "Leverage Optimization Strategy", "requiresInput": True},
+        ])
+
     logger.info(f"Prepared {len(required_inputs)} input requirements for model='{selected_model}'")
-    
+
     return PrepareInputsResponse(
         status="ready_to_fetch",
         required_inputs=[InputRequirement(**r) for r in required_inputs],
@@ -794,35 +916,110 @@ async def prepare_inputs(request: dict = Body(...)):
 @router.post("/step-6-fetch-api-data", response_model=FetchDataResponse)
 async def fetch_api_data(request: SessionFetchRequest):
     """
-    Step 6: Fetch financial data from external APIs.
-    
-    This endpoint handles ONLY API data retrieval:
-    - Historical financials from yFinance
+    Step 6: Fetch financial data from external sources (yFinance, etc.).
+
+    Returns API-retrieved data only:
+    - Historical financials
     - Forecast drivers from historical data
     - Peer comparison data
     - DCF inputs (WACC, terminal growth)
     - DuPont analysis results
     - Comps analysis results
-    
+
     Args:
         request: Session fetch request
-        
+
     Returns:
-        Financial data retrieved from APIs
+        Financial data from APIs
     """
     from app.main import get_session_store
-    
+
     logger.info(f"Fetching API data for session='{request.session_id}'")
-    
+
     sessions = get_session_store()
     session = get_session(request.session_id, sessions)
-    
+
     financial_data = fetch_financial_data(session['ticker'], session['market'])
     session['financial_data'] = financial_data
+
+    # Generate peer data and comps results for DCF model
+    if session.get('selected_model') == 'DCF':
+        try:
+            from app.engines.comps_engine import TradingCompsAnalyzer, TargetCompanyData, PeerCompanyData
+
+            info = financial_data.get('raw_info', {})
+            market_cap = info.get('marketCap', 1000000000) or 1000000000
+            enterprise_value = market_cap + (info.get('totalDebt', 0) or 0) - (info.get('cash', 0) or 0)
+            revenue_ltm = list(financial_data.get('financials', {}).get('revenue', {}).values())[0] if financial_data.get('financials', {}).get('revenue') else 100000000
+            ebitda_ltm = list(financial_data.get('financials', {}).get('ebitda', {}).values())[0] if financial_data.get('financials', {}).get('ebitda') else revenue_ltm * 0.2
+
+            target = TargetCompanyData(
+                ticker=session['ticker'],
+                company_name=financial_data.get('profile', {}).get('name', session['ticker']),
+                market_cap=market_cap,
+                enterprise_value=enterprise_value,
+                revenue_ltm=revenue_ltm,
+                ebitda_ltm=ebitda_ltm,
+                ebit_ltm=ebitda_ltm * 0.75,
+                net_income_ltm=revenue_ltm * 0.1,
+                free_cash_flow_ltm=ebitda_ltm * 0.7,
+                book_equity=market_cap * 0.4,
+                shares_outstanding=info.get('sharesOutstanding', 1000000) or 1000000,
+                share_price=financial_data.get('profile', {}).get('current_price', 100) or 100,
+                currency=financial_data.get('profile', {}).get('currency', 'USD')
+            )
+
+            sector = info.get('sector', 'Technology')
+            industry = info.get('industry', 'Software')
+
+            peers = []
+            peer_names = ['Peer A', 'Peer B', 'Peer C', 'Peer D', 'Peer E']
+            peer_tickers = ['PEERA', 'PEERB', 'PEERC', 'PEERD', 'PEERE']
+
+            import random
+            random.seed(42)
+
+            for i, (name, ticker_sym) in enumerate(zip(peer_names, peer_tickers)):
+                variation = 0.8 + (random.random() * 0.4)
+                peers.append(PeerCompanyData(
+                    ticker=ticker_sym,
+                    company_name=f"{name} Corp",
+                    market_cap=market_cap * variation,
+                    enterprise_value=enterprise_value * variation,
+                    ebitda_ltm=ebitda_ltm * variation,
+                    ebitda_fy2023=ebitda_ltm * 1.05 * variation,
+                    ebitda_fy2024=ebitda_ltm * 1.10 * variation,
+                    eps_ltm=(revenue_ltm * 0.1 * variation) / 1000000,
+                    eps_fy2023=(revenue_ltm * 0.105 * variation) / 1000000,
+                    eps_fy2024=(revenue_ltm * 0.110 * variation) / 1000000,
+                    share_price=100 * variation,
+                    shares_outstanding=1000000 * variation,
+                    industry=industry,
+                    sector=sector,
+                    selection_reason=f"Same {sector} sector"
+                ))
+
+            analyzer = TradingCompsAnalyzer(target, peers)
+            outputs = analyzer.run_analysis(apply_outlier_filtering=True)
+
+            logger.info(f"Generated comps analysis with {outputs.peer_count_total} peers")
+
+            comps_result = outputs.to_json_schema_format()
+            # Extract peer_data from peer_multiples for frontend display
+            financial_data['peers'] = comps_result.get('peer_multiples', [])
+            financial_data['comps_results'] = comps_result
+        except Exception as e:
+            logger.warning(f"Failed to generate comps analysis: {e}")
+            financial_data['peers'] = []
+            financial_data['comps_results'] = {}
+    else:
+        financial_data['peers'] = []
+        financial_data['comps_results'] = {}
+
     session['status'] = "data_fetched"
-    
+
     logger.info(f"API data fetched successfully for session='{request.session_id}'")
-    
+
     return FetchDataResponse(
         status="data_ready",
         data=financial_data,
@@ -834,137 +1031,120 @@ async def fetch_api_data(request: SessionFetchRequest):
 async def generate_ai_assumptions_endpoint(request: Request):
     """
     Step 7: Generate AI assumptions for valuation.
-    
-    This endpoint handles ONLY AI generation:
+
+    Only handles AI generation:
     - WACC with rationale
     - Terminal Growth Rate with rationale
     - Revenue Growth Forecast
     - EBITDA Margin Forecast
-    
+
     Includes proper timeout handling and fallback logic.
-    
+
     Args:
         request: Request containing session_id
-        
+
     Returns:
-        AI-generated assumptions with detailed error information if fallback was used
+        AI-generated assumptions with rationale
     """
     from app.main import get_session_store
-    import asyncio
-    from concurrent.futures import TimeoutError as FuturesTimeoutError
-    
+
     data = await request.json()
     session_id = data.get('session_id')
     sessions = get_session_store()
     session = get_session(session_id, sessions)
-    
+
     if not session['financial_data']:
         raise HTTPException(status_code=400, detail="Financial data missing")
-    
-    try:
-        # Add timeout wrapper for AI generation (90 seconds max)
-        logger.info(f"Starting AI generation for session='{session_id}' with 90s timeout...")
-        
-        # Run AI generation with timeout
-        ai_results = await asyncio.wait_for(
-            generate_ai_assumptions(session['financial_data'], session['selected_model']),
-            timeout=90.0
-        )
-        
-        session['ai_suggestions'] = ai_results
-        session['status'] = "ai_generated"
-        
-        logger.info(f"AI assumptions generated successfully for session='{session_id}'")
-        
-    except asyncio.TimeoutError:
-        logger.error(f"AI generation timed out for session='{session_id}' after 90 seconds")
-        # Return a structured error response instead of throwing
-        return AIAssumptionsResponse(
-            status="ai_timeout",
-            suggestions={
-                "_metadata": {
-                    "provider_status": {},
-                    "available_providers": [],
-                    "used_fallback": True,
-                    "ai_success": False,
-                    "provider_used": None,
-                    "provider_errors": {"timeout": "AI generation exceeded 90 second timeout"},
-                    "fallback_reason": "Request timeout - AI providers did not respond within time limit"
-                }
-            },
-            message="⚠️ AI generation timed out after 90 seconds. Using deterministic fallback assumptions based on historical data and standard formulas."
-        )
-    except Exception as e:
-        logger.error(f"AI generation failed for session='{session_id}': {str(e)}")
-        raise HTTPException(status_code=500, detail=f"AI generation failed: {str(e)}")
-    
+
+    ai_results = await generate_ai_assumptions(session['financial_data'], session['selected_model'])
+    session['ai_suggestions'] = ai_results
+    session['status'] = "ai_generated"
+
+    # Extract AI status metadata for frontend
+    ai_metadata = ai_results.get('_ai_status', {})
+
+    logger.info(f"AI assumptions generated for session='{session_id}'")
+
     return AIAssumptionsResponse(
         status="ai_ready",
         suggestions=ai_results,
-        message="AI analysis complete. Please review assumptions."
+        message="AI analysis complete. Please review assumptions.",
+        _metadata={
+            "ai_success": ai_metadata.get("success", False),
+            "provider_used": ai_metadata.get("provider_used"),
+            "fallback_reason": ai_metadata.get("fallback_reason"),
+            "provider_errors": ai_metadata.get("errors", {}),
+            "used_fallback": ai_metadata.get("provider_used") is None
+        }
     )
 
 
-@router.post("/step-10-confirm-assumptions")
+# Legacy endpoints - DEPRECATED, use new separated endpoints instead
+# @router.post("/step-5-6-prepare-inputs") -> Use /step-5-prepare-inputs
+# @router.post("/step-7-8-fetch-data") -> Use /step-6-fetch-api-data
+# @router.post("/step-9-generate-ai") -> Use /step-7-generate-ai-assumptions
+
+
+@router.post("/step-9-confirm-assumptions")
 async def confirm_assumptions(request: AssumptionConfirmRequest):
     """
-    Step 10: User confirms or modifies AI assumptions.
-    
+    Step 9: User confirms or modifies AI assumptions.
+
     Args:
         request: Assumption confirmation request
-        
+
     Returns:
         Final confirmed assumptions
     """
     from app.main import get_session_store
-    
+
     logger.info(f"Confirming assumptions for session='{request.session_id}'")
-    
+
     sessions = get_session_store()
     session = get_session(request.session_id, sessions)
-    
+
     final_assumptions = {**session['ai_suggestions'], **request.assumptions}
     session['confirmed_assumptions'] = final_assumptions
     session['status'] = "assumptions_confirmed"
-    
+
     logger.info(f"Assumptions confirmed for session='{request.session_id}'")
-    
+
     return {
         "status": "ready_for_valuation",
         "assumptions": final_assumptions
     }
 
 
-@router.post("/step-11-12-valuate", response_model=ValuationResultResponse)
+@router.post("/step-10-valuate", response_model=ValuationResultResponse)
 async def run_valuation(request: CalculationRequest):
     """
-    Step 11 & 12: Run valuation engine and return results.
-    
+    Step 10: Run valuation engine and return results.
+
     Args:
         request: Calculation request
-        
+
     Returns:
         Valuation results
     """
     from app.main import get_session_store
-    
+
     logger.info(f"Running valuation for session='{request.session_id}'")
-    
+
     sessions = get_session_store()
     session = get_session(request.session_id, sessions)
-    
+
     if not session['confirmed_assumptions']:
         raise ValidationException(
             message="Assumptions not confirmed",
             field="confirmed_assumptions"
         ).to_dict()
-    
+
     results = run_valuation_engine(session)
     session['valuation_result'] = results
     session['status'] = "completed"
-    
+
     logger.info(f"Valuation completed for session='{request.session_id}'")
-    
+
     return ValuationResultResponse(
         status="completed",
         result=results,
