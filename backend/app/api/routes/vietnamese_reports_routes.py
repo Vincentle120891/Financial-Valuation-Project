@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
 import logging
 
-from app.services.vietnamese_report_scraper import VietnameseReportScraper
+from app.services.vietnamese.vietnamese_report_scraper import VietnameseReportScraper
 from app.services.pdf_extraction_service import VietnamesePDFExtractor
 
 logger = logging.getLogger(__name__)

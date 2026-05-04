@@ -9,76 +9,52 @@ Business logic and data orchestration for Vietnamese market:
 
 from app.services.vietnamese.vietnamese_input_manager import (
     VietnameseInputManager,
-    build_vn_dcf_request,
-    build_vn_comps_selection_request,
-    build_vn_comps_valuation_request,
-    build_vn_dupont_request,
+    get_vietnamese_input_manager,
 )
 
 from app.services.vietnamese.vn_stock_database import (
     VNStockDatabase,
-    fetch_vn_financials,
-    get_vn_company_info,
-    query_vnindex_constituents,
+    get_vn_stock_database,
 )
 
 from app.services.vietnamese.vnd_financial_parser import (
     VNDFinancialParser,
-    parse_tt99_balance_sheet,
-    parse_tt99_income_statement,
+    parse_vn_financials_from_dict,
 )
 
 from app.services.vietnamese.vietnamese_ticker_service import (
     VietnameseTickerService,
-    validate_vn_ticker_format,
-    get_vn_exchange,
-    parse_ticker_suffix,
 )
 
 from app.services.vietnamese.vietnam_data_aggregator import (
     VietnamDataAggregator,
-    aggregate_vn_financials,
-    fetch_vn_market_data,
 )
 
 from app.services.vietnamese.vietnamese_report_scraper import (
     VietnameseReportScraper,
-    fetch_vn_annual_report,
-    scrape_cafef_data,
+    fetch_vietnamese_report,
 )
 
 __all__ = [
     # Input Manager
     "VietnameseInputManager",
-    "build_vn_dcf_request",
-    "build_vn_comps_selection_request",
-    "build_vn_comps_valuation_request",
-    "build_vn_dupont_request",
+    "get_vietnamese_input_manager",
     
     # VNStock Database
     "VNStockDatabase",
-    "fetch_vn_financials",
-    "get_vn_company_info",
-    "query_vnindex_constituents",
+    "get_vn_stock_database",
     
     # VND Financial Parser
     "VNDFinancialParser",
-    "parse_tt99_balance_sheet",
-    "parse_tt99_income_statement",
+    "parse_vn_financials_from_dict",
     
     # Ticker Service
     "VietnameseTickerService",
-    "validate_vn_ticker_format",
-    "get_vn_exchange",
-    "parse_ticker_suffix",
     
     # Data Aggregator
     "VietnamDataAggregator",
-    "aggregate_vn_financials",
-    "fetch_vn_market_data",
     
     # Report Scraper
     "VietnameseReportScraper",
-    "fetch_vn_annual_report",
-    "scrape_cafef_data",
+    "fetch_vietnamese_report",
 ]
