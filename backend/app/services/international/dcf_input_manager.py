@@ -16,7 +16,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-from app.models.international_inputs import (
+from app.models.international.international_inputs import (
     DCFHistoricalFinancials,
     DCFForecastDrivers,
     DCFMarketData,

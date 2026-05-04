@@ -7,7 +7,7 @@ Contains Pydantic models for Vietnamese market (TT99 accounting standards):
 - Balance sheet and income statement models for HOSE/HNX/UPCOM
 """
 
-from app.models.vietnamese_inputs import (
+from app.models.vietnamese.vietnamese_inputs import (
     # Enums
     VNExchange,
     VNSector,
@@ -28,7 +28,7 @@ from app.models.vietnamese_inputs import (
     VNFinancialData,
 )
 
-from app.models.vietnamese_inputs_tt99 import (
+from app.models.vietnamese.vietnamese_inputs_tt99 import (
     VNBalanceSheet_B01_DN,
     VNIncomeStatement_B02_DN,
     VNFinancialInputs_TT99,

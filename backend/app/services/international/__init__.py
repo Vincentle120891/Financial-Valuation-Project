@@ -7,7 +7,7 @@ Business logic and data orchestration for international markets:
 - DCF, Comps, and DuPont input building
 """
 
-from app.services.dcf_input_manager import (
+from app.services.international.dcf_input_manager import (
     ValuationInputManager,
     build_dupont_inputs,
     build_comps_selection_inputs,
