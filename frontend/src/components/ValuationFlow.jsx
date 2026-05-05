@@ -61,6 +61,7 @@ const ValuationFlow = () => {
   const [aiSuggestions, setAiSuggestions] = useState({});
   const [manualOverrides, setManualOverrides] = useState({});
   const [confirmedValues, setConfirmedValues] = useState({});
+  const [selectedScenario, setSelectedScenario] = useState('base_case');
   const [validationErrors, setValidationErrors] = useState([]);
   
   // Step 9-10: Results
