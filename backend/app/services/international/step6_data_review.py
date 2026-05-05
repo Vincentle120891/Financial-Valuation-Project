@@ -626,6 +626,9 @@ class Step6DataReviewProcessor:
         """Calculate ONLY intermediate metrics (margins, growth rates, ratios) - NOT WACC/TV/Fair Value"""
         fields = []
         
+        # Initialize revenues list at the start to avoid unbound local error
+        revenues = []
+        
         # Calculate historical EBITDA margins (if data available)
         if hist.data_fields:
             revenues = [f.value for f in hist.data_fields if 'Revenue' in f.field_name and f.value]
@@ -644,6 +647,7 @@ class Step6DataReviewProcessor:
                 ))
         
         # Calculate Net Debt (if debt and cash available)
+        net_debt = None
         if market.total_debt and market.cash:
             net_debt = market.total_debt.value - market.cash.value
             fields.append(DataField(
@@ -657,7 +661,7 @@ class Step6DataReviewProcessor:
             ))
         
         # Calculate Enterprise Value (if market cap and net debt available)
-        if market.market_cap and market.total_debt and market.cash:
+        if market.market_cap and market.total_debt and market.cash and net_debt is not None:
             ev = market.market_cap.value + net_debt
             fields.append(DataField(
                 field_name="Enterprise Value",

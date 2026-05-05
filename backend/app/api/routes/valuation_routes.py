@@ -81,20 +81,20 @@ async def prepare_inputs(request: PrepareInputsRequest):
         
         model = session_service.get_session_value(request.session_id, "selected_model", "DCF")
         
-        # Define required inputs based on model
+        # Define required inputs based on model - matching InputRequirement schema
         required_inputs = [
-            {"field": "revenue", "type": "historical", "required": True},
-            {"field": "net_income", "type": "historical", "required": True},
-            {"field": "total_assets", "type": "historical", "required": True},
-            {"field": "total_equity", "type": "historical", "required": True},
-            {"field": "operating_income", "type": "historical", "required": True},
-            {"field": "ebitda", "type": "historical", "required": True},
-            {"field": "free_cash_flow", "type": "historical", "required": False},
-            {"field": "revenue_growth_rate", "type": "forecast", "required": True},
-            {"field": "operating_margin", "type": "forecast", "required": True},
-            {"field": "tax_rate", "type": "forecast", "required": True},
-            {"field": "wacc", "type": "discount_rate", "required": True},
-            {"field": "terminal_growth_rate", "type": "terminal_value", "required": True},
+            {"category": "historical", "name": "revenue", "requiresInput": False},
+            {"category": "historical", "name": "net_income", "requiresInput": False},
+            {"category": "historical", "name": "total_assets", "requiresInput": False},
+            {"category": "historical", "name": "total_equity", "requiresInput": False},
+            {"category": "historical", "name": "operating_income", "requiresInput": False},
+            {"category": "historical", "name": "ebitda", "requiresInput": False},
+            {"category": "historical", "name": "free_cash_flow", "requiresInput": False},
+            {"category": "forecast", "name": "revenue_growth_rate", "requiresInput": True},
+            {"category": "forecast", "name": "operating_margin", "requiresInput": True},
+            {"category": "forecast", "name": "tax_rate", "requiresInput": True},
+            {"category": "discount_rate", "name": "wacc", "requiresInput": True},
+            {"category": "terminal_value", "name": "terminal_growth_rate", "requiresInput": True},
         ]
         
         session_service.update_session_data(request.session_id, "status", "ready_to_fetch")
@@ -133,12 +133,12 @@ async def fetch_api_data(request: FetchDataRequest):
         )
         
         # Store results in session using SessionService
-        session_service.update_session_data(request.session_id, "financial_data", result)
+        session_service.update_session_data(request.session_id, "financial_data", result.model_dump() if hasattr(result, 'model_dump') else result)
         session_service.update_session_data(request.session_id, "status", "data_ready")
         
         return FetchDataResponse(
             status="data_ready",
-            data=result,
+            data=result.model_dump() if hasattr(result, 'model_dump') else result,
             message="Financial data retrieved successfully from APIs."
         )
     except Exception as e:
