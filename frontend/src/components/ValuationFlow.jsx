@@ -13,11 +13,9 @@ import SearchStep from './valuation-flow/SearchStep';
 import ModelSelectionStep from './valuation-flow/ModelSelectionStep';
 import RequirementsStep from './valuation-flow/RequirementsStep';
 import ApiDataStep from './valuation-flow/ApiDataStep';
-import DataReviewStep from './valuation-flow/DataReviewStep';
 import AiAssumptionsStep from './valuation-flow/AiAssumptionsStep';
 import ForecastDriversStep from './valuation-flow/ForecastDriversStep';
 import AssumptionsStep from './valuation-flow/AssumptionsStep';
-import BaselineStep from './valuation-flow/BaselineStep';
 import RunValuationStep from './valuation-flow/RunValuationStep';
 import ResultsStep from './valuation-flow/ResultsStep';
 
@@ -55,15 +53,17 @@ const ValuationFlow = () => {
   const [requiredInputs, setRequiredInputs] = useState(null);
   const [requiredFields, setRequiredFields] = useState(null);
   
-  // Step 6: Reviewed data
-  const [reviewedData, setReviewedData] = useState(null);
+  // Financial Data State (used across steps 6-10)
+  const [historicalData, setHistoricalData] = useState(null);
+  const [forecastDrivers, setForecastDrivers] = useState(null);
+  const [peerData, setPeerData] = useState(null);
+  const [dcfInputs, setDcfInputs] = useState(null);
+  const [dupontResults, setDupontResults] = useState(null);
+  const [compsResults, setCompsResults] = useState(null);
+  const [aiData, setAiData] = useState(null);
+  const [aiError, setAiError] = useState(null);
   
-  // Step 7: Baselines
-  const [baselines, setBaselines] = useState(null);
-  
-  // Step 8: Assumption Studio (removed - merged into other steps)
-  const [aiSuggestions, setAiSuggestions] = useState({});
-  const [manualOverrides, setManualOverrides] = useState({});
+  // Assumption Management
   const [confirmedValues, setConfirmedValues] = useState({});
   const [selectedScenario, setSelectedScenario] = useState('base_case');
   const [validationErrors, setValidationErrors] = useState([]);
@@ -76,16 +76,6 @@ const ValuationFlow = () => {
   const [error, setError] = useState(null);
   const [market, setMarket] = useState('international');
   
-  // Financial Data State
-  const [historicalData, setHistoricalData] = useState(null);
-  const [forecastDrivers, setForecastDrivers] = useState(null);
-  const [peerData, setPeerData] = useState(null);
-  const [dcfInputs, setDcfInputs] = useState(null);
-  const [dupontResults, setDupontResults] = useState(null);
-  const [compsResults, setCompsResults] = useState(null);
-  const [aiData, setAiData] = useState(null);
-  const [aiError, setAiError] = useState(null);
-
   // ==================== STEP 1: SEARCH COMPANY ====================
   const handleSearch = useCallback(async () => {
     if (!searchQuery.trim()) return;
