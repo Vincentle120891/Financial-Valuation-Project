@@ -60,6 +60,7 @@ const ValuationFlow = () => {
   // Step 8: Assumption Studio (removed - merged into other steps)
   const [aiSuggestions, setAiSuggestions] = useState({});
   const [manualOverrides, setManualOverrides] = useState({});
+  const [confirmedValues, setConfirmedValues] = useState({});
   const [validationErrors, setValidationErrors] = useState([]);
   
   // Step 9-10: Results
