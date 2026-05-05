@@ -156,6 +156,39 @@ class Step1TickerProcessor:
             is_valid=True
         )
     
+    async def search_tickers(
+        self,
+        query: str,
+        market: str = "international"
+    ) -> List[Dict]:
+        """
+        Search for tickers based on query string.
+        
+        Args:
+            query: Search query (company name or partial ticker)
+            market: Market type (international or vietnamese)
+            
+        Returns:
+            List of matching ticker dictionaries
+        """
+        logger.info(f"Searching tickers for query='{query}', market='{market}'")
+        
+        # Use yfinance search
+        search_results = self.yfinance_service.search_tickers(query)
+        
+        results = []
+        for result in search_results:
+            results.append({
+                'symbol': result.get('symbol', ''),
+                'name': result.get('shortname', result.get('symbol', '')),
+                'exchange': result.get('exchDisp', 'UNKNOWN'),
+                'sector': result.get('sector'),
+                'industry': result.get('industry'),
+                'market': market
+            })
+        
+        return results
+    
     def suggest_similar_tickers(
         self,
         query: str,

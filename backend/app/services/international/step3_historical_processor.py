@@ -71,6 +71,37 @@ class Step3HistoricalProcessor:
     def __init__(self, yfinance_service: Optional[YFinanceService] = None):
         self.yfinance_service = yfinance_service or YFinanceService()
     
+    async def validate_ticker(
+        self,
+        ticker: str,
+        market: str = "international"
+    ) -> tuple[bool, str]:
+        """
+        Validate that a ticker has sufficient historical data.
+        
+        Args:
+            ticker: Ticker symbol
+            market: Market type
+            
+        Returns:
+            Tuple of (is_valid, message)
+        """
+        logger.info(f"Validating ticker='{ticker}', market='{market}'")
+        
+        try:
+            # Process historical data
+            response = self.process_historical_data(ticker, market)
+            
+            # Check if we have enough years
+            if len(response.historical_data) >= self.MIN_YEARS_REQUIRED:
+                return True, f"Ticker {ticker} has {len(response.historical_data)} years of data"
+            else:
+                return False, f"Insufficient data for {ticker}: only {len(response.historical_data)} years (need {self.MIN_YEARS_REQUIRED})"
+                
+        except Exception as e:
+            logger.error(f"Error validating ticker {ticker}: {str(e)}")
+            return False, f"Validation failed: {str(e)}"
+    
     def process_historical_data(
         self,
         ticker: str,

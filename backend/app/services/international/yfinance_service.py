@@ -25,7 +25,7 @@ VIETNAM MARKET ENHANCEMENT:
 """
 
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
@@ -559,6 +559,45 @@ class YFinanceService:
             if val == float('inf') or val == float('-inf'):
                 return None
         return val
+
+
+    def search_tickers(self, query: str) -> List[Dict[str, Any]]:
+        """
+        Search for tickers by company name or symbol.
+        
+        Args:
+            query: Search query string
+            
+        Returns:
+            List of matching ticker results
+        """
+        import yfinance as yf
+        
+        try:
+            logger.info(f"Searching tickers for query='{query}'")
+            results = yf.Search(query=query, max_results=10)
+            
+            # Convert to list of dicts
+            ticker_list = []
+            if hasattr(results, 'quotes'):
+                for quote in results.quotes:
+                    ticker_list.append({
+                        'symbol': quote.get('symbol', ''),
+                        'shortname': quote.get('shortname', ''),
+                        'longname': quote.get('longname', ''),
+                        'exchDisp': quote.get('exchDisp', ''),
+                        'typeDisp': quote.get('typeDisp', ''),
+                        'exchange': quote.get('exchange', ''),
+                        'sector': quote.get('sector'),
+                        'industry': quote.get('industry'),
+                    })
+            
+            logger.info(f"Found {len(ticker_list)} tickers for query='{query}'")
+            return ticker_list
+            
+        except Exception as e:
+            logger.error(f"Error searching tickers: {str(e)}")
+            return []
 
 
 def fetch_yfinance_data(ticker_symbol: str, market: str = "international") -> Dict[str, Any]:
