@@ -61,6 +61,51 @@ class Step2MarketDataProcessor:
     def __init__(self, yfinance_service: Optional[YFinanceService] = None):
         self.yfinance_service = yfinance_service or YFinanceService()
     
+    async def select_company(
+        self,
+        ticker: str,
+        market: str = "international",
+        session_id: Optional[str] = None
+    ) -> Dict:
+        """
+        Select a company and fetch its market data.
+        
+        Args:
+            ticker: Ticker symbol
+            market: Market type
+            session_id: Optional session ID
+            
+        Returns:
+            Dictionary with status and message
+        """
+        logger.info(f"Selecting company ticker='{ticker}', market='{market}'")
+        
+        try:
+            # Process market data
+            response = self.process_market_data(ticker, market)
+            
+            # Check if we got valid data
+            if response.data_quality_score > 0.5:
+                return {
+                    "status": "completed",
+                    "message": f"Successfully selected {ticker}",
+                    "data": response.model_dump()
+                }
+            else:
+                return {
+                    "status": "partial",
+                    "message": f"Selected {ticker} with limited data",
+                    "warnings": response.warnings,
+                    "data": response.model_dump()
+                }
+                
+        except Exception as e:
+            logger.error(f"Error selecting company {ticker}: {str(e)}")
+            return {
+                "status": "failed",
+                "message": f"Failed to select {ticker}: {str(e)}"
+            }
+    
     def process_market_data(
         self,
         ticker: str,
