@@ -731,7 +731,7 @@ class Step6DataReviewProcessor:
     # === Helper Methods for DuPont ===
     
     def _process_dupont_income_data(self, historical_data: Dict, overrides: Dict) -> HistoricalFinancialsDisplay:
-        """Process income statement data for DuPont"""
+        """Process income statement data for DuPont (6 fields)"""
         years = []
         data_fields = []
         
@@ -741,10 +741,10 @@ class Step6DataReviewProcessor:
                 year = int(col.year)
                 years.append(year)
                 
-                # Net Income
+                # 1. Net Income
                 ni_val = financials.loc['Net Income', col] if 'Net Income' in financials.index else None
                 data_fields.append(DataField(
-                    field_name=f"Net Income_{year}",
+                    field_name=f"Net_Income_{year}",
                     value=ni_val,
                     unit="USD",
                     status=DataStatus.RETRIEVED if ni_val else DataStatus.MISSING,
@@ -752,67 +752,268 @@ class Step6DataReviewProcessor:
                     is_critical=True
                 ))
                 
-                # Revenue
+                # 2. Total Revenue
                 rev_val = financials.loc['Total Revenue', col] if 'Total Revenue' in financials.index else None
                 data_fields.append(DataField(
-                    field_name=f"Revenue_{year}",
+                    field_name=f"Total_Revenue_{year}",
                     value=rev_val,
                     unit="USD",
                     status=DataStatus.RETRIEVED if rev_val else DataStatus.MISSING,
                     source="yfinance" if rev_val else None,
                     is_critical=True
                 ))
+                
+                # 3. Operating Income (EBIT)
+                op_val = financials.loc['Operating Income', col] if 'Operating Income' in financials.index else None
+                data_fields.append(DataField(
+                    field_name=f"Operating_Income_{year}",
+                    value=op_val,
+                    unit="USD",
+                    status=DataStatus.RETRIEVED if op_val else DataStatus.MISSING,
+                    source="yfinance" if op_val else None,
+                    is_critical=True
+                ))
+                
+                # 4. Interest Expense
+                int_val = financials.loc['Interest Expense', col] if 'Interest Expense' in financials.index else None
+                data_fields.append(DataField(
+                    field_name=f"Interest_Expense_{year}",
+                    value=int_val,
+                    unit="USD",
+                    status=DataStatus.RETRIEVED if int_val else DataStatus.MISSING,
+                    source="yfinance" if int_val else None,
+                    is_critical=False
+                ))
+                
+                # 5. Tax Provision
+                tax_val = financials.loc['Tax Provision', col] if 'Tax Provision' in financials.index else None
+                data_fields.append(DataField(
+                    field_name=f"Tax_Provision_{year}",
+                    value=tax_val,
+                    unit="USD",
+                    status=DataStatus.RETRIEVED if tax_val else DataStatus.MISSING,
+                    source="yfinance" if tax_val else None,
+                    is_critical=False
+                ))
+                
+                # 6. Pre-Tax Income
+                pretax_val = financials.loc['Pretax Income', col] if 'Pretax Income' in financials.index else None
+                data_fields.append(DataField(
+                    field_name=f"Pre_Tax_Income_{year}",
+                    value=pretax_val,
+                    unit="USD",
+                    status=DataStatus.RETRIEVED if pretax_val else DataStatus.MISSING,
+                    source="yfinance" if pretax_val else None,
+                    is_critical=False
+                ))
         
         return HistoricalFinancialsDisplay(years=years, data_fields=data_fields)
     
-    def _process_dupont_balance_data(self, historical_data: Dict, overrides: Dict) -> MarketDataDisplay:
-        """Process balance sheet data for DuPont"""
+    def _process_dupont_balance_data(self, historical_data: Dict, overrides: Dict) -> HistoricalFinancialsDisplay:
+        """Process balance sheet data for DuPont (6 fields)"""
+        years = []
+        data_fields = []
+        
         balance_sheet = historical_data.get("balance_sheet")
-        
-        # Total Assets
-        total_assets = None
         if balance_sheet is not None:
             for col in balance_sheet.columns:
-                if 'Total Assets' in balance_sheet.index:
-                    total_assets = balance_sheet.loc['Total Assets', col]
-                    break
+                year = int(col.year)
+                years.append(year)
+                
+                # 1. Total Assets
+                assets_val = balance_sheet.loc['Total Assets', col] if 'Total Assets' in balance_sheet.index else None
+                data_fields.append(DataField(
+                    field_name=f"Total_Assets_{year}",
+                    value=assets_val,
+                    unit="USD",
+                    status=DataStatus.RETRIEVED if assets_val else DataStatus.MISSING,
+                    source="yfinance" if assets_val else None,
+                    is_critical=True
+                ))
+                
+                # 2. Shareholders Equity
+                equity_val = balance_sheet.loc['Stockholders Equity', col] if 'Stockholders Equity' in balance_sheet.index else None
+                data_fields.append(DataField(
+                    field_name=f"Shareholders_Equity_{year}",
+                    value=equity_val,
+                    unit="USD",
+                    status=DataStatus.RETRIEVED if equity_val else DataStatus.MISSING,
+                    source="yfinance" if equity_val else None,
+                    is_critical=True
+                ))
+                
+                # 3. Total Liabilities
+                liab_val = balance_sheet.loc['Total Liabilities Net Minority Interest', col] if 'Total Liabilities Net Minority Interest' in balance_sheet.index else None
+                data_fields.append(DataField(
+                    field_name=f"Total_Liabilities_{year}",
+                    value=liab_val,
+                    unit="USD",
+                    status=DataStatus.RETRIEVED if liab_val else DataStatus.MISSING,
+                    source="yfinance" if liab_val else None,
+                    is_critical=False
+                ))
+                
+                # 4. Long-Term Debt
+                ltd_val = balance_sheet.loc['Long Term Debt', col] if 'Long Term Debt' in balance_sheet.index else None
+                data_fields.append(DataField(
+                    field_name=f"Long_Term_Debt_{year}",
+                    value=ltd_val,
+                    unit="USD",
+                    status=DataStatus.RETRIEVED if ltd_val else DataStatus.MISSING,
+                    source="yfinance" if ltd_val else None,
+                    is_critical=False
+                ))
+                
+                # 5. Short-Term Debt
+                std_val = balance_sheet.loc['Current Debt', col] if 'Current Debt' in balance_sheet.index else None
+                data_fields.append(DataField(
+                    field_name=f"Short_Term_Debt_{year}",
+                    value=std_val,
+                    unit="USD",
+                    status=DataStatus.RETRIEVED if std_val else DataStatus.MISSING,
+                    source="yfinance" if std_val else None,
+                    is_critical=False
+                ))
+                
+                # 6. Cash & Equivalents
+                cash_val = balance_sheet.loc['Cash And Cash Equivalents', col] if 'Cash And Cash Equivalents' in balance_sheet.index else None
+                data_fields.append(DataField(
+                    field_name=f"Cash_And_Equivalents_{year}",
+                    value=cash_val,
+                    unit="USD",
+                    status=DataStatus.RETRIEVED if cash_val else DataStatus.MISSING,
+                    source="yfinance" if cash_val else None,
+                    is_critical=False
+                ))
         
-        assets_field = DataField(
-            field_name="Total Assets",
-            value=total_assets,
-            unit="USD",
-            status=DataStatus.RETRIEVED if total_assets else DataStatus.MISSING,
-            source="yfinance" if total_assets else None,
-            is_critical=True
-        ) if total_assets else None
-        
-        # Shareholders Equity
-        equity = None
-        if balance_sheet is not None:
-            for col in balance_sheet.columns:
-                if 'Stockholders Equity' in balance_sheet.index:
-                    equity = balance_sheet.loc['Stockholders Equity', col]
-                    break
-        
-        equity_field = DataField(
-            field_name="Shareholders Equity",
-            value=equity,
-            unit="USD",
-            status=DataStatus.RETRIEVED if equity else DataStatus.MISSING,
-            source="yfinance" if equity else None,
-            is_critical=True
-        ) if equity else None
-        
-        return MarketDataDisplay(
-            market_cap=assets_field,
-            shares_outstanding=equity_field
-        )
+        return HistoricalFinancialsDisplay(years=years, data_fields=data_fields)
     
-    def _calculate_dupont_intermediate_metrics(self, income: HistoricalFinancialsDisplay, balance: MarketDataDisplay) -> CalculatedMetricsDisplay:
+    def _calculate_dupont_intermediate_metrics(self, income: HistoricalFinancialsDisplay, balance: HistoricalFinancialsDisplay) -> CalculatedMetricsDisplay:
         """Calculate ONLY intermediate metrics for DuPont - NOT final ROE"""
         fields = []
         
-        # Placeholder for intermediate calculations
+        # Extract data by year for calculations
+        income_by_year = {}
+        for field in income.data_fields:
+            year = field.field_name.split('_')[-1]
+            if year not in income_by_year:
+                income_by_year[year] = {}
+            income_by_year[year][field.field_name.rsplit('_', 1)[0]] = field.value
+        
+        balance_by_year = {}
+        for field in balance.data_fields:
+            year = field.field_name.split('_')[-1]
+            if year not in balance_by_year:
+                balance_by_year[year] = {}
+            balance_by_year[year][field.field_name.rsplit('_', 1)[0]] = field.value
+        
+        years = sorted(income_by_year.keys())
+        
+        # Calculate trends for each year (where prior year data exists)
+        for i, year in enumerate(years):
+            curr = income_by_year.get(year, {})
+            prev = income_by_year.get(str(int(year)-1), {}) if i > 0 else {}
+            
+            # Net Profit Margin
+            ni = curr.get('Net_Income')
+            rev = curr.get('Total_Revenue')
+            if ni and rev and rev != 0:
+                margin = ni / rev
+                fields.append(DataField(
+                    field_name=f"Net_Profit_Margin_{year}",
+                    value=margin,
+                    unit="%",
+                    status=DataStatus.CALCULATED,
+                    formula="Net Income / Revenue",
+                    is_critical=False
+                ))
+            
+            # Operating Margin
+            op = curr.get('Operating_Income')
+            if op and rev and rev != 0:
+                op_margin = op / rev
+                fields.append(DataField(
+                    field_name=f"Operating_Margin_{year}",
+                    value=op_margin,
+                    unit="%",
+                    status=DataStatus.CALCULATED,
+                    formula="Operating Income / Revenue",
+                    is_critical=False
+                ))
+            
+            # Asset Turnover (requires average assets)
+            if i > 0:
+                curr_assets = balance_by_year.get(year, {}).get('Total_Assets')
+                prev_assets = balance_by_year.get(str(int(year)-1), {}).get('Total_Assets')
+                if curr_assets and prev_assets:
+                    avg_assets = (curr_assets + prev_assets) / 2
+                    if avg_assets != 0:
+                        turnover = rev / avg_assets
+                        fields.append(DataField(
+                            field_name=f"Asset_Turnover_{year}",
+                            value=turnover,
+                            unit="x",
+                            status=DataStatus.CALCULATED,
+                            formula="Revenue / Average Total Assets",
+                            is_critical=False
+                        ))
+                
+                # Equity Multiplier
+                curr_equity = balance_by_year.get(year, {}).get('Shareholders_Equity')
+                prev_equity = balance_by_year.get(str(int(year)-1), {}).get('Shareholders_Equity')
+                if curr_equity and prev_equity:
+                    avg_equity = (curr_equity + prev_equity) / 2
+                    if avg_equity != 0:
+                        multiplier = avg_assets / avg_equity
+                        fields.append(DataField(
+                            field_name=f"Equity_Multiplier_{year}",
+                            value=multiplier,
+                            unit="x",
+                            status=DataStatus.CALCULATED,
+                            formula="Average Total Assets / Average Shareholders Equity",
+                            is_critical=False
+                        ))
+                
+                # Debt-to-Equity Ratio
+                curr_debt = (balance_by_year.get(year, {}).get('Long_Term_Debt') or 0) + \
+                           (balance_by_year.get(year, {}).get('Short_Term_Debt') or 0)
+                if curr_equity and curr_equity != 0:
+                    dte = curr_debt / curr_equity
+                    fields.append(DataField(
+                        field_name=f"Debt_to_Equity_{year}",
+                        value=dte,
+                        unit="x",
+                        status=DataStatus.CALCULATED,
+                        formula="(Long Term Debt + Short Term Debt) / Shareholders Equity",
+                        is_critical=False
+                    ))
+            
+            # Interest Burden
+            ebit = curr.get('Operating_Income')
+            pretax = curr.get('Pre_Tax_Income')
+            if ebit and pretax and ebit != 0:
+                interest_burden = pretax / ebit
+                fields.append(DataField(
+                    field_name=f"Interest_Burden_{year}",
+                    value=interest_burden,
+                    unit="x",
+                    status=DataStatus.CALCULATED,
+                    formula="Pre-Tax Income / Operating Income",
+                    is_critical=False
+                ))
+            
+            # Tax Burden
+            if pretax and ni and pretax != 0:
+                tax_burden = ni / pretax
+                fields.append(DataField(
+                    field_name=f"Tax_Burden_{year}",
+                    value=tax_burden,
+                    unit="x",
+                    status=DataStatus.CALCULATED,
+                    formula="Net Income / Pre-Tax Income",
+                    is_critical=False
+                ))
+        
         return CalculatedMetricsDisplay(data_fields=fields)
     
     # === Helper Methods for Comps ===
