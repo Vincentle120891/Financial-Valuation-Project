@@ -74,6 +74,52 @@ class ModelSelectRequest(BaseModel):
         return v
 
 
+class ModelSelectResponse(BaseModel):
+    """Response model for model selection."""
+    message: str
+    next_step: str
+    selected_model: str
+
+
+class PrepareInputsRequest(BaseModel):
+    """Request model for prepare inputs."""
+    session_id: str = Field(..., min_length=1, description="Session identifier")
+
+
+class FetchDataRequest(BaseModel):
+    """Request model for fetching data."""
+    session_id: str = Field(..., min_length=1, description="Session identifier")
+
+
+class GenerateAIRequest(BaseModel):
+    """Request model for generating AI assumptions."""
+    session_id: str = Field(..., min_length=1, description="Session identifier")
+
+
+class ConfirmAssumptionsRequest(BaseModel):
+    """Request model for confirming assumptions."""
+    session_id: str = Field(..., min_length=1, description="Session identifier")
+    confirmed_values: Dict[str, Any] = Field(..., description="User confirmed or modified values")
+
+
+class ValuateRequest(BaseModel):
+    """Request model for running valuation."""
+    session_id: str = Field(..., min_length=1, description="Session identifier")
+
+
+class ConfirmAssumptionsResponse(BaseModel):
+    """Response model for confirm assumptions endpoint."""
+    status: str
+    message: str
+
+
+class ValuateResponse(BaseModel):
+    """Response model for valuation endpoint."""
+    status: str
+    valuation_results: List[Dict[str, Any]]
+    message: str
+
+
 class AssumptionConfirmRequest(BaseModel):
     """Request model for confirming assumptions."""
     session_id: str = Field(..., min_length=1, description="Session identifier")
@@ -171,6 +217,16 @@ class AIAssumptionsResponse(BaseModel):
     
     class Config:
         extra = "allow"  # Allow additional fields like _metadata with provider_errors and fallback_reason
+
+
+class GenerateAIResponse(BaseModel):
+    """Response model for generating AI assumptions."""
+    status: str
+    suggestions: Dict[str, Any]
+    message: str
+    
+    class Config:
+        extra = "allow"
 
 
 class ValuationResultResponse(BaseModel):
