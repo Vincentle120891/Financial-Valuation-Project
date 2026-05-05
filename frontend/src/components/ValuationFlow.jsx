@@ -15,7 +15,6 @@ import RequirementsStep from './valuation-flow/RequirementsStep';
 import ApiDataStep from './valuation-flow/ApiDataStep';
 import DataReviewStep from './valuation-flow/DataReviewStep';
 import BaselineStep from './valuation-flow/BaselineStep';
-import AssumptionStudioStep from './valuation-flow/AssumptionStudioStep';
 import RunValuationStep from './valuation-flow/RunValuationStep';
 import ResultsStep from './valuation-flow/ResultsStep';
 
@@ -58,8 +57,7 @@ const ValuationFlow = () => {
   // Step 7: Baselines
   const [baselines, setBaselines] = useState(null);
   
-  // Step 8: Assumption Studio
-  const [assumptionStudio, setAssumptionStudio] = useState(null);
+  // Step 8: Assumption Studio (removed - merged into other steps)
   const [aiSuggestions, setAiSuggestions] = useState({});
   const [manualOverrides, setManualOverrides] = useState({});
   const [validationErrors, setValidationErrors] = useState([]);
