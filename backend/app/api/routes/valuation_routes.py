@@ -25,6 +25,7 @@ from app.api.schemas import (
     ValuateRequest,
     ValuateResponse
 )
+from app.services.international.step5_assumptions_processor import Step5AssumptionsProcessor
 from app.services.international.step6_data_review import Step6DataReviewProcessor
 from app.services.international.step7_ai_suggestions import Step7AISuggestionsProcessor
 from app.services.international.step8_manual_overrides import Step8ManualOverridesProcessor
@@ -35,6 +36,7 @@ logger = get_logger(__name__)
 router = APIRouter(tags=["Valuation"])
 
 # Initialize processors
+step5_processor = Step5AssumptionsProcessor()
 step6_processor = Step6DataReviewProcessor()
 step7_processor = Step7AISuggestionsProcessor()
 step8_processor = Step8ManualOverridesProcessor()
@@ -71,7 +73,7 @@ async def select_models(request: ModelSelectRequest):
 async def prepare_inputs(request: PrepareInputsRequest):
     """
     Step 5: Prepare required inputs for selected model.
-    Uses SessionService for session management.
+    Uses SessionService for session management and Step5AssumptionsProcessor for international markets.
     """
     try:
         # Get session data using SessionService
@@ -80,29 +82,34 @@ async def prepare_inputs(request: PrepareInputsRequest):
             raise HTTPException(status_code=404, detail="Session not found")
         
         model = session_service.get_session_value(request.session_id, "selected_model", "DCF")
+        ticker = session.get("ticker")
+        peer_tickers = session.get("peer_tickers", [])
         
-        # Define required inputs based on model - matching InputRequirement schema
-        required_inputs = [
-            {"category": "historical", "name": "revenue", "requiresInput": False},
-            {"category": "historical", "name": "net_income", "requiresInput": False},
-            {"category": "historical", "name": "total_assets", "requiresInput": False},
-            {"category": "historical", "name": "total_equity", "requiresInput": False},
-            {"category": "historical", "name": "operating_income", "requiresInput": False},
-            {"category": "historical", "name": "ebitda", "requiresInput": False},
-            {"category": "historical", "name": "free_cash_flow", "requiresInput": False},
-            {"category": "forecast", "name": "revenue_growth_rate", "requiresInput": True},
-            {"category": "forecast", "name": "operating_margin", "requiresInput": True},
-            {"category": "forecast", "name": "tax_rate", "requiresInput": True},
-            {"category": "discount_rate", "name": "wacc", "requiresInput": True},
-            {"category": "terminal_value", "name": "terminal_growth_rate", "requiresInput": True},
-        ]
+        # Use Step5AssumptionsProcessor to get required inputs from international service
+        result = step5_processor.process_data_retrieval_inputs(
+            ticker=ticker or "UNKNOWN",
+            valuation_model=model,
+            peer_tickers=peer_tickers
+        )
+        
+        # Convert retrieval groups to InputRequirement format for frontend
+        required_inputs = []
+        for group_name, fields in result.retrieval_groups.items():
+            for field in fields:
+                required_inputs.append({
+                    "category": group_name,
+                    "name": field.field_name,
+                    "requiresInput": field.is_required,
+                    "description": field.description,
+                    "unit": None
+                })
         
         session_service.update_session_data(request.session_id, "status", "ready_to_fetch")
         
         return PrepareInputsResponse(
             status="ready_to_fetch",
             required_inputs=required_inputs,
-            message=f"Found {len(required_inputs)} required inputs for your selected model"
+            message=result.message
         )
     except Exception as e:
         logger.error(f"Prepare inputs error: {e}")
