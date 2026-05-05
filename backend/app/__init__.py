@@ -10,8 +10,7 @@ A professional-grade valuation platform implementing:
 Package Structure:
 ├── api/           # API layer (routes, schemas)
 ├── core/          # Core configuration, security, exceptions
-├── engines/       # Valuation calculation engines
-├── services/      # Business logic and orchestration
+├── services/      # Business logic, orchestration, and calculation engines
 └── models/        # Domain models and data structures
 """
 
