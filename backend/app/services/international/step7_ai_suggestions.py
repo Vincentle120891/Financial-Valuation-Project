@@ -14,7 +14,7 @@ from pydantic import BaseModel
 from enum import Enum
 from datetime import datetime
 
-from app.engines.international.ai_engine import (
+from app.services.international.ai_engine import (
     AIFallbackEngine,
     get_strategy,
     DCFStrategy,

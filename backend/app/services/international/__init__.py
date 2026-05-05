@@ -37,7 +37,7 @@ from app.services.international.step3_historical_processor import Step3Historica
 from app.services.international.step4_forecast_processor import Step4ForecastProcessor
 from app.services.international.step5_assumptions_processor import Step5AssumptionsProcessor
 from app.services.international.step6_data_review import Step6DataReviewProcessor
-from app.services.international.step7_ai_suggestions import Step7DerivedDataProcessor
+from app.services.international.step7_ai_suggestions import Step7AISuggestionsProcessor
 from app.services.international.step8_manual_overrides import Step8ManualOverridesProcessor
 from app.services.international.step9_final_calculation import Step9FinalCalculationProcessor
 from app.services.international.step10_valuation_processor import Step10ValuationProcessor
@@ -69,7 +69,7 @@ __all__ = [
     "Step4ForecastProcessor",
     "Step5AssumptionsProcessor",
     "Step6DataReviewProcessor",
-    "Step7DerivedDataProcessor",
+    "Step7AISuggestionsProcessor",
     "Step8ManualOverridesProcessor",
     "Step9FinalCalculationProcessor",
     "Step10ValuationProcessor",

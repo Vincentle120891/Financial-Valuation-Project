@@ -14,11 +14,8 @@ from typing import List, Dict, Optional, Tuple
 from dataclasses import dataclass, field
 import statistics
 
-# Handle both package and script execution contexts
-try:
-    from .ai_engine import suggest_peer_companies
-except ImportError:
-    from ai_engine import suggest_peer_companies
+# Import AI engine for peer suggestions
+from app.services.international.ai_engine import suggest_peer_companies
 
 
 # ============================================================================

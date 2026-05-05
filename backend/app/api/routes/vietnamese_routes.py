@@ -29,7 +29,7 @@ from app.models.vietnamese import (
     VNFinancialData
 )
 from app.services.vietnamese import get_vietnamese_input_manager
-from app.engines.vietnamese import get_vietnamese_dcf_engine
+from app.services.vietnamese.vietnamese_dcf_engine import get_vietnamese_dcf_engine
 
 logger = logging.getLogger(__name__)
 
