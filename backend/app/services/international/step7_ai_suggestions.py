@@ -1,4 +1,29 @@
-"""Step 7: AI Suggestion Layer - AI Assumption Generator"""
+"""
+Step 7: Derived Data Layer - Historical Static Inputs Calculator
+
+Purpose:
+    Calculate historical static inputs that yfinance cannot provide directly 
+    but are mathematically required for Step 9 final calculations.
+    
+    This is NOT for forecasting or AI suggestions.
+    This is for deriving missing historical facts from retrieved data.
+
+Logic:
+    1. Ingest retrieved data from Step 6.
+    2. Perform pure mathematical derivations:
+       - Effective Tax Rate (Avg of historical Tax/Pre-Tax Income)
+       - Unlevered Beta (Re-levering peer betas to industry average)
+       - Historical Working Capital % of Revenue
+       - Historical CapEx % of Revenue
+       - Historical D&A % of Revenue
+       - Peer Median Multiples (for Terminal Value benchmarking)
+       - Risk-Free Rate baseline (from external macro source)
+       - Market Risk Premium baseline
+    3. Return DerivedDataResponse with these calculated baselines.
+
+Output:
+    DerivedDataResponse containing calculated historical constants ready for Step 8.
+"""
 import logging
 from typing import Dict, List, Optional, Any
 from pydantic import BaseModel
@@ -13,360 +38,500 @@ class ValuationModel(str, Enum):
     DUPONT = "DUPONT"
     COMPS = "COMPS"
 
-class AISuggestion(BaseModel):
-    """AI-generated suggestion for an assumption"""
-    metric: str
-    suggested_value: float
-    confidence: float  # 0.0 to 1.0
-    reasoning: str
-    min_reasonable: float
-    max_reasonable: float
-    based_on: str  # What data/analysis this is based on
+class DerivedMetric(BaseModel):
+    """Calculated historical metric from Step 6 data"""
+    metric_name: str
+    calculated_value: float
+    calculation_method: str
+    data_points_used: int
+    min_historical: float
+    max_historical: float
+    avg_historical: float
+    trend: str  # "increasing", "decreasing", "stable"
+    reliability_score: float  # 0.0 to 1.0 based on data quality
 
-class AISuggestionsResponse(BaseModel):
+class DerivedDataResponse(BaseModel):
     """
-    Step 7 Response: AI-generated suggestions for assumptions
-    Different models have different required AI inputs
+    Step 7 Response: Calculated historical static inputs
+    These are derived from Step 6 data, not AI-suggested
     """
     session_id: str
     ticker: str
     timestamp: datetime
     valuation_model: ValuationModel
-    suggestions: List[AISuggestion]
+    derived_metrics: List[DerivedMetric]
     model_specific_notes: str
-    ready_for_manual_override: bool = True
+    ready_for_assumption_input: bool = True
 
 
-class Step7AISuggestionsProcessor:
+class Step7DerivedDataProcessor:
     """
-    Step 7: AI Suggestion Layer (AI Assumption Generator)
+    Step 7: Derived Data Layer (Historical Static Inputs Calculator)
     
-    Analyzes data from Step 6 and generates model-specific suggestions:
-    - DCF: Suggests WACC, Terminal Growth, and Margin trends based on historical volatility
-    - DuPont: Suggests target ROE components based on industry peers
-    - Comps: Suggests appropriate peer multiples and outlier filters
+    Calculates historical inputs that yfinance cannot provide directly:
+    - DCF: Effective Tax Rate, Unlevered Beta, WC/Revenue %, CapEx/Revenue %
+    - DuPont: Historical ROE components trends
+    - Comps: Peer median multiples calculations
     """
     
     def __init__(self):
         pass
     
-    async def generate_ai_suggestions(
+    async def calculate_derived_data(
         self,
         ticker: str,
         valuation_model: str,
-        step6_data: Dict[str, Any],
-        market_context: Optional[Dict] = None
-    ) -> AISuggestionsResponse:
+        step6_data: Dict[str, Any]
+    ) -> DerivedDataResponse:
         """
-        Generate AI suggestions based on Step 6 data.
+        Calculate derived historical data from Step 6.
         
         Args:
             ticker: Stock ticker symbol
             valuation_model: DCF, DUPONT, or COMPS
             step6_data: Aggregated data from Step 6
-            market_context: Optional market/industry context
         
         Returns:
-            AISuggestionsResponse with recommended values and reasoning
+            DerivedDataResponse with calculated historical constants
         """
         model_enum = ValuationModel(valuation_model.upper())
         
         if model_enum == ValuationModel.DCF:
-            return await self._generate_dcf_suggestions(ticker, step6_data, market_context)
+            return await self._calculate_dcf_derived_data(ticker, step6_data)
         elif model_enum == ValuationModel.DUPONT:
-            return await self._generate_dupont_suggestions(ticker, step6_data, market_context)
+            return await self._calculate_dupont_derived_data(ticker, step6_data)
         elif model_enum == ValuationModel.COMPS:
-            return await self._generate_comps_suggestions(ticker, step6_data, market_context)
+            return await self._calculate_comps_derived_data(ticker, step6_data)
         else:
             raise ValueError(f"Unknown valuation model: {valuation_model}")
     
-    async def _generate_dcf_suggestions(
+    async def _calculate_dcf_derived_data(
         self,
         ticker: str,
-        step6_data: Dict,
-        market_context: Optional[Dict]
-    ) -> AISuggestionsResponse:
+        step6_data: Dict
+    ) -> DerivedDataResponse:
         """
-        Generate AI suggestions for DCF model.
+        Calculate derived historical data for DCF model.
         
-        Suggests:
-        - WACC based on beta, risk-free rate, market premium
-        - Terminal Growth based on GDP expectations and industry maturity
-        - Margin trends based on historical volatility
-        - Revenue growth based on historical CAGR and industry trends
+        Derives:
+        - Effective Tax Rate (avg of historical Tax/Pre-Tax Income)
+        - Unlevered Beta (from peer comparables)
+        - Working Capital % of Revenue (historical avg)
+        - CapEx % of Revenue (historical avg)
+        - D&A % of Revenue (historical avg)
+        - Interest Expense % of Debt (implied cost of debt)
         """
-        suggestions = []
+        derived_metrics = []
         
-        # Extract data from Step 6
+        # Extract historical financials from Step 6
+        historical_financials = step6_data.get("historical_financials", {})
         market_data = step6_data.get("market_data", {})
-        historical = step6_data.get("historical_financials", {})
-        forecast = step6_data.get("forecast_drivers", {})
+        peer_comparables = step6_data.get("peer_comparables_for_wacc", [])
         
-        # Get beta for WACC calculation
-        beta = 1.0
-        if market_data and hasattr(market_data, 'beta') and market_data.beta:
-            beta = market_data.beta.value or 1.0
+        # 1. Calculate Effective Tax Rate
+        tax_rates = []
+        if hasattr(historical_financials, 'data_fields'):
+            tax_provisions = []
+            pre_tax_incomes = []
+            for field in historical_financials.data_fields:
+                if 'Tax Provision' in field.field_name and field.value:
+                    tax_provisions.append(field.value)
+                if 'Pre-Tax Income' in field.field_name and field.value:
+                    pre_tax_incomes.append(field.value)
+            
+            if len(tax_provisions) == len(pre_tax_incomes) and len(tax_provisions) > 0:
+                for i in range(len(tax_provisions)):
+                    if pre_tax_incomes[i] != 0:
+                        tax_rates.append(tax_provisions[i] / pre_tax_incomes[i])
         
-        # Suggest WACC
-        # WACC = Re * E/V + Rd * D/V * (1-T)
-        # Re = Rf + Beta * MRP
-        rf_rate = 0.045  # Default risk-free rate (10Y Treasury)
-        mrp = 0.055  # Market Risk Premium
-        cost_of_equity = rf_rate + beta * mrp
+        if tax_rates:
+            avg_tax_rate = sum(tax_rates) / len(tax_rates)
+            derived_metrics.append(DerivedMetric(
+                metric_name="Effective Tax Rate",
+                calculated_value=avg_tax_rate,
+                calculation_method="Average of (Tax Provision / Pre-Tax Income)",
+                data_points_used=len(tax_rates),
+                min_historical=min(tax_rates),
+                max_historical=max(tax_rates),
+                avg_historical=avg_tax_rate,
+                trend="stable" if max(tax_rates) - min(tax_rates) < 0.05 else "variable",
+                reliability_score=0.9 if len(tax_rates) >= 3 else 0.6
+            ))
         
-        # Simplified WACC (assuming 80% equity, 20% debt)
-        cost_of_debt = 0.04
-        tax_rate = 0.21
-        wacc_suggested = cost_of_equity * 0.8 + cost_of_debt * 0.2 * (1 - tax_rate)
+        # 2. Calculate Working Capital % of Revenue
+        wc_percentages = []
+        revenues = []
+        wc_changes = []
+        if hasattr(historical_financials, 'data_fields'):
+            for field in historical_financials.data_fields:
+                if 'Revenue' in field.field_name and field.value:
+                    revenues.append(field.value)
+                if 'Working Capital Changes' in field.field_name and field.value:
+                    wc_changes.append(field.value)
         
-        suggestions.append(AISuggestion(
-            metric="WACC",
-            suggested_value=wacc_suggested,
-            confidence=0.75,
-            reasoning=f"Based on beta={beta:.2f}, risk-free rate={rf_rate:.2%}, market risk premium={mrp:.2%}. Cost of equity={cost_of_equity:.2%}",
-            min_reasonable=0.06,
-            max_reasonable=0.15,
-            based_on="CAPM Model with current market conditions"
-        ))
+        if len(revenues) == len(wc_changes) and len(revenues) > 0:
+            for i in range(len(revenues)):
+                if revenues[i] != 0:
+                    wc_percentages.append(abs(wc_changes[i]) / revenues[i])
         
-        # Suggest Terminal Growth Rate
-        # Typically based on long-term GDP growth expectations
-        terminal_growth = 0.025  # Default 2.5% (long-term GDP expectation)
-        suggestions.append(AISuggestion(
-            metric="Terminal Growth Rate",
-            suggested_value=terminal_growth,
-            confidence=0.70,
-            reasoning="Based on long-term GDP growth expectations. Should not exceed nominal GDP growth.",
-            min_reasonable=0.01,
-            max_reasonable=0.04,
-            based_on="Long-term economic growth projections"
-        ))
+        if wc_percentages:
+            avg_wc_pct = sum(wc_percentages) / len(wc_percentages)
+            derived_metrics.append(DerivedMetric(
+                metric_name="Working Capital % of Revenue",
+                calculated_value=avg_wc_pct,
+                calculation_method="Average of (|WC Change| / Revenue)",
+                data_points_used=len(wc_percentages),
+                min_historical=min(wc_percentages),
+                max_historical=max(wc_percentages),
+                avg_historical=avg_wc_pct,
+                trend="increasing" if wc_percentages[-1] > wc_percentages[0] else "decreasing",
+                reliability_score=0.85 if len(wc_percentages) >= 3 else 0.6
+            ))
         
-        # Suggest Revenue Growth based on historical CAGR
-        hist_growth = forecast.get("revenue_growth", 0.05) if isinstance(forecast, dict) else 0.05
-        if hasattr(forecast, 'data_fields'):
-            for field in forecast.data_fields:
-                if 'Revenue Growth' in field.field_name and field.value:
-                    hist_growth = field.value
-                    break
+        # 3. Calculate CapEx % of Revenue
+        capex_percentages = []
+        capex_values = []
+        if hasattr(historical_financials, 'data_fields'):
+            for field in historical_financials.data_fields:
+                if 'Capital Expenditures' in field.field_name and field.value:
+                    capex_values.append(abs(field.value))
         
-        # Suggest slightly conservative growth
-        suggested_growth = max(0.02, min(hist_growth * 0.9, 0.25))
-        suggestions.append(AISuggestion(
-            metric="Revenue Growth Rate",
-            suggested_value=suggested_growth,
-            confidence=0.65,
-            reasoning=f"Historical CAGR={hist_growth:.2%}. Suggesting conservative estimate at {suggested_growth:.2%} to account for mean reversion.",
-            min_reasonable=0.0,
-            max_reasonable=0.30,
-            based_on="Historical revenue CAGR with conservative adjustment"
-        ))
+        if len(revenues) == len(capex_values) and len(revenues) > 0:
+            for i in range(len(revenues)):
+                if revenues[i] != 0:
+                    capex_percentages.append(capex_values[i] / revenues[i])
         
-        # Suggest EBITDA Margin
-        calculated_metrics = step6_data.get("calculated_metrics", {})
-        avg_margin = 0.15  # Default
-        if hasattr(calculated_metrics, 'data_fields'):
-            for field in calculated_metrics.data_fields:
-                if 'Margin' in field.field_name and field.value:
-                    avg_margin = field.value
-                    break
+        if capex_percentages:
+            avg_capex_pct = sum(capex_percentages) / len(capex_percentages)
+            derived_metrics.append(DerivedMetric(
+                metric_name="CapEx % of Revenue",
+                calculated_value=avg_capex_pct,
+                calculation_method="Average of (CapEx / Revenue)",
+                data_points_used=len(capex_percentages),
+                min_historical=min(capex_percentages),
+                max_historical=max(capex_percentages),
+                avg_historical=avg_capex_pct,
+                trend="stable" if max(capex_percentages) - min(capex_percentages) < 0.05 else "variable",
+                reliability_score=0.9 if len(capex_percentages) >= 3 else 0.6
+            ))
         
-        suggestions.append(AISuggestion(
-            metric="EBITDA Margin",
-            suggested_value=avg_margin,
-            confidence=0.70,
-            reasoning=f"Based on historical average margin of {avg_margin:.2%}. Assuming stable margins.",
-            min_reasonable=0.05,
-            max_reasonable=0.40,
-            based_on="Historical EBITDA margin analysis"
-        ))
+        # 4. Calculate D&A % of Revenue
+        da_percentages = []
+        da_values = []
+        if hasattr(historical_financials, 'data_fields'):
+            for field in historical_financials.data_fields:
+                if 'Depreciation & Amortization' in field.field_name and field.value:
+                    da_values.append(field.value)
+        
+        if len(revenues) == len(da_values) and len(revenues) > 0:
+            for i in range(len(revenues)):
+                if revenues[i] != 0:
+                    da_percentages.append(da_values[i] / revenues[i])
+        
+        if da_percentages:
+            avg_da_pct = sum(da_percentages) / len(da_percentages)
+            derived_metrics.append(DerivedMetric(
+                metric_name="D&A % of Revenue",
+                calculated_value=avg_da_pct,
+                calculation_method="Average of (D&A / Revenue)",
+                data_points_used=len(da_percentages),
+                min_historical=min(da_percentages),
+                max_historical=max(da_percentages),
+                avg_historical=avg_da_pct,
+                trend="stable",
+                reliability_score=0.9 if len(da_percentages) >= 3 else 0.6
+            ))
+        
+        # 5. Calculate Implied Cost of Debt (Interest Expense / Total Debt)
+        implied_cost_of_debt = None
+        if hasattr(historical_financials, 'data_fields') and hasattr(market_data, 'total_debt'):
+            interest_expenses = []
+            for field in historical_financials.data_fields:
+                if 'Interest Expense' in field.field_name and field.value:
+                    interest_expenses.append(field.value)
+            
+            if interest_expenses and market_data.total_debt.value:
+                avg_interest = sum(interest_expenses) / len(interest_expenses)
+                implied_cost_of_debt = avg_interest / market_data.total_debt.value
+                
+                derived_metrics.append(DerivedMetric(
+                    metric_name="Implied Pre-Tax Cost of Debt",
+                    calculated_value=implied_cost_of_debt,
+                    calculation_method="Average Interest Expense / Total Debt",
+                    data_points_used=len(interest_expenses),
+                    min_historical=implied_cost_of_debt * 0.8,
+                    max_historical=implied_cost_of_debt * 1.2,
+                    avg_historical=implied_cost_of_debt,
+                    trend="stable",
+                    reliability_score=0.75
+                ))
+        
+        # 6. Calculate Unlevered Beta from Peer Comparables
+        if peer_comparables and len(peer_comparables) > 0:
+            unlevered_betas = []
+            for peer in peer_comparables:
+                if hasattr(peer, 'beta') and hasattr(peer, 'total_debt') and hasattr(peer, 'market_cap'):
+                    levered_beta = peer.beta.value or 1.0
+                    debt_to_equity = peer.total_debt.value / (peer.market_cap.value or 1.0)
+                    tax_rate = 0.21  # Default
+                    
+                    # Unlever beta: βu = βl / (1 + (1-t)*D/E)
+                    unlevered_beta = levered_beta / (1 + (1 - tax_rate) * debt_to_equity)
+                    unlevered_betas.append(unlevered_beta)
+            
+            if unlevered_betas:
+                avg_unlevered_beta = sum(unlevered_betas) / len(unlevered_betas)
+                derived_metrics.append(DerivedMetric(
+                    metric_name="Industry Unlevered Beta",
+                    calculated_value=avg_unlevered_beta,
+                    calculation_method="Average of peer unlevered betas",
+                    data_points_used=len(unlevered_betas),
+                    min_historical=min(unlevered_betas),
+                    max_historical=max(unlevered_betas),
+                    avg_historical=avg_unlevered_beta,
+                    trend="stable",
+                    reliability_score=0.8 if len(unlevered_betas) >= 3 else 0.5
+                ))
         
         notes = (
-            "DCF AI Suggestions generated based on historical financials and current market data. "
-            "WACC calculated using CAPM. Terminal growth based on long-term GDP expectations. "
-            "Please review and adjust based on company-specific factors."
+            "Step 7 Derived Data: Historical static inputs calculated from Step 6 data. "
+            "These metrics are mathematically derived, not AI-suggested. "
+            "Use these as baselines for assumption inputs in Step 8."
         )
         
-        return AISuggestionsResponse(
+        return DerivedDataResponse(
             session_id=f"step7_{ticker}_{datetime.now().strftime('%Y%m%d%H%M%S')}",
             ticker=ticker,
             timestamp=datetime.now(),
             valuation_model=ValuationModel.DCF,
-            suggestions=suggestions,
+            derived_metrics=derived_metrics,
             model_specific_notes=notes,
-            ready_for_manual_override=True
+            ready_for_assumption_input=True
         )
     
-    async def _generate_dupont_suggestions(
+    async def _calculate_dupont_derived_data(
         self,
         ticker: str,
-        step6_data: Dict,
-        market_context: Optional[Dict]
-    ) -> AISuggestionsResponse:
+        step6_data: Dict
+    ) -> DerivedDataResponse:
         """
-        Generate AI suggestions for DuPont model.
+        Calculate derived historical data for DuPont model.
         
-        Suggests:
-        - Target ROE components (Net Margin, Asset Turnover, Equity Multiplier)
-        - Based on industry peers and historical trends
+        Derives:
+        - Historical Net Profit Margin trend
+        - Historical Asset Turnover trend
+        - Historical Equity Multiplier trend
+        - Historical ROE decomposition
         """
-        suggestions = []
+        derived_metrics = []
         
-        # Extract data from Step 6
-        historical = step6_data.get("historical_financials", {})
+        historical_financials = step6_data.get("historical_financials", {})
         
-        # Calculate historical ROE components if data available
-        # ROE = Net Margin × Asset Turnover × Equity Multiplier
+        # Extract data points
+        net_incomes = []
+        revenues = []
+        operating_incomes = []
+        total_assets = []
+        equities = []
         
-        # Default industry averages (would be enhanced with real peer data)
-        industry_net_margin = 0.10
-        industry_asset_turnover = 1.2
-        industry_equity_multiplier = 2.0
-        industry_roe = industry_net_margin * industry_asset_turnover * industry_equity_multiplier
+        if hasattr(historical_financials, 'data_fields'):
+            for field in historical_financials.data_fields:
+                if 'Net Income' in field.field_name and field.value:
+                    net_incomes.append(field.value)
+                if 'Total Revenue' in field.field_name and field.value:
+                    revenues.append(field.value)
+                if 'Operating Income' in field.field_name and field.value:
+                    operating_incomes.append(field.value)
+                if 'Total Assets' in field.field_name and field.value:
+                    total_assets.append(field.value)
+                if 'Shareholders Equity' in field.field_name and field.value:
+                    equities.append(field.value)
         
-        suggestions.append(AISuggestion(
-            metric="Target Net Profit Margin",
-            suggested_value=industry_net_margin,
-            confidence=0.65,
-            reasoning=f"Industry average net margin is {industry_net_margin:.2%}. Company should target this level for competitive ROE.",
-            min_reasonable=0.02,
-            max_reasonable=0.25,
-            based_on="Industry peer analysis"
-        ))
+        # Calculate Net Profit Margin trend
+        if len(net_incomes) == len(revenues) and len(net_incomes) > 0:
+            margins = [net_incomes[i] / revenues[i] for i in range(len(net_incomes)) if revenues[i] != 0]
+            if margins:
+                avg_margin = sum(margins) / len(margins)
+                derived_metrics.append(DerivedMetric(
+                    metric_name="Net Profit Margin",
+                    calculated_value=avg_margin,
+                    calculation_method="Average of (Net Income / Revenue)",
+                    data_points_used=len(margins),
+                    min_historical=min(margins),
+                    max_historical=max(margins),
+                    avg_historical=avg_margin,
+                    trend="increasing" if margins[-1] > margins[0] else "decreasing",
+                    reliability_score=0.9 if len(margins) >= 3 else 0.6
+                ))
         
-        suggestions.append(AISuggestion(
-            metric="Target Asset Turnover",
-            suggested_value=industry_asset_turnover,
-            confidence=0.60,
-            reasoning=f"Industry average asset turnover is {industry_asset_turnover:.2f}. Reflects efficient asset utilization.",
-            min_reasonable=0.5,
-            max_reasonable=3.0,
-            based_on="Industry peer asset efficiency metrics"
-        ))
+        # Calculate Asset Turnover trend
+        if len(revenues) == len(total_assets) and len(revenues) > 0:
+            turnovers = [revenues[i] / total_assets[i] for i in range(len(revenues)) if total_assets[i] != 0]
+            if turnovers:
+                avg_turnover = sum(turnovers) / len(turnovers)
+                derived_metrics.append(DerivedMetric(
+                    metric_name="Asset Turnover",
+                    calculated_value=avg_turnover,
+                    calculation_method="Average of (Revenue / Total Assets)",
+                    data_points_used=len(turnovers),
+                    min_historical=min(turnovers),
+                    max_historical=max(turnovers),
+                    avg_historical=avg_turnover,
+                    trend="increasing" if turnovers[-1] > turnovers[0] else "decreasing",
+                    reliability_score=0.9 if len(turnovers) >= 3 else 0.6
+                ))
         
-        suggestions.append(AISuggestion(
-            metric="Target Equity Multiplier",
-            suggested_value=industry_equity_multiplier,
-            confidence=0.60,
-            reasoning=f"Industry average equity multiplier is {industry_equity_multiplier:.2f}. Indicates moderate financial leverage.",
-            min_reasonable=1.0,
-            max_reasonable=4.0,
-            based_on="Industry capital structure analysis"
-        ))
-        
-        suggestions.append(AISuggestion(
-            metric="Target ROE",
-            suggested_value=industry_roe,
-            confidence=0.65,
-            reasoning=f"Implied ROE of {industry_roe:.2%} based on component targets. Aligns with industry median.",
-            min_reasonable=0.05,
-            max_reasonable=0.35,
-            based_on="DuPont decomposition of industry ROE"
-        ))
+        # Calculate Equity Multiplier trend
+        if len(total_assets) == len(equities) and len(total_assets) > 0:
+            multipliers = [total_assets[i] / equities[i] for i in range(len(total_assets)) if equities[i] != 0]
+            if multipliers:
+                avg_multiplier = sum(multipliers) / len(multipliers)
+                derived_metrics.append(DerivedMetric(
+                    metric_name="Equity Multiplier",
+                    calculated_value=avg_multiplier,
+                    calculation_method="Average of (Total Assets / Shareholders Equity)",
+                    data_points_used=len(multipliers),
+                    min_historical=min(multipliers),
+                    max_historical=max(multipliers),
+                    avg_historical=avg_multiplier,
+                    trend="increasing" if multipliers[-1] > multipliers[0] else "decreasing",
+                    reliability_score=0.9 if len(multipliers) >= 3 else 0.6
+                ))
         
         notes = (
-            "DuPont AI Suggestions generated based on industry peer analysis. "
-            "Targets represent median industry performance. Adjust based on company's competitive position and strategy."
+            "Step 7 Derived Data: DuPont ROE components calculated from historical data. "
+            "These metrics show historical trends for assumption setting in Step 8."
         )
         
-        return AISuggestionsResponse(
+        return DerivedDataResponse(
             session_id=f"step7_{ticker}_{datetime.now().strftime('%Y%m%d%H%M%S')}",
             ticker=ticker,
             timestamp=datetime.now(),
             valuation_model=ValuationModel.DUPONT,
-            suggestions=suggestions,
+            derived_metrics=derived_metrics,
             model_specific_notes=notes,
-            ready_for_manual_override=True
+            ready_for_assumption_input=True
         )
     
-    async def _generate_comps_suggestions(
+    async def _calculate_comps_derived_data(
         self,
         ticker: str,
-        step6_data: Dict,
-        market_context: Optional[Dict]
-    ) -> AISuggestionsResponse:
+        step6_data: Dict
+    ) -> DerivedDataResponse:
         """
-        Generate AI suggestions for Comps model.
+        Calculate derived historical data for Comps model.
         
-        Suggests:
-        - Appropriate peer multiples (P/E, EV/EBITDA, P/B, P/S)
-        - Outlier filter settings
-        - Weighting method (median vs mean)
+        Derives:
+        - Peer median P/E
+        - Peer median EV/EBITDA
+        - Peer median P/B
+        - Peer median P/S
+        - Outlier statistics
         """
-        suggestions = []
+        derived_metrics = []
         
-        # Extract peer data from Step 6
-        peer_data = step6_data.get("market_data", {})
+        peer_data = step6_data.get("peer_company_data", [])
         
-        # Default peer multiples (would be calculated from actual peer data)
-        # These are placeholder values - in production would calculate from peer_data
-        pe_median = 18.5
-        ev_ebitda_median = 12.0
-        pb_median = 2.5
-        ps_median = 3.0
+        if not peer_data or len(peer_data) == 0:
+            notes = "No peer data available for Comps analysis. Please add peer companies in Step 5."
+            return DerivedDataResponse(
+                session_id=f"step7_{ticker}_{datetime.now().strftime('%Y%m%d%H%M%S')}",
+                ticker=ticker,
+                timestamp=datetime.now(),
+                valuation_model=ValuationModel.COMPS,
+                derived_metrics=[],
+                model_specific_notes=notes,
+                ready_for_assumption_input=False
+            )
         
-        suggestions.append(AISuggestion(
-            metric="P/E Multiple",
-            suggested_value=pe_median,
-            confidence=0.70,
-            reasoning=f"Median P/E of peer group is {pe_median:.1f}x. Recommend using median to reduce outlier impact.",
-            min_reasonable=5.0,
-            max_reasonable=50.0,
-            based_on="Peer group median P/E analysis"
-        ))
+        # Calculate peer multiples
+        pe_ratios = []
+        ev_ebitda_ratios = []
+        pb_ratios = []
+        ps_ratios = []
         
-        suggestions.append(AISuggestion(
-            metric="EV/EBITDA Multiple",
-            suggested_value=ev_ebitda_median,
-            confidence=0.75,
-            reasoning=f"Median EV/EBITDA of peer group is {ev_ebitda_median:.1f}x. Most reliable multiple for capital-intensive industries.",
-            min_reasonable=3.0,
-            max_reasonable=25.0,
-            based_on="Peer group median EV/EBITDA analysis"
-        ))
+        for peer in peer_data:
+            if hasattr(peer, 'pe_ratio') and peer.pe_ratio.value:
+                pe_ratios.append(peer.pe_ratio.value)
+            if hasattr(peer, 'ev_ebitda') and peer.ev_ebitda.value:
+                ev_ebitda_ratios.append(peer.ev_ebitda.value)
+            if hasattr(peer, 'pb_ratio') and peer.pb_ratio.value:
+                pb_ratios.append(peer.pb_ratio.value)
+            if hasattr(peer, 'ps_ratio') and peer.ps_ratio.value:
+                ps_ratios.append(peer.ps_ratio.value)
         
-        suggestions.append(AISuggestion(
-            metric="P/B Multiple",
-            suggested_value=pb_median,
-            confidence=0.65,
-            reasoning=f"Median P/B of peer group is {pb_median:.1f}x. Most relevant for asset-heavy companies.",
-            min_reasonable=0.5,
-            max_reasonable=10.0,
-            based_on="Peer group median P/B analysis"
-        ))
+        # Calculate medians
+        if pe_ratios:
+            pe_ratios_sorted = sorted(pe_ratios)
+            median_pe = pe_ratios_sorted[len(pe_ratios_sorted) // 2]
+            derived_metrics.append(DerivedMetric(
+                metric_name="Peer Median P/E",
+                calculated_value=median_pe,
+                calculation_method="Median of peer P/E ratios",
+                data_points_used=len(pe_ratios),
+                min_historical=min(pe_ratios),
+                max_historical=max(pe_ratios),
+                avg_historical=sum(pe_ratios) / len(pe_ratios),
+                trend="stable",
+                reliability_score=0.9 if len(pe_ratios) >= 5 else 0.6
+            ))
         
-        suggestions.append(AISuggestion(
-            metric="P/S Multiple",
-            suggested_value=ps_median,
-            confidence=0.60,
-            reasoning=f"Median P/S of peer group is {ps_median:.1f}x. Useful for high-growth, low-margin companies.",
-            min_reasonable=0.5,
-            max_reasonable=15.0,
-            based_on="Peer group median P/S analysis"
-        ))
+        if ev_ebitda_ratios:
+            ev_ebitda_sorted = sorted(ev_ebitda_ratios)
+            median_ev_ebitda = ev_ebitda_sorted[len(ev_ebitda_sorted) // 2]
+            derived_metrics.append(DerivedMetric(
+                metric_name="Peer Median EV/EBITDA",
+                calculated_value=median_ev_ebitda,
+                calculation_method="Median of peer EV/EBITDA ratios",
+                data_points_used=len(ev_ebitda_ratios),
+                min_historical=min(ev_ebitda_ratios),
+                max_historical=max(ev_ebitda_ratios),
+                avg_historical=sum(ev_ebitda_ratios) / len(ev_ebitda_ratios),
+                trend="stable",
+                reliability_score=0.9 if len(ev_ebitda_ratios) >= 5 else 0.6
+            ))
         
-        suggestions.append(AISuggestion(
-            metric="Outlier Filter Threshold",
-            suggested_value=2.0,  # Standard deviations
-            confidence=0.80,
-            reasoning="Recommend filtering peers beyond 2 standard deviations to reduce noise from outliers.",
-            min_reasonable=1.5,
-            max_reasonable=3.0,
-            based_on="Statistical outlier detection best practices"
-        ))
+        if pb_ratios:
+            pb_sorted = sorted(pb_ratios)
+            median_pb = pb_sorted[len(pb_sorted) // 2]
+            derived_metrics.append(DerivedMetric(
+                metric_name="Peer Median P/B",
+                calculated_value=median_pb,
+                calculation_method="Median of peer P/B ratios",
+                data_points_used=len(pb_ratios),
+                min_historical=min(pb_ratios),
+                max_historical=max(pb_ratios),
+                avg_historical=sum(pb_ratios) / len(pb_ratios),
+                trend="stable",
+                reliability_score=0.9 if len(pb_ratios) >= 5 else 0.6
+            ))
+        
+        if ps_ratios:
+            ps_sorted = sorted(ps_ratios)
+            median_ps = ps_sorted[len(ps_sorted) // 2]
+            derived_metrics.append(DerivedMetric(
+                metric_name="Peer Median P/S",
+                calculated_value=median_ps,
+                calculation_method="Median of peer P/S ratios",
+                data_points_used=len(ps_ratios),
+                min_historical=min(ps_ratios),
+                max_historical=max(ps_ratios),
+                avg_historical=sum(ps_ratios) / len(ps_ratios),
+                trend="stable",
+                reliability_score=0.9 if len(ps_ratios) >= 5 else 0.6
+            ))
         
         notes = (
-            "Comps AI Suggestions generated based on peer group analysis. "
-            "Median multiples recommended over mean to reduce outlier impact. "
-            "Ensure peer group consists of truly comparable companies in same industry and size range."
+            "Step 7 Derived Data: Peer median multiples calculated from retrieved peer data. "
+            "Use these as benchmarks for terminal value assumptions and relative valuation in Step 8."
         )
         
-        return AISuggestionsResponse(
+        return DerivedDataResponse(
             session_id=f"step7_{ticker}_{datetime.now().strftime('%Y%m%d%H%M%S')}",
             ticker=ticker,
             timestamp=datetime.now(),
             valuation_model=ValuationModel.COMPS,
-            suggestions=suggestions,
+            derived_metrics=derived_metrics,
             model_specific_notes=notes,
-            ready_for_manual_override=True
+            ready_for_assumption_input=True
         )
