@@ -1,6 +1,7 @@
 """
-Valuation Routes - Version 1
+Valuation Routes - Version 2
 
+Refactored to use advanced service processors from app.services.international
 Handles model selection, data fetching, AI assumptions, and valuation calculation.
 """
 
@@ -56,6 +57,11 @@ def get_session(session_id: str, sessions: Dict) -> Dict:
             details={"hint": "Please create a new session by selecting a ticker"}
         )
     return sessions[session_id]
+
+
+# Legacy helper functions - DEPRECATED
+# These are kept for backward compatibility but should not be used by routes
+# The routes now use the advanced processors from app.services.international
 
 
 def fetch_financial_data(ticker_symbol: str, market: str) -> Dict:
@@ -917,7 +923,7 @@ async def prepare_inputs(request: dict = Body(...)):
 async def fetch_api_data(request: SessionFetchRequest):
     """
     Step 6: Fetch financial data from external sources (yFinance, etc.).
-
+    
     Returns API-retrieved data only:
     - Historical financials
     - Forecast drivers from historical data
@@ -933,98 +939,48 @@ async def fetch_api_data(request: SessionFetchRequest):
         Financial data from APIs
     """
     from app.main import get_session_store
+    from app.services.international.step6_data_review import Step6DataReviewProcessor
 
     logger.info(f"Fetching API data for session='{request.session_id}'")
 
     sessions = get_session_store()
     session = get_session(request.session_id, sessions)
 
-    financial_data = fetch_financial_data(session['ticker'], session['market'])
-    session['financial_data'] = financial_data
-
-    # Generate peer data and comps results for DCF model
-    if session.get('selected_model') == 'DCF':
-        try:
-            from app.engines.international.comps_engine import TradingCompsAnalyzer, TargetCompanyData, PeerCompanyData
-
-            info = financial_data.get('raw_info', {})
-            market_cap = info.get('marketCap', 1000000000) or 1000000000
-            enterprise_value = market_cap + (info.get('totalDebt', 0) or 0) - (info.get('cash', 0) or 0)
-            revenue_ltm = list(financial_data.get('financials', {}).get('revenue', {}).values())[0] if financial_data.get('financials', {}).get('revenue') else 100000000
-            ebitda_ltm = list(financial_data.get('financials', {}).get('ebitda', {}).values())[0] if financial_data.get('financials', {}).get('ebitda') else revenue_ltm * 0.2
-
-            target = TargetCompanyData(
-                ticker=session['ticker'],
-                company_name=financial_data.get('profile', {}).get('name', session['ticker']),
-                market_cap=market_cap,
-                enterprise_value=enterprise_value,
-                revenue_ltm=revenue_ltm,
-                ebitda_ltm=ebitda_ltm,
-                ebit_ltm=ebitda_ltm * 0.75,
-                net_income_ltm=revenue_ltm * 0.1,
-                free_cash_flow_ltm=ebitda_ltm * 0.7,
-                book_equity=market_cap * 0.4,
-                shares_outstanding=info.get('sharesOutstanding', 1000000) or 1000000,
-                share_price=financial_data.get('profile', {}).get('current_price', 100) or 100,
-                currency=financial_data.get('profile', {}).get('currency', 'USD')
-            )
-
-            sector = info.get('sector', 'Technology')
-            industry = info.get('industry', 'Software')
-
-            peers = []
-            peer_names = ['Peer A', 'Peer B', 'Peer C', 'Peer D', 'Peer E']
-            peer_tickers = ['PEERA', 'PEERB', 'PEERC', 'PEERD', 'PEERE']
-
-            import random
-            random.seed(42)
-
-            for i, (name, ticker_sym) in enumerate(zip(peer_names, peer_tickers)):
-                variation = 0.8 + (random.random() * 0.4)
-                peers.append(PeerCompanyData(
-                    ticker=ticker_sym,
-                    company_name=f"{name} Corp",
-                    market_cap=market_cap * variation,
-                    enterprise_value=enterprise_value * variation,
-                    ebitda_ltm=ebitda_ltm * variation,
-                    ebitda_fy2023=ebitda_ltm * 1.05 * variation,
-                    ebitda_fy2024=ebitda_ltm * 1.10 * variation,
-                    eps_ltm=(revenue_ltm * 0.1 * variation) / 1000000,
-                    eps_fy2023=(revenue_ltm * 0.105 * variation) / 1000000,
-                    eps_fy2024=(revenue_ltm * 0.110 * variation) / 1000000,
-                    share_price=100 * variation,
-                    shares_outstanding=1000000 * variation,
-                    industry=industry,
-                    sector=sector,
-                    selection_reason=f"Same {sector} sector"
-                ))
-
-            analyzer = TradingCompsAnalyzer(target, peers)
-            outputs = analyzer.run_analysis(apply_outlier_filtering=True)
-
-            logger.info(f"Generated comps analysis with {outputs.peer_count_total} peers")
-
-            comps_result = outputs.to_json_schema_format()
-            # Extract peer_data from peer_multiples for frontend display
-            financial_data['peers'] = comps_result.get('peer_multiples', [])
-            financial_data['comps_results'] = comps_result
-        except Exception as e:
-            logger.warning(f"Failed to generate comps analysis: {e}")
-            financial_data['peers'] = []
-            financial_data['comps_results'] = {}
-    else:
-        financial_data['peers'] = []
-        financial_data['comps_results'] = {}
-
-    session['status'] = "data_fetched"
-
-    logger.info(f"API data fetched successfully for session='{request.session_id}'")
-
-    return FetchDataResponse(
-        status="data_ready",
-        data=financial_data,
-        message="Financial data retrieved successfully from APIs."
-    )
+    # Use the advanced Step6DataReviewProcessor instead of inline fetch_financial_data
+    processor = Step6DataReviewProcessor()
+    
+    try:
+        result = await processor.process_data_review(
+            ticker=session['ticker'],
+            valuation_model=session.get('selected_model', 'DCF'),
+            market=session.get('market', 'international')
+        )
+        
+        # Store the structured result in session
+        session['financial_data'] = {
+            'profile': result.market_data.dict() if result.market_data else {},
+            'financials': result.historical_financials.dict() if result.historical_financials else {},
+            'historical_financials': result.historical_financials.dict() if result.historical_financials else {},
+            'peers': result.calculated_metrics.dict() if result.calculated_metrics else {},
+            'comps_results': result.calculated_metrics.dict() if result.calculated_metrics else {},
+            'dcf_inputs': result.forecast_drivers.dict() if result.forecast_drivers else {},
+            'dupont_results': result.calculated_metrics.dict() if result.calculated_metrics else {},
+            'raw_info': {}  # Will be populated by processor
+        }
+        
+        session['status'] = "data_fetched"
+        
+        logger.info(f"API data fetched successfully for session='{request.session_id}'")
+        
+        return FetchDataResponse(
+            status="data_ready",
+            data=session['financial_data'],
+            message="Financial data retrieved successfully from APIs."
+        )
+        
+    except Exception as e:
+        logger.error(f"Failed to fetch API data: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Data retrieval failed: {str(e)}")
 
 
 @router.post("/step-7-generate-ai-assumptions", response_model=AIAssumptionsResponse)
@@ -1047,6 +1003,7 @@ async def generate_ai_assumptions_endpoint(request: Request):
         AI-generated assumptions with rationale
     """
     from app.main import get_session_store
+    from app.services.international.step7_ai_suggestions import Step7DerivedDataProcessor
 
     data = await request.json()
     session_id = data.get('session_id')
@@ -1056,27 +1013,41 @@ async def generate_ai_assumptions_endpoint(request: Request):
     if not session['financial_data']:
         raise HTTPException(status_code=400, detail="Financial data missing")
 
-    ai_results = await generate_ai_assumptions(session['financial_data'], session['selected_model'])
-    session['ai_suggestions'] = ai_results
-    session['status'] = "ai_generated"
+    # Use the advanced Step7DerivedDataProcessor instead of inline generate_ai_assumptions
+    processor = Step7DerivedDataProcessor()
+    
+    try:
+        ai_results = await processor.calculate_derived_data(
+            ticker=session['ticker'],
+            valuation_model=session.get('selected_model', 'DCF'),
+            market=session.get('market', 'international'),
+            financial_data=session['financial_data']
+        )
+        
+        session['ai_suggestions'] = ai_results.dict() if hasattr(ai_results, 'dict') else ai_results
+        session['status'] = "ai_generated"
+        
+        # Extract AI status metadata for frontend
+        ai_metadata = ai_results.get('_ai_status', {}) if isinstance(ai_results, dict) else {}
 
-    # Extract AI status metadata for frontend
-    ai_metadata = ai_results.get('_ai_status', {})
+        logger.info(f"AI assumptions generated for session='{session_id}'")
 
-    logger.info(f"AI assumptions generated for session='{session_id}'")
-
-    return AIAssumptionsResponse(
-        status="ai_ready",
-        suggestions=ai_results,
-        message="AI analysis complete. Please review assumptions.",
-        _metadata={
-            "ai_success": ai_metadata.get("success", False),
-            "provider_used": ai_metadata.get("provider_used"),
-            "fallback_reason": ai_metadata.get("fallback_reason"),
-            "provider_errors": ai_metadata.get("errors", {}),
-            "used_fallback": ai_metadata.get("provider_used") is None
-        }
-    )
+        return AIAssumptionsResponse(
+            status="ai_ready",
+            suggestions=session['ai_suggestions'],
+            message="AI analysis complete. Please review assumptions.",
+            _metadata={
+                "ai_success": ai_metadata.get("success", False),
+                "provider_used": ai_metadata.get("provider_used"),
+                "fallback_reason": ai_metadata.get("fallback_reason"),
+                "provider_errors": ai_metadata.get("errors", {}),
+                "used_fallback": ai_metadata.get("provider_used") is None
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"Failed to generate AI assumptions: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"AI generation failed: {str(e)}")
 
 
 # Legacy endpoints - DEPRECATED, use new separated endpoints instead
@@ -1097,22 +1068,38 @@ async def confirm_assumptions(request: AssumptionConfirmRequest):
         Final confirmed assumptions
     """
     from app.main import get_session_store
+    from app.services.international.step8_manual_overrides import Step8ManualOverridesProcessor
 
     logger.info(f"Confirming assumptions for session='{request.session_id}'")
 
     sessions = get_session_store()
     session = get_session(request.session_id, sessions)
 
-    final_assumptions = {**session['ai_suggestions'], **request.assumptions}
-    session['confirmed_assumptions'] = final_assumptions
-    session['status'] = "assumptions_confirmed"
+    # Use the advanced Step8ManualOverridesProcessor to handle assumption confirmation
+    processor = Step8ManualOverridesProcessor()
+    
+    try:
+        # Initialize with AI suggestions and apply user overrides
+        final_assumptions = await processor.initialize_assumptions(
+            ticker=session['ticker'],
+            valuation_model=session.get('selected_model', 'DCF'),
+            ai_suggestions=session.get('ai_suggestions', {}),
+            user_overrides=request.assumptions
+        )
+        
+        session['confirmed_assumptions'] = final_assumptions.dict() if hasattr(final_assumptions, 'dict') else final_assumptions
+        session['status'] = "assumptions_confirmed"
 
-    logger.info(f"Assumptions confirmed for session='{request.session_id}'")
+        logger.info(f"Assumptions confirmed for session='{request.session_id}'")
 
-    return {
-        "status": "ready_for_valuation",
-        "assumptions": final_assumptions
-    }
+        return {
+            "status": "ready_for_valuation",
+            "assumptions": session['confirmed_assumptions']
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to confirm assumptions: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Assumption confirmation failed: {str(e)}")
 
 
 @router.post("/step-10-valuate", response_model=ValuationResultResponse)
@@ -1127,6 +1114,7 @@ async def run_valuation(request: CalculationRequest):
         Valuation results
     """
     from app.main import get_session_store
+    from app.services.international.step10_valuation_processor import Step10ValuationProcessor
 
     logger.info(f"Running valuation for session='{request.session_id}'")
 
@@ -1139,14 +1127,29 @@ async def run_valuation(request: CalculationRequest):
             field="confirmed_assumptions"
         ).to_dict()
 
-    results = run_valuation_engine(session)
-    session['valuation_result'] = results
-    session['status'] = "completed"
+    # Use the advanced Step10ValuationProcessor instead of inline run_valuation_engine
+    processor = Step10ValuationProcessor()
+    
+    try:
+        results = await processor.process_valuation(
+            ticker=session['ticker'],
+            valuation_model=session.get('selected_model', 'DCF'),
+            market=session.get('market', 'international'),
+            confirmed_assumptions=session['confirmed_assumptions'],
+            financial_data=session.get('financial_data', {})
+        )
+        
+        session['valuation_result'] = results.dict() if hasattr(results, 'dict') else results
+        session['status'] = "completed"
 
-    logger.info(f"Valuation completed for session='{request.session_id}'")
+        logger.info(f"Valuation completed for session='{request.session_id}'")
 
-    return ValuationResultResponse(
-        status="completed",
-        result=results,
-        inputs_used=session['confirmed_assumptions']
-    )
+        return ValuationResultResponse(
+            status="completed",
+            result=session['valuation_result'],
+            inputs_used=session['confirmed_assumptions']
+        )
+        
+    except Exception as e:
+        logger.error(f"Failed to run valuation: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Valuation failed: {str(e)}")
