@@ -1,4 +1,4 @@
-"""Step 6: Data Review Layer - Pure Data Aggregation (No Calculations)"""
+"""Step 6: Data Review Layer - Pure Data Aggregation (No Final Calculations)"""
 import logging
 from typing import Dict, List, Optional, Any
 from pydantic import BaseModel
@@ -49,6 +49,7 @@ class MarketDataDisplay(BaseModel):
     total_debt: Optional[DataField] = None
     cash: Optional[DataField] = None
     currency: Optional[DataField] = None
+    data_fields: List[DataField] = []
 
 class CalculatedMetricsDisplay(BaseModel):
     """Calculated metrics from retrieved data (NOT final valuations)"""
@@ -136,24 +137,26 @@ class Step6DataReviewProcessor:
     ) -> Step6DataReviewResponse:
         """Process DCF data review - aggregate only, no final calculations"""
         
-        # Process Historical Financials
+        # Process Historical Financials (11 fields)
         historical_display = self._process_dcf_historical(historical_data, user_overrides)
         
-        # Process Market Data
+        # Process Market Data (6 fields)
         market_display = self._process_dcf_market_data(market_data, user_overrides)
         
-        # Process Forecast Drivers (from retrieved data only)
-        forecast_display = self._process_dcf_forecast_drivers(forecast_data, retrieved_assumptions, user_overrides)
+        # Process Balance Sheet Opening Balances (3 fields)
+        opening_display = self._process_dcf_opening_balances(historical_data, user_overrides)
+        
+        # Process Peer Comparables for WACC (5 fields × N peers)
+        peer_display = self._process_dcf_peer_comparables(retrieved_assumptions, user_overrides)
         
         # Calculate ONLY intermediate metrics (growth rates, margins, etc.) - NOT WACC/TV/Fair Value
         calculated_display = self._calculate_dcf_intermediate_metrics(
-            historical_display, market_display, forecast_display
+            historical_display, market_display, opening_display, peer_display
         )
         
         # Aggregate missing data
-        missing_summary = self._aggregate_missing_data([
-            historical_display, forecast_display, market_display, calculated_display
-        ])
+        all_displays = [historical_display, market_display, opening_display, peer_display, calculated_display]
+        missing_summary = self._aggregate_missing_data(all_displays)
         
         ready = len(missing_summary.critical_missing) == 0
         
@@ -163,7 +166,7 @@ class Step6DataReviewProcessor:
             timestamp=datetime.now(),
             valuation_model=ValuationModel.DCF,
             historical_financials=historical_display,
-            forecast_drivers=forecast_display,
+            forecast_drivers=ForecastDriversDisplay(data_fields=opening_display.data_fields + peer_display.data_fields),
             market_data=market_display,
             calculated_metrics=calculated_display,
             missing_data_summary=missing_summary,
@@ -251,17 +254,20 @@ class Step6DataReviewProcessor:
     # === Helper Methods for DCF ===
     
     def _process_dcf_historical(self, historical_data: Dict, overrides: Dict) -> HistoricalFinancialsDisplay:
-        """Process historical financials for DCF"""
+        """Process historical financials for DCF (11 fields)"""
         years = []
         data_fields = []
         
         financials = historical_data.get("financials")
+        cashflow = historical_data.get("cashflow")
+        balance_sheet = historical_data.get("balance_sheet")
+        
         if financials is not None:
             for col in financials.columns:
                 year = int(col.year)
                 years.append(year)
                 
-                # Revenue
+                # 1. Total Revenue
                 rev_val = financials.loc['Total Revenue', col] if 'Total Revenue' in financials.index else None
                 data_fields.append(DataField(
                     field_name=f"Revenue_{year}",
@@ -272,7 +278,7 @@ class Step6DataReviewProcessor:
                     is_critical=True
                 ))
                 
-                # EBITDA
+                # 2. EBITDA
                 ebitda_val = financials.loc['EBITDA', col] if 'EBITDA' in financials.index else None
                 data_fields.append(DataField(
                     field_name=f"EBITDA_{year}",
@@ -282,14 +288,116 @@ class Step6DataReviewProcessor:
                     source="yfinance" if ebitda_val else None,
                     is_critical=True
                 ))
+                
+                # 3. Depreciation & Amortization
+                da_val = cashflow.loc['Depreciation', col] if cashflow is not None and 'Depreciation' in cashflow.index else None
+                data_fields.append(DataField(
+                    field_name=f"Depreciation_Amortization_{year}",
+                    value=da_val,
+                    unit="USD",
+                    status=DataStatus.RETRIEVED if da_val else DataStatus.MISSING,
+                    source="yfinance" if da_val else None,
+                    is_critical=False
+                ))
+                
+                # 4. Capital Expenditures
+                capex_val = cashflow.loc['Capital Expenditure', col] * -1 if cashflow is not None and 'Capital Expenditure' in cashflow.index else None
+                data_fields.append(DataField(
+                    field_name=f"CapEx_{year}",
+                    value=capex_val,
+                    unit="USD",
+                    status=DataStatus.RETRIEVED if capex_val else DataStatus.MISSING,
+                    source="yfinance" if capex_val else None,
+                    is_critical=True
+                ))
+                
+                # 5. Working Capital Changes
+                wc_val = cashflow.loc['Change In Working Capital', col] if cashflow is not None and 'Change In Working Capital' in cashflow.index else None
+                data_fields.append(DataField(
+                    field_name=f"Working_Capital_Change_{year}",
+                    value=wc_val,
+                    unit="USD",
+                    status=DataStatus.RETRIEVED if wc_val else DataStatus.MISSING,
+                    source="yfinance" if wc_val else None,
+                    is_critical=False
+                ))
+                
+                # 6. Accounts Receivable (for AR Days)
+                ar_val = balance_sheet.loc['Accounts Receivable', col] if balance_sheet is not None and 'Accounts Receivable' in balance_sheet.index else None
+                data_fields.append(DataField(
+                    field_name=f"Accounts_Receivable_{year}",
+                    value=ar_val,
+                    unit="USD",
+                    status=DataStatus.RETRIEVED if ar_val else DataStatus.MISSING,
+                    source="yfinance" if ar_val else None,
+                    is_critical=False
+                ))
+                
+                # 7. Inventory (for Inventory Days)
+                inv_val = balance_sheet.loc['Inventory', col] if balance_sheet is not None and 'Inventory' in balance_sheet.index else None
+                data_fields.append(DataField(
+                    field_name=f"Inventory_{year}",
+                    value=inv_val,
+                    unit="USD",
+                    status=DataStatus.RETRIEVED if inv_val else DataStatus.MISSING,
+                    source="yfinance" if inv_val else None,
+                    is_critical=False
+                ))
+                
+                # 8. Accounts Payable (for AP Days)
+                ap_val = balance_sheet.loc['Accounts Payable', col] if balance_sheet is not None and 'Accounts Payable' in balance_sheet.index else None
+                data_fields.append(DataField(
+                    field_name=f"Accounts_Payable_{year}",
+                    value=ap_val,
+                    unit="USD",
+                    status=DataStatus.RETRIEVED if ap_val else DataStatus.MISSING,
+                    source="yfinance" if ap_val else None,
+                    is_critical=False
+                ))
+                
+                # 9. Interest Expense
+                int_val = financials.loc['Interest Expense', col] if 'Interest Expense' in financials.index else None
+                data_fields.append(DataField(
+                    field_name=f"Interest_Expense_{year}",
+                    value=int_val,
+                    unit="USD",
+                    status=DataStatus.RETRIEVED if int_val else DataStatus.MISSING,
+                    source="yfinance" if int_val else None,
+                    is_critical=False
+                ))
+                
+                # 10. Tax Provision (for effective tax rate)
+                tax_val = financials.loc['Tax Effect Of Unusual Items', col] if 'Tax Effect Of Unusual Items' in financials.index else None
+                if tax_val is None:
+                    tax_val = financials.loc['Income Tax', col] if 'Income Tax' in financials.index else None
+                data_fields.append(DataField(
+                    field_name=f"Tax_Provision_{year}",
+                    value=tax_val,
+                    unit="USD",
+                    status=DataStatus.RETRIEVED if tax_val else DataStatus.MISSING,
+                    source="yfinance" if tax_val else None,
+                    is_critical=False
+                ))
+                
+                # 11. Pre-Tax Income (for effective tax rate)
+                pretax_val = financials.loc['Pretax Income', col] if 'Pretax Income' in financials.index else None
+                data_fields.append(DataField(
+                    field_name=f"Pre_Tax_Income_{year}",
+                    value=pretax_val,
+                    unit="USD",
+                    status=DataStatus.RETRIEVED if pretax_val else DataStatus.MISSING,
+                    source="yfinance" if pretax_val else None,
+                    is_critical=False
+                ))
         
         return HistoricalFinancialsDisplay(years=years, data_fields=data_fields)
     
     def _process_dcf_market_data(self, market_data: Dict, overrides: Dict) -> MarketDataDisplay:
-        """Process market data for DCF"""
+        """Process market data for DCF (6 fields)"""
         info = market_data.get("info", {})
+        data_fields = []
         
-        # Current Stock Price
+        # 1. Current Stock Price
         current_price = info.get('currentPrice', info.get('regularMarketPrice'))
         price_field = DataField(
             field_name="Current Stock Price",
@@ -299,8 +407,21 @@ class Step6DataReviewProcessor:
             source="yfinance" if current_price else None,
             is_critical=True
         ) if current_price else None
+        data_fields.append(price_field) if price_field else None
         
-        # Beta
+        # 2. Shares Outstanding
+        shares = info.get('sharesOutstanding')
+        shares_field = DataField(
+            field_name="Shares Outstanding",
+            value=shares,
+            unit="shares",
+            status=DataStatus.RETRIEVED if shares else DataStatus.MISSING,
+            source="yfinance" if shares else None,
+            is_critical=True
+        ) if shares else None
+        data_fields.append(shares_field) if shares_field else None
+        
+        # 3. Beta
         beta = overrides.get("beta", info.get('beta', 1.0))
         beta_field = DataField(
             field_name="Beta",
@@ -310,8 +431,9 @@ class Step6DataReviewProcessor:
             is_critical=True,
             allow_override=True
         )
+        data_fields.append(beta_field)
         
-        # Total Debt
+        # 4. Total Debt
         total_debt = market_data.get("total_debt")
         debt_field = DataField(
             field_name="Total Debt",
@@ -321,55 +443,170 @@ class Step6DataReviewProcessor:
             source="yfinance" if total_debt else None,
             is_critical=True
         ) if total_debt else None
+        data_fields.append(debt_field) if debt_field else None
         
-        # Cash
+        # 5. Cash & Equivalents
         cash = market_data.get("cash")
         cash_field = DataField(
-            field_name="Cash",
+            field_name="Cash & Equivalents",
             value=cash,
             unit="USD",
             status=DataStatus.RETRIEVED if cash else DataStatus.MISSING,
             source="yfinance" if cash else None,
             is_critical=True
         ) if cash else None
+        data_fields.append(cash_field) if cash_field else None
+        
+        # 6. Market Cap
+        mcap = info.get('marketCap')
+        mcap_field = DataField(
+            field_name="Market Cap",
+            value=mcap,
+            unit="USD",
+            status=DataStatus.RETRIEVED if mcap else DataStatus.MISSING,
+            source="yfinance" if mcap else None,
+            is_critical=True
+        ) if mcap else None
+        data_fields.append(mcap_field) if mcap_field else None
         
         return MarketDataDisplay(
             current_stock_price=price_field,
+            shares_outstanding=shares_field,
             beta=beta_field,
             total_debt=debt_field,
             cash=cash_field,
-            currency=DataField(field_name="Currency", value="USD", status=DataStatus.RETRIEVED, source="yfinance")
+            market_cap=mcap_field,
+            currency=DataField(field_name="Currency", value="USD", status=DataStatus.RETRIEVED, source="yfinance"),
+            data_fields=data_fields
         )
     
-    def _process_dcf_forecast_drivers(self, forecast_data: Dict, retrieved_assumptions: Dict, overrides: Dict) -> ForecastDriversDisplay:
-        """Process forecast drivers from retrieved data"""
-        fields = []
+    def _process_dcf_opening_balances(self, historical_data: Dict, overrides: Dict) -> HistoricalFinancialsDisplay:
+        """Process opening balances for DCF (3 fields)"""
+        years = []
+        data_fields = []
         
-        # Revenue Growth (from historical calculation or override)
-        default_growth = retrieved_assumptions.get("revenue_growth", 0.05)
-        if "revenue_growth" in overrides:
-            default_growth = overrides["revenue_growth"]
-            status = DataStatus.MANUAL_OVERRIDE
-            source = "User Input"
-        else:
-            status = DataStatus.CALCULATED
-            source = "Historical CAGR"
+        balance_sheet = historical_data.get("balance_sheet")
+        if balance_sheet is not None:
+            # Get most recent year for opening balances
+            if len(balance_sheet.columns) > 0:
+                latest_col = balance_sheet.columns[0]
+                year = int(latest_col.year)
+                years.append(year)
+                
+                # 1. Net Debt Opening Balance (calculated from Debt - Cash)
+                total_debt = balance_sheet.loc['Total Debt', latest_col] if 'Total Debt' in balance_sheet.index else None
+                if total_debt is None:
+                    total_debt = balance_sheet.loc['Long Term Debt', latest_col] if 'Long Term Debt' in balance_sheet.index else None
+                cash = balance_sheet.loc['Cash And Cash Equivalents', latest_col] if 'Cash And Cash Equivalents' in balance_sheet.index else None
+                if cash is None:
+                    cash = balance_sheet.loc['Cash', latest_col] if 'Cash' in balance_sheet.index else None
+                
+                net_debt = (total_debt - cash) if (total_debt and cash) else None
+                data_fields.append(DataField(
+                    field_name=f"Net_Debt_Opening_{year}",
+                    value=net_debt,
+                    unit="USD",
+                    status=DataStatus.CALCULATED if net_debt else DataStatus.MISSING,
+                    source="Calculated from Balance Sheet",
+                    formula="Total Debt - Cash",
+                    is_critical=False
+                ))
+                
+                # 2. PP&E (Gross) Opening Balance
+                ppe_val = balance_sheet.loc['Property Plant Equipment', latest_col] if 'Property Plant Equipment' in balance_sheet.index else None
+                data_fields.append(DataField(
+                    field_name=f"PPnE_Gross_Opening_{year}",
+                    value=ppe_val,
+                    unit="USD",
+                    status=DataStatus.RETRIEVED if ppe_val else DataStatus.MISSING,
+                    source="yfinance" if ppe_val else None,
+                    is_critical=False
+                ))
+                
+                # 3. Accumulated Depreciation
+                accum_dep_val = balance_sheet.loc['Accumulated Depreciation', latest_col] if 'Accumulated Depreciation' in balance_sheet.index else None
+                data_fields.append(DataField(
+                    field_name=f"Accumulated_Depreciation_Opening_{year}",
+                    value=accum_dep_val,
+                    unit="USD",
+                    status=DataStatus.RETRIEVED if accum_dep_val else DataStatus.MISSING,
+                    source="yfinance" if accum_dep_val else None,
+                    is_critical=False
+                ))
         
-        fields.append(DataField(
-            field_name="Revenue Growth Rate",
-            value=default_growth,
-            unit="%",
-            status=status,
-            source=source,
-            formula="Historical CAGR or User Input",
-            is_critical=True,
-            allow_override=True
-        ))
-        
-        return ForecastDriversDisplay(data_fields=fields)
+        return HistoricalFinancialsDisplay(years=years, data_fields=data_fields)
     
-    def _calculate_dcf_intermediate_metrics(self, hist: HistoricalFinancialsDisplay, market: MarketDataDisplay, forecast: ForecastDriversDisplay) -> CalculatedMetricsDisplay:
-        """Calculate ONLY intermediate metrics (margins, growth rates) - NOT WACC/TV/Fair Value"""
+    def _process_dcf_peer_comparables(self, retrieved_assumptions: Dict, overrides: Dict) -> HistoricalFinancialsDisplay:
+        """Process peer comparables for WACC calculation (5 fields × N peers)"""
+        years = [2024]  # Current year for peer data
+        data_fields = []
+        
+        peers = retrieved_assumptions.get("peers", [])
+        if not peers:
+            peers = overrides.get("peers", [])
+        
+        for i, peer_ticker in enumerate(peers[:5]):  # Limit to 5 peers
+            peer_info = retrieved_assumptions.get(f"peer_{peer_ticker}_info", {})
+            
+            # 1. Peer Market Cap
+            peer_mcap = peer_info.get('marketCap')
+            data_fields.append(DataField(
+                field_name=f"Peer_{peer_ticker}_MarketCap",
+                value=peer_mcap,
+                unit="USD",
+                status=DataStatus.RETRIEVED if peer_mcap else DataStatus.MISSING,
+                source="yfinance" if peer_mcap else None,
+                is_critical=False
+            ))
+            
+            # 2. Peer Beta
+            peer_beta = peer_info.get('beta')
+            data_fields.append(DataField(
+                field_name=f"Peer_{peer_ticker}_Beta",
+                value=peer_beta,
+                status=DataStatus.RETRIEVED if peer_beta else DataStatus.MISSING,
+                source="yfinance" if peer_beta else None,
+                is_critical=False
+            ))
+            
+            # 3. Peer Total Debt
+            peer_debt = peer_info.get('totalDebt')
+            data_fields.append(DataField(
+                field_name=f"Peer_{peer_ticker}_TotalDebt",
+                value=peer_debt,
+                unit="USD",
+                status=DataStatus.RETRIEVED if peer_debt else DataStatus.MISSING,
+                source="yfinance" if peer_debt else None,
+                is_critical=False
+            ))
+            
+            # 4. Peer Cash
+            peer_cash = peer_info.get('cash')
+            data_fields.append(DataField(
+                field_name=f"Peer_{peer_ticker}_Cash",
+                value=peer_cash,
+                unit="USD",
+                status=DataStatus.RETRIEVED if peer_cash else DataStatus.MISSING,
+                source="yfinance" if peer_cash else None,
+                is_critical=False
+            ))
+            
+            # 5. Peer Tax Rate (calculated from financials)
+            peer_tax_rate = peer_info.get('effectiveTaxRate')
+            data_fields.append(DataField(
+                field_name=f"Peer_{peer_ticker}_TaxRate",
+                value=peer_tax_rate,
+                unit="%",
+                status=DataStatus.CALCULATED if peer_tax_rate else DataStatus.MISSING,
+                source="Calculated from yfinance" if peer_tax_rate else None,
+                formula="Tax Provision / Pre-Tax Income",
+                is_critical=False
+            ))
+        
+        return HistoricalFinancialsDisplay(years=years, data_fields=data_fields)
+    
+    def _calculate_dcf_intermediate_metrics(self, hist: HistoricalFinancialsDisplay, market: MarketDataDisplay, opening: HistoricalFinancialsDisplay, peers: HistoricalFinancialsDisplay) -> CalculatedMetricsDisplay:
+        """Calculate ONLY intermediate metrics (margins, growth rates, ratios) - NOT WACC/TV/Fair Value"""
         fields = []
         
         # Calculate historical EBITDA margins (if data available)
@@ -386,6 +623,106 @@ class Step6DataReviewProcessor:
                     status=DataStatus.CALCULATED,
                     source="Step 6 Calculation",
                     formula="Avg(EBITDA / Revenue)",
+                    is_critical=False
+                ))
+        
+        # Calculate Net Debt (if debt and cash available)
+        if market.total_debt and market.cash:
+            net_debt = market.total_debt.value - market.cash.value
+            fields.append(DataField(
+                field_name="Net Debt",
+                value=net_debt,
+                unit="USD",
+                status=DataStatus.CALCULATED,
+                source="Step 6 Calculation",
+                formula="Total Debt - Cash",
+                is_critical=False
+            ))
+        
+        # Calculate Enterprise Value (if market cap and net debt available)
+        if market.market_cap and market.total_debt and market.cash:
+            ev = market.market_cap.value + net_debt
+            fields.append(DataField(
+                field_name="Enterprise Value",
+                value=ev,
+                unit="USD",
+                status=DataStatus.CALCULATED,
+                source="Step 6 Calculation",
+                formula="Market Cap + Net Debt",
+                is_critical=False
+            ))
+        
+        # Calculate historical growth rates (YoY)
+        if len(revenues) >= 2:
+            revenue_growth = (revenues[-1] - revenues[0]) / revenues[0]
+            fields.append(DataField(
+                field_name="Revenue Growth Rate (Period)",
+                value=revenue_growth,
+                unit="%",
+                status=DataStatus.CALCULATED,
+                source="Step 6 Calculation",
+                formula="(Latest Revenue - Earliest Revenue) / Earliest Revenue",
+                is_critical=False
+            ))
+        
+        # Calculate D&A % of Revenue
+        if hist.data_fields:
+            da_values = [f.value for f in hist.data_fields if 'Depreciation_Amortization' in f.field_name and f.value]
+            if da_values and revenues and len(da_values) == len(revenues):
+                avg_da_pct = sum(d/r for d, r in zip(da_values, revenues)) / len(revenues)
+                fields.append(DataField(
+                    field_name="Average D&A % of Revenue",
+                    value=avg_da_pct,
+                    unit="%",
+                    status=DataStatus.CALCULATED,
+                    source="Step 6 Calculation",
+                    formula="Avg(D&A / Revenue)",
+                    is_critical=False
+                ))
+        
+        # Calculate CapEx % of Revenue
+        if hist.data_fields:
+            capex_values = [f.value for f in hist.data_fields if 'CapEx' in f.field_name and f.value]
+            if capex_values and revenues and len(capex_values) == len(revenues):
+                avg_capex_pct = sum(c/r for c, r in zip(capex_values, revenues)) / len(revenues)
+                fields.append(DataField(
+                    field_name="Average CapEx % of Revenue",
+                    value=avg_capex_pct,
+                    unit="%",
+                    status=DataStatus.CALCULATED,
+                    source="Step 6 Calculation",
+                    formula="Avg(CapEx / Revenue)",
+                    is_critical=False
+                ))
+        
+        # Calculate Working Capital % of Revenue
+        if hist.data_fields:
+            wc_values = [f.value for f in hist.data_fields if 'Working_Capital_Change' in f.field_name and f.value]
+            if wc_values and revenues and len(wc_values) == len(revenues):
+                avg_wc_pct = sum(w/r for w, r in zip(wc_values, revenues)) / len(revenues)
+                fields.append(DataField(
+                    field_name="Average WC Change % of Revenue",
+                    value=avg_wc_pct,
+                    unit="%",
+                    status=DataStatus.CALCULATED,
+                    source="Step 6 Calculation",
+                    formula="Avg(WC Change / Revenue)",
+                    is_critical=False
+                ))
+        
+        # Calculate implied effective tax rate
+        if hist.data_fields:
+            tax_values = [f.value for f in hist.data_fields if 'Tax_Provision' in f.field_name and f.value]
+            pretax_values = [f.value for f in hist.data_fields if 'Pre_Tax_Income' in f.field_name and f.value]
+            if tax_values and pretax_values and len(tax_values) == len(pretax_values):
+                avg_tax_rate = sum(t/p for t, p in zip(tax_values, pretax_values) if p != 0) / len(tax_values)
+                fields.append(DataField(
+                    field_name="Average Effective Tax Rate",
+                    value=avg_tax_rate,
+                    unit="%",
+                    status=DataStatus.CALCULATED,
+                    source="Step 6 Calculation",
+                    formula="Avg(Tax Provision / Pre-Tax Income)",
                     is_critical=False
                 ))
         
