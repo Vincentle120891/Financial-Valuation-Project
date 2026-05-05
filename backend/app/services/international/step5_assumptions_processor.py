@@ -1,6 +1,6 @@
-"""Step 5: Assumptions Review Processor - Model-Specific Validation"""
+"""Step 5: Data Retrieval Inputs - Shows required inputs that can be retrieved from APIs only"""
 import logging
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 from pydantic import BaseModel
 from enum import Enum
 
@@ -12,189 +12,365 @@ class ValuationModel(str, Enum):
     DUPONT = "DUPONT"
     COMPS = "COMPS"
 
-class AssumptionValidation(BaseModel):
-    metric: str
-    value: float
-    is_valid: bool
-    validation_message: str
-    recommended_range: Dict[str, float]
-
-class ScenarioModel(BaseModel):
-    scenario_name: str
-    assumptions: Dict[str, float]
+class DataRetrievalField(BaseModel):
+    """A field that can be retrieved from external APIs"""
+    field_name: str
     description: str
+    data_source: str  # yfinance, etc.
+    is_required: bool
+    api_endpoint: str  # Which API method to call
+    example_response_key: str
 
-class CompsAssumptions(BaseModel):
-    """Assumptions specific to Comps analysis"""
-    selected_peers: List[str] = []
-    valuation_multiples: List[str] = ["P/E", "EV/EBITDA", "P/B", "P/S"]
-    apply_outlier_filter: bool = True
-    weighting_method: str = "median"  # median, mean, or harmonic_mean
-
-class DuPontAssumptions(BaseModel):
-    """Assumptions specific to DuPont analysis"""
-    years_to_analyze: int = 3
-    include_benchmark_comparison: bool = True
-    sector_average_roe: Optional[float] = None
-
-class Step5Response(BaseModel):
+class Step5DataRetrievalResponse(BaseModel):
+    """Response showing what data needs to be retrieved from APIs"""
+    ticker: str
     valuation_model: ValuationModel
-    validated_assumptions: Optional[List[AssumptionValidation]] = None
-    scenarios: Optional[List[ScenarioModel]] = None
-    comps_assumptions: Optional[CompsAssumptions] = None
-    dupont_assumptions: Optional[DuPontAssumptions] = None
-    warnings: List[str] = []
-    ready_for_valuation: bool = False
-    model_specific_notes: str = ""
+    retrieval_groups: Dict[str, List[DataRetrievalField]]
+    total_fields_to_retrieve: int
+    retrieval_status: str = "PENDING"  # PENDING, IN_PROGRESS, COMPLETED
+    message: str = "Click 'Retrieve Data' to fetch required inputs from external APIs"
 
 class Step5AssumptionsProcessor:
-    DCF_VALIDATION_RULES = {
-        "revenue_growth": {"min": -0.20, "max": 0.50, "warning_min": 0.0, "warning_max": 0.30},
-        "wacc": {"min": 0.05, "max": 0.25, "warning_min": 0.08, "warning_max": 0.15},
-        "terminal_growth": {"min": -0.02, "max": 0.08, "warning_min": 0.01, "warning_max": 0.04},
-        "ebitda_margin": {"min": 0.05, "max": 0.60, "warning_min": 0.10, "warning_max": 0.40},
-        "tax_rate": {"min": 0.10, "max": 0.40, "warning_min": 0.15, "warning_max": 0.35}
+    """
+    Step 5: Shows ONLY the inputs that can be retrieved from APIs.
+    No calculations, no AI suggestions, no manual inputs.
+    User clicks 'Retrieve' button to fetch data.
+    """
+    
+    # DCF: Data that can be retrieved from yfinance
+    DCF_RETRIEVABLE_INPUTS = {
+        "historical_financials": [
+            DataRetrievalField(
+                field_name="Total Revenue",
+                description="Annual revenue for past 3-5 years",
+                data_source="yfinance",
+                is_required=True,
+                api_endpoint="get_financials",
+                example_response_key="Total Revenue"
+            ),
+            DataRetrievalField(
+                field_name="EBITDA",
+                description="Earnings Before Interest, Taxes, Depreciation and Amortization",
+                data_source="yfinance",
+                is_required=True,
+                api_endpoint="get_financials",
+                example_response_key="EBITDA"
+            ),
+            DataRetrievalField(
+                field_name="Depreciation & Amortization",
+                description="Non-cash expense for D&A",
+                data_source="yfinance",
+                is_required=False,
+                api_endpoint="get_cash_flow",
+                example_response_key="Depreciation"
+            ),
+            DataRetrievalField(
+                field_name="Capital Expenditures",
+                description="Cash spent on fixed assets",
+                data_source="yfinance",
+                is_required=True,
+                api_endpoint="get_cash_flow",
+                example_response_key="Capital Expenditure"
+            ),
+            DataRetrievalField(
+                field_name="Working Capital Changes",
+                description="Changes in net working capital",
+                data_source="yfinance",
+                is_required=False,
+                api_endpoint="get_cash_flow",
+                example_response_key="Change In Working Capital"
+            )
+        ],
+        "market_data": [
+            DataRetrievalField(
+                field_name="Current Stock Price",
+                description="Latest market price",
+                data_source="yfinance",
+                is_required=True,
+                api_endpoint="get_company_info",
+                example_response_key="currentPrice"
+            ),
+            DataRetrievalField(
+                field_name="Shares Outstanding",
+                description="Number of shares outstanding",
+                data_source="yfinance",
+                is_required=True,
+                api_endpoint="get_company_info",
+                example_response_key="sharesOutstanding"
+            ),
+            DataRetrievalField(
+                field_name="Beta",
+                description="Stock beta vs market",
+                data_source="yfinance",
+                is_required=True,
+                api_endpoint="get_company_info",
+                example_response_key="beta"
+            ),
+            DataRetrievalField(
+                field_name="Total Debt",
+                description="Short-term + Long-term debt",
+                data_source="yfinance",
+                is_required=True,
+                api_endpoint="get_balance_sheet",
+                example_response_key="Total Debt"
+            ),
+            DataRetrievalField(
+                field_name="Cash & Equivalents",
+                description="Cash and short-term investments",
+                data_source="yfinance",
+                is_required=True,
+                api_endpoint="get_balance_sheet",
+                example_response_key="Cash And Cash Equivalents"
+            ),
+            DataRetrievalField(
+                field_name="Market Cap",
+                description="Current market capitalization",
+                data_source="yfinance",
+                is_required=False,
+                api_endpoint="get_company_info",
+                example_response_key="marketCap"
+            )
+        ]
     }
     
-    COMPS_VALIDATION_RULES = {
-        "pe_ratio": {"min": 0.5, "max": 100, "warning_min": 5, "warning_max": 50},
-        "ev_ebitda": {"min": 1, "max": 50, "warning_min": 3, "warning_max": 25},
-        "pb_ratio": {"min": 0.1, "max": 20, "warning_min": 0.5, "warning_max": 10}
+    # DuPont: Data that can be retrieved from yfinance
+    DUPONT_RETRIEVABLE_INPUTS = {
+        "income_statement": [
+            DataRetrievalField(
+                field_name="Net Income",
+                description="Bottom line earnings",
+                data_source="yfinance",
+                is_required=True,
+                api_endpoint="get_financials",
+                example_response_key="Net Income"
+            ),
+            DataRetrievalField(
+                field_name="Total Revenue",
+                description="Top line sales",
+                data_source="yfinance",
+                is_required=True,
+                api_endpoint="get_financials",
+                example_response_key="Total Revenue"
+            ),
+            DataRetrievalField(
+                field_name="Operating Income",
+                description="Income from operations",
+                data_source="yfinance",
+                is_required=False,
+                api_endpoint="get_financials",
+                example_response_key="Operating Income"
+            )
+        ],
+        "balance_sheet": [
+            DataRetrievalField(
+                field_name="Total Assets",
+                description="Sum of all assets",
+                data_source="yfinance",
+                is_required=True,
+                api_endpoint="get_balance_sheet",
+                example_response_key="Total Assets"
+            ),
+            DataRetrievalField(
+                field_name="Shareholders Equity",
+                description="Book value of equity",
+                data_source="yfinance",
+                is_required=True,
+                api_endpoint="get_balance_sheet",
+                example_response_key="Stockholders Equity"
+            ),
+            DataRetrievalField(
+                field_name="Total Liabilities",
+                description="Sum of all liabilities",
+                data_source="yfinance",
+                is_required=False,
+                api_endpoint="get_balance_sheet",
+                example_response_key="Total Liabilities Net Minority Interest"
+            )
+        ]
     }
     
-    DUPONT_VALIDATION_RULES = {
-        "net_margin": {"min": -0.50, "max": 0.60, "warning_min": 0.05, "warning_max": 0.40},
-        "asset_turnover": {"min": 0.1, "max": 5.0, "warning_min": 0.5, "warning_max": 2.0},
-        "equity_multiplier": {"min": 1.0, "max": 10.0, "warning_min": 1.5, "warning_max": 4.0}
+    # Comps: Data that can be retrieved from yfinance (including peers)
+    COMPS_RETRIEVABLE_INPUTS = {
+        "target_company": [
+            DataRetrievalField(
+                field_name="Current Stock Price",
+                description="Latest market price",
+                data_source="yfinance",
+                is_required=True,
+                api_endpoint="get_company_info",
+                example_response_key="currentPrice"
+            ),
+            DataRetrievalField(
+                field_name="EPS (TTM)",
+                description="Trailing twelve months earnings per share",
+                data_source="yfinance",
+                is_required=True,
+                api_endpoint="get_company_info",
+                example_response_key="trailingEps"
+            ),
+            DataRetrievalField(
+                field_name="Market Cap",
+                description="Current market capitalization",
+                data_source="yfinance",
+                is_required=True,
+                api_endpoint="get_company_info",
+                example_response_key="marketCap"
+            ),
+            DataRetrievalField(
+                field_name="Enterprise Value",
+                description="Market cap + debt - cash",
+                data_source="yfinance",
+                is_required=True,
+                api_endpoint="get_company_info",
+                example_response_key="enterpriseValue"
+            ),
+            DataRetrievalField(
+                field_name="EBITDA (TTM)",
+                description="Trailing EBITDA",
+                data_source="yfinance",
+                is_required=True,
+                api_endpoint="get_company_info",
+                example_response_key="ebitda"
+            ),
+            DataRetrievalField(
+                field_name="Book Value",
+                description="Shareholders equity per share",
+                data_source="yfinance",
+                is_required=True,
+                api_endpoint="get_company_info",
+                example_response_key="bookValue"
+            ),
+            DataRetrievalField(
+                field_name="Revenue (TTM)",
+                description="Trailing twelve months revenue",
+                data_source="yfinance",
+                is_required=True,
+                api_endpoint="get_company_info",
+                example_response_key="totalRevenue"
+            )
+        ],
+        "peer_companies": [
+            DataRetrievalField(
+                field_name="Peer Stock Prices",
+                description="Current prices for all selected peers",
+                data_source="yfinance",
+                is_required=True,
+                api_endpoint="get_company_info",
+                example_response_key="currentPrice (for each peer)"
+            ),
+            DataRetrievalField(
+                field_name="Peer EPS",
+                description="EPS for all selected peers",
+                data_source="yfinance",
+                is_required=True,
+                api_endpoint="get_company_info",
+                example_response_key="trailingEps (for each peer)"
+            ),
+            DataRetrievalField(
+                field_name="Peer Market Caps",
+                description="Market caps for all selected peers",
+                data_source="yfinance",
+                is_required=True,
+                api_endpoint="get_company_info",
+                example_response_key="marketCap (for each peer)"
+            ),
+            DataRetrievalField(
+                field_name="Peer Enterprise Values",
+                description="EV for all selected peers",
+                data_source="yfinance",
+                is_required=True,
+                api_endpoint="get_company_info",
+                example_response_key="enterpriseValue (for each peer)"
+            ),
+            DataRetrievalField(
+                field_name="Peer EBITDA",
+                description="EBITDA for all selected peers",
+                data_source="yfinance",
+                is_required=True,
+                api_endpoint="get_company_info",
+                example_response_key="ebitda (for each peer)"
+            ),
+            DataRetrievalField(
+                field_name="Peer Book Values",
+                description="Book value for all selected peers",
+                data_source="yfinance",
+                is_required=True,
+                api_endpoint="get_company_info",
+                example_response_key="bookValue (for each peer)"
+            ),
+            DataRetrievalField(
+                field_name="Peer Revenues",
+                description="Revenue for all selected peers",
+                data_source="yfinance",
+                is_required=True,
+                api_endpoint="get_company_info",
+                example_response_key="totalRevenue (for each peer)"
+            )
+        ]
     }
     
-    def process_assumptions_review(
-        self, 
-        assumptions: Dict[str, float], 
-        valuation_model: str = "DCF",
-        market: str = "international"
-    ) -> Step5Response:
+    def process_data_retrieval_inputs(
+        self,
+        ticker: str,
+        valuation_model: str,
+        peer_tickers: Optional[List[str]] = None
+    ) -> Step5DataRetrievalResponse:
+        """
+        Returns the list of inputs that need to be retrieved from APIs.
+        No calculations performed here - purely showing what will be fetched.
+        """
         model_enum = ValuationModel(valuation_model.upper())
         
         if model_enum == ValuationModel.DCF:
-            return self._process_dcf_assumptions(assumptions, market)
-        elif model_enum == ValuationModel.COMPS:
-            return self._process_comps_assumptions(assumptions)
+            return self._build_dcf_retrieval_response(ticker)
         elif model_enum == ValuationModel.DUPONT:
-            return self._process_dupont_assumptions(assumptions)
+            return self._build_dupont_retrieval_response(ticker)
+        elif model_enum == ValuationModel.COMPS:
+            return self._build_comps_retrieval_response(ticker, peer_tickers or [])
         else:
             raise ValueError(f"Unknown valuation model: {valuation_model}")
     
-    def _process_dcf_assumptions(self, assumptions: Dict[str, float], market: str) -> Step5Response:
-        """Validate DCF-specific assumptions"""
-        validated, warnings, all_valid = [], [], True
+    def _build_dcf_retrieval_response(self, ticker: str) -> Step5DataRetrievalResponse:
+        """Build DCF data retrieval response"""
+        total_fields = sum(len(fields) for fields in self.DCF_RETRIEVABLE_INPUTS.values())
         
-        for metric, value in assumptions.items():
-            if metric in self.DCF_VALIDATION_RULES:
-                rules = self.DCF_VALIDATION_RULES[metric]
-                is_valid = rules["min"] <= value <= rules["max"]
-                if not is_valid:
-                    all_valid = False
-                    warnings.append(f"{metric} ({value:.2%}) outside valid range [{rules['min']:.2%} - {rules['max']:.2%}]")
-                
-                validated.append(AssumptionValidation(
-                    metric=metric,
-                    value=value,
-                    is_valid=is_valid,
-                    validation_message="Valid" if is_valid else "Invalid",
-                    recommended_range={"min": rules["warning_min"], "max": rules["warning_max"]}
-                ))
-        
-        base_wacc = assumptions.get("wacc", 0.10)
-        base_growth = assumptions.get("terminal_growth", 0.025)
-        
-        scenarios = [
-            ScenarioModel(scenario_name="Bull Case", assumptions={"wacc": base_wacc-0.015, "terminal_growth": base_growth+0.01}, description="Optimistic scenario with lower discount rate and higher terminal growth"),
-            ScenarioModel(scenario_name="Base Case", assumptions=assumptions, description="Most likely scenario based on current assumptions"),
-            ScenarioModel(scenario_name="Bear Case", assumptions={"wacc": base_wacc+0.02, "terminal_growth": base_growth-0.01}, description="Conservative scenario with higher discount rate and lower terminal growth")
-        ]
-        
-        return Step5Response(
+        return Step5DataRetrievalResponse(
+            ticker=ticker,
             valuation_model=ValuationModel.DCF,
-            validated_assumptions=validated,
-            scenarios=scenarios,
-            warnings=warnings,
-            ready_for_valuation=all_valid,
-            model_specific_notes="DCF assumptions validated. Ready to calculate intrinsic value."
+            retrieval_groups=self.DCF_RETRIEVABLE_INPUTS,
+            total_fields_to_retrieve=total_fields,
+            retrieval_status="PENDING",
+            message=f"Ready to retrieve {total_fields} data points from yfinance for DCF analysis"
         )
     
-    def _process_comps_assumptions(self, assumptions: Dict[str, float]) -> Step5Response:
-        """Validate Comps-specific assumptions"""
-        validated, warnings, all_valid = [], [], True
+    def _build_dupont_retrieval_response(self, ticker: str) -> Step5DataRetrievalResponse:
+        """Build DuPont data retrieval response"""
+        total_fields = sum(len(fields) for fields in self.DUPONT_RETRIEVABLE_INPUTS.values())
         
-        selected_peers = assumptions.get("peer_tickers", [])
-        if len(selected_peers) < 3:
-            warnings.append(f"Only {len(selected_peers)} peers selected. Minimum 3 recommended for reliable comparison.")
-            all_valid = False
-        
-        for metric, value in assumptions.items():
-            if metric in self.COMPS_VALIDATION_RULES:
-                rules = self.COMPS_VALIDATION_RULES[metric]
-                is_valid = rules["min"] <= value <= rules["max"]
-                if not is_valid:
-                    all_valid = False
-                    warnings.append(f"{metric} ({value:.2f}) outside valid range")
-                
-                validated.append(AssumptionValidation(
-                    metric=metric,
-                    value=value,
-                    is_valid=is_valid,
-                    validation_message="Valid" if is_valid else "Invalid",
-                    recommended_range={"min": rules["warning_min"], "max": rules["warning_max"]}
-                ))
-        
-        comps_assumptions = CompsAssumptions(
-            selected_peers=selected_peers,
-            valuation_multiples=assumptions.get("valuation_multiples", ["P/E", "EV/EBITDA", "P/B", "P/S"]),
-            apply_outlier_filter=assumptions.get("apply_outlier_filter", True),
-            weighting_method=assumptions.get("weighting_method", "median")
-        )
-        
-        return Step5Response(
-            valuation_model=ValuationModel.COMPS,
-            comps_assumptions=comps_assumptions,
-            validated_assumptions=validated if validated else None,
-            warnings=warnings,
-            ready_for_valuation=all_valid and len(selected_peers) >= 3,
-            model_specific_notes="Comps analysis ready. Ensure peer group is truly comparable."
-        )
-    
-    def _process_dupont_assumptions(self, assumptions: Dict[str, float]) -> Step5Response:
-        """Validate DuPont-specific assumptions"""
-        validated, warnings, all_valid = [], [], True
-        
-        for metric, value in assumptions.items():
-            if metric in self.DUPONT_VALIDATION_RULES:
-                rules = self.DUPONT_VALIDATION_RULES[metric]
-                is_valid = rules["min"] <= value <= rules["max"]
-                if not is_valid:
-                    all_valid = False
-                    warnings.append(f"{metric} ({value:.2f}) outside valid range")
-                
-                validated.append(AssumptionValidation(
-                    metric=metric,
-                    value=value,
-                    is_valid=is_valid,
-                    validation_message="Valid" if is_valid else "Invalid",
-                    recommended_range={"min": rules["warning_min"], "max": rules["warning_max"]}
-                ))
-        
-        dupont_assumptions = DuPontAssumptions(
-            years_to_analyze=assumptions.get("years_to_analyze", 3),
-            include_benchmark_comparison=assumptions.get("include_benchmark_comparison", True),
-            sector_average_roe=assumptions.get("sector_average_roe")
-        )
-        
-        return Step5Response(
+        return Step5DataRetrievalResponse(
+            ticker=ticker,
             valuation_model=ValuationModel.DUPONT,
-            dupont_assumptions=dupont_assumptions,
-            validated_assumptions=validated if validated else None,
-            warnings=warnings,
-            ready_for_valuation=all_valid,
-            model_specific_notes="DuPont analysis will decompose ROE into operational efficiency, asset use efficiency, and financial leverage."
+            retrieval_groups=self.DUPONT_RETRIEVABLE_INPUTS,
+            total_fields_to_retrieve=total_fields,
+            retrieval_status="PENDING",
+            message=f"Ready to retrieve {total_fields} data points from yfinance for DuPont analysis"
+        )
+    
+    def _build_comps_retrieval_response(self, ticker: str, peer_tickers: List[str]) -> Step5DataRetrievalResponse:
+        """Build Comps data retrieval response"""
+        total_fields = sum(len(fields) for fields in self.COMPS_RETRIEVABLE_INPUTS.values())
+        
+        # Add note about peer count
+        if peer_tickers:
+            message = f"Ready to retrieve data for {ticker} and {len(peer_tickers)} peers ({total_fields} total data points)"
+        else:
+            message = "Warning: No peer tickers provided. Please select comparable companies before retrieving data."
+        
+        return Step5DataRetrievalResponse(
+            ticker=ticker,
+            valuation_model=ValuationModel.COMPS,
+            retrieval_groups=self.COMPS_RETRIEVABLE_INPUTS,
+            total_fields_to_retrieve=total_fields,
+            retrieval_status="PENDING" if peer_tickers else "BLOCKED",
+            message=message
         )
