@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { searchCompanies, selectCompany, selectModels, prepareInputs, fetchApiData, generateAI, confirmAssumptions, runValuation } from '../services/api';
+import { valuationApi } from '../services/valuationApi';
 import SearchStep from './valuation-flow/SearchStep';
 import ModelSelectionStep from './valuation-flow/ModelSelectionStep';
 import RequirementsStep from './valuation-flow/RequirementsStep';
 import ApiDataStep from './valuation-flow/ApiDataStep';
-import AiAssumptionsStep from './valuation-flow/AiAssumptionsStep';
-import ForecastDriversStep from './valuation-flow/ForecastDriversStep';
-import AssumptionsStep from './valuation-flow/AssumptionsStep';
+import DataReviewStep from './valuation-flow/DataReviewStep';
+import BaselineStep from './valuation-flow/BaselineStep';
+import AssumptionStudioStep from './valuation-flow/AssumptionStudioStep';
 import RunValuationStep from './valuation-flow/RunValuationStep';
 import ResultsStep from './valuation-flow/ResultsStep';
 
@@ -15,20 +15,20 @@ import ResultsStep from './valuation-flow/ResultsStep';
  *
  * Orchestrates the 10-step valuation workflow:
  * 1. Search Company
- * 2-3. (Skipped in current implementation)
- * 4. Select Model
- * 5. Review Requirements (shows what data is needed)
- * 6. API Data Review (displays data retrieved from APIs)
- * 7. AI Assumptions (displays AI-generated assumptions)
- * 8. Forecast Drivers (manual input for forecast drivers)
- * 9. Confirm Assumptions
- * 10. Run Valuation
- * 11. View Results
+ * 2. Select Company (get session_id)
+ * 3. (Merged into 2)
+ * 4. Select Model (DCF/DuPont/Comps)
+ * 5. Show Required API Inputs + [Retrieve Button]
+ * 6. Data Review (Retrieved inputs + intermediate calcs)
+ * 7. Generate Baselines (Historical static inputs)
+ * 8. Assumption Studio (Trendlines + AI buttons + Manual overrides)
+ * 9. Final Calculation
+ * 10. View Results
  *
  * Architecture:
  * - Container component managing state and business logic
  * - Delegated rendering to specialized step components
- * - Centralized API communication via services/api.js
+ * - Centralized API communication via services/valuationApi.js
  */
 const ValuationFlow = () => {
   // ==================== STATE MANAGEMENT ====================
@@ -38,22 +38,30 @@ const ValuationFlow = () => {
   const [selectedCompany, setSelectedCompany] = useState(null);
   const [selectedModel, setSelectedModel] = useState(null);
   const [sessionId, setSessionId] = useState(null);
-  const [requiredFields, setRequiredFields] = useState([]);
-  const [confirmedValues, setConfirmedValues] = useState({});
-  const [selectedScenario, setSelectedScenario] = useState('base_case');
+  const [forecastYears, setForecastYears] = useState(5);
+  
+  // Step 5: Required inputs
+  const [requiredInputs, setRequiredInputs] = useState(null);
+  
+  // Step 6: Reviewed data
+  const [reviewedData, setReviewedData] = useState(null);
+  
+  // Step 7: Baselines
+  const [baselines, setBaselines] = useState(null);
+  
+  // Step 8: Assumption Studio
+  const [assumptionStudio, setAssumptionStudio] = useState(null);
+  const [aiSuggestions, setAiSuggestions] = useState({});
+  const [manualOverrides, setManualOverrides] = useState({});
+  const [validationErrors, setValidationErrors] = useState([]);
+  
+  // Step 9-10: Results
   const [valuationResults, setValuationResults] = useState(null);
+  
+  // UI State
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [market, setMarket] = useState('international');
-
-  // Enhanced data states
-  const [historicalData, setHistoricalData] = useState(null);
-  const [forecastDrivers, setForecastDrivers] = useState(null);
-  const [peerData, setPeerData] = useState(null);
-  const [dupontResults, setDupontResults] = useState(null);
-  const [compsResults, setCompsResults] = useState(null);
-  const [dcfInputs, setDcfInputs] = useState(null);
-  const [aiData, setAiData] = useState(null);
 
   // ==================== STEP 1: SEARCH COMPANY ====================
   const handleSearch = useCallback(async () => {
