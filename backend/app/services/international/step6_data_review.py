@@ -626,6 +626,9 @@ class Step6DataReviewProcessor:
         """Calculate ONLY intermediate metrics (margins, growth rates, ratios) - NOT WACC/TV/Fair Value"""
         fields = []
         
+        # Initialize revenues list at the start
+        revenues = []
+        
         # Calculate historical EBITDA margins (if data available)
         if hist.data_fields:
             revenues = [f.value for f in hist.data_fields if 'Revenue' in f.field_name and f.value]

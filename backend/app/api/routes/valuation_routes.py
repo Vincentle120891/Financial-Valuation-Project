@@ -16,6 +16,7 @@ from app.api.schemas import (
     ModelSelectResponse,
     PrepareInputsRequest,
     PrepareInputsResponse,
+    InputRequirement,
     FetchDataRequest,
     FetchDataResponse,
     GenerateAIRequest,
@@ -83,25 +84,25 @@ async def prepare_inputs(request: PrepareInputsRequest):
         
         # Define required inputs based on model
         required_inputs = [
-            {"field": "revenue", "type": "historical", "required": True},
-            {"field": "net_income", "type": "historical", "required": True},
-            {"field": "total_assets", "type": "historical", "required": True},
-            {"field": "total_equity", "type": "historical", "required": True},
-            {"field": "operating_income", "type": "historical", "required": True},
-            {"field": "ebitda", "type": "historical", "required": True},
-            {"field": "free_cash_flow", "type": "historical", "required": False},
-            {"field": "revenue_growth_rate", "type": "forecast", "required": True},
-            {"field": "operating_margin", "type": "forecast", "required": True},
-            {"field": "tax_rate", "type": "forecast", "required": True},
-            {"field": "wacc", "type": "discount_rate", "required": True},
-            {"field": "terminal_growth_rate", "type": "terminal_value", "required": True},
+            {"category": "historical", "name": "revenue", "requiresInput": False, "defaultValue": None, "unit": "USD", "description": "Total Revenue"},
+            {"category": "historical", "name": "net_income", "requiresInput": False, "defaultValue": None, "unit": "USD", "description": "Net Income"},
+            {"category": "historical", "name": "total_assets", "requiresInput": False, "defaultValue": None, "unit": "USD", "description": "Total Assets"},
+            {"category": "historical", "name": "total_equity", "requiresInput": False, "defaultValue": None, "unit": "USD", "description": "Total Equity"},
+            {"category": "historical", "name": "operating_income", "requiresInput": False, "defaultValue": None, "unit": "USD", "description": "Operating Income"},
+            {"category": "historical", "name": "ebitda", "requiresInput": False, "defaultValue": None, "unit": "USD", "description": "EBITDA"},
+            {"category": "historical", "name": "free_cash_flow", "requiresInput": False, "defaultValue": None, "unit": "USD", "description": "Free Cash Flow"},
+            {"category": "forecast", "name": "revenue_growth_rate", "requiresInput": True, "defaultValue": None, "unit": "%", "description": "Revenue Growth Rate"},
+            {"category": "forecast", "name": "operating_margin", "requiresInput": True, "defaultValue": None, "unit": "%", "description": "Operating Margin"},
+            {"category": "forecast", "name": "tax_rate", "requiresInput": True, "defaultValue": None, "unit": "%", "description": "Tax Rate"},
+            {"category": "discount_rate", "name": "wacc", "requiresInput": True, "defaultValue": None, "unit": "%", "description": "Weighted Average Cost of Capital"},
+            {"category": "terminal_value", "name": "terminal_growth_rate", "requiresInput": True, "defaultValue": None, "unit": "%", "description": "Terminal Growth Rate"},
         ]
         
         session_service.update_session_data(request.session_id, "status", "ready_to_fetch")
         
         return PrepareInputsResponse(
             status="ready_to_fetch",
-            required_inputs=required_inputs,
+            required_inputs=[InputRequirement(**inp) for inp in required_inputs],
             message=f"Found {len(required_inputs)} required inputs for your selected model"
         )
     except Exception as e:
