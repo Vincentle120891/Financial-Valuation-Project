@@ -38,11 +38,12 @@ class Step5AssumptionsProcessor:
     """
     
     # DCF: Data that can be retrieved from yfinance
+    # Based on Excel template requirements - ONLY fields retrievable from APIs
     DCF_RETRIEVABLE_INPUTS = {
         "historical_financials": [
             DataRetrievalField(
                 field_name="Total Revenue",
-                description="Annual revenue for past 3-5 years",
+                description="Annual revenue for past 3-5 years (historical)",
                 data_source="yfinance",
                 is_required=True,
                 api_endpoint="get_financials",
@@ -50,7 +51,7 @@ class Step5AssumptionsProcessor:
             ),
             DataRetrievalField(
                 field_name="EBITDA",
-                description="Earnings Before Interest, Taxes, Depreciation and Amortization",
+                description="Earnings Before Interest, Taxes, Depreciation and Amortization (historical)",
                 data_source="yfinance",
                 is_required=True,
                 api_endpoint="get_financials",
@@ -58,7 +59,7 @@ class Step5AssumptionsProcessor:
             ),
             DataRetrievalField(
                 field_name="Depreciation & Amortization",
-                description="Non-cash expense for D&A",
+                description="Non-cash expense for D&A (historical)",
                 data_source="yfinance",
                 is_required=False,
                 api_endpoint="get_cash_flow",
@@ -66,7 +67,7 @@ class Step5AssumptionsProcessor:
             ),
             DataRetrievalField(
                 field_name="Capital Expenditures",
-                description="Cash spent on fixed assets",
+                description="Cash spent on fixed assets (historical)",
                 data_source="yfinance",
                 is_required=True,
                 api_endpoint="get_cash_flow",
@@ -74,11 +75,59 @@ class Step5AssumptionsProcessor:
             ),
             DataRetrievalField(
                 field_name="Working Capital Changes",
-                description="Changes in net working capital",
+                description="Changes in net working capital (historical)",
                 data_source="yfinance",
                 is_required=False,
                 api_endpoint="get_cash_flow",
                 example_response_key="Change In Working Capital"
+            ),
+            DataRetrievalField(
+                field_name="Accounts Receivable",
+                description="Outstanding receivables for AR Days calculation",
+                data_source="yfinance",
+                is_required=False,
+                api_endpoint="get_balance_sheet",
+                example_response_key="Accounts Receivable"
+            ),
+            DataRetrievalField(
+                field_name="Inventory",
+                description="Inventory balance for Inventory Days calculation",
+                data_source="yfinance",
+                is_required=False,
+                api_endpoint="get_balance_sheet",
+                example_response_key="Inventory"
+            ),
+            DataRetrievalField(
+                field_name="Accounts Payable",
+                description="Outstanding payables for AP Days calculation",
+                data_source="yfinance",
+                is_required=False,
+                api_endpoint="get_balance_sheet",
+                example_response_key="Accounts Payable"
+            ),
+            DataRetrievalField(
+                field_name="Interest Expense",
+                description="Historical interest expense",
+                data_source="yfinance",
+                is_required=False,
+                api_endpoint="get_financials",
+                example_response_key="Interest Expense"
+            ),
+            DataRetrievalField(
+                field_name="Tax Provision",
+                description="Historical tax provision for effective tax rate calculation",
+                data_source="yfinance",
+                is_required=False,
+                api_endpoint="get_financials",
+                example_response_key="Tax Provision"
+            ),
+            DataRetrievalField(
+                field_name="Pre-Tax Income",
+                description="Income before taxes for tax rate calculation",
+                data_source="yfinance",
+                is_required=False,
+                api_endpoint="get_financials",
+                example_response_key="Pretax Income"
             )
         ],
         "market_data": [
@@ -100,7 +149,7 @@ class Step5AssumptionsProcessor:
             ),
             DataRetrievalField(
                 field_name="Beta",
-                description="Stock beta vs market",
+                description="Stock beta vs market (5-year monthly)",
                 data_source="yfinance",
                 is_required=True,
                 api_endpoint="get_company_info",
@@ -129,6 +178,74 @@ class Step5AssumptionsProcessor:
                 is_required=False,
                 api_endpoint="get_company_info",
                 example_response_key="marketCap"
+            )
+        ],
+        "balance_sheet_opening": [
+            DataRetrievalField(
+                field_name="Net Debt (Opening)",
+                description="Calculated as Total Debt - Cash (can derive opening from prior year)",
+                data_source="yfinance",
+                is_required=False,
+                api_endpoint="get_balance_sheet",
+                example_response_key="Total Debt, Cash And Cash Equivalents (prior year)"
+            ),
+            DataRetrievalField(
+                field_name="PP&E (Gross)",
+                description="Gross Property, Plant & Equipment for opening balance",
+                data_source="yfinance",
+                is_required=False,
+                api_endpoint="get_balance_sheet",
+                example_response_key="Gross PPE"
+            ),
+            DataRetrievalField(
+                field_name="Accumulated Depreciation",
+                description="Accumulated depreciation for PP&E net calculation",
+                data_source="yfinance",
+                is_required=False,
+                api_endpoint="get_balance_sheet",
+                example_response_key="Accumulated Depreciation"
+            )
+        ],
+        "peer_comparables_for_wacc": [
+            DataRetrievalField(
+                field_name="Peer Market Caps",
+                description="Market caps for 5 comparable companies (for WACC beta calculation)",
+                data_source="yfinance",
+                is_required=False,
+                api_endpoint="get_company_info",
+                example_response_key="marketCap (for each peer)"
+            ),
+            DataRetrievalField(
+                field_name="Peer Betas",
+                description="Levered betas for 5 comparable companies",
+                data_source="yfinance",
+                is_required=False,
+                api_endpoint="get_company_info",
+                example_response_key="beta (for each peer)"
+            ),
+            DataRetrievalField(
+                field_name="Peer Total Debt",
+                description="Total debt for 5 comparable companies",
+                data_source="yfinance",
+                is_required=False,
+                api_endpoint="get_balance_sheet",
+                example_response_key="Total Debt (for each peer)"
+            ),
+            DataRetrievalField(
+                field_name="Peer Cash",
+                description="Cash positions for 5 comparable companies",
+                data_source="yfinance",
+                is_required=False,
+                api_endpoint="get_balance_sheet",
+                example_response_key="Cash And Cash Equivalents (for each peer)"
+            ),
+            DataRetrievalField(
+                field_name="Peer Tax Rates",
+                description="Effective tax rates for 5 comparable companies (calculated from Tax Provision / Pre-Tax Income)",
+                data_source="yfinance",
+                is_required=False,
+                api_endpoint="get_financials",
+                example_response_key="Tax Provision, Pretax Income (for each peer)"
             )
         ]
     }
@@ -322,7 +439,7 @@ class Step5AssumptionsProcessor:
         model_enum = ValuationModel(valuation_model.upper())
         
         if model_enum == ValuationModel.DCF:
-            return self._build_dcf_retrieval_response(ticker)
+            return self._build_dcf_retrieval_response(ticker, peer_tickers or [])
         elif model_enum == ValuationModel.DUPONT:
             return self._build_dupont_retrieval_response(ticker)
         elif model_enum == ValuationModel.COMPS:
@@ -330,9 +447,17 @@ class Step5AssumptionsProcessor:
         else:
             raise ValueError(f"Unknown valuation model: {valuation_model}")
     
-    def _build_dcf_retrieval_response(self, ticker: str) -> Step5DataRetrievalResponse:
+    def _build_dcf_retrieval_response(self, ticker: str, peer_tickers: List[str]) -> Step5DataRetrievalResponse:
         """Build DCF data retrieval response"""
+        # Count base fields
         total_fields = sum(len(fields) for fields in self.DCF_RETRIEVABLE_INPUTS.values())
+        
+        # Add note about peer count for WACC calculation
+        message = f"Ready to retrieve {total_fields} data points from yfinance for DCF analysis"
+        if peer_tickers:
+            message += f" (including {len(peer_tickers)} peers for WACC beta calculation)"
+        else:
+            message += ". Note: Peer companies recommended for accurate WACC calculation."
         
         return Step5DataRetrievalResponse(
             ticker=ticker,
@@ -340,7 +465,7 @@ class Step5AssumptionsProcessor:
             retrieval_groups=self.DCF_RETRIEVABLE_INPUTS,
             total_fields_to_retrieve=total_fields,
             retrieval_status="PENDING",
-            message=f"Ready to retrieve {total_fields} data points from yfinance for DCF analysis"
+            message=message
         )
     
     def _build_dupont_retrieval_response(self, ticker: str) -> Step5DataRetrievalResponse:
