@@ -771,10 +771,104 @@ class Step8ManualOverridesProcessor:
                     reasoning = "No historical data. Using estimated cost of 6%."
                     confidence = "low"
             
+            # DuPont Model Metrics
+            elif metric == "Target Net Profit Margin":
+                if historical_avg is not None:
+                    # Suggest slight improvement based on trend
+                    if trend_direction == "increasing":
+                        suggested_value = historical_avg * 1.05
+                        reasoning = f"Historical avg {historical_avg:.1%} with upward trend. Suggesting 5% improvement."
+                    elif trend_direction == "decreasing":
+                        suggested_value = historical_avg * 0.95
+                        reasoning = f"Historical avg {historical_avg:.1%} with downward trend. Conservative 5% reduction target."
+                    else:
+                        suggested_value = historical_avg
+                        reasoning = f"Stable historical performance at {historical_avg:.1%}. Maintaining average."
+                else:
+                    suggested_value = 0.10
+                    reasoning = "No historical data. Using industry default net margin of 10%."
+                    confidence = "low"
+            
+            elif metric == "Target Asset Turnover":
+                if historical_avg is not None:
+                    suggested_value = historical_avg
+                    reasoning = f"Using historical asset turnover of {historical_avg:.2f}x. Maintain efficiency."
+                else:
+                    suggested_value = 1.0
+                    reasoning = "No historical data. Using industry default asset turnover of 1.0x."
+                    confidence = "low"
+            
+            elif metric == "Target Equity Multiplier":
+                if historical_avg is not None:
+                    # Suggest maintaining or slightly reducing leverage
+                    suggested_value = min(historical_avg, historical_avg * 1.05)
+                    reasoning = f"Historical equity multiplier of {historical_avg:.2f}x. Suggesting stable to slightly reduced leverage."
+                else:
+                    suggested_value = 2.0
+                    reasoning = "No historical data. Using industry default equity multiplier of 2.0x."
+                    confidence = "low"
+            
+            # Comps Model Metrics
+            elif metric == "P/E Multiple":
+                if step7_data and 'peer_median_pe' in step7_data:
+                    suggested_value = step7_data['peer_median_pe']
+                    reasoning = f"Based on peer median P/E of {suggested_value:.1f}x."
+                elif historical_avg is not None:
+                    suggested_value = historical_avg
+                    reasoning = f"Using historical P/E of {historical_avg:.1f}x."
+                else:
+                    suggested_value = 15.0
+                    reasoning = "No data available. Using industry default P/E of 15x."
+                    confidence = "low"
+            
+            elif metric == "EV/EBITDA Multiple":
+                if step7_data and 'peer_median_ev_ebitda' in step7_data:
+                    suggested_value = step7_data['peer_median_ev_ebitda']
+                    reasoning = f"Based on peer median EV/EBITDA of {suggested_value:.1f}x."
+                elif historical_avg is not None:
+                    suggested_value = historical_avg
+                    reasoning = f"Using historical EV/EBITDA of {historical_avg:.1f}x."
+                else:
+                    suggested_value = 10.0
+                    reasoning = "No data available. Using industry default EV/EBITDA of 10x."
+                    confidence = "low"
+            
+            elif metric == "P/B Multiple":
+                if step7_data and 'peer_median_pb' in step7_data:
+                    suggested_value = step7_data['peer_median_pb']
+                    reasoning = f"Based on peer median P/B of {suggested_value:.1f}x."
+                elif historical_avg is not None:
+                    suggested_value = historical_avg
+                    reasoning = f"Using historical P/B of {historical_avg:.1f}x."
+                else:
+                    suggested_value = 2.0
+                    reasoning = "No data available. Using industry default P/B of 2x."
+                    confidence = "low"
+            
+            elif metric == "P/S Multiple":
+                if step7_data and 'peer_median_ps' in step7_data:
+                    suggested_value = step7_data['peer_median_ps']
+                    reasoning = f"Based on peer median P/S of {suggested_value:.1f}x."
+                elif historical_avg is not None:
+                    suggested_value = historical_avg
+                    reasoning = f"Using historical P/S of {historical_avg:.1f}x."
+                else:
+                    suggested_value = 3.0
+                    reasoning = "No data available. Using industry default P/S of 3x."
+                    confidence = "low"
+            
+            elif metric == "Outlier Filter Std Dev":
+                # Default to 2 standard deviations for outlier removal
+                suggested_value = 2.0
+                reasoning = "Standard practice: exclude peers beyond 2 standard deviations from median."
+            
             # Apply validation bounds
             if suggested_value is not None and validation_rules:
                 min_val = validation_rules.get("min", 0)
                 max_val = validation_rules.get("max", 1)
+                # For multiples, allow higher max
+                if "Multiple" in metric or "Multiplier" in metric or "Turnover" in metric:
+                    max_val = validation_rules.get("max", 10)
                 suggested_value = max(min_val, min(suggested_value, max_val))
             
             if suggested_value is None:
