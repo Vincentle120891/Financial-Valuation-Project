@@ -26,7 +26,7 @@ from app.api.schemas import (
     ValuateResponse
 )
 from app.services.international.step6_data_review import Step6DataReviewProcessor
-from app.services.international.step7_ai_suggestions import Step7DerivedDataProcessor
+from app.services.international.step7_ai_suggestions import Step7AISuggestionsProcessor
 from app.services.international.step8_manual_overrides import Step8ManualOverridesProcessor
 from app.services.international.step10_valuation_processor import Step10ValuationProcessor
 
@@ -36,7 +36,7 @@ router = APIRouter(tags=["Valuation"])
 
 # Initialize processors
 step6_processor = Step6DataReviewProcessor()
-step7_processor = Step7DerivedDataProcessor()
+step7_processor = Step7AISuggestionsProcessor()
 step8_processor = Step8ManualOverridesProcessor()
 step10_processor = Step10ValuationProcessor()
 
@@ -164,11 +164,13 @@ async def generate_ai_assumptions(request: GenerateAIRequest):
         if not financial_data:
             raise HTTPException(status_code=400, detail="No financial data available")
         
-        # Use Step7DerivedDataProcessor for AI-driven analysis
-        result = await step7_processor.calculate_derived_data(
+        # Use Step7AISuggestionsProcessor for AI-driven analysis
+        result = await step7_processor.generate_ai_suggestions(
             ticker=ticker,
-            historical_data=financial_data.get("historical_financials", []),
-            peers_data=financial_data.get("peers_data", [])
+            company_name=session.get("company_name", ticker),
+            valuation_model=model,
+            market=session.get("market", "US"),
+            financial_data=financial_data
         )
         
         # Store AI suggestions in session using SessionService

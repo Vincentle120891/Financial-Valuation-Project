@@ -2,9 +2,9 @@
 Model Integrity Validator
 
 This module ensures that all model changes are validated against the reference
-documentation in the 'excel models/' folder before any edits to inputs or engines
-are allowed. This preserves the integrity of the valuation models as mandated by
-the MODEL_INTEGRITY_MANIFESTO.md.
+documentation in the 'excel models/' folder before any edits to inputs or calculation
+engines in the services layer are allowed. This preserves the integrity of the 
+valuation models as mandated by the MODEL_INTEGRITY_MANIFESTO.md.
 
 Usage:
     from app.core.model_integrity import ModelIntegrityValidator
@@ -61,7 +61,7 @@ class ValidationResult:
 class ModelIntegrityValidator:
     """
     Validates that model implementations match the reference documentation
-    before allowing any edits to inputs or engines.
+    before allowing any edits to inputs or calculation engines in services.
     
     This enforces the MODEL_INTEGRITY_MANIFESTO.md requirement that no inputs,
     calculations, or outputs be removed, simplified, or bypassed.
