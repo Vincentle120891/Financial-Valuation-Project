@@ -128,8 +128,8 @@ async def fetch_api_data(request: FetchDataRequest):
         # Use Step6DataReviewProcessor for comprehensive data fetching and calculation
         result = await step6_processor.process_data_review(
             ticker=ticker,
-            model=model,
-            market=market
+            market=market,
+            valuation_model=model
         )
         
         # Store results in session using SessionService
