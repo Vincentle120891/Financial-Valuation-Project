@@ -200,12 +200,19 @@ async def general_exception_handler(request: Request, exc: Exception):
 
 
 # In-memory session store (TODO: Replace with Redis in production)
+# Deprecated: Use session_service from app.core.session_service instead
 sessions_store: dict = {}
 
 
 def get_session_store() -> dict:
-    """Get session store instance. Allows future replacement with Redis."""
-    return sessions_store
+    """
+    Get session store instance. 
+    DEPRECATED: Use session_service from app.core.session_service instead.
+    Kept for backward compatibility only.
+    """
+    from app.core.session_service import session_service
+    # Return the internal storage of session_service for compatibility
+    return session_service._sessions
 
 
 # Include routers with API versioning

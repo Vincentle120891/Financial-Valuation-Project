@@ -1,5 +1,5 @@
 """
-Valuation Routes - Refactored to use International Services
+Valuation Routes - Refactored to use SessionService and International Services
 
 Handles valuation workflow steps 4-10 using advanced service processors.
 """
@@ -10,6 +10,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from app.core.logging_config import get_logger
+from app.core.session_service import session_service
 from app.api.schemas import (
     ModelSelectRequest, 
     ModelSelectResponse,
@@ -24,9 +25,9 @@ from app.api.schemas import (
     ValuateRequest,
     ValuateResponse
 )
-from app.services.international.step6_data_review_processor import Step6DataReviewProcessor
-from app.services.international.step7_derived_data_processor import Step7DerivedDataProcessor
-from app.services.international.step8_manual_overrides_processor import Step8ManualOverridesProcessor
+from app.services.international.step6_data_review import Step6DataReviewProcessor
+from app.services.international.step7_ai_suggestions import Step7DerivedDataProcessor
+from app.services.international.step8_manual_overrides import Step8ManualOverridesProcessor
 from app.services.international.step10_valuation_processor import Step10ValuationProcessor
 
 logger = get_logger(__name__)
@@ -44,16 +45,17 @@ step10_processor = Step10ValuationProcessor()
 async def select_models(request: ModelSelectRequest):
     """
     Step 4: User selects valuation model.
+    Uses SessionService for session management.
     """
     try:
-        from app.main import get_session_store
-        sessions = get_session_store()
-        
-        if request.session_id not in sessions:
+        # Get session data using SessionService
+        session = session_service.get_session_data(request.session_id)
+        if not session:
             raise HTTPException(status_code=404, detail="Session not found")
         
-        sessions[request.session_id]["selected_model"] = request.model.upper()
-        sessions[request.session_id]["status"] = "ready_for_data_fetch"
+        # Update session with selected model
+        session_service.update_session_data(request.session_id, "selected_model", request.model.upper())
+        session_service.update_session_data(request.session_id, "status", "ready_for_data_fetch")
         
         return ModelSelectResponse(
             message="Model selected",
@@ -69,16 +71,15 @@ async def select_models(request: ModelSelectRequest):
 async def prepare_inputs(request: PrepareInputsRequest):
     """
     Step 5: Prepare required inputs for selected model.
+    Uses SessionService for session management.
     """
     try:
-        from app.main import get_session_store
-        sessions = get_session_store()
-        
-        if request.session_id not in sessions:
+        # Get session data using SessionService
+        session = session_service.get_session_data(request.session_id)
+        if not session:
             raise HTTPException(status_code=404, detail="Session not found")
         
-        session = sessions[request.session_id]
-        model = session.get("selected_model", "DCF")
+        model = session_service.get_session_value(request.session_id, "selected_model", "DCF")
         
         # Define required inputs based on model
         required_inputs = [
@@ -96,7 +97,7 @@ async def prepare_inputs(request: PrepareInputsRequest):
             {"field": "terminal_growth_rate", "type": "terminal_value", "required": True},
         ]
         
-        session["status"] = "ready_to_fetch"
+        session_service.update_session_data(request.session_id, "status", "ready_to_fetch")
         
         return PrepareInputsResponse(
             status="ready_to_fetch",
@@ -112,19 +113,17 @@ async def prepare_inputs(request: PrepareInputsRequest):
 async def fetch_api_data(request: FetchDataRequest):
     """
     Step 6: Fetch financial data from APIs and calculate metrics.
-    Uses Step6DataReviewProcessor for comprehensive data review.
+    Uses SessionService for session management and Step6DataReviewProcessor for comprehensive data review.
     """
     try:
-        from app.main import get_session_store
-        sessions = get_session_store()
-        
-        if request.session_id not in sessions:
+        # Get session data using SessionService
+        session = session_service.get_session_data(request.session_id)
+        if not session:
             raise HTTPException(status_code=404, detail="Session not found")
         
-        session = sessions[request.session_id]
         ticker = session.get("ticker")
         market = session.get("market")
-        model = session.get("selected_model", "DCF")
+        model = session_service.get_session_value(request.session_id, "selected_model", "DCF")
         
         # Use Step6DataReviewProcessor for comprehensive data fetching and calculation
         result = await step6_processor.process_data_review(
@@ -133,9 +132,9 @@ async def fetch_api_data(request: FetchDataRequest):
             market=market
         )
         
-        # Store results in session
-        session["financial_data"] = result
-        session["status"] = "data_ready"
+        # Store results in session using SessionService
+        session_service.update_session_data(request.session_id, "financial_data", result)
+        session_service.update_session_data(request.session_id, "status", "data_ready")
         
         return FetchDataResponse(
             status="data_ready",
@@ -151,18 +150,16 @@ async def fetch_api_data(request: FetchDataRequest):
 async def generate_ai_assumptions(request: GenerateAIRequest):
     """
     Step 7: Generate AI-powered assumptions.
-    Uses Step7DerivedDataProcessor for advanced derived calculations.
+    Uses SessionService for session management and Step7DerivedDataProcessor for advanced derived calculations.
     """
     try:
-        from app.main import get_session_store
-        sessions = get_session_store()
-        
-        if request.session_id not in sessions:
+        # Get session data using SessionService
+        session = session_service.get_session_data(request.session_id)
+        if not session:
             raise HTTPException(status_code=404, detail="Session not found")
         
-        session = sessions[request.session_id]
         ticker = session.get("ticker")
-        financial_data = session.get("financial_data")
+        financial_data = session_service.get_session_value(request.session_id, "financial_data")
         
         if not financial_data:
             raise HTTPException(status_code=400, detail="No financial data available")
@@ -174,9 +171,9 @@ async def generate_ai_assumptions(request: GenerateAIRequest):
             peers_data=financial_data.get("peers_data", [])
         )
         
-        # Store AI suggestions in session
-        session["ai_suggestions"] = result
-        session["status"] = "ai_ready"
+        # Store AI suggestions in session using SessionService
+        session_service.update_session_data(request.session_id, "ai_suggestions", result)
+        session_service.update_session_data(request.session_id, "status", "ai_ready")
         
         return GenerateAIResponse(
             status="ai_ready",
@@ -193,27 +190,26 @@ async def generate_ai_assumptions(request: GenerateAIRequest):
 async def confirm_assumptions(request: ConfirmAssumptionsRequest):
     """
     Step 9: User confirms or overrides assumptions.
-    Uses Step8ManualOverridesProcessor for assumption management.
+    Uses SessionService for session management and Step8ManualOverridesProcessor for assumption management.
     """
     try:
-        from app.main import get_session_store
-        sessions = get_session_store()
-        
-        if request.session_id not in sessions:
+        # Get session data using SessionService
+        session = session_service.get_session_data(request.session_id)
+        if not session:
             raise HTTPException(status_code=404, detail="Session not found")
         
-        session = sessions[request.session_id]
+        ai_suggestions = session_service.get_session_value(request.session_id, "ai_suggestions", {})
         
         # Use Step8ManualOverridesProcessor to handle confirmations
         result = await step8_processor.initialize_assumptions(
             session_id=request.session_id,
-            ai_suggestions=session.get("ai_suggestions", {}),
+            ai_suggestions=ai_suggestions,
             user_overrides=request.confirmed_values
         )
         
-        # Store confirmed assumptions
-        session["confirmed_assumptions"] = result
-        session["status"] = "assumptions_confirmed"
+        # Store confirmed assumptions using SessionService
+        session_service.update_session_data(request.session_id, "confirmed_assumptions", result)
+        session_service.update_session_data(request.session_id, "status", "assumptions_confirmed")
         
         return ConfirmAssumptionsResponse(
             status="assumptions_confirmed",
@@ -228,19 +224,17 @@ async def confirm_assumptions(request: ConfirmAssumptionsRequest):
 async def valuate(request: ValuateRequest):
     """
     Step 10: Run valuation engine.
-    Uses Step10ValuationProcessor for comprehensive multi-model valuation.
+    Uses SessionService for session management and Step10ValuationProcessor for comprehensive multi-model valuation.
     """
     try:
-        from app.main import get_session_store
-        sessions = get_session_store()
-        
-        if request.session_id not in sessions:
+        # Get session data using SessionService
+        session = session_service.get_session_data(request.session_id)
+        if not session:
             raise HTTPException(status_code=404, detail="Session not found")
         
-        session = sessions[request.session_id]
         ticker = session.get("ticker")
-        model = session.get("selected_model", "DCF")
-        confirmed_assumptions = session.get("confirmed_assumptions")
+        model = session_service.get_session_value(request.session_id, "selected_model", "DCF")
+        confirmed_assumptions = session_service.get_session_value(request.session_id, "confirmed_assumptions")
         
         if not confirmed_assumptions:
             raise HTTPException(status_code=400, detail="No confirmed assumptions available")
@@ -252,9 +246,9 @@ async def valuate(request: ValuateRequest):
             assumptions=confirmed_assumptions
         )
         
-        # Store valuation result
-        session["valuation_result"] = result
-        session["status"] = "valuation_complete"
+        # Store valuation result using SessionService
+        session_service.update_session_data(request.session_id, "valuation_result", result)
+        session_service.update_session_data(request.session_id, "status", "valuation_complete")
         
         return ValuateResponse(
             status="success",

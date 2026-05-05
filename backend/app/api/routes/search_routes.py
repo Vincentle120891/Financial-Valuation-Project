@@ -1,5 +1,5 @@
 """
-Search and Ticker Routes - Refactored to use International Services
+Search and Ticker Routes - Refactored to use SessionService and International Services
 
 Handles ticker search and selection functionality using Step1-3 processors.
 """
@@ -10,6 +10,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from app.core.logging_config import get_logger
+from app.core.session_service import session_service
 from app.api.schemas import SearchRequest, TickerSelectRequest, SearchResponse, SessionCreateResponse, SearchResult
 from app.services.international.step1_ticker_processor import Step1TickerProcessor
 from app.services.international.step2_market_data_processor import Step2MarketDataProcessor
@@ -58,7 +59,7 @@ async def search_tickers(request: SearchRequest):
 async def select_ticker(request: TickerSelectRequest):
     """
     Step 2: User chooses ticker and creates a session.
-    Uses Step2MarketDataProcessor for session management and validation.
+    Uses SessionService for session management and Step2MarketDataProcessor for validation.
 
     Args:
         request: Ticker selection request
@@ -69,14 +70,24 @@ async def select_ticker(request: TickerSelectRequest):
     logger.info(f"Creating session for ticker='{request.ticker}', market='{request.market}'")
 
     try:
+        # Create session using SessionService
+        session_id = session_service.create_session(
+            ticker=request.ticker,
+            market=request.market
+        )
+        
+        # Validate and enrich session data using Step2 processor
         result = await step2_processor.select_company(
             ticker=request.ticker,
             market=request.market,
-            session_id=None  # New session
+            session_id=session_id
         )
 
+        # Update session status from processor result
+        session_service.update_session_data(session_id, "status", result["status"])
+
         return SessionCreateResponse(
-            session_id=result["session_id"],
+            session_id=session_id,
             status=result["status"],
             message=result.get("message", "Session created successfully")
         )
