@@ -34,7 +34,7 @@ from app.models.international.international_inputs import (
     CompsTargetCompany,
     CompsPeerCompany
 )
-from app.engines.international.dcf_engine import (
+from app.models.international.dcf_engine_types import (
     DCFInputs, ScenarioDrivers, ComparableCompany, 
     InputWithMetadata, InputSource
 )
