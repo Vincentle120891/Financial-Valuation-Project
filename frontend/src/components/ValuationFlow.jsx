@@ -50,6 +50,7 @@ const ValuationFlow = () => {
   
   // Step 5: Required inputs
   const [requiredInputs, setRequiredInputs] = useState(null);
+  const [requiredFields, setRequiredFields] = useState(null);
   
   // Step 6: Reviewed data
   const [reviewedData, setReviewedData] = useState(null);
