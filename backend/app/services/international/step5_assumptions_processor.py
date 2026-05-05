@@ -250,12 +250,12 @@ class Step5AssumptionsProcessor:
         ]
     }
     
-    # DuPont: Data that can be retrieved from yfinance
+    # DuPont: Data that can be retrieved from yfinance (18 total fields)
     DUPONT_RETRIEVABLE_INPUTS = {
         "income_statement": [
             DataRetrievalField(
                 field_name="Net Income",
-                description="Bottom line earnings",
+                description="Bottom line earnings (historical 3-5 years)",
                 data_source="yfinance",
                 is_required=True,
                 api_endpoint="get_financials",
@@ -263,25 +263,49 @@ class Step5AssumptionsProcessor:
             ),
             DataRetrievalField(
                 field_name="Total Revenue",
-                description="Top line sales",
+                description="Top line sales (historical 3-5 years)",
                 data_source="yfinance",
                 is_required=True,
                 api_endpoint="get_financials",
                 example_response_key="Total Revenue"
             ),
             DataRetrievalField(
-                field_name="Operating Income",
-                description="Income from operations",
+                field_name="Operating Income (EBIT)",
+                description="Income from operations (historical 3-5 years)",
+                data_source="yfinance",
+                is_required=True,
+                api_endpoint="get_financials",
+                example_response_key="Operating Income"
+            ),
+            DataRetrievalField(
+                field_name="Interest Expense",
+                description="Historical interest expense for interest burden calculation",
                 data_source="yfinance",
                 is_required=False,
                 api_endpoint="get_financials",
-                example_response_key="Operating Income"
+                example_response_key="Interest Expense"
+            ),
+            DataRetrievalField(
+                field_name="Tax Provision",
+                description="Historical tax provision for tax burden calculation",
+                data_source="yfinance",
+                is_required=False,
+                api_endpoint="get_financials",
+                example_response_key="Tax Provision"
+            ),
+            DataRetrievalField(
+                field_name="Pre-Tax Income",
+                description="Income before taxes for tax burden calculation",
+                data_source="yfinance",
+                is_required=False,
+                api_endpoint="get_financials",
+                example_response_key="Pretax Income"
             )
         ],
         "balance_sheet": [
             DataRetrievalField(
                 field_name="Total Assets",
-                description="Sum of all assets",
+                description="Sum of all assets (current and prior year for average)",
                 data_source="yfinance",
                 is_required=True,
                 api_endpoint="get_balance_sheet",
@@ -289,7 +313,7 @@ class Step5AssumptionsProcessor:
             ),
             DataRetrievalField(
                 field_name="Shareholders Equity",
-                description="Book value of equity",
+                description="Book value of equity (current and prior year for average)",
                 data_source="yfinance",
                 is_required=True,
                 api_endpoint="get_balance_sheet",
@@ -302,6 +326,80 @@ class Step5AssumptionsProcessor:
                 is_required=False,
                 api_endpoint="get_balance_sheet",
                 example_response_key="Total Liabilities Net Minority Interest"
+            ),
+            DataRetrievalField(
+                field_name="Long-Term Debt",
+                description="Long-term debt for leverage analysis",
+                data_source="yfinance",
+                is_required=False,
+                api_endpoint="get_balance_sheet",
+                example_response_key="Long Term Debt"
+            ),
+            DataRetrievalField(
+                field_name="Short-Term Debt",
+                description="Short-term debt for leverage analysis",
+                data_source="yfinance",
+                is_required=False,
+                api_endpoint="get_balance_sheet",
+                example_response_key="Short Term Debt"
+            ),
+            DataRetrievalField(
+                field_name="Cash & Equivalents",
+                description="Cash and short-term investments",
+                data_source="yfinance",
+                is_required=False,
+                api_endpoint="get_balance_sheet",
+                example_response_key="Cash And Cash Equivalents"
+            )
+        ],
+        "derived_components": [
+            DataRetrievalField(
+                field_name="Average Total Assets",
+                description="Calculated as (Current Year Assets + Prior Year Assets) / 2",
+                data_source="yfinance",
+                is_required=False,
+                api_endpoint="get_balance_sheet",
+                example_response_key="Total Assets (current and prior year)"
+            ),
+            DataRetrievalField(
+                field_name="Average Shareholders Equity",
+                description="Calculated as (Current Year Equity + Prior Year Equity) / 2",
+                data_source="yfinance",
+                is_required=False,
+                api_endpoint="get_balance_sheet",
+                example_response_key="Stockholders Equity (current and prior year)"
+            ),
+            DataRetrievalField(
+                field_name="Cost of Goods Sold (COGS)",
+                description="Direct costs for margin analysis if available",
+                data_source="yfinance",
+                is_required=False,
+                api_endpoint="get_financials",
+                example_response_key="Cost Of Revenue"
+            ),
+            DataRetrievalField(
+                field_name="SG&A Expenses",
+                description="Selling, general & administrative expenses",
+                data_source="yfinance",
+                is_required=False,
+                api_endpoint="get_financials",
+                example_response_key="Selling General And Administrative"
+            ),
+            DataRetrievalField(
+                field_name="Research & Development (R&D)",
+                description="R&D expenses for operating analysis",
+                data_source="yfinance",
+                is_required=False,
+                api_endpoint="get_financials",
+                example_response_key="Research And Development"
+            ),
+            DataRetrievalField(
+                field_name="Other Operating Expenses",
+                description="Other operating expenses for detailed margin breakdown",
+                data_source="yfinance",
+                is_required=False,
+                api_endpoint="get_financials",
+                example_response_key="Other Operating Expenses"
             )
         ]
     }
