@@ -11,10 +11,10 @@ from pydantic import BaseModel
 from app.engines.international.dcf_engine import (
     DCFEngine,
     DCFInputs,
-    run_dcf_valuation,
     create_default_inputs,
     ScenarioDrivers
 )
+# Note: run_dcf_valuation is a convenience function, we use DCFEngine class directly for better control
 
 logger = logging.getLogger(__name__)
 
@@ -79,11 +79,11 @@ class Step10ValuationProcessor:
             scenario = dcf_inputs.get('scenario', 'base_case')
             output = engine.calculate(scenario)
             
-            # Extract key results from engine output
-            ev = output.main_outputs.perpetuity_method.enterprise_value
-            equity_val = output.main_outputs.perpetuity_method.equity_value
-            fair_val = output.main_outputs.perpetuity_method.equity_value_per_share
-            wacc = output.wacc_calculation.wacc
+            # Extract key results from engine output (DCFOutput is a dataclass with direct attributes)
+            ev = output.perpetuity_method.enterprise_value
+            equity_val = output.perpetuity_method.equity_value
+            fair_val = output.perpetuity_method.equity_value_per_share
+            wacc = output.wacc
             terminal_growth = inputs.forecast_drivers[scenario].get_value(
                 inputs.forecast_drivers[scenario].terminal_growth_rate
             )
