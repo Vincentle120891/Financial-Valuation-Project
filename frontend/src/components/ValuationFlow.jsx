@@ -202,7 +202,7 @@ const ValuationFlow = () => {
 
   // ==================== STEP 7-8: RETRIEVE DATA ====================
   const [aiError, setAiError] = useState(null);
-  
+
   const handleRetrieveData = useCallback(async () => {
     setLoading(true);
     setAiError(null); // Clear previous AI errors
