@@ -1,5 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { valuationApi } from '../services/valuationApi';
+import { 
+  searchCompanies, 
+  selectCompany, 
+  selectModels, 
+  prepareInputs, 
+  fetchApiData, 
+  generateAI, 
+  confirmAssumptions, 
+  runValuation 
+} from '../services/api';
 import SearchStep from './valuation-flow/SearchStep';
 import ModelSelectionStep from './valuation-flow/ModelSelectionStep';
 import RequirementsStep from './valuation-flow/RequirementsStep';
