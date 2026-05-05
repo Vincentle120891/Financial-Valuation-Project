@@ -71,6 +71,15 @@ const ValuationFlow = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [market, setMarket] = useState('international');
+  
+  // Financial Data State
+  const [historicalData, setHistoricalData] = useState(null);
+  const [forecastDrivers, setForecastDrivers] = useState(null);
+  const [peerData, setPeerData] = useState(null);
+  const [dcfInputs, setDcfInputs] = useState(null);
+  const [dupontResults, setDupontResults] = useState(null);
+  const [compsResults, setCompsResults] = useState(null);
+  const [aiData, setAiData] = useState(null);
 
   // ==================== STEP 1: SEARCH COMPANY ====================
   const handleSearch = useCallback(async () => {

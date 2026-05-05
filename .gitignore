@@ -1,1 +1,3 @@
-Nothing needs to be added to .gitignore since only a source code file (ValuationFlow.jsx) was modified and no build artifacts, dependencies, or temporary files were detected in the changes.
+(frontend/src/components/ValuationFlow.jsx is a source file, so no .gitignore rules needed)
+
+(empty)
