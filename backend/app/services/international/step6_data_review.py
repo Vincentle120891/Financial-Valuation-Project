@@ -5,6 +5,8 @@ from pydantic import BaseModel
 from enum import Enum
 from datetime import datetime
 
+from .yfinance_service import YFinanceService
+
 logger = logging.getLogger(__name__)
 
 class ValuationModel(str, Enum):
@@ -97,18 +99,33 @@ class Step6DataReviewProcessor:
     async def process_data_review(
         self,
         ticker: str,
-        valuation_model: str,
-        historical_data: Dict,
-        market_data: Dict,
-        forecast_data: Dict,
-        retrieved_assumptions: Dict,
-        user_overrides: Optional[Dict[str, Any]] = None
+        market: str = "international",
+        historical_data: Optional[Dict] = None,
+        market_data: Optional[Dict] = None,
+        forecast_data: Optional[Dict] = None,
+        retrieved_assumptions: Optional[Dict] = None,
+        user_overrides: Optional[Dict[str, Any]] = None,
+        valuation_model: Optional[str] = None
     ) -> Step6DataReviewResponse:
         """
         Main entry point for Step 6 data review.
         Aggregates all retrieved data without performing final calculations.
+        
+        Args can be passed directly or will be fetched if not provided.
         """
+        # If data is not provided, fetch it
+        if historical_data is None or market_data is None or forecast_data is None or retrieved_assumptions is None:
+            # Fetch all required data
+            yfinance_service = YFinanceService()
+            all_data = yfinance_service.fetch_all_data(ticker, market)
+            
+            historical_data = historical_data or all_data.get('historical', {})
+            market_data = market_data or all_data.get('key_stats', {})
+            forecast_data = forecast_data or all_data.get('analyst_estimates', {})
+            retrieved_assumptions = retrieved_assumptions or {}
+        
         user_overrides = user_overrides or {}
+        valuation_model = valuation_model or "DCF"
         model_enum = ValuationModel(valuation_model.upper())
         
         if model_enum == ValuationModel.DCF:

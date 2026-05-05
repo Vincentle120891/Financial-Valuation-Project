@@ -598,6 +598,51 @@ class YFinanceService:
         except Exception as e:
             logger.error(f"Error searching tickers: {str(e)}")
             return []
+    
+    def get_ticker_info(self, ticker: str) -> Optional[Dict[str, Any]]:
+        """
+        Get basic ticker information from yfinance.
+        
+        Args:
+            ticker: Stock ticker symbol
+            
+        Returns:
+            Dictionary with ticker info or None if not found
+        """
+        import yfinance as yf
+        
+        try:
+            logger.info(f"Getting ticker info for '{ticker}'")
+            yf_ticker = yf.Ticker(ticker)
+            info = yf_ticker.info
+            
+            if not info:
+                return None
+            
+            return {
+                'symbol': info.get('symbol', ticker),
+                'shortName': info.get('shortName', ''),
+                'longName': info.get('longName', ''),
+                'currentPrice': info.get('currentPrice'),
+                'previousClose': info.get('previousClose'),
+                'open': info.get('open'),
+                'dayLow': info.get('dayLow'),
+                'dayHigh': info.get('dayHigh'),
+                'regularMarketVolume': info.get('regularMarketVolume'),
+                'marketCap': info.get('marketCap'),
+                'beta': info.get('beta'),
+                'trailingPE': info.get('trailingPE'),
+                'forwardPE': info.get('forwardPE'),
+                'dividendYield': info.get('dividendYield'),
+                'sector': info.get('sector'),
+                'industry': info.get('industry'),
+                'exchange': info.get('exchange'),
+                'currency': info.get('currency'),
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting ticker info for '{ticker}': {str(e)}")
+            return None
 
 
 def fetch_yfinance_data(ticker_symbol: str, market: str = "international") -> Dict[str, Any]:
