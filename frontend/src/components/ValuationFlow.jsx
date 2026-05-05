@@ -14,6 +14,7 @@ import ModelSelectionStep from './valuation-flow/ModelSelectionStep';
 import RequirementsStep from './valuation-flow/RequirementsStep';
 import ApiDataStep from './valuation-flow/ApiDataStep';
 import DataReviewStep from './valuation-flow/DataReviewStep';
+import AiAssumptionsStep from './valuation-flow/AiAssumptionsStep';
 import BaselineStep from './valuation-flow/BaselineStep';
 import RunValuationStep from './valuation-flow/RunValuationStep';
 import ResultsStep from './valuation-flow/ResultsStep';
@@ -81,6 +82,7 @@ const ValuationFlow = () => {
   const [dupontResults, setDupontResults] = useState(null);
   const [compsResults, setCompsResults] = useState(null);
   const [aiData, setAiData] = useState(null);
+  const [aiError, setAiError] = useState(null);
 
   // ==================== STEP 1: SEARCH COMPANY ====================
   const handleSearch = useCallback(async () => {
@@ -211,7 +213,6 @@ const ValuationFlow = () => {
   }, [selectedModel, currentStep, sessionId, fetchRequiredInputs]);
 
   // ==================== STEP 7-8: RETRIEVE DATA ====================
-  const [aiError, setAiError] = useState(null);
   
   const handleRetrieveData = useCallback(async () => {
     setLoading(true);
