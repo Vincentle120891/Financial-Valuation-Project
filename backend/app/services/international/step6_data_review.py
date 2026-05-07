@@ -339,10 +339,17 @@ class Step6DataReviewProcessor:
                     is_critical=True
                 ))
                 
-                # 3. Depreciation & Amortization - try multiple possible field names
+                # 3. Depreciation & Amortization - try multiple possible field names (income stmt + cashflow)
                 da_val = None
-                if cashflow is not None:
-                    for dep_key in ['Depreciation Amortization Depletion', 'Depreciation And Amortization', 'Depreciation', 'depreciation_amortization', 'depreciation', 'DepreciationAmortizationDepletion']:
+                # First try income statement
+                if financials is not None:
+                    for dep_key in ['depreciation_amortization', 'd_and_a', 'Depreciation Amortization Depletion', 'Depreciation And Amortization', 'Reconciled Depreciation']:
+                        if dep_key in financials.index:
+                            da_val = financials.loc[dep_key, col]
+                            break
+                # Then try cashflow if not found in income statement
+                if da_val is None and cashflow is not None:
+                    for dep_key in ['depreciation_amortization', 'Depreciation Amortization Depletion', 'Depreciation And Amortization', 'Depreciation', 'DepreciationAmortizationDepletion']:
                         if dep_key in cashflow.index:
                             da_val = cashflow.loc[dep_key, col]
                             break
@@ -358,7 +365,7 @@ class Step6DataReviewProcessor:
                 # 4. Capital Expenditures - try multiple possible field names
                 capex_val = None
                 if cashflow is not None:
-                    for capex_key in ['Capital Expenditure', 'capex', 'Capital Expenditures', 'capital_expenditure']:
+                    for capex_key in ['capital_expenditure', 'capex', 'Capital Expenditure', 'Capital Expenditures', 'Purchase Of PPE']:
                         if capex_key in cashflow.index:
                             capex_val = cashflow.loc[capex_key, col] * -1  # Convert to positive
                             break
@@ -374,7 +381,7 @@ class Step6DataReviewProcessor:
                 # 5. Working Capital Changes - try multiple possible field names
                 wc_val = None
                 if cashflow is not None:
-                    for wc_key in ['Change In Working Capital', 'change_in_working_capital', 'Changes In Working Capital', 'changes_in_working_capital']:
+                    for wc_key in ['change_in_working_capital', 'Change In Working Capital', 'Changes In Working Capital', 'changes_in_working_capital']:
                         if wc_key in cashflow.index:
                             wc_val = cashflow.loc[wc_key, col]
                             break
@@ -390,7 +397,7 @@ class Step6DataReviewProcessor:
                 # 6. Accounts Receivable - try multiple possible field names
                 ar_val = None
                 if balance_sheet is not None:
-                    for ar_key in ['Accounts Receivable', 'accounts_receivable', 'ar', 'Receivables', 'receivables']:
+                    for ar_key in ['accounts_receivable', 'ar', 'Accounts Receivable', 'Receivables', 'receivables']:
                         if ar_key in balance_sheet.index:
                             ar_val = balance_sheet.loc[ar_key, col]
                             break
@@ -406,7 +413,7 @@ class Step6DataReviewProcessor:
                 # 7. Inventory - try multiple possible field names
                 inv_val = None
                 if balance_sheet is not None:
-                    for inv_key in ['Inventory', 'inventory', 'Inventories', 'inventories']:
+                    for inv_key in ['inventory', 'Inventory', 'Inventories', 'inventories']:
                         if inv_key in balance_sheet.index:
                             inv_val = balance_sheet.loc[inv_key, col]
                             break
@@ -422,7 +429,7 @@ class Step6DataReviewProcessor:
                 # 8. Accounts Payable (for AP Days) - try multiple possible field names
                 ap_val = None
                 if balance_sheet is not None:
-                    for ap_key in ['Accounts Payable', 'accounts_payable', 'ap', 'Payables', 'payables', 'Change In Payable', 'change_in_ap']:
+                    for ap_key in ['accounts_payable', 'ap', 'Accounts Payable', 'Payables', 'payables']:
                         if ap_key in balance_sheet.index:
                             ap_val = balance_sheet.loc[ap_key, col]
                             break
@@ -437,7 +444,7 @@ class Step6DataReviewProcessor:
                 
                 # 9. Interest Expense - try multiple possible field names
                 int_val = None
-                for int_key in ['Interest Expense', 'interest_expense', 'Interest Income Net Operating', 'net_interest_income']:
+                for int_key in ['interest_expense', 'Interest Expense', 'Interest Income Net Operating', 'net_interest_income']:
                     if int_key in financials.index:
                         int_val = financials.loc[int_key, col]
                         break
@@ -452,7 +459,7 @@ class Step6DataReviewProcessor:
                 
                 # 10. Tax Provision (for effective tax rate) - try multiple possible field names
                 tax_val = None
-                for tax_key in ['Tax Provision', 'tax_provision', 'Tax Expense', 'tax_expense', 'Income Tax', 'income_tax', 'Tax Effect Of Unusual Items']:
+                for tax_key in ['tax_provision', 'Tax Provision', 'Tax Expense', 'tax_expense', 'Income Tax', 'income_tax']:
                     if tax_key in financials.index:
                         tax_val = financials.loc[tax_key, col]
                         break
@@ -467,7 +474,7 @@ class Step6DataReviewProcessor:
                 
                 # 11. Pre-Tax Income (for effective tax rate) - try multiple possible field names
                 pretax_val = None
-                for pretax_key in ['Pretax Income', 'pretax_income', 'Pre Tax Income', 'pre_tax_income', 'Income Before Tax', 'income_before_tax']:
+                for pretax_key in ['pretax_income', 'Pretax Income', 'Pre Tax Income', 'pre_tax_income', 'Income Before Tax', 'income_before_tax']:
                     if pretax_key in financials.index:
                         pretax_val = financials.loc[pretax_key, col]
                         break
