@@ -1,1 +1,1 @@
-Nothing should be ignored based on the provided file changes, as they only include source code files (.jsx) without any build artifacts, dependencies, or temporary files.
+Nothing should be ignored based on the provided file changes. The modification of 'frontend/src/components/valuation-flow/ApiDataStep.jsx' is a source code file that should be tracked in version control. No build artifacts, dependencies, or temporary files are present in the changes.
