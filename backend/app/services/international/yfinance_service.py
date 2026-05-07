@@ -374,47 +374,44 @@ class YFinanceService:
                 logger.warning("No income statement data available")
                 return {}
             
-            def get_series(label: str) -> Dict[str, Optional[float]]:
-                if label in stmt.index:
-                    series = stmt.loc[label]
-                    return {str(year): self._sanitize_value(val) for year, val in series.items()}
-                return {}
-            
-            def get_series_raw(label: str) -> Dict[str, Optional[float]]:
-                """Get series with original column names (dates)."""
-                if label in stmt.index:
-                    series = stmt.loc[label]
-                    return {str(col): self._sanitize_value(val) for col, val in series.items()}
+            def get_series_raw(label: str, fallback_labels: List[str] = None) -> Dict[str, Optional[float]]:
+                """Get series with fallback options for field name variations."""
+                labels_to_try = [label] + (fallback_labels or [])
+                for lbl in labels_to_try:
+                    if lbl in stmt.index:
+                        series = stmt.loc[lbl]
+                        return {str(col): self._sanitize_value(val) for col, val in series.items()}
+                logger.warning(f"Income statement field '{label}' not found, tried: {labels_to_try}")
                 return {}
             
             return {
                 # Top Line
-                "total_revenue": get_series_raw('Total Revenue'),
-                "revenue": get_series_raw('Total Revenue'),  # Alias
+                "total_revenue": get_series_raw('Total Revenue', ['Operating Revenue']),
+                "revenue": get_series_raw('Total Revenue', ['Operating Revenue']),  # Alias
                 
                 # Cost of Goods Sold
-                "cost_of_revenue": get_series_raw('Cost Of Revenue'),
+                "cost_of_revenue": get_series_raw('Cost Of Revenue', ['Reconciled Cost Of Revenue']),
                 "cogs": get_series_raw('Cost Of Revenue'),  # Alias
                 
                 # Gross Profit
                 "gross_profit": get_series_raw('Gross Profit'),
                 
                 # Operating Expenses
-                "operating_expense": get_series_raw('Operating Expense'),
-                "selling_general_administrative": get_series_raw('Selling General And Administrative'),
-                "research_development": get_series_raw('Research And Development'),
+                "operating_expense": get_series_raw('Operating Expense', ['Total Expenses']),
+                "selling_general_administrative": get_series_raw('Selling General And Administration', ['Selling General And Administrative']),
+                "research_development": get_series_raw('Research And Development', ['Research Development']),
                 
                 # Operating Income
-                "operating_income": get_series_raw('Operating Income'),
-                "ebit": get_series_raw('EBIT'),  # Alias
+                "operating_income": get_series_raw('Operating Income', ['Total Operating Income As Reported']),
+                "ebit": get_series_raw('EBIT', ['Operating Income']),  # Alias
                 
                 # EBITDA
-                "ebitda": get_series_raw('EBITDA'),
+                "ebitda": get_series_raw('EBITDA', ['Normalized EBITDA']),
                 
                 # Non-Operating Items
-                "interest_expense": get_series_raw('Interest Expense'),
-                "interest_income": get_series_raw('Interest Income'),
-                "other_income_expense": get_series_raw('Other Income Expense'),
+                "interest_expense": get_series_raw('Interest Expense', ['Interest Expense Non Operating']),
+                "interest_income": get_series_raw('Interest Income', ['Interest Income Non Operating']),
+                "other_income_expense": get_series_raw('Other Income Expense', ['Other Income Expense Net', 'Other Non Operating Income Expenses']),
                 
                 # Pre-Tax Income
                 "pretax_income": get_series_raw('Pretax Income'),
@@ -424,13 +421,13 @@ class YFinanceService:
                 "tax_expense": get_series_raw('Tax Provision'),  # Alias
                 
                 # Net Income
-                "net_income": get_series_raw('Net Income Common Stockholders'),
-                "net_income_continuing_ops": get_series_raw('Net Income Continuing Operations'),
+                "net_income": get_series_raw('Net Income Common Stockholders', ['Net Income', 'Diluted NI Availto Com Stockholders']),
+                "net_income_continuing_ops": get_series_raw('Net Income From Continuing And Discontinued Operation', ['Net Income From Continuing Operation Net Minority Interest']),
                 "diluted_eps": get_series_raw('Diluted EPS'),
                 "basic_eps": get_series_raw('Basic EPS'),
                 
                 # Depreciation & Amortization
-                "depreciation_amortization": get_series_raw('Depreciation Amortization Depletion'),
+                "depreciation_amortization": get_series_raw('Depreciation Amortization Depletion', ['Reconciled Depreciation', 'Depreciation And Amortization']),
                 "d_and_a": get_series_raw('Depreciation Amortization Depletion'),  # Alias
             }
         except Exception as e:
@@ -445,23 +442,27 @@ class YFinanceService:
                 logger.warning("No balance sheet data available")
                 return {}
             
-            def get_series_raw(label: str) -> Dict[str, Optional[float]]:
-                if label in bs.index:
-                    series = bs.loc[label]
-                    return {str(col): self._sanitize_value(val) for col, val in series.items()}
+            def get_series_raw(label: str, fallback_labels: List[str] = None) -> Dict[str, Optional[float]]:
+                """Get series with fallback options for field name variations."""
+                labels_to_try = [label] + (fallback_labels or [])
+                for lbl in labels_to_try:
+                    if lbl in bs.index:
+                        series = bs.loc[lbl]
+                        return {str(col): self._sanitize_value(val) for col, val in series.items()}
+                logger.warning(f"Balance sheet field '{label}' not found, tried: {labels_to_try}")
                 return {}
             
             return {
                 # Assets
                 "total_assets": get_series_raw('Total Assets'),
                 "current_assets": get_series_raw('Current Assets'),
-                "non_current_assets": get_series_raw('Non Current Assets'),
+                "non_current_assets": get_series_raw('Total Non Current Assets'),
                 
                 # Current Assets Breakdown
                 "cash_and_equivalents": get_series_raw('Cash Cash Equivalents And Short Term Investments'),
                 "cash": get_series_raw('Cash Cash Equivalents And Short Term Investments'),  # Alias
-                "accounts_receivable": get_series_raw('Accounts Receivable'),
-                "ar": get_series_raw('Accounts Receivable'),  # Alias
+                "accounts_receivable": get_series_raw('Accounts Receivable', ['Receivables', 'Gross Accounts Receivable']),
+                "ar": get_series_raw('Accounts Receivable', ['Receivables']),  # Alias
                 "inventory": get_series_raw('Inventory'),
                 "other_current_assets": get_series_raw('Other Current Assets'),
                 
@@ -469,8 +470,8 @@ class YFinanceService:
                 "property_plant_equipment": get_series_raw('Net PPE'),
                 "ppe_net": get_series_raw('Net PPE'),  # Alias
                 "goodwill": get_series_raw('Goodwill'),
-                "intangible_assets": get_series_raw('Intangible Assets'),
-                "long_term_investments": get_series_raw('Investments And Advances'),
+                "intangible_assets": get_series_raw('Other Intangible Assets', ['Intangible Assets']),
+                "long_term_investments": get_series_raw('Investments And Advances', ['Long Term Equity Investment']),
                 
                 # Liabilities
                 "total_liabilities": get_series_raw('Total Liabilities Net Minority Interest'),
@@ -478,14 +479,14 @@ class YFinanceService:
                 "non_current_liabilities": get_series_raw('Total Non Current Liabilities Net Minority Interest'),
                 
                 # Current Liabilities Breakdown
-                "accounts_payable": get_series_raw('Accounts Payable'),
-                "ap": get_series_raw('Accounts Payable'),  # Alias
+                "accounts_payable": get_series_raw('Accounts Payable', ['Payables And Accrued Expenses', 'Payables']),
+                "ap": get_series_raw('Accounts Payable', ['Payables']),  # Alias
                 "short_term_debt": get_series_raw('Current Debt'),
                 "other_current_liabilities": get_series_raw('Other Current Liabilities'),
                 
                 # Non-Current Liabilities
                 "long_term_debt": get_series_raw('Long Term Debt'),
-                "deferred_tax_liabilities": get_series_raw('Non Current Deferred Taxes Assets'),
+                "deferred_tax_liabilities": get_series_raw('Non Current Deferred Taxes Liabilities', ['Non Current Deferred Liabilities']),
                 "other_non_current_liabilities": get_series_raw('Other Non Current Liabilities'),
                 
                 # Total Debt
@@ -514,10 +515,14 @@ class YFinanceService:
                 logger.warning("No cash flow data available")
                 return {}
             
-            def get_series_raw(label: str) -> Dict[str, Optional[float]]:
-                if label in cf.index:
-                    series = cf.loc[label]
-                    return {str(col): self._sanitize_value(val) for col, val in series.items()}
+            def get_series_raw(label: str, fallback_labels: List[str] = None) -> Dict[str, Optional[float]]:
+                """Get series with fallback options for field name variations."""
+                labels_to_try = [label] + (fallback_labels or [])
+                for lbl in labels_to_try:
+                    if lbl in cf.index:
+                        series = cf.loc[lbl]
+                        return {str(col): self._sanitize_value(val) for col, val in series.items()}
+                logger.warning(f"Cash flow field '{label}' not found, tried: {labels_to_try}")
                 return {}
             
             return {
@@ -525,17 +530,17 @@ class YFinanceService:
                 "operating_cash_flow": get_series_raw('Operating Cash Flow'),
                 "ocf": get_series_raw('Operating Cash Flow'),  # Alias
                 "net_income_from_continuing_ops": get_series_raw('Net Income From Continuing Operations'),
-                "depreciation_amortization": get_series_raw('Depreciation Amortization Depletion'),
+                "depreciation_amortization": get_series_raw('Depreciation Amortization Depletion', ['Depreciation And Amortization']),
                 "change_in_working_capital": get_series_raw('Change In Working Capital'),
-                "change_in_ar": get_series_raw('Change In Account Receivable'),
+                "change_in_ar": get_series_raw('Change In Receivables', ['Change In Account Receivable', 'Changes In Account Receivables']),
                 "change_in_inventory": get_series_raw('Change In Inventory'),
-                "change_in_ap": get_series_raw('Change In Account Payable'),
+                "change_in_ap": get_series_raw('Change In Payable', ['Change In Account Payable', 'Change In Payables And Accrued Expense']),
                 
                 # Investing Activities
                 "investing_cash_flow": get_series_raw('Investing Cash Flow'),
-                "capital_expenditure": get_series_raw('Purchase Of PPE'),
-                "capex": get_series_raw('Purchase Of PPE'),  # Alias
-                "acquisitions": get_series_raw('Purchase Of Business'),
+                "capital_expenditure": get_series_raw('Capital Expenditure', ['Purchase Of PPE', 'Capital Expenditure Reported']),
+                "capex": get_series_raw('Capital Expenditure', ['Purchase Of PPE']),  # Alias
+                "acquisitions": get_series_raw('Purchase Of Business', ['Net Business Purchase And Sale']),
                 "purchase_of_investments": get_series_raw('Purchase Of Investment'),
                 "sale_of_investments": get_series_raw('Sale Of Investment'),
                 "other_investing_activities": get_series_raw('Other Investing Activities'),
@@ -544,7 +549,7 @@ class YFinanceService:
                 "financing_cash_flow": get_series_raw('Financing Cash Flow'),
                 "dividends_paid": get_series_raw('Cash Dividends Paid'),
                 "dividends": get_series_raw('Cash Dividends Paid'),  # Alias
-                "repurchase_of_stock": get_series_raw('Common Stock Payments'),
+                "repurchase_of_stock": get_series_raw('Common Stock Payments', ['Repurchase Of Capital Stock']),
                 "issuance_of_stock": get_series_raw('Issuance Of Capital Stock'),
                 "repayment_of_debt": get_series_raw('Repayment Of Debt'),
                 "issuance_of_debt": get_series_raw('Issuance Of Debt'),
