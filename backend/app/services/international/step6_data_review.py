@@ -1438,15 +1438,164 @@ class Step6DataReviewProcessor:
         return HistoricalFinancialsDisplay(years=years, data_fields=data_fields)
     
     def _process_comps_peer_data(self, retrieved_assumptions: Dict, overrides: Dict) -> MarketDataDisplay:
-        """Process peer company data for Comps"""
-        # Placeholder for peer data processing
-        return MarketDataDisplay()
+        """Process peer company data for Comps - extract market data and multiples for each peer"""
+        data_fields = []
+        
+        # Get peer list from retrieved assumptions or overrides
+        peers = retrieved_assumptions.get("peers", [])
+        if not peers:
+            peers = overrides.get("peers", [])
+        
+        # Process up to 5 peers (matching DCF pattern)
+        for peer_ticker in peers[:5]:
+            # Peer info is stored as peer_{ticker}_info in retrieved_assumptions
+            peer_info = retrieved_assumptions.get(f"peer_{peer_ticker}_info", {})
+            
+            if not peer_info:
+                continue
+            
+            # 1. Peer Current Price
+            peer_price = peer_info.get('currentPrice') or peer_info.get('current_price')
+            data_fields.append(DataField(
+                field_name=f"Peer_{peer_ticker}_Price",
+                display_name=f"{peer_ticker} Stock Price",
+                value=peer_price,
+                unit="USD",
+                status=DataStatus.RETRIEVED if peer_price else DataStatus.MISSING,
+                source="yfinance" if peer_price else None,
+                is_critical=True
+            ))
+            
+            # 2. Peer Market Cap
+            peer_mcap = peer_info.get('marketCap') or peer_info.get('market_cap')
+            data_fields.append(DataField(
+                field_name=f"Peer_{peer_ticker}_MarketCap",
+                display_name=f"{peer_ticker} Market Cap",
+                value=peer_mcap,
+                unit="USD",
+                status=DataStatus.RETRIEVED if peer_mcap else DataStatus.MISSING,
+                source="yfinance" if peer_mcap else None,
+                is_critical=True
+            ))
+            
+            # 3. Peer Enterprise Value
+            peer_ev = peer_info.get('enterpriseValue') or peer_info.get('enterprise_value')
+            data_fields.append(DataField(
+                field_name=f"Peer_{peer_ticker}_EV",
+                display_name=f"{peer_ticker} Enterprise Value",
+                value=peer_ev,
+                unit="USD",
+                status=DataStatus.RETRIEVED if peer_ev else DataStatus.MISSING,
+                source="yfinance" if peer_ev else None,
+                is_critical=True
+            ))
+            
+            # 4. Peer EBITDA
+            peer_ebitda = peer_info.get('ebitda') or peer_info.get('EBITDA')
+            data_fields.append(DataField(
+                field_name=f"Peer_{peer_ticker}_EBITDA",
+                display_name=f"{peer_ticker} EBITDA",
+                value=peer_ebitda,
+                unit="USD",
+                status=DataStatus.RETRIEVED if peer_ebitda else DataStatus.MISSING,
+                source="yfinance" if peer_ebitda else None,
+                is_critical=True
+            ))
+            
+            # 5. Peer EPS (Trailing)
+            peer_eps = peer_info.get('trailingEps') or peer_info.get('trailing_eps') or peer_info.get('eps')
+            data_fields.append(DataField(
+                field_name=f"Peer_{peer_ticker}_EPS",
+                display_name=f"{peer_ticker} EPS (TTM)",
+                value=peer_eps,
+                unit="USD",
+                status=DataStatus.RETRIEVED if peer_eps else DataStatus.MISSING,
+                source="yfinance" if peer_eps else None,
+                is_critical=True
+            ))
+            
+            # 6. Peer Book Value
+            peer_book = peer_info.get('bookValue') or peer_info.get('book_value')
+            data_fields.append(DataField(
+                field_name=f"Peer_{peer_ticker}_BookValue",
+                display_name=f"{peer_ticker} Book Value",
+                value=peer_book,
+                unit="USD",
+                status=DataStatus.RETRIEVED if peer_book else DataStatus.MISSING,
+                source="yfinance" if peer_book else None,
+                is_critical=False
+            ))
+            
+            # 7. Peer Revenue
+            peer_revenue = peer_info.get('totalRevenue') or peer_info.get('total_revenue') or peer_info.get('revenue')
+            data_fields.append(DataField(
+                field_name=f"Peer_{peer_ticker}_Revenue",
+                display_name=f"{peer_ticker} Revenue (TTM)",
+                value=peer_revenue,
+                unit="USD",
+                status=DataStatus.RETRIEVED if peer_revenue else DataStatus.MISSING,
+                source="yfinance" if peer_revenue else None,
+                is_critical=False
+            ))
+        
+        return MarketDataDisplay(data_fields=data_fields)
     
     def _calculate_comps_intermediate_metrics(self, target: HistoricalFinancialsDisplay, peers: MarketDataDisplay) -> CalculatedMetricsDisplay:
-        """Calculate ONLY intermediate metrics for Comps - NOT median/mean multiples"""
+        """Calculate ONLY intermediate metrics for Comps - individual peer multiples (NOT median/mean)"""
         fields = []
         
-        # Placeholder for intermediate calculations
+        # Extract peer data for multiple calculations
+        peer_data = {}  # ticker -> {price, mcap, ev, ebitda, eps}
+        
+        for field in peers.data_fields:
+            if field.value is None:
+                continue
+            
+            # Parse field name: Peer_{TICKER}_{METRIC}
+            parts = field.field_name.split('_')
+            if len(parts) >= 3 and parts[0] == 'Peer':
+                ticker = parts[1]
+                metric = '_'.join(parts[2:])  # e.g., "MarketCap", "EV", "EBITDA"
+                
+                if ticker not in peer_data:
+                    peer_data[ticker] = {}
+                peer_data[ticker][metric] = field.value
+        
+        # Calculate EV/EBITDA and P/E multiples for each peer
+        for ticker, data in peer_data.items():
+            ev = data.get('EV')
+            ebitda = data.get('EBITDA')
+            price = data.get('Price')
+            eps = data.get('EPS')
+            
+            # EV/EBITDA LTM
+            if ev and ebitda and ebitda > 0:
+                ev_ebitda = ev / ebitda
+                fields.append(DataField(
+                    field_name=f"Peer_{ticker}_EV_EBITDA_LTM",
+                    display_name=f"{ticker} EV/EBITDA (LTM)",
+                    value=round(ev_ebitda, 2),
+                    unit="x",
+                    status=DataStatus.CALCULATED,
+                    source="Step 6 Calculation",
+                    formula="Enterprise Value / EBITDA",
+                    is_critical=False
+                ))
+            
+            # P/E LTM
+            if price and eps and eps > 0:
+                pe = price / eps
+                fields.append(DataField(
+                    field_name=f"Peer_{ticker}_PE_LTM",
+                    display_name=f"{ticker} P/E (LTM)",
+                    value=round(pe, 2),
+                    unit="x",
+                    status=DataStatus.CALCULATED,
+                    source="Step 6 Calculation",
+                    formula="Stock Price / EPS",
+                    is_critical=False
+                ))
+        
         return CalculatedMetricsDisplay(data_fields=fields)
     
     # === Common Helper Methods ===
