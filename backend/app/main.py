@@ -215,19 +215,13 @@ def get_session_store() -> dict:
     return session_service._sessions
 
 
-# Include routers with API versioning
-# Version 1 routes
-app.include_router(search_router, prefix="/api/v1")
-app.include_router(valuation_router, prefix="/api/v1")
-app.include_router(pdf_extraction_router, prefix="/api/v1/pdf")
-app.include_router(vietnamese_reports_router, prefix="/api/v1")
-app.include_router(international_router, prefix="/api/v1")
-app.include_router(vietnamese_valuation_router, prefix="/api/v1")
-
-# Legacy routes (for backward compatibility)
+# Include routers - single API version
 app.include_router(search_router, prefix="/api")
 app.include_router(valuation_router, prefix="/api")
+app.include_router(pdf_extraction_router, prefix="/api/pdf")
+app.include_router(vietnamese_reports_router, prefix="/api")
 app.include_router(international_router, prefix="/api")
+app.include_router(vietnamese_valuation_router, prefix="/api")
 
 
 @app.on_event("startup")
@@ -239,7 +233,6 @@ async def startup_event():
             "environment": settings.environment,
             "debug_mode": settings.debug,
             "log_level": settings.log_level,
-            "api_versions": ["v1"],
         }
     )
 
