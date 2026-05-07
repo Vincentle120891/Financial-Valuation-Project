@@ -300,7 +300,7 @@ async def get_company_profile(
 
 @router.get("/market-data/{ticker}/price-history")
 async def get_price_history(
-    ticker: str = Query(..., description="Ticker symbol"),
+    ticker: str = Path(..., description="Ticker symbol"),
     market_code: str = Query("VN", description="Market code"),
     period: str = Query("2y", description="Period: 1mo, 3mo, 6mo, 1y, 2y, 5y, max")
 ):
@@ -337,7 +337,7 @@ async def get_price_history(
 
 @router.get("/market-data/{ticker}/key-statistics")
 async def get_key_statistics(
-    ticker: str = Query(..., description="Ticker symbol"),
+    ticker: str = Path(..., description="Ticker symbol"),
     market_code: str = Query("VN", description="Market code")
 ):
     """
@@ -390,7 +390,7 @@ async def get_key_statistics(
 
 @router.get("/models/dcf/{ticker}/historical-financials")
 async def get_dcf_historical_financials(
-    ticker: str = Query(..., description="Ticker symbol"),
+    ticker: str = Path(..., description="Ticker symbol"),
     market_code: str = Query("VN", description="Market code"),
     years: int = Query(5, description="Number of historical years (3-5)")
 ):
@@ -455,7 +455,7 @@ async def get_dcf_historical_financials(
 
 @router.get("/models/dcf/{ticker}/growth-rates")
 async def get_dcf_growth_rates(
-    ticker: str = Query(..., description="Ticker symbol"),
+    ticker: str = Path(..., description="Ticker symbol"),
     market_code: str = Query("VN", description="Market code")
 ):
     """Get historical growth rates for DCF projections."""
@@ -483,7 +483,7 @@ async def get_dcf_growth_rates(
 
 @router.get("/models/dcf/{ticker}/margins")
 async def get_dcf_margins(
-    ticker: str = Query(..., description="Ticker symbol"),
+    ticker: str = Path(..., description="Ticker symbol"),
     market_code: str = Query("VN", description="Market code")
 ):
     """Get historical margin analysis for DCF modeling."""
@@ -511,7 +511,7 @@ async def get_dcf_margins(
 
 @router.get("/models/dcf/{ticker}/working-capital")
 async def get_dcf_working_capital(
-    ticker: str = Query(..., description="Ticker symbol"),
+    ticker: str = Path(..., description="Ticker symbol"),
     market_code: str = Query("VN", description="Market code")
 ):
     """Get working capital efficiency metrics (DSO, DIO, DPO, CCC)."""
@@ -539,7 +539,7 @@ async def get_dcf_working_capital(
 
 @router.get("/models/dcf/{ticker}/capex-depreciation")
 async def get_dcf_capex_depreciation(
-    ticker: str = Query(..., description="Ticker symbol"),
+    ticker: str = Path(..., description="Ticker symbol"),
     market_code: str = Query("VN", description="Market code")
 ):
     """Get Capex and depreciation ratios."""
@@ -567,7 +567,7 @@ async def get_dcf_capex_depreciation(
 
 @router.get("/models/dcf/{ticker}/peer-suggestions")
 async def get_dcf_peer_suggestions(
-    ticker: str = Query(..., description="Ticker symbol"),
+    ticker: str = Path(..., description="Ticker symbol"),
     market_code: str = Query("VN", description="Market code"),
     num_peers: int = Query(5, description="Number of peer companies")
 ):
@@ -588,7 +588,7 @@ async def get_dcf_peer_suggestions(
 
 @router.get("/models/dcf/{ticker}/debt-cost")
 async def get_dcf_debt_cost(
-    ticker: str = Query(..., description="Ticker symbol"),
+    ticker: str = Path(..., description="Ticker symbol"),
     market_code: str = Query("VN", description="Market code")
 ):
     """Get implied cost of debt and debt ratios."""
@@ -617,7 +617,7 @@ async def get_dcf_debt_cost(
 
 @router.get("/models/dcf/{ticker}/profitability")
 async def get_dcf_profitability(
-    ticker: str = Query(..., description="Ticker symbol"),
+    ticker: str = Path(..., description="Ticker symbol"),
     market_code: str = Query("VN", description="Market code")
 ):
     """Get profitability ratios (ROE, ROA, ROIC)."""
@@ -650,7 +650,7 @@ async def get_dcf_profitability(
 
 @router.get("/models/comps/{ticker}/peer-list")
 async def get_comps_peer_list(
-    ticker: str = Query(..., description="Ticker symbol"),
+    ticker: str = Path(..., description="Ticker symbol"),
     market_code: str = Query("VN", description="Market code"),
     num_peers: int = Query(5, description="Number of peer companies")
 ):
@@ -671,7 +671,7 @@ async def get_comps_peer_list(
 
 @router.get("/models/comps/{ticker}/peer-metrics")
 async def get_comps_peer_metrics(
-    ticker: str = Query(..., description="Target ticker"),
+    ticker: str = Path(..., description="Target ticker"),
     market_code: str = Query("VN", description="Market code"),
     peers: str = Query(..., description="Comma-separated peer tickers")
 ):
@@ -712,7 +712,7 @@ async def get_comps_peer_metrics(
 
 @router.get("/models/comps/{ticker}/target-metrics")
 async def get_comps_target_metrics(
-    ticker: str = Query(..., description="Target ticker"),
+    ticker: str = Path(..., description="Target ticker"),
     market_code: str = Query("VN", description="Market code")
 ):
     """Get target company's current valuation multiples."""
@@ -745,7 +745,7 @@ async def get_comps_target_metrics(
 
 @router.get("/models/comps/{ticker}/multiples-analysis")
 async def get_comps_multiples_analysis(
-    ticker: str = Query(..., description="Target ticker"),
+    ticker: str = Path(..., description="Target ticker"),
     market_code: str = Query("VN", description="Market code"),
     peers: str = Query(..., description="Comma-separated peer tickers")
 ):
@@ -792,7 +792,7 @@ async def get_comps_multiples_analysis(
 
 @router.get("/models/comps/{ticker}/implied-valuation")
 async def get_comps_implied_valuation(
-    ticker: str = Query(..., description="Target ticker"),
+    ticker: str = Path(..., description="Target ticker"),
     market_code: str = Query("VN", description="Market code"),
     peers: str = Query(..., description="Comma-separated peer tickers")
 ):
@@ -845,7 +845,7 @@ async def get_comps_implied_valuation(
 
 @router.get("/models/dupont/{ticker}/profitability-drivers")
 async def get_dupont_profitability_drivers(
-    ticker: str = Query(..., description="Ticker symbol"),
+    ticker: str = Path(..., description="Ticker symbol"),
     market_code: str = Query("VN", description="Market code")
 ):
     """Get DuPont profitability drivers (Tax Burden, Interest Burden, EBIT Margin)."""
@@ -886,7 +886,7 @@ async def get_dupont_profitability_drivers(
 
 @router.get("/models/dupont/{ticker}/efficiency-drivers")
 async def get_dupont_efficiency_drivers(
-    ticker: str = Query(..., description="Ticker symbol"),
+    ticker: str = Path(..., description="Ticker symbol"),
     market_code: str = Query("VN", description="Market code")
 ):
     """Get DuPont efficiency drivers (Asset Turnover)."""
@@ -924,7 +924,7 @@ async def get_dupont_efficiency_drivers(
 
 @router.get("/models/dupont/{ticker}/leverage-drivers")
 async def get_dupont_leverage_drivers(
-    ticker: str = Query(..., description="Ticker symbol"),
+    ticker: str = Path(..., description="Ticker symbol"),
     market_code: str = Query("VN", description="Market code")
 ):
     """Get DuPont leverage drivers (Equity Multiplier, Debt/Equity)."""
@@ -963,7 +963,7 @@ async def get_dupont_leverage_drivers(
 
 @router.get("/models/dupont/{ticker}/full-analysis")
 async def get_dupont_full_analysis(
-    ticker: str = Query(..., description="Ticker symbol"),
+    ticker: str = Path(..., description="Ticker symbol"),
     market_code: str = Query("VN", description="Market code")
 ):
     """Get complete 3-step and 5-step DuPont analysis."""
