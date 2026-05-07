@@ -185,9 +185,12 @@ async def generate_ai_assumptions(request: GenerateAIRequest):
         session_service.update_session_data(request.session_id, "ai_suggestions", result)
         session_service.update_session_data(request.session_id, "status", "ai_ready")
         
+        # Convert AISuggestionResponse to dict for GenerateAIResponse
+        suggestions_dict = result.model_dump() if hasattr(result, 'model_dump') else result.dict()
+        
         return GenerateAIResponse(
             status="ai_ready",
-            suggestions=result,
+            suggestions=suggestions_dict,
             message="AI analysis complete. Please review assumptions.",
             _metadata={"model_version": "v2.0"}
         )
