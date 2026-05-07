@@ -743,6 +743,44 @@ class YFinanceService:
         except Exception as e:
             logger.error(f"Error getting ticker info for '{ticker}': {str(e)}")
             return None
+    
+    def get_financial_statements(self, ticker: str) -> Optional[Dict[str, Any]]:
+        """
+        Get financial statements (income, balance sheet, cash flow) for a ticker.
+        
+        Args:
+            ticker: Stock ticker symbol
+            
+        Returns:
+            Dictionary with income_stmt, balance_sheet, cashflow DataFrames or None
+        """
+        import yfinance as yf
+        
+        try:
+            logger.info(f"Getting financial statements for '{ticker}'")
+            yf_ticker = yf.Ticker(ticker)
+            
+            # Use get_* methods for yfinance v1.3.0+ compatibility
+            income_stmt = yf_ticker.get_income_stmt()
+            balance_sheet = yf_ticker.get_balance_sheet()
+            cashflow = yf_ticker.get_cash_flow()
+            
+            # Check if we have at least some data
+            if (income_stmt is None or income_stmt.empty) and \
+               (balance_sheet is None or balance_sheet.empty) and \
+               (cashflow is None or cashflow.empty):
+                logger.warning(f"No financial statements available for '{ticker}'")
+                return None
+            
+            return {
+                'income_stmt': income_stmt if income_stmt is not None and not income_stmt.empty else None,
+                'balance_sheet': balance_sheet if balance_sheet is not None and not balance_sheet.empty else None,
+                'cashflow': cashflow if cashflow is not None and not cashflow.empty else None,
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting financial statements for '{ticker}': {str(e)}")
+            return None
 
 
 def fetch_yfinance_data(ticker_symbol: str, market: str = "international") -> Dict[str, Any]:

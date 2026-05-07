@@ -155,12 +155,12 @@ class Step3HistoricalProcessor:
             )
             historical_data.append(year_data)
             
-            # Track missing fields
+            # Track missing fields (convert year to string for pydantic validation)
             for field_name, field_value in year_data.dict().items():
                 if field_name not in ['year', 'status', 'source'] and field_value is None:
                     if field_name not in missing_fields:
                         missing_fields[field_name] = []
-                    missing_fields[field_name].append(year)
+                    missing_fields[field_name].append(str(year))
         
         # Check for missing years
         missing_years = []
