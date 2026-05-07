@@ -311,7 +311,7 @@ class Step6DataReviewProcessor:
                 
                 # 1. Total Revenue - try multiple possible field names
                 rev_val = None
-                for rev_key in ['Total Revenue', 'total_revenue', 'revenue', 'Operating Revenue', 'operating_revenue']:
+                for rev_key in ['Total Revenue', 'Operating Revenue', 'operating_revenue', 'total_revenue', 'revenue']:
                     if rev_key in financials.index:
                         rev_val = financials.loc[rev_key, col]
                         break
@@ -326,7 +326,7 @@ class Step6DataReviewProcessor:
                 
                 # 2. EBITDA - try multiple possible field names
                 ebitda_val = None
-                for ebitda_key in ['EBITDA', 'ebitda', 'Normalized EBITDA', 'normalized_ebitda']:
+                for ebitda_key in ['EBITDA', 'Normalized EBITDA', 'normalized_ebitda', 'ebitda']:
                     if ebitda_key in financials.index:
                         ebitda_val = financials.loc[ebitda_key, col]
                         break
@@ -343,13 +343,13 @@ class Step6DataReviewProcessor:
                 da_val = None
                 # First try income statement
                 if financials is not None:
-                    for dep_key in ['depreciation_amortization', 'd_and_a', 'Depreciation Amortization Depletion', 'Depreciation And Amortization', 'Reconciled Depreciation']:
+                    for dep_key in ['Reconciled Depreciation', 'Depreciation Amortization Depletion', 'Depreciation And Amortization', 'depreciation_amortization', 'd_and_a']:
                         if dep_key in financials.index:
                             da_val = financials.loc[dep_key, col]
                             break
                 # Then try cashflow if not found in income statement
                 if da_val is None and cashflow is not None:
-                    for dep_key in ['depreciation_amortization', 'Depreciation Amortization Depletion', 'Depreciation And Amortization', 'Depreciation', 'DepreciationAmortizationDepletion']:
+                    for dep_key in ['Depreciation Amortization Depletion', 'Depreciation And Amortization', 'Depreciation', 'DepreciationAmortizationDepletion', 'depreciation_amortization']:
                         if dep_key in cashflow.index:
                             da_val = cashflow.loc[dep_key, col]
                             break
@@ -365,7 +365,7 @@ class Step6DataReviewProcessor:
                 # 4. Capital Expenditures - try multiple possible field names
                 capex_val = None
                 if cashflow is not None:
-                    for capex_key in ['capital_expenditure', 'capex', 'Capital Expenditure', 'Capital Expenditures', 'Purchase Of PPE']:
+                    for capex_key in ['Capital Expenditure', 'Purchase Of PPE', 'Capital Expenditure Reported', 'capital_expenditure', 'capex']:
                         if capex_key in cashflow.index:
                             capex_val = cashflow.loc[capex_key, col] * -1  # Convert to positive
                             break
@@ -381,7 +381,7 @@ class Step6DataReviewProcessor:
                 # 5. Working Capital Changes - try multiple possible field names
                 wc_val = None
                 if cashflow is not None:
-                    for wc_key in ['change_in_working_capital', 'Change In Working Capital', 'Changes In Working Capital', 'changes_in_working_capital']:
+                    for wc_key in ['Change In Working Capital', 'Changes In Working Capital', 'change_in_working_capital', 'changes_in_working_capital']:
                         if wc_key in cashflow.index:
                             wc_val = cashflow.loc[wc_key, col]
                             break
@@ -397,7 +397,7 @@ class Step6DataReviewProcessor:
                 # 6. Accounts Receivable - try multiple possible field names
                 ar_val = None
                 if balance_sheet is not None:
-                    for ar_key in ['accounts_receivable', 'ar', 'Accounts Receivable', 'Receivables', 'receivables']:
+                    for ar_key in ['Accounts Receivable', 'Receivables', 'Gross Accounts Receivable', 'accounts_receivable', 'ar', 'receivables']:
                         if ar_key in balance_sheet.index:
                             ar_val = balance_sheet.loc[ar_key, col]
                             break
@@ -413,7 +413,7 @@ class Step6DataReviewProcessor:
                 # 7. Inventory - try multiple possible field names
                 inv_val = None
                 if balance_sheet is not None:
-                    for inv_key in ['inventory', 'Inventory', 'Inventories', 'inventories']:
+                    for inv_key in ['Inventory', 'Inventories', 'inventory', 'inventories']:
                         if inv_key in balance_sheet.index:
                             inv_val = balance_sheet.loc[inv_key, col]
                             break
@@ -429,7 +429,7 @@ class Step6DataReviewProcessor:
                 # 8. Accounts Payable (for AP Days) - try multiple possible field names
                 ap_val = None
                 if balance_sheet is not None:
-                    for ap_key in ['accounts_payable', 'ap', 'Accounts Payable', 'Payables', 'payables']:
+                    for ap_key in ['Accounts Payable', 'Payables', 'Payables And Accrued Expenses', 'accounts_payable', 'ap', 'payables']:
                         if ap_key in balance_sheet.index:
                             ap_val = balance_sheet.loc[ap_key, col]
                             break
@@ -444,7 +444,7 @@ class Step6DataReviewProcessor:
                 
                 # 9. Interest Expense - try multiple possible field names
                 int_val = None
-                for int_key in ['interest_expense', 'Interest Expense', 'Interest Income Net Operating', 'net_interest_income']:
+                for int_key in ['Interest Expense', 'Interest Expense Non Operating', 'interest_expense', 'Interest Income Net Operating', 'net_interest_income']:
                     if int_key in financials.index:
                         int_val = financials.loc[int_key, col]
                         break
@@ -459,7 +459,7 @@ class Step6DataReviewProcessor:
                 
                 # 10. Tax Provision (for effective tax rate) - try multiple possible field names
                 tax_val = None
-                for tax_key in ['tax_provision', 'Tax Provision', 'Tax Expense', 'tax_expense', 'Income Tax', 'income_tax']:
+                for tax_key in ['Tax Provision', 'Income Tax', 'tax_provision', 'Tax Expense', 'tax_expense', 'income_tax']:
                     if tax_key in financials.index:
                         tax_val = financials.loc[tax_key, col]
                         break
@@ -474,7 +474,7 @@ class Step6DataReviewProcessor:
                 
                 # 11. Pre-Tax Income (for effective tax rate) - try multiple possible field names
                 pretax_val = None
-                for pretax_key in ['pretax_income', 'Pretax Income', 'Pre Tax Income', 'pre_tax_income', 'Income Before Tax', 'income_before_tax']:
+                for pretax_key in ['Pretax Income', 'Pre Tax Income', 'Income Before Tax', 'pretax_income', 'pre_tax_income', 'income_before_tax']:
                     if pretax_key in financials.index:
                         pretax_val = financials.loc[pretax_key, col]
                         break
@@ -484,6 +484,231 @@ class Step6DataReviewProcessor:
                     unit="USD",
                     status=DataStatus.RETRIEVED if pretax_val else DataStatus.MISSING,
                     source="yfinance" if pretax_val else None,
+                    is_critical=False
+                ))
+                
+                # 12. Cost of Revenue (COGS)
+                cogs_val = None
+                for cogs_key in ['Cost Of Revenue', 'Reconciled Cost Of Revenue', 'cost_of_revenue', 'cogs']:
+                    if cogs_key in financials.index:
+                        cogs_val = financials.loc[cogs_key, col]
+                        break
+                data_fields.append(DataField(
+                    field_name=f"COGS_{year}",
+                    value=cogs_val,
+                    unit="USD",
+                    status=DataStatus.RETRIEVED if cogs_val else DataStatus.MISSING,
+                    source="yfinance" if cogs_val else None,
+                    is_critical=False
+                ))
+                
+                # 13. Gross Profit
+                gp_val = None
+                for gp_key in ['Gross Profit', 'gross_profit']:
+                    if gp_key in financials.index:
+                        gp_val = financials.loc[gp_key, col]
+                        break
+                data_fields.append(DataField(
+                    field_name=f"Gross_Profit_{year}",
+                    value=gp_val,
+                    unit="USD",
+                    status=DataStatus.RETRIEVED if gp_val else DataStatus.MISSING,
+                    source="yfinance" if gp_val else None,
+                    is_critical=False
+                ))
+                
+                # 14. Operating Expenses
+                opex_val = None
+                for opex_key in ['Operating Expense', 'Total Expenses', 'operating_expense', 'operating_expenses']:
+                    if opex_key in financials.index:
+                        opex_val = financials.loc[opex_key, col]
+                        break
+                data_fields.append(DataField(
+                    field_name=f"Operating_Expenses_{year}",
+                    value=opex_val,
+                    unit="USD",
+                    status=DataStatus.RETRIEVED if opex_val else DataStatus.MISSING,
+                    source="yfinance" if opex_val else None,
+                    is_critical=False
+                ))
+                
+                # 15. Research & Development
+                rd_val = None
+                for rd_key in ['Research And Development', 'Research Development', 'research_development']:
+                    if rd_key in financials.index:
+                        rd_val = financials.loc[rd_key, col]
+                        break
+                data_fields.append(DataField(
+                    field_name=f"RD_{year}",
+                    value=rd_val,
+                    unit="USD",
+                    status=DataStatus.RETRIEVED if rd_val else DataStatus.MISSING,
+                    source="yfinance" if rd_val else None,
+                    is_critical=False
+                ))
+                
+                # 16. EBIT / Operating Income
+                ebit_val = None
+                for ebit_key in ['EBIT', 'Operating Income', 'Total Operating Income As Reported', 'ebit', 'operating_income']:
+                    if ebit_key in financials.index:
+                        ebit_val = financials.loc[ebit_key, col]
+                        break
+                data_fields.append(DataField(
+                    field_name=f"EBIT_{year}",
+                    value=ebit_val,
+                    unit="USD",
+                    status=DataStatus.RETRIEVED if ebit_val else DataStatus.MISSING,
+                    source="yfinance" if ebit_val else None,
+                    is_critical=False
+                ))
+                
+                # 17. Other Income/Expense
+                other_val = None
+                for other_key in ['Other Income Expense', 'Other Non Operating Income Expenses', 'other_income_expense']:
+                    if other_key in financials.index:
+                        other_val = financials.loc[other_key, col]
+                        break
+                data_fields.append(DataField(
+                    field_name=f"Other_Income_Expense_{year}",
+                    value=other_val,
+                    unit="USD",
+                    status=DataStatus.RETRIEVED if other_val else DataStatus.MISSING,
+                    source="yfinance" if other_val else None,
+                    is_critical=False
+                ))
+                
+                # 18. Net Income
+                ni_val = None
+                for ni_key in ['Net Income Common Stockholders', 'Net Income', 'Diluted NI Availto Com Stockholders', 'net_income']:
+                    if ni_key in financials.index:
+                        ni_val = financials.loc[ni_key, col]
+                        break
+                data_fields.append(DataField(
+                    field_name=f"Net_Income_{year}",
+                    value=ni_val,
+                    unit="USD",
+                    status=DataStatus.RETRIEVED if ni_val else DataStatus.MISSING,
+                    source="yfinance" if ni_val else None,
+                    is_critical=False
+                ))
+                
+                # 19. Operating Cash Flow
+                ocf_val = None
+                for ocf_key in ['Operating Cash Flow', 'Cash Flow From Continuing Operating Activities', 'operating_cash_flow', 'ocf']:
+                    if ocf_key in cashflow.index:
+                        ocf_val = cashflow.loc[ocf_key, col]
+                        break
+                data_fields.append(DataField(
+                    field_name=f"Operating_Cash_Flow_{year}",
+                    value=ocf_val,
+                    unit="USD",
+                    status=DataStatus.RETRIEVED if ocf_val else DataStatus.MISSING,
+                    source="yfinance" if ocf_val else None,
+                    is_critical=False
+                ))
+                
+                # 20. Free Cash Flow
+                fcf_val = None
+                for fcf_key in ['Free Cash Flow', 'free_cash_flow', 'fcf']:
+                    if fcf_key in cashflow.index:
+                        fcf_val = cashflow.loc[fcf_key, col]
+                        break
+                data_fields.append(DataField(
+                    field_name=f"Free_Cash_Flow_{year}",
+                    value=fcf_val,
+                    unit="USD",
+                    status=DataStatus.RETRIEVED if fcf_val else DataStatus.MISSING,
+                    source="yfinance" if fcf_val else None,
+                    is_critical=False
+                ))
+                
+                # 21. Cash & Equivalents
+                cash_val = None
+                for cash_key in ['Cash Cash Equivalents And Short Term Investments', 'Cash And Cash Equivalents', 'cash_and_equivalents', 'cash']:
+                    if cash_key in balance_sheet.index:
+                        cash_val = balance_sheet.loc[cash_key, col]
+                        break
+                data_fields.append(DataField(
+                    field_name=f"Cash_Equivalents_{year}",
+                    value=cash_val,
+                    unit="USD",
+                    status=DataStatus.RETRIEVED if cash_val else DataStatus.MISSING,
+                    source="yfinance" if cash_val else None,
+                    is_critical=False
+                ))
+                
+                # 22. Total Assets
+                assets_val = None
+                for assets_key in ['Total Assets', 'total_assets']:
+                    if assets_key in balance_sheet.index:
+                        assets_val = balance_sheet.loc[assets_key, col]
+                        break
+                data_fields.append(DataField(
+                    field_name=f"Total_Assets_{year}",
+                    value=assets_val,
+                    unit="USD",
+                    status=DataStatus.RETRIEVED if assets_val else DataStatus.MISSING,
+                    source="yfinance" if assets_val else None,
+                    is_critical=False
+                ))
+                
+                # 23. Total Debt
+                debt_val = None
+                for debt_key in ['Total Debt', 'Long Term Debt And Capital Lease Obligation', 'total_debt']:
+                    if debt_key in balance_sheet.index:
+                        debt_val = balance_sheet.loc[debt_key, col]
+                        break
+                data_fields.append(DataField(
+                    field_name=f"Total_Debt_{year}",
+                    value=debt_val,
+                    unit="USD",
+                    status=DataStatus.RETRIEVED if debt_val else DataStatus.MISSING,
+                    source="yfinance" if debt_val else None,
+                    is_critical=False
+                ))
+                
+                # 24. Shareholders Equity
+                equity_val = None
+                for equity_key in ['Stockholders Equity', 'Total Equity Gross Minority Interest', 'Common Stock Equity', 'stockholders_equity', 'total_equity']:
+                    if equity_key in balance_sheet.index:
+                        equity_val = balance_sheet.loc[equity_key, col]
+                        break
+                data_fields.append(DataField(
+                    field_name=f"Shareholders_Equity_{year}",
+                    value=equity_val,
+                    unit="USD",
+                    status=DataStatus.RETRIEVED if equity_val else DataStatus.MISSING,
+                    source="yfinance" if equity_val else None,
+                    is_critical=False
+                ))
+                
+                # 25. Retained Earnings
+                re_val = None
+                for re_key in ['Retained Earnings', 'retained_earnings']:
+                    if re_key in balance_sheet.index:
+                        re_val = balance_sheet.loc[re_key, col]
+                        break
+                data_fields.append(DataField(
+                    field_name=f"Retained_Earnings_{year}",
+                    value=re_val,
+                    unit="USD",
+                    status=DataStatus.RETRIEVED if re_val else DataStatus.MISSING,
+                    source="yfinance" if re_val else None,
+                    is_critical=False
+                ))
+                
+                # 26. Shares Outstanding
+                shares_val = None
+                for shares_key in ['Ordinary Shares Number', 'Share Issued', 'ordinary_shares_number', 'shares_outstanding']:
+                    if shares_key in balance_sheet.index:
+                        shares_val = balance_sheet.loc[shares_key, col]
+                        break
+                data_fields.append(DataField(
+                    field_name=f"Shares_Outstanding_{year}",
+                    value=shares_val,
+                    unit="shares",
+                    status=DataStatus.RETRIEVED if shares_val else DataStatus.MISSING,
+                    source="yfinance" if shares_val else None,
                     is_critical=False
                 ))
         
