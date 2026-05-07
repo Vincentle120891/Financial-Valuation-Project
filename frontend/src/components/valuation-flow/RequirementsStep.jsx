@@ -467,7 +467,10 @@ const RequirementsStep = ({
   return (
     <div className="step-container">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-        <h2>Step 5: Required Inputs</h2>
+        <div>
+          <h2>Step 5: Review Required Inputs</h2>
+          <p style={{ color: '#666', marginTop: '8px' }}>Review the data points needed for {selectedModel} analysis. Click "Retrieve Data" to fetch from financial APIs.</p>
+        </div>
         <button onClick={onBackToModelSelection} className="btn-secondary">
           ← Change Model
         </button>

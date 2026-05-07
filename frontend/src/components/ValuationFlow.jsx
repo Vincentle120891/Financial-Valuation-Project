@@ -22,17 +22,17 @@ import ResultsStep from './valuation-flow/ResultsStep';
 /**
  * ValuationFlow - Main Container Component
  *
- * Orchestrates the 10-step valuation workflow:
- * 1. Search Company
- * 2. Select Company (get session_id)
- * 3. (Merged into 2)
- * 4. Select Model (DCF/DuPont/Comps)
- * 5. Show Required API Inputs + [Retrieve Button]
- * 6. Data Review (Retrieved inputs + intermediate calcs)
- * 7. Generate Baselines (Historical static inputs)
- * 8. Assumption Studio (Trendlines + AI buttons + Manual overrides)
- * 9. Final Calculation
- * 10. View Results
+ * Orchestrates the 11-step valuation workflow:
+ * 1. Search Company (Input ticker/name)
+ * 2-3. Select Company (get session_id) - Merged
+ * 4. Select Valuation Model (DCF/DuPont/Comps)
+ * 5. Review Required Inputs (Show data requirements + Retrieve button)
+ * 6. Review Retrieved Financial Data (Display all API-fetched inputs)
+ * 7. Review AI-Generated Assumptions (AI suggestions with manual override)
+ * 8. Modify Forecast Drivers (Fine-tune growth rates, margins, scenarios)
+ * 9. Review & Confirm All Assumptions (Final confirmation before calculation)
+ * 10. Run Valuation Calculation (Execute DCF/DuPont/Comps models)
+ * 11. View Valuation Results & Analysis (Intrinsic value, sensitivity, charts)
  *
  * Architecture:
  * - Container component managing state and business logic

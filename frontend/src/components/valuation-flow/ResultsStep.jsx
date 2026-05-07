@@ -53,7 +53,8 @@ const ResultsStep = ({
 
   return (
     <div className="step-container">
-      <h2>Step 10: Valuation Results</h2>
+      <h2>Step 11: Valuation Results & Analysis</h2>
+      <p style={{ marginBottom: '24px', color: '#666' }}>Comprehensive valuation output including intrinsic value estimates, sensitivity analysis, and comparative metrics.</p>
       
       {/* DCF Results */}
       {selectedModel === 'DCF' && valuationResults.dcf_outputs && (

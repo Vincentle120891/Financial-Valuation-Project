@@ -797,7 +797,10 @@ const ApiDataStep = ({
   return (
     <div className="step-container">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-        <h2>Step 6: API Data Review</h2>
+        <div>
+          <h2>Step 6: Review Retrieved Financial Data</h2>
+          <p style={{ color: '#666', marginTop: '8px' }}>Review all financial data fetched from yfinance and AlphaVantage APIs. Verify accuracy before proceeding.</p>
+        </div>
         <button onClick={onBackToRequirements} className="btn-secondary">
           ← Back to Requirements
         </button>
@@ -805,7 +808,7 @@ const ApiDataStep = ({
       
       <div style={{ marginBottom: '20px', padding: '16px', background: '#e3f2fd', borderRadius: '8px' }}>
         <p style={{ margin: 0, color: '#1565c0' }}>
-          <strong>ℹ️ About this step:</strong> This screen shows all financial data retrieved automatically from external APIs. 
+          <strong>ℹ️ About this step:</strong> This screen shows all financial data retrieved automatically from external APIs (yfinance v1.3.0 + AlphaVantage). 
           Review the data below before proceeding to AI-generated assumptions.
         </p>
       </div>

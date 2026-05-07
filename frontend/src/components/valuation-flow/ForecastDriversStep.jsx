@@ -207,7 +207,10 @@ const ForecastDriversStep = ({
   return (
     <div className="step-container">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-        <h2>Step 7: Modify Forecast Drivers & DCF Inputs</h2>
+        <div>
+          <h2>Step 8: Modify Forecast Drivers & DCF Inputs</h2>
+          <p style={{ color: '#666', marginTop: '8px' }}>Fine-tune revenue growth rates, margins, and other forecast drivers. Adjust assumptions for Bull/Base/Bear scenarios.</p>
+        </div>
         <button onClick={onBackToRequirements} className="btn-secondary">
           ← Back to Requirements
         </button>

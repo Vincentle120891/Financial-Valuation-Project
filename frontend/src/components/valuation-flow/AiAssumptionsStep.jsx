@@ -335,7 +335,10 @@ const AiAssumptionsStep = ({
   return (
     <div className="step-container">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-        <h2>Step 7: AI Assumptions</h2>
+        <div>
+          <h2>Step 7: Review AI-Generated Assumptions</h2>
+          <p style={{ color: '#666', marginTop: '8px' }}>Review AI-suggested valuation assumptions based on historical data, peer analysis, and market conditions. Accept or override each assumption.</p>
+        </div>
         <button onClick={onBackToApiData} className="btn-secondary">
           ← Back to API Data
         </button>
