@@ -248,7 +248,8 @@ class Step6DataReviewProcessor:
             timestamp=datetime.now(),
             valuation_model=ValuationModel.DUPONT,
             historical_financials=income_display,
-            market_data=balance_display,
+            forecast_drivers=ForecastDriversDisplay(data_fields=balance_display.data_fields if balance_display else []),
+            market_data=MarketDataDisplay(data_fields=[]),  # Empty MarketDataDisplay for DuPont
             calculated_metrics=calculated_display,
             missing_data_summary=missing_summary,
             manual_overrides_applied=user_overrides,
@@ -286,7 +287,8 @@ class Step6DataReviewProcessor:
             timestamp=datetime.now(),
             valuation_model=ValuationModel.COMPS,
             historical_financials=target_display,
-            market_data=peer_display,
+            forecast_drivers=ForecastDriversDisplay(data_fields=peer_display.data_fields if peer_display else []),
+            market_data=MarketDataDisplay(data_fields=[]),  # Empty MarketDataDisplay for Comps
             calculated_metrics=calculated_display,
             missing_data_summary=missing_summary,
             manual_overrides_applied=user_overrides,
