@@ -359,6 +359,7 @@ class Step6DataReviewProcessor:
                             break
                 data_fields.append(DataField(
                     field_name=f"Depreciation_Amortization_{year}",
+                    display_name="Depreciation & Amortization",
                     value=da_val,
                     unit="USD",
                     status=DataStatus.RETRIEVED if da_val else DataStatus.MISSING,
@@ -375,6 +376,7 @@ class Step6DataReviewProcessor:
                             break
                 data_fields.append(DataField(
                     field_name=f"CapEx_{year}",
+                    display_name="Capital Expenditures (CapEx)",
                     value=capex_val,
                     unit="USD",
                     status=DataStatus.RETRIEVED if capex_val else DataStatus.MISSING,
@@ -391,6 +393,7 @@ class Step6DataReviewProcessor:
                             break
                 data_fields.append(DataField(
                     field_name=f"Working_Capital_Change_{year}",
+                    display_name="Working Capital Changes",
                     value=wc_val,
                     unit="USD",
                     status=DataStatus.RETRIEVED if wc_val else DataStatus.MISSING,
@@ -407,6 +410,7 @@ class Step6DataReviewProcessor:
                             break
                 data_fields.append(DataField(
                     field_name=f"Accounts_Receivable_{year}",
+                    display_name="Accounts Receivable",
                     value=ar_val,
                     unit="USD",
                     status=DataStatus.RETRIEVED if ar_val else DataStatus.MISSING,
@@ -423,6 +427,7 @@ class Step6DataReviewProcessor:
                             break
                 data_fields.append(DataField(
                     field_name=f"Inventory_{year}",
+                    display_name="Inventory",
                     value=inv_val,
                     unit="USD",
                     status=DataStatus.RETRIEVED if inv_val else DataStatus.MISSING,
@@ -439,6 +444,7 @@ class Step6DataReviewProcessor:
                             break
                 data_fields.append(DataField(
                     field_name=f"Accounts_Payable_{year}",
+                    display_name="Accounts Payable",
                     value=ap_val,
                     unit="USD",
                     status=DataStatus.RETRIEVED if ap_val else DataStatus.MISSING,
@@ -454,6 +460,7 @@ class Step6DataReviewProcessor:
                         break
                 data_fields.append(DataField(
                     field_name=f"Interest_Expense_{year}",
+                    display_name="Interest Expense",
                     value=int_val,
                     unit="USD",
                     status=DataStatus.RETRIEVED if int_val else DataStatus.MISSING,
@@ -469,6 +476,7 @@ class Step6DataReviewProcessor:
                         break
                 data_fields.append(DataField(
                     field_name=f"Tax_Provision_{year}",
+                    display_name="Tax Provision",
                     value=tax_val,
                     unit="USD",
                     status=DataStatus.RETRIEVED if tax_val else DataStatus.MISSING,
@@ -484,6 +492,7 @@ class Step6DataReviewProcessor:
                         break
                 data_fields.append(DataField(
                     field_name=f"Pre_Tax_Income_{year}",
+                    display_name="Pre-Tax Income",
                     value=pretax_val,
                     unit="USD",
                     status=DataStatus.RETRIEVED if pretax_val else DataStatus.MISSING,
@@ -499,6 +508,7 @@ class Step6DataReviewProcessor:
                         break
                 data_fields.append(DataField(
                     field_name=f"COGS_{year}",
+                    display_name="Cost of Revenue (COGS)",
                     value=cogs_val,
                     unit="USD",
                     status=DataStatus.RETRIEVED if cogs_val else DataStatus.MISSING,
@@ -514,6 +524,7 @@ class Step6DataReviewProcessor:
                         break
                 data_fields.append(DataField(
                     field_name=f"Gross_Profit_{year}",
+                    display_name="Gross Profit",
                     value=gp_val,
                     unit="USD",
                     status=DataStatus.RETRIEVED if gp_val else DataStatus.MISSING,
@@ -529,6 +540,7 @@ class Step6DataReviewProcessor:
                         break
                 data_fields.append(DataField(
                     field_name=f"Operating_Expenses_{year}",
+                    display_name="Operating Expenses",
                     value=opex_val,
                     unit="USD",
                     status=DataStatus.RETRIEVED if opex_val else DataStatus.MISSING,
@@ -544,6 +556,7 @@ class Step6DataReviewProcessor:
                         break
                 data_fields.append(DataField(
                     field_name=f"RD_{year}",
+                    display_name="Research & Development",
                     value=rd_val,
                     unit="USD",
                     status=DataStatus.RETRIEVED if rd_val else DataStatus.MISSING,
@@ -559,6 +572,7 @@ class Step6DataReviewProcessor:
                         break
                 data_fields.append(DataField(
                     field_name=f"EBIT_{year}",
+                    display_name="EBIT",
                     value=ebit_val,
                     unit="USD",
                     status=DataStatus.RETRIEVED if ebit_val else DataStatus.MISSING,
@@ -574,6 +588,7 @@ class Step6DataReviewProcessor:
                         break
                 data_fields.append(DataField(
                     field_name=f"Other_Income_Expense_{year}",
+                    display_name="Other Income/Expense",
                     value=other_val,
                     unit="USD",
                     status=DataStatus.RETRIEVED if other_val else DataStatus.MISSING,
@@ -589,6 +604,7 @@ class Step6DataReviewProcessor:
                         break
                 data_fields.append(DataField(
                     field_name=f"Net_Income_{year}",
+                    display_name="Net Income",
                     value=ni_val,
                     unit="USD",
                     status=DataStatus.RETRIEVED if ni_val else DataStatus.MISSING,
@@ -604,6 +620,7 @@ class Step6DataReviewProcessor:
                         break
                 data_fields.append(DataField(
                     field_name=f"Operating_Cash_Flow_{year}",
+                    display_name="Operating Cash Flow",
                     value=ocf_val,
                     unit="USD",
                     status=DataStatus.RETRIEVED if ocf_val else DataStatus.MISSING,
@@ -619,6 +636,7 @@ class Step6DataReviewProcessor:
                         break
                 data_fields.append(DataField(
                     field_name=f"Free_Cash_Flow_{year}",
+                    display_name="Free Cash Flow",
                     value=fcf_val,
                     unit="USD",
                     status=DataStatus.RETRIEVED if fcf_val else DataStatus.MISSING,
@@ -634,6 +652,7 @@ class Step6DataReviewProcessor:
                         break
                 data_fields.append(DataField(
                     field_name=f"Cash_Equivalents_{year}",
+                    display_name="Cash & Equivalents",
                     value=cash_val,
                     unit="USD",
                     status=DataStatus.RETRIEVED if cash_val else DataStatus.MISSING,
@@ -649,6 +668,7 @@ class Step6DataReviewProcessor:
                         break
                 data_fields.append(DataField(
                     field_name=f"Total_Assets_{year}",
+                    display_name="Total Assets",
                     value=assets_val,
                     unit="USD",
                     status=DataStatus.RETRIEVED if assets_val else DataStatus.MISSING,
@@ -664,6 +684,7 @@ class Step6DataReviewProcessor:
                         break
                 data_fields.append(DataField(
                     field_name=f"Total_Debt_{year}",
+                    display_name="Total Debt",
                     value=debt_val,
                     unit="USD",
                     status=DataStatus.RETRIEVED if debt_val else DataStatus.MISSING,
@@ -679,6 +700,7 @@ class Step6DataReviewProcessor:
                         break
                 data_fields.append(DataField(
                     field_name=f"Shareholders_Equity_{year}",
+                    display_name="Shareholders Equity",
                     value=equity_val,
                     unit="USD",
                     status=DataStatus.RETRIEVED if equity_val else DataStatus.MISSING,
@@ -694,6 +716,7 @@ class Step6DataReviewProcessor:
                         break
                 data_fields.append(DataField(
                     field_name=f"Retained_Earnings_{year}",
+                    display_name="Retained Earnings",
                     value=re_val,
                     unit="USD",
                     status=DataStatus.RETRIEVED if re_val else DataStatus.MISSING,
@@ -709,6 +732,7 @@ class Step6DataReviewProcessor:
                         break
                 data_fields.append(DataField(
                     field_name=f"Shares_Outstanding_{year}",
+                    display_name="Shares Outstanding",
                     value=shares_val,
                     unit="shares",
                     status=DataStatus.RETRIEVED if shares_val else DataStatus.MISSING,
@@ -727,6 +751,7 @@ class Step6DataReviewProcessor:
         current_price = info.get('currentPrice', info.get('regularMarketPrice'))
         price_field = DataField(
             field_name="Current Stock Price",
+            display_name="Current Stock Price",
             value=current_price,
             unit="USD",
             status=DataStatus.RETRIEVED if current_price else DataStatus.MISSING,
@@ -739,6 +764,7 @@ class Step6DataReviewProcessor:
         shares = info.get('sharesOutstanding')
         shares_field = DataField(
             field_name="Shares Outstanding",
+            display_name="Shares Outstanding",
             value=shares,
             unit="shares",
             status=DataStatus.RETRIEVED if shares else DataStatus.MISSING,
@@ -751,6 +777,7 @@ class Step6DataReviewProcessor:
         beta = overrides.get("beta", info.get('beta', 1.0))
         beta_field = DataField(
             field_name="Beta",
+            display_name="Beta",
             value=beta,
             status=DataStatus.MANUAL_OVERRIDE if "beta" in overrides else DataStatus.RETRIEVED,
             source="User Input" if "beta" in overrides else "yfinance",
@@ -763,6 +790,7 @@ class Step6DataReviewProcessor:
         total_debt = market_data.get("total_debt")
         debt_field = DataField(
             field_name="Total Debt",
+            display_name="Total Debt",
             value=total_debt,
             unit="USD",
             status=DataStatus.RETRIEVED if total_debt else DataStatus.MISSING,
@@ -775,6 +803,7 @@ class Step6DataReviewProcessor:
         cash = market_data.get("cash")
         cash_field = DataField(
             field_name="Cash & Equivalents",
+            display_name="Cash & Equivalents",
             value=cash,
             unit="USD",
             status=DataStatus.RETRIEVED if cash else DataStatus.MISSING,
@@ -787,6 +816,7 @@ class Step6DataReviewProcessor:
         mcap = info.get('marketCap')
         mcap_field = DataField(
             field_name="Market Cap",
+            display_name="Market Cap",
             value=mcap,
             unit="USD",
             status=DataStatus.RETRIEVED if mcap else DataStatus.MISSING,
@@ -802,7 +832,7 @@ class Step6DataReviewProcessor:
             total_debt=debt_field,
             cash=cash_field,
             market_cap=mcap_field,
-            currency=DataField(field_name="Currency", value="USD", status=DataStatus.RETRIEVED, source="yfinance"),
+            currency=DataField(field_name="Currency", display_name="Currency", value="USD", status=DataStatus.RETRIEVED, source="yfinance"),
             data_fields=data_fields
         )
     
