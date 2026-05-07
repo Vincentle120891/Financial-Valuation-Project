@@ -22,8 +22,8 @@ from app.api.routes.search_routes import router as search_router
 from app.api.routes.valuation_routes import router as valuation_router
 from app.api.routes.pdf_extraction_routes import router as pdf_extraction_router
 from app.api.routes.vietnamese_reports_routes import router as vietnamese_reports_router
-from app.api.routes.international_routes import router as international_router
-from app.api.routes.vietnamese_routes import router as vietnamese_valuation_router
+from app.api.routes.international_market_data_routes import router as international_router
+from app.api.routes.vietnamese_market_data_routes import router as vietnamese_valuation_router
 
 # Setup structured logging at application startup
 setup_logging(

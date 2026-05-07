@@ -23,12 +23,12 @@ Utility Routes:
 # This module documents available endpoints
 
 __all__ = [
-    # International routes (international_routes.py)
+    # International market data routes (international_market_data_routes.py)
     # POST /international/valuate
     # POST /international/comps
     # POST /international/dupont
     
-    # Vietnamese routes (vietnamese_routes.py)
+    # Vietnamese market data routes (vietnamese_market_data_routes.py)
     # POST /vietnamese/vn-valuate
     # POST /vietnamese/vn-comps
     # POST /vietnamese/vn-dupont
