@@ -1092,8 +1092,9 @@ class Step6DataReviewProcessor:
                 year = int(col.year)
                 years.append(year)
                 
-                # 1. Net Income
-                ni_val = financials.loc['Net Income', col] if 'Net Income' in financials.index else None
+                # 1. Net Income - try multiple field name variations
+                ni_key = self._find_field_key(financials.index, ['Net Income Common Stockholders', 'Net Income', 'Diluted NI Availto Com Stockholders'])
+                ni_val = financials.loc[ni_key, col] if ni_key else None
                 data_fields.append(DataField(
                     field_name=f"Net_Income_{year}",
                     display_name="Net Income",
@@ -1104,8 +1105,9 @@ class Step6DataReviewProcessor:
                     is_critical=True
                 ))
                 
-                # 2. Total Revenue
-                rev_val = financials.loc['Total Revenue', col] if 'Total Revenue' in financials.index else None
+                # 2. Total Revenue - try multiple field name variations
+                rev_key = self._find_field_key(financials.index, ['Total Revenue', 'Operating Revenue'])
+                rev_val = financials.loc[rev_key, col] if rev_key else None
                 data_fields.append(DataField(
                     field_name=f"Total_Revenue_{year}",
                     display_name="Total Revenue",
@@ -1116,8 +1118,9 @@ class Step6DataReviewProcessor:
                     is_critical=True
                 ))
                 
-                # 3. Operating Income (EBIT)
-                op_val = financials.loc['Operating Income', col] if 'Operating Income' in financials.index else None
+                # 3. Operating Income (EBIT) - try multiple field name variations
+                op_key = self._find_field_key(financials.index, ['Operating Income', 'EBIT', 'Total Operating Income As Reported'])
+                op_val = financials.loc[op_key, col] if op_key else None
                 data_fields.append(DataField(
                     field_name=f"Operating_Income_{year}",
                     display_name="Operating Income (EBIT)",
@@ -1128,8 +1131,9 @@ class Step6DataReviewProcessor:
                     is_critical=True
                 ))
                 
-                # 4. Interest Expense
-                int_val = financials.loc['Interest Expense', col] if 'Interest Expense' in financials.index else None
+                # 4. Interest Expense - try multiple field name variations
+                int_key = self._find_field_key(financials.index, ['Interest Expense', 'Interest Expense Non Operating'])
+                int_val = financials.loc[int_key, col] if int_key else None
                 data_fields.append(DataField(
                     field_name=f"Interest_Expense_{year}",
                     display_name="Interest Expense",
@@ -1140,8 +1144,9 @@ class Step6DataReviewProcessor:
                     is_critical=False
                 ))
                 
-                # 5. Tax Provision
-                tax_val = financials.loc['Tax Provision', col] if 'Tax Provision' in financials.index else None
+                # 5. Tax Provision - try multiple field name variations
+                tax_key = self._find_field_key(financials.index, ['Tax Provision', 'Tax Expense'])
+                tax_val = financials.loc[tax_key, col] if tax_key else None
                 data_fields.append(DataField(
                     field_name=f"Tax_Provision_{year}",
                     display_name="Tax Provision",
@@ -1152,8 +1157,9 @@ class Step6DataReviewProcessor:
                     is_critical=False
                 ))
                 
-                # 6. Pre-Tax Income
-                pretax_val = financials.loc['Pretax Income', col] if 'Pretax Income' in financials.index else None
+                # 6. Pre-Tax Income - try multiple field name variations
+                pretax_key = self._find_field_key(financials.index, ['Pretax Income', 'Pre-Tax Income'])
+                pretax_val = financials.loc[pretax_key, col] if pretax_key else None
                 data_fields.append(DataField(
                     field_name=f"Pre_Tax_Income_{year}",
                     display_name="Pre-Tax Income",
@@ -1166,6 +1172,21 @@ class Step6DataReviewProcessor:
         
         return HistoricalFinancialsDisplay(years=years, data_fields=data_fields)
     
+    def _find_field_key(self, index, possible_names: List[str]) -> Optional[str]:
+        """Find a field key from a list of possible names.
+        
+        Args:
+            index: The DataFrame index to search
+            possible_names: List of possible field names to try in order
+            
+        Returns:
+            The matching field name if found, None otherwise
+        """
+        for name in possible_names:
+            if name in index:
+                return name
+        return None
+    
     def _process_dupont_balance_data(self, historical_data: Dict, overrides: Dict) -> HistoricalFinancialsDisplay:
         """Process balance sheet data for DuPont (6 fields)"""
         years = []
@@ -1177,8 +1198,9 @@ class Step6DataReviewProcessor:
                 year = int(col.year)
                 years.append(year)
                 
-                # 1. Total Assets
-                assets_val = balance_sheet.loc['Total Assets', col] if 'Total Assets' in balance_sheet.index else None
+                # 1. Total Assets - try multiple field name variations
+                assets_key = self._find_field_key(balance_sheet.index, ['Total Assets'])
+                assets_val = balance_sheet.loc[assets_key, col] if assets_key else None
                 data_fields.append(DataField(
                     field_name=f"Total_Assets_{year}",
                     display_name="Total Assets",
@@ -1189,8 +1211,9 @@ class Step6DataReviewProcessor:
                     is_critical=True
                 ))
                 
-                # 2. Shareholders Equity
-                equity_val = balance_sheet.loc['Stockholders Equity', col] if 'Stockholders Equity' in balance_sheet.index else None
+                # 2. Shareholders Equity - try multiple field name variations
+                equity_key = self._find_field_key(balance_sheet.index, ['Stockholders Equity', 'Total Equity Gross Minority Interest', 'Common Stock Equity'])
+                equity_val = balance_sheet.loc[equity_key, col] if equity_key else None
                 data_fields.append(DataField(
                     field_name=f"Shareholders_Equity_{year}",
                     display_name="Shareholders Equity",
@@ -1201,8 +1224,9 @@ class Step6DataReviewProcessor:
                     is_critical=True
                 ))
                 
-                # 3. Total Liabilities
-                liab_val = balance_sheet.loc['Total Liabilities Net Minority Interest', col] if 'Total Liabilities Net Minority Interest' in balance_sheet.index else None
+                # 3. Total Liabilities - try multiple field name variations
+                liab_key = self._find_field_key(balance_sheet.index, ['Total Liabilities Net Minority Interest', 'Total Liabilities'])
+                liab_val = balance_sheet.loc[liab_key, col] if liab_key else None
                 data_fields.append(DataField(
                     field_name=f"Total_Liabilities_{year}",
                     display_name="Total Liabilities",
@@ -1213,8 +1237,9 @@ class Step6DataReviewProcessor:
                     is_critical=False
                 ))
                 
-                # 4. Long-Term Debt
-                ltd_val = balance_sheet.loc['Long Term Debt', col] if 'Long Term Debt' in balance_sheet.index else None
+                # 4. Long-Term Debt - try multiple field name variations
+                ltd_key = self._find_field_key(balance_sheet.index, ['Long Term Debt', 'Non Current Debt'])
+                ltd_val = balance_sheet.loc[ltd_key, col] if ltd_key else None
                 data_fields.append(DataField(
                     field_name=f"Long_Term_Debt_{year}",
                     display_name="Long-Term Debt",
@@ -1225,8 +1250,9 @@ class Step6DataReviewProcessor:
                     is_critical=False
                 ))
                 
-                # 5. Short-Term Debt
-                std_val = balance_sheet.loc['Current Debt', col] if 'Current Debt' in balance_sheet.index else None
+                # 5. Short-Term Debt - try multiple field name variations
+                std_key = self._find_field_key(balance_sheet.index, ['Current Debt', 'Short Term Debt'])
+                std_val = balance_sheet.loc[std_key, col] if std_key else None
                 data_fields.append(DataField(
                     field_name=f"Short_Term_Debt_{year}",
                     display_name="Short-Term Debt",
@@ -1237,8 +1263,9 @@ class Step6DataReviewProcessor:
                     is_critical=False
                 ))
                 
-                # 6. Cash & Equivalents
-                cash_val = balance_sheet.loc['Cash And Cash Equivalents', col] if 'Cash And Cash Equivalents' in balance_sheet.index else None
+                # 6. Cash & Equivalents - try multiple field name variations
+                cash_key = self._find_field_key(balance_sheet.index, ['Cash And Cash Equivalents', 'Cash Cash Equivalents And Short Term Investments', 'Cash'])
+                cash_val = balance_sheet.loc[cash_key, col] if cash_key else None
                 data_fields.append(DataField(
                     field_name=f"Cash_And_Equivalents_{year}",
                     display_name="Cash & Equivalents",
