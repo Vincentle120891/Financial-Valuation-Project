@@ -311,7 +311,7 @@ class Step6DataReviewProcessor:
                 
                 # 1. Total Revenue - try multiple possible field names
                 rev_val = None
-                for rev_key in ['Total Revenue', 'Operating Revenue', 'operating_revenue', 'total_revenue', 'revenue']:
+                for rev_key in ['total_revenue', 'Total Revenue', 'Operating Revenue', 'operating_revenue', 'revenue']:
                     if rev_key in financials.index:
                         rev_val = financials.loc[rev_key, col]
                         break
@@ -326,7 +326,7 @@ class Step6DataReviewProcessor:
                 
                 # 2. EBITDA - try multiple possible field names
                 ebitda_val = None
-                for ebitda_key in ['EBITDA', 'Normalized EBITDA', 'normalized_ebitda', 'ebitda']:
+                for ebitda_key in ['ebitda', 'EBITDA', 'Normalized EBITDA', 'normalized_ebitda']:
                     if ebitda_key in financials.index:
                         ebitda_val = financials.loc[ebitda_key, col]
                         break
@@ -343,13 +343,13 @@ class Step6DataReviewProcessor:
                 da_val = None
                 # First try income statement
                 if financials is not None:
-                    for dep_key in ['Reconciled Depreciation', 'Depreciation Amortization Depletion', 'Depreciation And Amortization', 'depreciation_amortization', 'd_and_a']:
+                    for dep_key in ['depreciation_amortization', 'd_and_a', 'Reconciled Depreciation', 'Depreciation Amortization Depletion', 'Depreciation And Amortization']:
                         if dep_key in financials.index:
                             da_val = financials.loc[dep_key, col]
                             break
                 # Then try cashflow if not found in income statement
                 if da_val is None and cashflow is not None:
-                    for dep_key in ['Depreciation Amortization Depletion', 'Depreciation And Amortization', 'Depreciation', 'DepreciationAmortizationDepletion', 'depreciation_amortization']:
+                    for dep_key in ['depreciation_amortization', 'Depreciation Amortization Depletion', 'Depreciation And Amortization', 'Depreciation', 'DepreciationAmortizationDepletion']:
                         if dep_key in cashflow.index:
                             da_val = cashflow.loc[dep_key, col]
                             break
@@ -365,7 +365,7 @@ class Step6DataReviewProcessor:
                 # 4. Capital Expenditures - try multiple possible field names
                 capex_val = None
                 if cashflow is not None:
-                    for capex_key in ['Capital Expenditure', 'Purchase Of PPE', 'Capital Expenditure Reported', 'capital_expenditure', 'capex']:
+                    for capex_key in ['capital_expenditure', 'capex', 'Capital Expenditure', 'Purchase Of PPE', 'Capital Expenditure Reported']:
                         if capex_key in cashflow.index:
                             capex_val = cashflow.loc[capex_key, col] * -1  # Convert to positive
                             break
@@ -381,7 +381,7 @@ class Step6DataReviewProcessor:
                 # 5. Working Capital Changes - try multiple possible field names
                 wc_val = None
                 if cashflow is not None:
-                    for wc_key in ['Change In Working Capital', 'Changes In Working Capital', 'change_in_working_capital', 'changes_in_working_capital']:
+                    for wc_key in ['change_in_working_capital', 'changes_in_working_capital', 'Change In Working Capital', 'Changes In Working Capital']:
                         if wc_key in cashflow.index:
                             wc_val = cashflow.loc[wc_key, col]
                             break
@@ -397,7 +397,7 @@ class Step6DataReviewProcessor:
                 # 6. Accounts Receivable - try multiple possible field names
                 ar_val = None
                 if balance_sheet is not None:
-                    for ar_key in ['Accounts Receivable', 'Receivables', 'Gross Accounts Receivable', 'accounts_receivable', 'ar', 'receivables']:
+                    for ar_key in ['accounts_receivable', 'ar', 'receivables', 'Accounts Receivable', 'Receivables', 'Gross Accounts Receivable']:
                         if ar_key in balance_sheet.index:
                             ar_val = balance_sheet.loc[ar_key, col]
                             break
@@ -413,7 +413,7 @@ class Step6DataReviewProcessor:
                 # 7. Inventory - try multiple possible field names
                 inv_val = None
                 if balance_sheet is not None:
-                    for inv_key in ['Inventory', 'Inventories', 'inventory', 'inventories']:
+                    for inv_key in ['inventory', 'inventories', 'Inventory', 'Inventories']:
                         if inv_key in balance_sheet.index:
                             inv_val = balance_sheet.loc[inv_key, col]
                             break
@@ -429,7 +429,7 @@ class Step6DataReviewProcessor:
                 # 8. Accounts Payable (for AP Days) - try multiple possible field names
                 ap_val = None
                 if balance_sheet is not None:
-                    for ap_key in ['Accounts Payable', 'Payables', 'Payables And Accrued Expenses', 'accounts_payable', 'ap', 'payables']:
+                    for ap_key in ['accounts_payable', 'ap', 'payables', 'Accounts Payable', 'Payables', 'Payables And Accrued Expenses']:
                         if ap_key in balance_sheet.index:
                             ap_val = balance_sheet.loc[ap_key, col]
                             break
@@ -444,7 +444,7 @@ class Step6DataReviewProcessor:
                 
                 # 9. Interest Expense - try multiple possible field names
                 int_val = None
-                for int_key in ['Interest Expense', 'Interest Expense Non Operating', 'interest_expense', 'Interest Income Net Operating', 'net_interest_income']:
+                for int_key in ['interest_expense', 'Interest Expense', 'Interest Expense Non Operating', 'Interest Income Net Operating', 'net_interest_income']:
                     if int_key in financials.index:
                         int_val = financials.loc[int_key, col]
                         break
@@ -459,7 +459,7 @@ class Step6DataReviewProcessor:
                 
                 # 10. Tax Provision (for effective tax rate) - try multiple possible field names
                 tax_val = None
-                for tax_key in ['Tax Provision', 'Income Tax', 'tax_provision', 'Tax Expense', 'tax_expense', 'income_tax']:
+                for tax_key in ['tax_provision', 'tax_expense', 'income_tax', 'Tax Provision', 'Income Tax', 'Tax Expense']:
                     if tax_key in financials.index:
                         tax_val = financials.loc[tax_key, col]
                         break
@@ -474,7 +474,7 @@ class Step6DataReviewProcessor:
                 
                 # 11. Pre-Tax Income (for effective tax rate) - try multiple possible field names
                 pretax_val = None
-                for pretax_key in ['Pretax Income', 'Pre Tax Income', 'Income Before Tax', 'pretax_income', 'pre_tax_income', 'income_before_tax']:
+                for pretax_key in ['pretax_income', 'pre_tax_income', 'income_before_tax', 'Pretax Income', 'Pre Tax Income', 'Income Before Tax']:
                     if pretax_key in financials.index:
                         pretax_val = financials.loc[pretax_key, col]
                         break
@@ -489,7 +489,7 @@ class Step6DataReviewProcessor:
                 
                 # 12. Cost of Revenue (COGS)
                 cogs_val = None
-                for cogs_key in ['Cost Of Revenue', 'Reconciled Cost Of Revenue', 'cost_of_revenue', 'cogs']:
+                for cogs_key in ['cost_of_revenue', 'cogs', 'Cost Of Revenue', 'Reconciled Cost Of Revenue']:
                     if cogs_key in financials.index:
                         cogs_val = financials.loc[cogs_key, col]
                         break
@@ -504,7 +504,7 @@ class Step6DataReviewProcessor:
                 
                 # 13. Gross Profit
                 gp_val = None
-                for gp_key in ['Gross Profit', 'gross_profit']:
+                for gp_key in ['gross_profit', 'Gross Profit']:
                     if gp_key in financials.index:
                         gp_val = financials.loc[gp_key, col]
                         break
@@ -519,7 +519,7 @@ class Step6DataReviewProcessor:
                 
                 # 14. Operating Expenses
                 opex_val = None
-                for opex_key in ['Operating Expense', 'Total Expenses', 'operating_expense', 'operating_expenses']:
+                for opex_key in ['operating_expense', 'operating_expenses', 'Operating Expense', 'Total Expenses']:
                     if opex_key in financials.index:
                         opex_val = financials.loc[opex_key, col]
                         break
@@ -534,7 +534,7 @@ class Step6DataReviewProcessor:
                 
                 # 15. Research & Development
                 rd_val = None
-                for rd_key in ['Research And Development', 'Research Development', 'research_development']:
+                for rd_key in ['research_development', 'Research And Development', 'Research Development']:
                     if rd_key in financials.index:
                         rd_val = financials.loc[rd_key, col]
                         break
@@ -549,7 +549,7 @@ class Step6DataReviewProcessor:
                 
                 # 16. EBIT / Operating Income
                 ebit_val = None
-                for ebit_key in ['EBIT', 'Operating Income', 'Total Operating Income As Reported', 'ebit', 'operating_income']:
+                for ebit_key in ['ebit', 'operating_income', 'EBIT', 'Operating Income', 'Total Operating Income As Reported']:
                     if ebit_key in financials.index:
                         ebit_val = financials.loc[ebit_key, col]
                         break
@@ -564,7 +564,7 @@ class Step6DataReviewProcessor:
                 
                 # 17. Other Income/Expense
                 other_val = None
-                for other_key in ['Other Income Expense', 'Other Non Operating Income Expenses', 'other_income_expense']:
+                for other_key in ['other_income_expense', 'Other Income Expense', 'Other Non Operating Income Expenses']:
                     if other_key in financials.index:
                         other_val = financials.loc[other_key, col]
                         break
@@ -579,7 +579,7 @@ class Step6DataReviewProcessor:
                 
                 # 18. Net Income
                 ni_val = None
-                for ni_key in ['Net Income Common Stockholders', 'Net Income', 'Diluted NI Availto Com Stockholders', 'net_income']:
+                for ni_key in ['net_income', 'Net Income Common Stockholders', 'Net Income', 'Diluted NI Availto Com Stockholders']:
                     if ni_key in financials.index:
                         ni_val = financials.loc[ni_key, col]
                         break
@@ -594,7 +594,7 @@ class Step6DataReviewProcessor:
                 
                 # 19. Operating Cash Flow
                 ocf_val = None
-                for ocf_key in ['Operating Cash Flow', 'Cash Flow From Continuing Operating Activities', 'operating_cash_flow', 'ocf']:
+                for ocf_key in ['operating_cash_flow', 'ocf', 'Operating Cash Flow', 'Cash Flow From Continuing Operating Activities']:
                     if ocf_key in cashflow.index:
                         ocf_val = cashflow.loc[ocf_key, col]
                         break
