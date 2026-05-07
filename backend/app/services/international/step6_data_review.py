@@ -308,7 +308,8 @@ class Step6DataReviewProcessor:
         if financials is not None:
             for col in financials.columns:
                 year = int(col.year)
-                years.append(year)
+                if year not in years:  # Avoid duplicate years
+                    years.append(year)
                 
                 # 1. Total Revenue - try multiple possible field names (snake_case from yfinance_service)
                 rev_val = None
