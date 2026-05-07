@@ -119,7 +119,32 @@ class Step6DataReviewProcessor:
             yfinance_service = YFinanceService()
             all_data = yfinance_service.fetch_all_data(ticker, market)
             
-            historical_data = historical_data or all_data.get('historical', {})
+            # Convert dict format to DataFrame format expected by _process_dcf_historical
+            # fetch_all_data returns dicts, but the processor expects DataFrames
+            import pandas as pd
+            
+            income_stmt_dict = all_data.get('income_statement', {})
+            balance_sheet_dict = all_data.get('balance_sheet', {})
+            cash_flow_dict = all_data.get('cash_flow', {})
+            
+            # Convert to DataFrame and transpose to match expected format (rows=metrics, cols=years)
+            financials_df = pd.DataFrame(income_stmt_dict).T if income_stmt_dict else None
+            balance_sheet_df = pd.DataFrame(balance_sheet_dict).T if balance_sheet_dict else None
+            cashflow_df = pd.DataFrame(cash_flow_dict).T if cash_flow_dict else None
+            
+            # Convert column strings to datetime for proper year extraction
+            if financials_df is not None:
+                financials_df.columns = pd.to_datetime(financials_df.columns)
+            if balance_sheet_df is not None:
+                balance_sheet_df.columns = pd.to_datetime(balance_sheet_df.columns)
+            if cashflow_df is not None:
+                cashflow_df.columns = pd.to_datetime(cashflow_df.columns)
+            
+            historical_data = historical_data or {
+                'financials': financials_df,
+                'balance_sheet': balance_sheet_df,
+                'cashflow': cashflow_df
+            }
             market_data = market_data or all_data.get('key_stats', {})
             forecast_data = forecast_data or all_data.get('analyst_estimates', {})
             retrieved_assumptions = retrieved_assumptions or {}
