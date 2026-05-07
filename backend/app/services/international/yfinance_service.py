@@ -314,7 +314,7 @@ class YFinanceService:
                 # Non-Operating Items
                 "interest_expense": get_series_raw('Interest Expense'),
                 "interest_income": get_series_raw('Interest Income'),
-                "other_income_expense": get_series_raw('Other Income Expense Net'),
+                "other_income_expense": get_series_raw('Other Income Expense'),
                 
                 # Pre-Tax Income
                 "pretax_income": get_series_raw('Pretax Income'),
@@ -360,8 +360,8 @@ class YFinanceService:
                 # Current Assets Breakdown
                 "cash_and_equivalents": get_series_raw('Cash Cash Equivalents And Short Term Investments'),
                 "cash": get_series_raw('Cash Cash Equivalents And Short Term Investments'),  # Alias
-                "accounts_receivable": get_series_raw('Receivables'),
-                "ar": get_series_raw('Receivables'),  # Alias
+                "accounts_receivable": get_series_raw('Accounts Receivable'),
+                "ar": get_series_raw('Accounts Receivable'),  # Alias
                 "inventory": get_series_raw('Inventory'),
                 "other_current_assets": get_series_raw('Other Current Assets'),
                 
@@ -375,17 +375,17 @@ class YFinanceService:
                 # Liabilities
                 "total_liabilities": get_series_raw('Total Liabilities Net Minority Interest'),
                 "current_liabilities": get_series_raw('Current Liabilities'),
-                "non_current_liabilities": get_series_raw('Non Current Liabilities'),
+                "non_current_liabilities": get_series_raw('Total Non Current Liabilities Net Minority Interest'),
                 
                 # Current Liabilities Breakdown
-                "accounts_payable": get_series_raw('Payables And Accrued Expense'),
-                "ap": get_series_raw('Payables And Accrued Expense'),  # Alias
+                "accounts_payable": get_series_raw('Accounts Payable'),
+                "ap": get_series_raw('Accounts Payable'),  # Alias
                 "short_term_debt": get_series_raw('Current Debt'),
                 "other_current_liabilities": get_series_raw('Other Current Liabilities'),
                 
                 # Non-Current Liabilities
                 "long_term_debt": get_series_raw('Long Term Debt'),
-                "deferred_tax_liabilities": get_series_raw('Tax Liabilities Net'),
+                "deferred_tax_liabilities": get_series_raw('Non Current Deferred Taxes Assets'),
                 "other_non_current_liabilities": get_series_raw('Other Non Current Liabilities'),
                 
                 # Total Debt
@@ -427,15 +427,15 @@ class YFinanceService:
                 "net_income_from_continuing_ops": get_series_raw('Net Income From Continuing Operations'),
                 "depreciation_amortization": get_series_raw('Depreciation Amortization Depletion'),
                 "change_in_working_capital": get_series_raw('Change In Working Capital'),
-                "change_in_ar": get_series_raw('Change In Receivables'),
+                "change_in_ar": get_series_raw('Change In Account Receivable'),
                 "change_in_inventory": get_series_raw('Change In Inventory'),
-                "change_in_ap": get_series_raw('Change In Payables And Accrued Expense'),
+                "change_in_ap": get_series_raw('Change In Account Payable'),
                 
                 # Investing Activities
                 "investing_cash_flow": get_series_raw('Investing Cash Flow'),
-                "capital_expenditure": get_series_raw('Capital Expenditure'),
-                "capex": get_series_raw('Capital Expenditure'),  # Alias
-                "acquisitions": get_series_raw('Acquisitions Net'),
+                "capital_expenditure": get_series_raw('Purchase Of PPE'),
+                "capex": get_series_raw('Purchase Of PPE'),  # Alias
+                "acquisitions": get_series_raw('Purchase Of Business'),
                 "purchase_of_investments": get_series_raw('Purchase Of Investment'),
                 "sale_of_investments": get_series_raw('Sale Of Investment'),
                 "other_investing_activities": get_series_raw('Other Investing Activities'),
@@ -444,7 +444,7 @@ class YFinanceService:
                 "financing_cash_flow": get_series_raw('Financing Cash Flow'),
                 "dividends_paid": get_series_raw('Cash Dividends Paid'),
                 "dividends": get_series_raw('Cash Dividends Paid'),  # Alias
-                "repurchase_of_stock": get_series_raw('Repurchase Of Capital Stock'),
+                "repurchase_of_stock": get_series_raw('Common Stock Payments'),
                 "issuance_of_stock": get_series_raw('Issuance Of Capital Stock'),
                 "repayment_of_debt": get_series_raw('Repayment Of Debt'),
                 "issuance_of_debt": get_series_raw('Issuance Of Debt'),
