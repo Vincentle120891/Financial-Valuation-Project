@@ -27,6 +27,62 @@ const ApiDataStep = ({
   // Check if data has been retrieved
   const hasRetrievedData = historicalData || peerData || dcfInputs || dupontResults || compsResults;
 
+  // Comprehensive list of ALL expected inputs to display (even if missing/errors)
+  const allExpectedInputs = [
+    // Historical Financials - Income Statement
+    { category: 'historical_financials', key: 'revenue', name: 'Total Revenue', patterns: ['Total Revenue', 'total_revenue', 'revenue'] },
+    { category: 'historical_financials', key: 'cogs', name: 'Cost of Revenue (COGS)', patterns: ['COGS', 'cogs', 'Cost Of Revenue', 'cost_of_revenue'] },
+    { category: 'historical_financials', key: 'gross_profit', name: 'Gross Profit', patterns: ['Gross Profit', 'gross_profit'] },
+    { category: 'historical_financials', key: 'operating_expenses', name: 'Operating Expenses', patterns: ['Operating Expenses', 'operating_expenses', 'Operating Expense', 'SG&A', 'sg_and_a', 'Selling General And Administrative'] },
+    { category: 'historical_financials', key: 'research_development', name: 'Research & Development', patterns: ['Research And Development', 'Research Development', 'research_development'] },
+    { category: 'historical_financials', key: 'ebitda', name: 'EBITDA', patterns: ['EBITDA', 'ebitda', 'Normalized EBITDA'] },
+    { category: 'historical_financials', key: 'ebit', name: 'EBIT', patterns: ['EBIT', 'ebit', 'Operating Income', 'operating_income'] },
+    { category: 'historical_financials', key: 'interest_expense', name: 'Interest Expense', patterns: ['Interest Expense', 'interest_expense'] },
+    { category: 'historical_financials', key: 'other_income', name: 'Other Income/Expense', patterns: ['Other Income Expense', 'Other Income Expense Net', 'other_income'] },
+    { category: 'historical_financials', key: 'pretax_income', name: 'Pre-Tax Income', patterns: ['Pre-Tax Income', 'Pretax Income', 'pretax_income'] },
+    { category: 'historical_financials', key: 'tax_provision', name: 'Tax Provision', patterns: ['Tax Provision', 'tax_provision', 'Income Tax'] },
+    { category: 'historical_financials', key: 'net_income', name: 'Net Income', patterns: ['Net Income', 'net_income', 'netIncome'] },
+    { category: 'historical_financials', key: 'depreciation', name: 'Depreciation & Amortization', patterns: ['Depreciation', 'depreciation', 'Depreciation And Amortization', 'depreciation_and_amortization', 'Depreciation Amortization Depletion'] },
+    
+    // Historical Financials - Cash Flow
+    { category: 'historical_financials', key: 'capex', name: 'Capital Expenditures (CapEx)', patterns: ['CapEx', 'capex', 'Capital Expenditures', 'capital_expenditures', 'Purchase Of PPE'] },
+    { category: 'historical_financials', key: 'operating_cash_flow', name: 'Operating Cash Flow', patterns: ['Operating Cash Flow', 'operating_cash_flow'] },
+    { category: 'historical_financials', key: 'free_cash_flow', name: 'Free Cash Flow', patterns: ['Free Cash Flow', 'free_cash_flow', 'fcf'] },
+    { category: 'historical_financials', key: 'working_capital_changes', name: 'Working Capital Changes', patterns: ['Change In Working Capital', 'working_capital_changes'] },
+    
+    // Historical Financials - Balance Sheet (Working Capital)
+    { category: 'historical_financials', key: 'accounts_receivable', name: 'Accounts Receivable', patterns: ['Accounts Receivable', 'accounts_receivable', 'receivables', 'Account Receivable'] },
+    { category: 'historical_financials', key: 'inventory', name: 'Inventory', patterns: ['Inventory', 'inventory', 'inventories'] },
+    { category: 'historical_financials', key: 'accounts_payable', name: 'Accounts Payable', patterns: ['Accounts Payable', 'accounts_payable', 'payables', 'Account Payable'] },
+    { category: 'historical_financials', key: 'cash_equivalents', name: 'Cash & Equivalents', patterns: ['Cash And Cash Equivalents', 'cash_and_cash_equivalents', 'Cash Cash Equivalents And Short Term Investments'] },
+    
+    // Historical Financials - Balance Sheet (Long-term)
+    { category: 'historical_financials', key: 'total_assets', name: 'Total Assets', patterns: ['Total Assets', 'total_assets'] },
+    { category: 'historical_financials', key: 'total_debt', name: 'Total Debt', patterns: ['Total Debt', 'total_debt', 'long_term_debt', 'Current Debt', 'Long Term Debt'] },
+    { category: 'historical_financials', key: 'shareholders_equity', name: 'Shareholders Equity', patterns: ['Shareholders Equity', 'shareholders_equity', 'Stockholders Equity', 'Common Stock Equity'] },
+    { category: 'historical_financials', key: 'retained_earnings', name: 'Retained Earnings', patterns: ['Retained Earnings', 'retained_earnings'] },
+    { category: 'historical_financials', key: 'shares_outstanding', name: 'Shares Outstanding', patterns: ['Ordinary Shares Number', 'shares_outstanding', 'Shares Outstanding'] },
+    
+    // Market Data
+    { category: 'market_data', key: 'current_stock_price', name: 'Current Stock Price', patterns: ['Current Stock Price', 'current_stock_price', 'currentPrice'] },
+    { category: 'market_data', key: 'market_cap', name: 'Market Cap', patterns: ['Market Cap', 'market_cap', 'marketCap'] },
+    { category: 'market_data', key: 'beta', name: 'Beta', patterns: ['Beta', 'beta'] },
+    { category: 'market_data', key: 'risk_free_rate', name: 'Risk-Free Rate', patterns: ['Risk Free Rate', 'risk_free_rate'] },
+    { category: 'market_data', key: 'equity_risk_premium', name: 'Equity Risk Premium', patterns: ['Equity Risk Premium', 'equity_risk_premium'] },
+    
+    // Balance Sheet Opening
+    { category: 'balance_sheet_opening', key: 'net_debt_opening', name: 'Net Debt (Opening)', patterns: ['Net Debt Opening', 'net_debt_opening'] },
+    { category: 'balance_sheet_opening', key: 'ppe_gross', name: 'PP&E (Gross)', patterns: ['PP&E Gross', 'ppe_gross', 'Net PPE'] },
+    { category: 'balance_sheet_opening', key: 'accumulated_depreciation', name: 'Accumulated Depreciation', patterns: ['Accumulated Depreciation', 'accumulated_depreciation'] },
+    
+    // Peer Comparables for WACC
+    { category: 'peer_comparables', key: 'peer_market_caps', name: 'Peer Market Caps', patterns: ['Peer Market Caps', 'peer_market_caps'] },
+    { category: 'peer_comparables', key: 'peer_betas', name: 'Peer Betas', patterns: ['Peer Betas', 'peer_betas'] },
+    { category: 'peer_comparables', key: 'peer_total_debt', name: 'Peer Total Debt', patterns: ['Peer Total Debt', 'peer_total_debt'] },
+    { category: 'peer_comparables', key: 'peer_cash', name: 'Peer Cash', patterns: ['Peer Cash', 'peer_cash'] },
+    { category: 'peer_comparables', key: 'peer_tax_rates', name: 'Peer Tax Rates', patterns: ['Peer Tax Rates', 'peer_tax_rates'] },
+  ];
+
   // Helper function to extract values from data_fields array format used by backend
   // Backend returns: { years: [2020, 2021], data_fields: [{ field_name: 'Revenue_2020', value: 100 }, ...] }
   // Frontend expects: { revenue: { 2020: 100, 2021: 110 }, ... }
@@ -83,8 +139,122 @@ const ApiDataStep = ({
     return `${(num * 100).toFixed(2)}%`;
   };
 
-  // Render historical financials with detailed numbers
-  const renderHistoricalData = () => {
+  // Render ALL expected inputs with clear status indicators (shows missing/errors explicitly)
+  const renderAllInputs = () => {
+    if (!historicalData || !historicalData.data_fields) {
+      return (
+        <div className="summary-box" style={{ background: '#ffebee', marginBottom: '20px' }}>
+          <h3>⚠️ No Data Retrieved</h3>
+          <p style={{ color: '#c62828' }}>Unable to display inputs. Please check if data was successfully fetched from APIs.</p>
+        </div>
+      );
+    }
+
+    // Group inputs by category
+    const categories = [...new Set(allExpectedInputs.map(input => input.category))];
+
+    return (
+      <div style={{ marginBottom: '20px' }}>
+        {categories.map(category => {
+          const categoryInputs = allExpectedInputs.filter(input => input.category === category);
+          const categoryTitle = category.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+          
+          return (
+            <div key={category} className="summary-box" style={{ 
+              background: category === 'historical_financials' ? 'linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%)' :
+                         category === 'market_data' ? 'linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%)' :
+                         category === 'balance_sheet_opening' ? 'linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%)' :
+                         'linear-gradient(135deg, #f3e5f5 0%, #e1bee7 100%)',
+              marginBottom: '20px'
+            }}>
+              <h3 style={{ marginBottom: '16px' }}>
+                {category === 'historical_financials' && '📊 '}
+                {category === 'market_data' && '📈 '}
+                {category === 'balance_sheet_opening' && '📋 '}
+                {category === 'peer_comparables' && '🏢 '}
+                {categoryTitle}
+              </h3>
+              
+              <div style={{ display: 'grid', gap: '12px' }}>
+                {categoryInputs.map(input => {
+                  // Try to get values using the patterns
+                  const values = getFieldValues(historicalData, input.patterns);
+                  const hasData = values && Object.keys(values).length > 0;
+                  const years = historicalData.years || [];
+                  
+                  return (
+                    <div key={input.key} style={{ 
+                      background: 'white', 
+                      padding: '12px', 
+                      borderRadius: '6px',
+                      border: hasData ? '2px solid #4caf50' : '2px dashed #ff9800',
+                      opacity: hasData ? 1 : 0.7
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                        <strong style={{ color: hasData ? '#2e7d32' : '#f57c00' }}>
+                          {input.name}
+                        </strong>
+                        {hasData ? (
+                          <span style={{ 
+                            background: '#4caf50', 
+                            color: 'white', 
+                            padding: '2px 8px', 
+                            borderRadius: '4px', 
+                            fontSize: '11px',
+                            fontWeight: 600
+                          }}>✓ FETCHED</span>
+                        ) : (
+                          <span style={{ 
+                            background: '#ff9800', 
+                            color: 'white', 
+                            padding: '2px 8px', 
+                            borderRadius: '4px', 
+                            fontSize: '11px',
+                            fontWeight: 600
+                          }}>⚠ MISSING</span>
+                        )}
+                      </div>
+                      
+                      {hasData ? (
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: '6px' }}>
+                          {Object.entries(values).map(([year, value]) => (
+                            <div key={year} style={{ textAlign: 'center', padding: '6px', background: '#f5f5f5', borderRadius: '4px' }}>
+                              <small style={{ color: '#999', display: 'block', fontSize: '11px' }}>{year}</small>
+                              <span style={{ 
+                                color: typeof value === 'number' && value < 0 ? '#f44336' : '#1976d2',
+                                fontWeight: 600,
+                                fontSize: '12px'
+                              }}>
+                                {formatCurrency(value)}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div style={{ 
+                          textAlign: 'center', 
+                          padding: '12px', 
+                          background: '#fff3e0', 
+                          borderRadius: '4px',
+                          color: '#e65100',
+                          fontSize: '13px'
+                        }}>
+                          ⚠️ This data point was not retrieved from the API. You may need to manually input it in the next step.
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  // Render historical financials with detailed numbers (legacy view - kept for backward compatibility)
+  const renderHistoricalDataLegacy = () => {
 
     // Handle both old format (revenue: {2020: 100}) and new format (data_fields array)
     // Extract data using getFieldValues helper for new backend format
@@ -820,7 +990,7 @@ const ApiDataStep = ({
         </div>
       ) : (
         <>
-          {renderHistoricalData()}
+          {renderAllInputs()}
           {renderForecastDrivers()}
           {renderPeerData()}
           {renderDcfInputs()}
