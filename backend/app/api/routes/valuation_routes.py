@@ -185,9 +185,21 @@ async def generate_ai_assumptions(request: GenerateAIRequest):
         session_service.update_session_data(request.session_id, "ai_suggestions", result)
         session_service.update_session_data(request.session_id, "status", "ai_ready")
         
+        # Convert AISuggestionResponse to dict for GenerateAIResponse
+        # Ensure we get a proper dict, not a Pydantic model
+        if hasattr(result, 'model_dump'):
+            suggestions_dict = result.model_dump()
+        elif hasattr(result, 'dict'):
+            suggestions_dict = result.dict()
+        else:
+            suggestions_dict = dict(result) if isinstance(result, dict) else str(result)
+        
+        # Debug log to verify conversion
+        logger.info(f"Converted suggestions type: {type(suggestions_dict)}, keys: {suggestions_dict.keys() if isinstance(suggestions_dict, dict) else 'N/A'}")
+        
         return GenerateAIResponse(
             status="ai_ready",
-            suggestions=result,
+            suggestions=suggestions_dict,
             message="AI analysis complete. Please review assumptions.",
             _metadata={"model_version": "v2.0"}
         )
