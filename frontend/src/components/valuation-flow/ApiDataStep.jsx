@@ -95,7 +95,10 @@ const ApiDataStep = ({
     data.data_fields.forEach(field => {
       const matchedPattern = patterns.find(pattern => {
         if (typeof pattern === 'string') {
-          return field.field_name === pattern || field.field_name.startsWith(pattern + '_');
+          // Check field_name and display_name for match
+          return field.field_name === pattern || 
+                 field.field_name.startsWith(pattern + '_') ||
+                 (field.display_name && field.display_name === pattern);
         }
         if (pattern instanceof RegExp) {
           return pattern.test(field.field_name);
@@ -112,6 +115,9 @@ const ApiDataStep = ({
           // Handle special cases for key naming
           if (key === 'total revenue') key = 'revenue';
           result[year] = field.value;
+        } else {
+          // Non-yearly field, use the value directly
+          result['value'] = field.value;
         }
       }
     });

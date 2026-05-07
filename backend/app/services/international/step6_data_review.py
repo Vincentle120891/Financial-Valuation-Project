@@ -25,6 +25,7 @@ class DataStatus(str, Enum):
 class DataField(BaseModel):
     """A single data field with status tracking"""
     field_name: str
+    display_name: Optional[str] = None
     value: Optional[Any] = None
     unit: str = ""
     status: DataStatus
@@ -317,6 +318,7 @@ class Step6DataReviewProcessor:
                         break
                 data_fields.append(DataField(
                     field_name=f"Revenue_{year}",
+                    display_name="Total Revenue",
                     value=rev_val,
                     unit="USD",
                     status=DataStatus.RETRIEVED if rev_val else DataStatus.MISSING,
@@ -332,6 +334,7 @@ class Step6DataReviewProcessor:
                         break
                 data_fields.append(DataField(
                     field_name=f"EBITDA_{year}",
+                    display_name="EBITDA",
                     value=ebitda_val,
                     unit="USD",
                     status=DataStatus.RETRIEVED if ebitda_val else DataStatus.MISSING,
