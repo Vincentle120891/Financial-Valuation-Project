@@ -13,7 +13,7 @@ Endpoint Organization:
 Total: ~33 granular endpoints for precise frontend integration
 """
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Path
 from typing import Optional, Dict, Any, List
 from pydantic import BaseModel
 import logging
@@ -261,7 +261,7 @@ async def get_vietnam_market_info(market_code: str):
 
 @router.get("/market-data/{ticker}/profile")
 async def get_company_profile(
-    ticker: str = Query(..., description="Ticker symbol"),
+    ticker: str = Path(..., description="Ticker symbol"),
     market_code: str = Query("VN", description="Market code")
 ):
     """
