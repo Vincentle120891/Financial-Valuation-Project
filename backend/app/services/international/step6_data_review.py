@@ -78,7 +78,7 @@ class Step6DataReviewResponse(BaseModel):
     calculated_metrics: Optional[CalculatedMetricsDisplay] = None
     missing_data_summary: Optional[MissingDataSummary] = None
     manual_overrides_applied: Dict[str, Any] = {}
-    ready_for_ai_suggestions: bool = False
+    data_complete: bool = False
     message: str = ""
 
 
@@ -188,8 +188,8 @@ class Step6DataReviewProcessor:
             calculated_metrics=calculated_display,
             missing_data_summary=missing_summary,
             manual_overrides_applied=user_overrides,
-            ready_for_ai_suggestions=ready,
-            message="Data aggregated successfully. Ready for AI suggestions in Step 7." if ready else "Missing critical data. Please retrieve missing inputs."
+            data_complete=ready,
+            message="Data aggregated successfully. Ready for next steps." if ready else "Missing critical data. Please retrieve missing inputs."
         )
     
     async def _process_dupont_data_review(
@@ -226,8 +226,8 @@ class Step6DataReviewProcessor:
             calculated_metrics=calculated_display,
             missing_data_summary=missing_summary,
             manual_overrides_applied=user_overrides,
-            ready_for_ai_suggestions=ready,
-            message="Data aggregated successfully. Ready for AI suggestions in Step 7." if ready else "Missing critical data. Please retrieve missing inputs."
+            data_complete=ready,
+            message="Data aggregated successfully. Ready for next steps." if ready else "Missing critical data. Please retrieve missing inputs."
         )
     
     async def _process_comps_data_review(
@@ -264,8 +264,8 @@ class Step6DataReviewProcessor:
             calculated_metrics=calculated_display,
             missing_data_summary=missing_summary,
             manual_overrides_applied=user_overrides,
-            ready_for_ai_suggestions=ready,
-            message="Data aggregated successfully. Ready for AI suggestions in Step 7." if ready else "Missing critical data. Please retrieve missing inputs."
+            data_complete=ready,
+            message="Data aggregated successfully. Ready for next steps." if ready else "Missing critical data. Please retrieve missing inputs."
         )
     
     # === Helper Methods for DCF ===
@@ -660,19 +660,6 @@ class Step6DataReviewProcessor:
                 is_critical=False
             ))
         
-        # Calculate Enterprise Value (if market cap and net debt available)
-        if market.market_cap and market.total_debt and market.cash and net_debt is not None:
-            ev = market.market_cap.value + net_debt
-            fields.append(DataField(
-                field_name="Enterprise Value",
-                value=ev,
-                unit="USD",
-                status=DataStatus.CALCULATED,
-                source="Step 6 Calculation",
-                formula="Market Cap + Net Debt",
-                is_critical=False
-            ))
-        
         # Calculate historical growth rates (YoY)
         if len(revenues) >= 2:
             revenue_growth = (revenues[-1] - revenues[0]) / revenues[0]
@@ -1054,17 +1041,6 @@ class Step6DataReviewProcessor:
             unit="USD",
             status=DataStatus.RETRIEVED if mcap else DataStatus.MISSING,
             source="yfinance" if mcap else None,
-            is_critical=True
-        ))
-        
-        # Enterprise Value
-        ev = info.get('enterpriseValue')
-        data_fields.append(DataField(
-            field_name="Enterprise Value",
-            value=ev,
-            unit="USD",
-            status=DataStatus.RETRIEVED if ev else DataStatus.MISSING,
-            source="yfinance" if ev else None,
             is_critical=True
         ))
         
