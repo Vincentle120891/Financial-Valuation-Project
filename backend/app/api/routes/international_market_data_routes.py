@@ -1175,7 +1175,7 @@ async def get_vietnam_sector_stocks(sector_name: str):
 
 @router.get("/data/{ticker}/dcf/historical-financials")
 async def get_dcf_historical_financials(
-    ticker: str,
+    ticker: str = Path(..., description="Ticker symbol"),
     market_code: str = Query("VN", description="Market code")
 ):
     """
@@ -1214,7 +1214,7 @@ async def get_dcf_historical_financials(
 
 @router.get("/data/{ticker}/dcf/growth-rates")
 async def get_dcf_growth_rates(
-    ticker: str,
+    ticker: str = Path(..., description="Ticker symbol"),
     market_code: str = Query("VN", description="Market code")
 ):
     """
@@ -1247,7 +1247,7 @@ async def get_dcf_growth_rates(
 
 @router.get("/data/{ticker}/dcf/margins")
 async def get_dcf_margins(
-    ticker: str,
+    ticker: str = Path(..., description="Ticker symbol"),
     market_code: str = Query("VN", description="Market code")
 ):
     """
@@ -1281,7 +1281,7 @@ async def get_dcf_margins(
 
 @router.get("/data/{ticker}/dcf/working-capital")
 async def get_dcf_working_capital(
-    ticker: str,
+    ticker: str = Path(..., description="Ticker symbol"),
     market_code: str = Query("VN", description="Market code")
 ):
     """
@@ -1316,7 +1316,7 @@ async def get_dcf_working_capital(
 
 @router.get("/data/{ticker}/dcf/capex")
 async def get_dcf_capex(
-    ticker: str,
+    ticker: str = Path(..., description="Ticker symbol"),
     market_code: str = Query("VN", description="Market code")
 ):
     """
@@ -1350,7 +1350,7 @@ async def get_dcf_capex(
 
 @router.get("/data/{ticker}/dcf/debt-metrics")
 async def get_dcf_debt_metrics(
-    ticker: str,
+    ticker: str = Path(..., description="Ticker symbol"),
     market_code: str = Query("VN", description="Market code")
 ):
     """
@@ -1385,7 +1385,7 @@ async def get_dcf_debt_metrics(
 
 @router.get("/data/{ticker}/dcf/wacc-inputs")
 async def get_dcf_wacc_inputs(
-    ticker: str,
+    ticker: str = Path(..., description="Ticker symbol"),
     market_code: str = Query("VN", description="Market code")
 ):
     """
@@ -1437,7 +1437,7 @@ async def get_dcf_wacc_inputs(
 
 @router.get("/data/{ticker}/comps/peer-list")
 async def get_comps_peer_list(
-    ticker: str,
+    ticker: str = Path(..., description="Ticker symbol"),
     market_code: str = Query("VN", description="Market code"),
     sector: Optional[str] = Query(None, description="Filter by sector")
 ):
@@ -1486,7 +1486,7 @@ async def get_comps_peer_list(
 
 @router.get("/data/{ticker}/comps/peer-multiples")
 async def get_comps_peer_multiples(
-    ticker: str,
+    ticker: str = Path(..., description="Ticker symbol"),
     market_code: str = Query("VN", description="Market code"),
     peer_tickers: Optional[str] = Query(None, description="Comma-separated peer tickers")
 ):
@@ -1559,7 +1559,7 @@ async def get_comps_peer_multiples(
 
 @router.get("/data/{ticker}/comps/target-metrics")
 async def get_comps_target_metrics(
-    ticker: str,
+    ticker: str = Path(..., description="Ticker symbol"),
     market_code: str = Query("VN", description="Market code")
 ):
     """
@@ -1608,7 +1608,7 @@ async def get_comps_target_metrics(
 
 @router.get("/data/{ticker}/dupont/profitability")
 async def get_dupont_profitability(
-    ticker: str,
+    ticker: str = Path(..., description="Ticker symbol"),
     market_code: str = Query("VN", description="Market code"),
     years: Optional[int] = Query(5, description="Number of years")
 ):
@@ -1647,7 +1647,7 @@ async def get_dupont_profitability(
 
 @router.get("/data/{ticker}/dupont/efficiency")
 async def get_dupont_efficiency(
-    ticker: str,
+    ticker: str = Path(..., description="Ticker symbol"),
     market_code: str = Query("VN", description="Market code"),
     years: Optional[int] = Query(5, description="Number of years")
 ):
@@ -1695,7 +1695,7 @@ async def get_dupont_efficiency(
 
 @router.get("/data/{ticker}/dupont/leverage")
 async def get_dupont_leverage(
-    ticker: str,
+    ticker: str = Path(..., description="Ticker symbol"),
     market_code: str = Query("VN", description="Market code"),
     years: Optional[int] = Query(5, description="Number of years")
 ):
@@ -1741,7 +1741,7 @@ async def get_dupont_leverage(
 
 @router.get("/data/{ticker}/dupont/roe-decomposition")
 async def get_dupont_roe_decomposition(
-    ticker: str,
+    ticker: str = Path(..., description="Ticker symbol"),
     market_code: str = Query("VN", description="Market code")
 ):
     """
@@ -1799,7 +1799,7 @@ async def get_dupont_roe_decomposition(
 
 @router.get("/data/{ticker}/initialize-dcf")
 async def initialize_dcf_model(
-    ticker: str,
+    ticker: str = Path(..., description="Ticker symbol"),
     market_code: str = Query("VN", description="Market code")
 ):
     """
@@ -1855,7 +1855,7 @@ async def initialize_dcf_model(
 
 @router.get("/data/{ticker}/initialize-comps")
 async def initialize_comps_model(
-    ticker: str,
+    ticker: str = Path(..., description="Ticker symbol"),
     market_code: str = Query("VN", description="Market code")
 ):
     """
@@ -1912,7 +1912,7 @@ async def initialize_comps_model(
 
 @router.get("/data/{ticker}/initialize-dupont")
 async def initialize_dupont_model(
-    ticker: str,
+    ticker: str = Path(..., description="Ticker symbol"),
     market_code: str = Query("VN", description="Market code")
 ):
     """
