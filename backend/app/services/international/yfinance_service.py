@@ -1,5 +1,5 @@
 """
-YFinance Service - Step 5A: API Fetch
+YFinance Service - Step 5A: API Fetch (Primary Source)
 
 Fetches ALL available raw data from yfinance free tier:
     - Income Statement: Revenue, COGS, EBITDA, EBIT, Net Income, Interest Expense*, D&A
@@ -19,6 +19,15 @@ DATA LIMITATIONS (CANNOT be fetched from yfinance):
     - Segment Data - Not available in yfinance free tier
     - Management Guidance - Not available, requires SEC filings or company reports
 
+ENHANCED WITH ALPHAVANTAGE FALLBACK:
+    This service now integrates with AlphaVantageService for:
+    - Fallback when yfinance fails to fetch data
+    - Enhanced coverage for international stocks
+    - Cross-validation of critical financial metrics
+    - Additional analyst ratings data
+    
+    Cascade: yfinance (primary) -> AlphaVantage (fallback) -> Error
+
 VIETNAM MARKET ENHANCEMENT:
     For Vietnamese stocks, this service now integrates with VietnamDataAggregator
     which provides cascading fallback: vnstock (primary) -> yfinance (fallback).
@@ -32,19 +41,26 @@ logger = logging.getLogger(__name__)
 
 
 class YFinanceService:
-    """Service for fetching financial data from yfinance."""
+    """Service for fetching financial data from yfinance with AlphaVantage fallback."""
     
-    def __init__(self):
+    def __init__(self, enable_alphavantage_fallback: bool = True):
         self.ticker = None
         self.info = None
         self.financials = None
         self.balance_sheet = None
         self.cashflow = None
         self.estimates = None
+        self.enable_alphavantage_fallback = enable_alphavantage_fallback
+        self.alphavantage_service = None
     
     def fetch_all_data(self, ticker_symbol: str, market: str = "international") -> Dict[str, Any]:
         """
-        Fetch all available financial data from yfinance.
+        Fetch all available financial data from yfinance with AlphaVantage fallback.
+        
+        Data source cascade:
+        1. yfinance (primary) - Most comprehensive free data
+        2. AlphaVantage (fallback) - Better for some international stocks
+        3. Vietnamese market: vnstock -> yfinance -> AlphaVantage
         
         For Vietnamese markets, uses VietnamDataAggregator with cascading fallback:
         vnstock (primary) -> yfinance (fallback).
@@ -65,37 +81,121 @@ class YFinanceService:
             if market == "vietnamese":
                 return self._fetch_vietnamese_enhanced(ticker_symbol)
             
-            # Append .VN for Vietnamese stocks if not already present (legacy support)
-            if market == "vietnamese" and not ticker_symbol.endswith(".VN"):
-                ticker_symbol += ".VN"
+            # Try yfinance first (primary source)
+            data_package = self._fetch_yfinance_primary(ticker_symbol, market, yf)
             
-            self.ticker = yf.Ticker(ticker_symbol)
-            
-            # Fetch all data categories
-            self.info = self._fetch_key_stats()
-            self.financials = self._fetch_income_statement()
-            self.balance_sheet = self._fetch_balance_sheet()
-            self.cashflow = self._fetch_cash_flow()
-            self.estimates = self._fetch_analyst_estimates()
-            
-            # Compile comprehensive data package
-            data_package = {
-                "symbol": ticker_symbol,
-                "fetch_timestamp": datetime.now().isoformat(),
-                "market": market,
-                "key_stats": self.info,
-                "income_statement": self.financials,
-                "balance_sheet": self.balance_sheet,
-                "cash_flow": self.cashflow,
-                "analyst_estimates": self.estimates,
-            }
-            
-            logger.info(f"Successfully fetched all data for ticker='{ticker_symbol}'")
-            return data_package
+            if data_package and self._validate_data_quality(data_package):
+                # Optionally enhance with AlphaVantage data
+                if self.enable_alphavantage_fallback:
+                    data_package = self._enhance_with_alphavantage(data_package, ticker_symbol, market)
+                
+                logger.info(f"Successfully fetched all data for ticker='{ticker_symbol}'")
+                return data_package
+            else:
+                # yfinance returned poor quality data, try AlphaVantage
+                if self.enable_alphavantage_fallback:
+                    logger.warning(f"yfinance data quality low for {ticker_symbol}, trying AlphaVantage fallback")
+                    av_data = self._fetch_alphavantage_fallback(ticker_symbol, market)
+                    if av_data:
+                        logger.info(f"Successfully fetched fallback data from AlphaVantage for {ticker_symbol}")
+                        return av_data
+                
+                # Return whatever we have, even if incomplete
+                return data_package
             
         except Exception as e:
             logger.error(f"Failed to fetch yfinance data for ticker='{ticker_symbol}': {str(e)}")
+            # On complete failure, try AlphaVantage as emergency fallback
+            if self.enable_alphavantage_fallback:
+                logger.info(f"Attempting AlphaVantage emergency fallback for {ticker_symbol}")
+                av_data = self._fetch_alphavantage_fallback(ticker_symbol, market)
+                if av_data:
+                    return av_data
             raise
+    
+    def _fetch_yfinance_primary(self, ticker_symbol: str, market: str, yf) -> Dict[str, Any]:
+        """Fetch data from yfinance as primary source."""
+        self.ticker = yf.Ticker(ticker_symbol)
+        
+        # Fetch all data categories
+        self.info = self._fetch_key_stats()
+        self.financials = self._fetch_income_statement()
+        self.balance_sheet = self._fetch_balance_sheet()
+        self.cashflow = self._fetch_cash_flow()
+        self.estimates = self._fetch_analyst_estimates()
+        
+        # Compile comprehensive data package
+        data_package = {
+            "symbol": ticker_symbol,
+            "fetch_timestamp": datetime.now().isoformat(),
+            "market": market,
+            "data_sources": ["yfinance"],
+            "key_stats": self.info,
+            "income_statement": self.financials,
+            "balance_sheet": self.balance_sheet,
+            "cash_flow": self.cashflow,
+            "analyst_estimates": self.estimates,
+        }
+        
+        return data_package
+    
+    def _validate_data_quality(self, data_package: Dict[str, Any]) -> bool:
+        """
+        Validate minimum data quality requirements.
+        
+        Returns True if data meets minimum thresholds, False otherwise.
+        """
+        # Check for critical fields
+        key_stats = data_package.get('key_stats', {})
+        income_stmt = data_package.get('income_statement', {})
+        
+        # Must have at least revenue data
+        has_revenue = bool(income_stmt.get('total_revenue'))
+        
+        # Must have some key stats
+        has_price = key_stats.get('current_price') is not None
+        
+        return has_revenue or has_price
+    
+    def _enhance_with_alphavantage(self, data_package: Dict[str, Any], ticker_symbol: str, market: str) -> Dict[str, Any]:
+        """Enhance yfinance data with supplementary AlphaVantage data."""
+        try:
+            av_data = self._get_alphavantage_service().fetch_all_data(ticker_symbol, market)
+            
+            if not av_data:
+                return data_package
+            
+            # Use merge function from AlphaVantageService
+            merged = self._get_alphavantage_service().merge_with_yfinance(data_package, av_data)
+            logger.info(f"Enhanced yfinance data with AlphaVantage for {ticker_symbol}")
+            return merged
+            
+        except Exception as e:
+            logger.warning(f"Failed to enhance with AlphaVantage: {e}")
+            return data_package
+    
+    def _fetch_alphavantage_fallback(self, ticker_symbol: str, market: str) -> Optional[Dict[str, Any]]:
+        """Fetch data from AlphaVantage as fallback when yfinance fails."""
+        try:
+            av_service = self._get_alphavantage_service()
+            av_data = av_service.fetch_all_data(ticker_symbol, market)
+            
+            if av_data:
+                av_data['data_sources'] = ['alphavantage']
+                av_data['fallback_used'] = True
+            
+            return av_data
+            
+        except Exception as e:
+            logger.error(f"AlphaVantage fallback failed: {e}")
+            return None
+    
+    def _get_alphavantage_service(self):
+        """Lazy initialization of AlphaVantage service."""
+        if self.alphavantage_service is None:
+            from .alphavantage_service import AlphaVantageService
+            self.alphavantage_service = AlphaVantageService()
+        return self.alphavantage_service
     
     def _fetch_vietnamese_enhanced(self, ticker_symbol: str) -> Dict[str, Any]:
         """
@@ -302,11 +402,11 @@ class YFinanceService:
                 # Operating Expenses
                 "operating_expense": get_series_raw('Operating Expense'),
                 "selling_general_administrative": get_series_raw('Selling General And Administrative'),
-                "research_development": get_series_raw('Research Development'),
+                "research_development": get_series_raw('Research And Development'),
                 
                 # Operating Income
                 "operating_income": get_series_raw('Operating Income'),
-                "ebit": get_series_raw('Ebit'),  # Alias
+                "ebit": get_series_raw('EBIT'),  # Alias
                 
                 # EBITDA
                 "ebitda": get_series_raw('EBITDA'),
@@ -314,7 +414,7 @@ class YFinanceService:
                 # Non-Operating Items
                 "interest_expense": get_series_raw('Interest Expense'),
                 "interest_income": get_series_raw('Interest Income'),
-                "other_income_expense": get_series_raw('Other Income Expense Net'),
+                "other_income_expense": get_series_raw('Other Income Expense'),
                 
                 # Pre-Tax Income
                 "pretax_income": get_series_raw('Pretax Income'),
@@ -360,8 +460,8 @@ class YFinanceService:
                 # Current Assets Breakdown
                 "cash_and_equivalents": get_series_raw('Cash Cash Equivalents And Short Term Investments'),
                 "cash": get_series_raw('Cash Cash Equivalents And Short Term Investments'),  # Alias
-                "accounts_receivable": get_series_raw('Receivables'),
-                "ar": get_series_raw('Receivables'),  # Alias
+                "accounts_receivable": get_series_raw('Accounts Receivable'),
+                "ar": get_series_raw('Accounts Receivable'),  # Alias
                 "inventory": get_series_raw('Inventory'),
                 "other_current_assets": get_series_raw('Other Current Assets'),
                 
@@ -375,17 +475,17 @@ class YFinanceService:
                 # Liabilities
                 "total_liabilities": get_series_raw('Total Liabilities Net Minority Interest'),
                 "current_liabilities": get_series_raw('Current Liabilities'),
-                "non_current_liabilities": get_series_raw('Non Current Liabilities'),
+                "non_current_liabilities": get_series_raw('Total Non Current Liabilities Net Minority Interest'),
                 
                 # Current Liabilities Breakdown
-                "accounts_payable": get_series_raw('Payables And Accrued Expenses'),
-                "ap": get_series_raw('Payables And Accrued Expenses'),  # Alias
+                "accounts_payable": get_series_raw('Accounts Payable'),
+                "ap": get_series_raw('Accounts Payable'),  # Alias
                 "short_term_debt": get_series_raw('Current Debt'),
                 "other_current_liabilities": get_series_raw('Other Current Liabilities'),
                 
                 # Non-Current Liabilities
                 "long_term_debt": get_series_raw('Long Term Debt'),
-                "deferred_tax_liabilities": get_series_raw('Tax Liabilities Net'),
+                "deferred_tax_liabilities": get_series_raw('Non Current Deferred Taxes Assets'),
                 "other_non_current_liabilities": get_series_raw('Other Non Current Liabilities'),
                 
                 # Total Debt
@@ -427,15 +527,15 @@ class YFinanceService:
                 "net_income_from_continuing_ops": get_series_raw('Net Income From Continuing Operations'),
                 "depreciation_amortization": get_series_raw('Depreciation Amortization Depletion'),
                 "change_in_working_capital": get_series_raw('Change In Working Capital'),
-                "change_in_ar": get_series_raw('Change In Receivables'),
+                "change_in_ar": get_series_raw('Change In Account Receivable'),
                 "change_in_inventory": get_series_raw('Change In Inventory'),
-                "change_in_ap": get_series_raw('Change In Payables And Accrued Expense'),
+                "change_in_ap": get_series_raw('Change In Account Payable'),
                 
                 # Investing Activities
                 "investing_cash_flow": get_series_raw('Investing Cash Flow'),
-                "capital_expenditure": get_series_raw('Capital Expenditure'),
-                "capex": get_series_raw('Capital Expenditure'),  # Alias
-                "acquisitions": get_series_raw('Acquisitions Net'),
+                "capital_expenditure": get_series_raw('Purchase Of PPE'),
+                "capex": get_series_raw('Purchase Of PPE'),  # Alias
+                "acquisitions": get_series_raw('Purchase Of Business'),
                 "purchase_of_investments": get_series_raw('Purchase Of Investment'),
                 "sale_of_investments": get_series_raw('Sale Of Investment'),
                 "other_investing_activities": get_series_raw('Other Investing Activities'),
@@ -444,7 +544,7 @@ class YFinanceService:
                 "financing_cash_flow": get_series_raw('Financing Cash Flow'),
                 "dividends_paid": get_series_raw('Cash Dividends Paid'),
                 "dividends": get_series_raw('Cash Dividends Paid'),  # Alias
-                "repurchase_of_stock": get_series_raw('Repurchase Of Capital Stock'),
+                "repurchase_of_stock": get_series_raw('Common Stock Payments'),
                 "issuance_of_stock": get_series_raw('Issuance Of Capital Stock'),
                 "repayment_of_debt": get_series_raw('Repayment Of Debt'),
                 "issuance_of_debt": get_series_raw('Issuance Of Debt'),

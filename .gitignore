@@ -1,1 +1,46 @@
-Nothing should be ignored in this case, as only a source code file (`backend/app/main.py`) was modified and there are no build artifacts, dependencies, or temporary files in the changes.
+# Compiled Python files
+*.pyc
+__pycache__/
+
+# Dependencies
+venv/
+.venv/
+
+# Logs
+*.log
+
+# Environment files
+.env
+.env.local
+*.env.*
+
+# Editor/IDE
+.vscode/
+.idea/
+
+# Python cache
+.mypy_cache/
+.pytest_cache/
+__pycache__/
+
+# Build/dist directories
+dist/
+build/
+target/
+
+# Node dependencies (if any)
+node_modules/
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Coverage reports
+coverage/
+htmlcov/
+.coverage
+
+# Temporary files
+*.tmp
+*.swp
+*.swo
