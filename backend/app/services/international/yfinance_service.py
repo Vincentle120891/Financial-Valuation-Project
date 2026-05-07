@@ -302,11 +302,11 @@ class YFinanceService:
                 # Operating Expenses
                 "operating_expense": get_series_raw('Operating Expense'),
                 "selling_general_administrative": get_series_raw('Selling General And Administrative'),
-                "research_development": get_series_raw('Research Development'),
+                "research_development": get_series_raw('Research And Development'),
                 
                 # Operating Income
                 "operating_income": get_series_raw('Operating Income'),
-                "ebit": get_series_raw('Ebit'),  # Alias
+                "ebit": get_series_raw('EBIT'),  # Alias
                 
                 # EBITDA
                 "ebitda": get_series_raw('EBITDA'),
@@ -378,8 +378,8 @@ class YFinanceService:
                 "non_current_liabilities": get_series_raw('Non Current Liabilities'),
                 
                 # Current Liabilities Breakdown
-                "accounts_payable": get_series_raw('Payables And Accrued Expenses'),
-                "ap": get_series_raw('Payables And Accrued Expenses'),  # Alias
+                "accounts_payable": get_series_raw('Payables And Accrued Expense'),
+                "ap": get_series_raw('Payables And Accrued Expense'),  # Alias
                 "short_term_debt": get_series_raw('Current Debt'),
                 "other_current_liabilities": get_series_raw('Other Current Liabilities'),
                 
