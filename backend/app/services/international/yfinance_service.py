@@ -426,9 +426,9 @@ class YFinanceService:
                 "diluted_eps": get_series_raw('Diluted EPS'),
                 "basic_eps": get_series_raw('Basic EPS'),
                 
-                # Depreciation & Amortization
-                "depreciation_amortization": get_series_raw('Depreciation Amortization Depletion', ['Reconciled Depreciation', 'Depreciation And Amortization']),
-                "d_and_a": get_series_raw('Depreciation Amortization Depletion'),  # Alias
+                # Depreciation & Amortization (try income statement first, then cash flow)
+                "depreciation_amortization": get_series_raw('Reconciled Depreciation', ['Depreciation Amortization Depletion', 'Depreciation And Amortization']),
+                "d_and_a": get_series_raw('Reconciled Depreciation', ['Depreciation Amortization Depletion']),  # Alias
             }
         except Exception as e:
             logger.warning(f"Error fetching income statement: {str(e)}")
