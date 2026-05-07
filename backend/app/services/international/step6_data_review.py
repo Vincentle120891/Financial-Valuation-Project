@@ -1092,6 +1092,7 @@ class Step6DataReviewProcessor:
                 ni_val = financials.loc['Net Income', col] if 'Net Income' in financials.index else None
                 data_fields.append(DataField(
                     field_name=f"Net_Income_{year}",
+                    display_name="Net Income",
                     value=ni_val,
                     unit="USD",
                     status=DataStatus.RETRIEVED if ni_val else DataStatus.MISSING,
@@ -1103,6 +1104,7 @@ class Step6DataReviewProcessor:
                 rev_val = financials.loc['Total Revenue', col] if 'Total Revenue' in financials.index else None
                 data_fields.append(DataField(
                     field_name=f"Total_Revenue_{year}",
+                    display_name="Total Revenue",
                     value=rev_val,
                     unit="USD",
                     status=DataStatus.RETRIEVED if rev_val else DataStatus.MISSING,
@@ -1114,6 +1116,7 @@ class Step6DataReviewProcessor:
                 op_val = financials.loc['Operating Income', col] if 'Operating Income' in financials.index else None
                 data_fields.append(DataField(
                     field_name=f"Operating_Income_{year}",
+                    display_name="Operating Income (EBIT)",
                     value=op_val,
                     unit="USD",
                     status=DataStatus.RETRIEVED if op_val else DataStatus.MISSING,
@@ -1125,6 +1128,7 @@ class Step6DataReviewProcessor:
                 int_val = financials.loc['Interest Expense', col] if 'Interest Expense' in financials.index else None
                 data_fields.append(DataField(
                     field_name=f"Interest_Expense_{year}",
+                    display_name="Interest Expense",
                     value=int_val,
                     unit="USD",
                     status=DataStatus.RETRIEVED if int_val else DataStatus.MISSING,
@@ -1136,6 +1140,7 @@ class Step6DataReviewProcessor:
                 tax_val = financials.loc['Tax Provision', col] if 'Tax Provision' in financials.index else None
                 data_fields.append(DataField(
                     field_name=f"Tax_Provision_{year}",
+                    display_name="Tax Provision",
                     value=tax_val,
                     unit="USD",
                     status=DataStatus.RETRIEVED if tax_val else DataStatus.MISSING,
@@ -1147,6 +1152,7 @@ class Step6DataReviewProcessor:
                 pretax_val = financials.loc['Pretax Income', col] if 'Pretax Income' in financials.index else None
                 data_fields.append(DataField(
                     field_name=f"Pre_Tax_Income_{year}",
+                    display_name="Pre-Tax Income",
                     value=pretax_val,
                     unit="USD",
                     status=DataStatus.RETRIEVED if pretax_val else DataStatus.MISSING,
@@ -1171,6 +1177,7 @@ class Step6DataReviewProcessor:
                 assets_val = balance_sheet.loc['Total Assets', col] if 'Total Assets' in balance_sheet.index else None
                 data_fields.append(DataField(
                     field_name=f"Total_Assets_{year}",
+                    display_name="Total Assets",
                     value=assets_val,
                     unit="USD",
                     status=DataStatus.RETRIEVED if assets_val else DataStatus.MISSING,
@@ -1182,6 +1189,7 @@ class Step6DataReviewProcessor:
                 equity_val = balance_sheet.loc['Stockholders Equity', col] if 'Stockholders Equity' in balance_sheet.index else None
                 data_fields.append(DataField(
                     field_name=f"Shareholders_Equity_{year}",
+                    display_name="Shareholders Equity",
                     value=equity_val,
                     unit="USD",
                     status=DataStatus.RETRIEVED if equity_val else DataStatus.MISSING,
@@ -1193,6 +1201,7 @@ class Step6DataReviewProcessor:
                 liab_val = balance_sheet.loc['Total Liabilities Net Minority Interest', col] if 'Total Liabilities Net Minority Interest' in balance_sheet.index else None
                 data_fields.append(DataField(
                     field_name=f"Total_Liabilities_{year}",
+                    display_name="Total Liabilities",
                     value=liab_val,
                     unit="USD",
                     status=DataStatus.RETRIEVED if liab_val else DataStatus.MISSING,
@@ -1204,6 +1213,7 @@ class Step6DataReviewProcessor:
                 ltd_val = balance_sheet.loc['Long Term Debt', col] if 'Long Term Debt' in balance_sheet.index else None
                 data_fields.append(DataField(
                     field_name=f"Long_Term_Debt_{year}",
+                    display_name="Long-Term Debt",
                     value=ltd_val,
                     unit="USD",
                     status=DataStatus.RETRIEVED if ltd_val else DataStatus.MISSING,
@@ -1215,6 +1225,7 @@ class Step6DataReviewProcessor:
                 std_val = balance_sheet.loc['Current Debt', col] if 'Current Debt' in balance_sheet.index else None
                 data_fields.append(DataField(
                     field_name=f"Short_Term_Debt_{year}",
+                    display_name="Short-Term Debt",
                     value=std_val,
                     unit="USD",
                     status=DataStatus.RETRIEVED if std_val else DataStatus.MISSING,
@@ -1226,6 +1237,7 @@ class Step6DataReviewProcessor:
                 cash_val = balance_sheet.loc['Cash And Cash Equivalents', col] if 'Cash And Cash Equivalents' in balance_sheet.index else None
                 data_fields.append(DataField(
                     field_name=f"Cash_And_Equivalents_{year}",
+                    display_name="Cash & Equivalents",
                     value=cash_val,
                     unit="USD",
                     status=DataStatus.RETRIEVED if cash_val else DataStatus.MISSING,
@@ -1268,6 +1280,7 @@ class Step6DataReviewProcessor:
                 margin = ni / rev
                 fields.append(DataField(
                     field_name=f"Net_Profit_Margin_{year}",
+                    display_name="Net Profit Margin",
                     value=margin,
                     unit="%",
                     status=DataStatus.CALCULATED,
@@ -1281,6 +1294,7 @@ class Step6DataReviewProcessor:
                 op_margin = op / rev
                 fields.append(DataField(
                     field_name=f"Operating_Margin_{year}",
+                    display_name="Operating Margin",
                     value=op_margin,
                     unit="%",
                     status=DataStatus.CALCULATED,
@@ -1298,6 +1312,7 @@ class Step6DataReviewProcessor:
                         turnover = rev / avg_assets
                         fields.append(DataField(
                             field_name=f"Asset_Turnover_{year}",
+                            display_name="Asset Turnover",
                             value=turnover,
                             unit="x",
                             status=DataStatus.CALCULATED,
@@ -1314,6 +1329,7 @@ class Step6DataReviewProcessor:
                         multiplier = avg_assets / avg_equity
                         fields.append(DataField(
                             field_name=f"Equity_Multiplier_{year}",
+                            display_name="Equity Multiplier",
                             value=multiplier,
                             unit="x",
                             status=DataStatus.CALCULATED,
@@ -1328,6 +1344,7 @@ class Step6DataReviewProcessor:
                     dte = curr_debt / curr_equity
                     fields.append(DataField(
                         field_name=f"Debt_to_Equity_{year}",
+                        display_name="Debt-to-Equity Ratio",
                         value=dte,
                         unit="x",
                         status=DataStatus.CALCULATED,
@@ -1342,6 +1359,7 @@ class Step6DataReviewProcessor:
                 interest_burden = pretax / ebit
                 fields.append(DataField(
                     field_name=f"Interest_Burden_{year}",
+                    display_name="Interest Burden",
                     value=interest_burden,
                     unit="x",
                     status=DataStatus.CALCULATED,
@@ -1354,6 +1372,7 @@ class Step6DataReviewProcessor:
                 tax_burden = ni / pretax
                 fields.append(DataField(
                     field_name=f"Tax_Burden_{year}",
+                    display_name="Tax Burden",
                     value=tax_burden,
                     unit="x",
                     status=DataStatus.CALCULATED,
@@ -1376,6 +1395,7 @@ class Step6DataReviewProcessor:
         mcap = info.get('marketCap')
         data_fields.append(DataField(
             field_name="Market Cap",
+            display_name="Market Cap",
             value=mcap,
             unit="USD",
             status=DataStatus.RETRIEVED if mcap else DataStatus.MISSING,
