@@ -167,6 +167,7 @@ async def generate_ai_assumptions(request: GenerateAIRequest):
         
         ticker = session.get("ticker")
         financial_data = session_service.get_session_value(request.session_id, "financial_data")
+        model = session_service.get_session_value(request.session_id, "selected_model", "DCF")
         
         if not financial_data:
             raise HTTPException(status_code=400, detail="No financial data available")
