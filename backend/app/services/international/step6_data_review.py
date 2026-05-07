@@ -744,11 +744,13 @@ class Step6DataReviewProcessor:
     
     def _process_dcf_market_data(self, market_data: Dict, overrides: Dict) -> MarketDataDisplay:
         """Process market data for DCF (6 fields)"""
-        info = market_data.get("info", {})
+        # market_data is already the key_stats dict from yfinance_service (flat structure)
+        # No nested "info" key - use market_data directly
+        info = market_data if market_data else {}
         data_fields = []
         
         # 1. Current Stock Price
-        current_price = info.get('currentPrice', info.get('regularMarketPrice'))
+        current_price = info.get('current_price', info.get('currentPrice'))
         price_field = DataField(
             field_name="Current Stock Price",
             display_name="Current Stock Price",
@@ -786,8 +788,8 @@ class Step6DataReviewProcessor:
         )
         data_fields.append(beta_field)
         
-        # 4. Total Debt
-        total_debt = market_data.get("total_debt")
+        # 4. Total Debt - use snake_case key from yfinance_service
+        total_debt = info.get("total_debt")
         debt_field = DataField(
             field_name="Total Debt",
             display_name="Total Debt",
@@ -799,8 +801,8 @@ class Step6DataReviewProcessor:
         ) if total_debt else None
         data_fields.append(debt_field) if debt_field else None
         
-        # 5. Cash & Equivalents
-        cash = market_data.get("cash")
+        # 5. Cash & Equivalents - use snake_case key from yfinance_service
+        cash = info.get("total_cash")
         cash_field = DataField(
             field_name="Cash & Equivalents",
             display_name="Cash & Equivalents",
@@ -1389,10 +1391,11 @@ class Step6DataReviewProcessor:
         years = []
         data_fields = []
         
-        info = market_data.get("info", {})
+        # market_data is already the key_stats dict from yfinance_service (flat structure)
+        info = market_data if market_data else {}
         
-        # Market Cap
-        mcap = info.get('marketCap')
+        # Market Cap - use snake_case key from yfinance_service
+        mcap = info.get('market_cap')
         data_fields.append(DataField(
             field_name="Market Cap",
             display_name="Market Cap",
