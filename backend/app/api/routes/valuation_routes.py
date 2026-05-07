@@ -139,13 +139,14 @@ async def fetch_api_data(request: FetchDataRequest):
             valuation_model=model
         )
         
-        # Store results in session using SessionService
-        session_service.update_session_data(request.session_id, "financial_data", result.model_dump() if hasattr(result, 'model_dump') else result)
+        # Store results in session using SessionService (with JSON serialization)
+        result_dict = result.model_dump(mode='json') if hasattr(result, 'model_dump') else result
+        session_service.update_session_data(request.session_id, "financial_data", result_dict)
         session_service.update_session_data(request.session_id, "status", "data_ready")
         
         return FetchDataResponse(
             status="data_ready",
-            data=result.model_dump() if hasattr(result, 'model_dump') else result,
+            data=result_dict,
             message="Financial data retrieved successfully from APIs."
         )
     except Exception as e:
