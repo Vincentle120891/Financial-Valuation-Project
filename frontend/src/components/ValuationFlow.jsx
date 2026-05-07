@@ -264,8 +264,10 @@ const ValuationFlow = () => {
       const fetchDataResponse = await fetchApiData(sessionId);
       console.log('Fetch API data response:', fetchDataResponse);
 
-      // Set financial data first
+      // Set financial data first - handle both old and new backend formats
       if (fetchDataResponse.data) {
+        // New format: data is wrapped in objects with data_fields arrays
+        // Old format: direct property access
         if (fetchDataResponse.data.historical_financials) {
           setHistoricalData(fetchDataResponse.data.historical_financials);
         }
@@ -284,10 +286,11 @@ const ValuationFlow = () => {
         if (fetchDataResponse.data.comps_results) {
           setCompsResults(fetchDataResponse.data.comps_results);
         }
+        
+        // Auto-navigate to Step 6 to show retrieved data
+        setCurrentStep(6);
       }
 
-      // Stay on step 5 to show retrieved data
-      // User must click "Continue" to go to Step 6, then manually trigger AI in Step 7
     } catch (err) {
       console.error('Retrieve data error:', err);
       setError('Failed to retrieve data');

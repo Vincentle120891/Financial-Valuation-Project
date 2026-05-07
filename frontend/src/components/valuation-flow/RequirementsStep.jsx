@@ -105,6 +105,42 @@ const RequirementsStep = ({
   // Check if data has been retrieved
   const hasRetrievedData = historicalData || peerData || dcfInputs || dupontResults || compsResults || (aiData && Object.keys(aiData).length > 0);
 
+  // Helper function to extract values from data_fields array format used by backend
+  // Backend returns: { years: [2020, 2021], data_fields: [{ field_name: 'Revenue_2020', value: 100 }, ...] }
+  // Frontend expects: { revenue: { 2020: 100, 2021: 110 }, ... }
+  const getFieldValues = (data, fieldNamePatterns) => {
+    if (!data || !data.data_fields) return {};
+    
+    const result = {};
+    const patterns = Array.isArray(fieldNamePatterns) ? fieldNamePatterns : [fieldNamePatterns];
+    
+    data.data_fields.forEach(field => {
+      const matchedPattern = patterns.find(pattern => {
+        if (typeof pattern === 'string') {
+          return field.field_name === pattern || field.field_name.startsWith(pattern + '_');
+        }
+        if (pattern instanceof RegExp) {
+          return pattern.test(field.field_name);
+        }
+        return false;
+      });
+      
+      if (matchedPattern) {
+        // Extract year from field_name (e.g., 'Revenue_2020' -> 2020)
+        const yearMatch = field.field_name.match(/_(\d{4})$/);
+        if (yearMatch) {
+          const year = yearMatch[1];
+          let key = typeof matchedPattern === 'string' ? matchedPattern.toLowerCase() : 'value';
+          // Handle special cases for key naming
+          if (key === 'total revenue') key = 'revenue';
+          result[year] = field.value;
+        }
+      }
+    });
+    
+    return result;
+  };
+
   // Render retrieved data summary
   const renderRetrievedData = () => {
     if (!hasRetrievedData) return null;
@@ -118,51 +154,52 @@ const RequirementsStep = ({
           <div style={{ marginBottom: '16px' }}>
             <h4 style={{ color: '#2e7d32', marginBottom: '8px' }}>Historical Financials</h4>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '12px' }}>
-              {historicalData.revenue && (
+              {/* Handle both old format (revenue: {2020: 100}) and new format (data_fields array) */}
+              {(historicalData.revenue || (historicalData.data_fields && getFieldValues(historicalData, ['Total Revenue', 'total_revenue', 'revenue']))) && (
                 <div style={{ background: 'white', padding: '12px', borderRadius: '6px' }}>
                   <strong>Revenue:</strong>
                   <p style={{ margin: '4px 0 0 0', color: '#666' }}>
-                    {Object.keys(historicalData.revenue).length} years ✓
+                    {Object.keys(historicalData.revenue || getFieldValues(historicalData, ['Total Revenue', 'total_revenue', 'revenue'])).length} years ✓
                   </p>
                 </div>
               )}
-              {historicalData.ebitda && (
+              {(historicalData.ebitda || (historicalData.data_fields && getFieldValues(historicalData, ['EBITDA', 'ebitda', 'Normalized EBITDA']))) && (
                 <div style={{ background: 'white', padding: '12px', borderRadius: '6px' }}>
                   <strong>EBITDA:</strong>
                   <p style={{ margin: '4px 0 0 0', color: '#666' }}>
-                    {Object.keys(historicalData.ebitda).length} years ✓
+                    {Object.keys(historicalData.ebitda || getFieldValues(historicalData, ['EBITDA', 'ebitda', 'Normalized EBITDA'])).length} years ✓
                   </p>
                 </div>
               )}
-              {historicalData.net_income && (
+              {(historicalData.net_income || (historicalData.data_fields && getFieldValues(historicalData, ['Net Income', 'net_income', 'netIncome']))) && (
                 <div style={{ background: 'white', padding: '12px', borderRadius: '6px' }}>
                   <strong>Net Income:</strong>
                   <p style={{ margin: '4px 0 0 0', color: '#666' }}>
-                    {Object.keys(historicalData.net_income).length} years ✓
+                    {Object.keys(historicalData.net_income || getFieldValues(historicalData, ['Net Income', 'net_income', 'netIncome'])).length} years ✓
                   </p>
                 </div>
               )}
-              {historicalData.operating_expenses && (
+              {(historicalData.operating_expenses || (historicalData.data_fields && getFieldValues(historicalData, ['Operating Expenses', 'operating_expenses', 'SG&A', 'sg_and_a']))) && (
                 <div style={{ background: 'white', padding: '12px', borderRadius: '6px' }}>
                   <strong>OpEx:</strong>
                   <p style={{ margin: '4px 0 0 0', color: '#666' }}>
-                    {Object.keys(historicalData.operating_expenses).length} years ✓
+                    {Object.keys(historicalData.operating_expenses || getFieldValues(historicalData, ['Operating Expenses', 'operating_expenses', 'SG&A', 'sg_and_a'])).length} years ✓
                   </p>
                 </div>
               )}
-              {historicalData.capex && (
+              {(historicalData.capex || (historicalData.data_fields && getFieldValues(historicalData, ['CapEx', 'capex', 'Capital Expenditures', 'capital_expenditures']))) && (
                 <div style={{ background: 'white', padding: '12px', borderRadius: '6px' }}>
                   <strong>CapEx:</strong>
                   <p style={{ margin: '4px 0 0 0', color: '#666' }}>
-                    {Object.keys(historicalData.capex).length} years ✓
+                    {Object.keys(historicalData.capex || getFieldValues(historicalData, ['CapEx', 'capex', 'Capital Expenditures', 'capital_expenditures'])).length} years ✓
                   </p>
                 </div>
               )}
-              {historicalData.depreciation && (
+              {(historicalData.depreciation || (historicalData.data_fields && getFieldValues(historicalData, ['Depreciation', 'depreciation', 'Depreciation And Amortization', 'depreciation_and_amortization']))) && (
                 <div style={{ background: 'white', padding: '12px', borderRadius: '6px' }}>
                   <strong>D&A:</strong>
                   <p style={{ margin: '4px 0 0 0', color: '#666' }}>
-                    {Object.keys(historicalData.depreciation).length} years ✓
+                    {Object.keys(historicalData.depreciation || getFieldValues(historicalData, ['Depreciation', 'depreciation', 'Depreciation And Amortization', 'depreciation_and_amortization'])).length} years ✓
                   </p>
                 </div>
               )}
