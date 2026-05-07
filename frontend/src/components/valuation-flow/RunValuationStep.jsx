@@ -30,7 +30,10 @@ const RunValuationStep = ({
   return (
     <div className="step-container">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-        <h2>Step 9: Run Valuation</h2>
+        <div>
+          <h2>Step 10: Run Valuation Calculation</h2>
+          <p style={{ color: '#666', marginTop: '8px' }}>Execute the valuation model with your confirmed assumptions to generate intrinsic value estimates and sensitivity analysis.</p>
+        </div>
         <button onClick={onBackToModelSelection} className="btn-secondary">
           ← Change Model
         </button>

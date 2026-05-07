@@ -169,7 +169,14 @@ const AssumptionsStep = ({
   return (
     <div className="step-container">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-        <h2>{showReviewOnly ? 'Step 6: View Retrieved Inputs' : 'Step 8: Review & Confirm Assumptions'}</h2>
+        <div>
+          <h2>{showReviewOnly ? 'Step 6: View Retrieved Inputs' : 'Step 9: Review & Confirm All Assumptions'}</h2>
+          <p style={{ color: '#666', marginTop: '8px' }}>
+            {showReviewOnly 
+              ? 'Review all inputs retrieved from APIs before proceeding.' 
+              : 'Final review of all assumptions before running valuation. Confirm or override any values.'}
+          </p>
+        </div>
         {onBackToRequirements && (
           <button onClick={onBackToRequirements} className="btn-secondary">
             ← Back to Requirements

@@ -31,6 +31,7 @@ const ModelSelectionStep = ({ onSelectModel }) => {
   return (
     <div className="step-container">
       <h2>Step 4: Select Valuation Model</h2>
+      <p style={{ marginBottom: '20px', color: '#666' }}>Choose which valuation methodologies you want to apply to this company.</p>
       <div className="model-options">
         {models.map((model) => (
           <div 

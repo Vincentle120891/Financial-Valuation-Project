@@ -61,7 +61,8 @@ const SearchStep = ({
 
   return (
     <div className="step-container">
-      <h2>Step 1: Input Company Name or Ticker</h2>
+      <h2>Step 1: Search Company</h2>
+      <p style={{ marginBottom: '20px', color: '#666' }}>Enter a company name or ticker symbol to begin your valuation analysis.</p>
       
       {/* Market Toggle */}
       <div className="market-toggle" style={{ marginBottom: '20px' }}>
