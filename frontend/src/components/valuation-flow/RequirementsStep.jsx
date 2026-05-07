@@ -470,7 +470,7 @@ const RequirementsStep = ({
               onClick={onShowInputs} 
               className="btn-primary"
             >
-              View Retrieved Inputs →
+              Continue to Review Data →
             </button>
           </>
         )}

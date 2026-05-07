@@ -161,9 +161,60 @@ const ValuationFlow = () => {
   }, []);
 
   // ==================== CONTINUE TO AI ASSUMPTIONS (STEP 7) ====================
-  const handleContinueToAiAssumptions = useCallback(() => {
-    setCurrentStep(7);
-  }, []);
+  const handleContinueToAiAssumptions = useCallback(async () => {
+    setLoading(true);
+    try {
+      // Only generate AI when user explicitly clicks to go to Step 7
+      console.log('🤖 Starting AI generation...');
+      const aiDataResponse = await generateAI(sessionId);
+      console.log('AI response:', aiDataResponse);
+
+      if (aiDataResponse.suggestions) {
+        setAiData(aiDataResponse.suggestions);
+        
+        // Check for timeout status
+        if (aiDataResponse.status === 'ai_timeout') {
+          setAiError('⏱️ AI generation timed out after 90 seconds. Using deterministic fallback - assumptions generated from CAPM formula and historical averages.');
+        } else {
+          // Build detailed error message from metadata
+          const metadata = aiDataResponse.suggestions._metadata;
+          if (metadata && !metadata.ai_success) {
+            // AI failed, build detailed error message
+            let errorMsg = '⚠️ AI generation failed. ';
+            
+            if (metadata.fallback_reason) {
+              errorMsg += `Reason: ${metadata.fallback_reason}. `;
+            }
+            
+            if (metadata.provider_errors && Object.keys(metadata.provider_errors).length > 0) {
+              errorMsg += 'Provider errors: ';
+              const errorDetails = Object.entries(metadata.provider_errors)
+                .map(([provider, error]) => `${provider}: ${error}`)
+                .join('; ');
+              errorMsg += errorDetails;
+            } else if (!metadata.available_providers || metadata.available_providers.length === 0) {
+              errorMsg += 'No AI providers configured. Please add API keys for Groq, Gemini, or Qwen.';
+            }
+            
+            errorMsg += ' Using deterministic fallback - assumptions generated from CAPM formula and historical averages.';
+            setAiError(errorMsg);
+          } else if (metadata?.used_fallback) {
+            setAiError('⚠️ AI providers unavailable. Using deterministic fallback - assumptions generated from CAPM formula and historical averages.');
+          } else {
+            setAiError(null); // Clear any previous AI error
+          }
+        }
+      } else if (aiDataResponse.detail) {
+        setAiError(aiDataResponse.detail);
+      }
+    } catch (aiErr) {
+      console.error('AI generation failed:', aiErr);
+      setAiError(aiErr.message || 'AI suggestions could not be generated. You can still proceed with manual inputs.');
+    } finally {
+      setLoading(false);
+      setCurrentStep(7);
+    }
+  }, [sessionId]);
 
   // ==================== CONTINUE TO FORECAST DRIVERS (STEP 8) ====================
   const handleContinueToForecastDrivers = useCallback(() => {
@@ -204,12 +255,12 @@ const ValuationFlow = () => {
     }
   }, [selectedModel, currentStep, sessionId, fetchRequiredInputs]);
 
-  // ==================== STEP 7-8: RETRIEVE DATA ====================
+  // ==================== STEP 6: RETRIEVE API DATA ONLY ====================
   
   const handleRetrieveData = useCallback(async () => {
     setLoading(true);
-    setAiError(null); // Clear previous AI errors
     try {
+      // Only fetch API data - do NOT generate AI yet
       const fetchDataResponse = await fetchApiData(sessionId);
       console.log('Fetch API data response:', fetchDataResponse);
 
@@ -235,58 +286,8 @@ const ValuationFlow = () => {
         }
       }
 
-      // Try to generate AI suggestions
-      try {
-        console.log('🤖 Starting AI generation...');
-        const aiDataResponse = await generateAI(sessionId);
-        console.log('AI response:', aiDataResponse);
-
-        if (aiDataResponse.suggestions) {
-          setAiData(aiDataResponse.suggestions);
-          
-          // Check for timeout status
-          if (aiDataResponse.status === 'ai_timeout') {
-            setAiError('⏱️ AI generation timed out after 90 seconds. Using deterministic fallback - assumptions generated from CAPM formula and historical averages.');
-          } else {
-            // Build detailed error message from metadata
-            const metadata = aiDataResponse.suggestions._metadata;
-            if (metadata && !metadata.ai_success) {
-              // AI failed, build detailed error message
-              let errorMsg = '⚠️ AI generation failed. ';
-              
-              if (metadata.fallback_reason) {
-                errorMsg += `Reason: ${metadata.fallback_reason}. `;
-              }
-              
-              if (metadata.provider_errors && Object.keys(metadata.provider_errors).length > 0) {
-                errorMsg += 'Provider errors: ';
-                const errorDetails = Object.entries(metadata.provider_errors)
-                  .map(([provider, error]) => `${provider}: ${error}`)
-                  .join('; ');
-                errorMsg += errorDetails;
-              } else if (!metadata.available_providers || metadata.available_providers.length === 0) {
-                errorMsg += 'No AI providers configured. Please add API keys for Groq, Gemini, or Qwen.';
-              }
-              
-              errorMsg += ' Using deterministic fallback - assumptions generated from CAPM formula and historical averages.';
-              setAiError(errorMsg);
-            } else if (metadata?.used_fallback) {
-              setAiError('⚠️ AI providers unavailable. Using deterministic fallback - assumptions generated from CAPM formula and historical averages.');
-            } else {
-              setAiError(null); // Clear any previous AI error
-            }
-          }
-        } else if (aiDataResponse.detail) {
-          setAiError(aiDataResponse.detail);
-        }
-      } catch (aiErr) {
-        console.error('AI generation failed:', aiErr);
-        setAiError(aiErr.message || 'AI suggestions could not be generated. You can still proceed with manual inputs.');
-        // Don't fail the entire operation - financial data is still available
-      }
-
-      // Stay on step 5 to show retrieved data, don't jump to step 8
-      // setCurrentStep(8); // Removed - stay on step 5
+      // Stay on step 5 to show retrieved data
+      // User must click "Continue" to go to Step 6, then manually trigger AI in Step 7
     } catch (err) {
       console.error('Retrieve data error:', err);
       setError('Failed to retrieve data');
