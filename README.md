@@ -371,7 +371,7 @@ In Step 8 (Assumption & AI Suggestion), the AI engine provides suggestions for f
 - Provides transparent explanations for each suggestion
 - Allows users to accept, edit, or override AI recommendations
 
-**Note**: Step 7 (Historical Data Retrieval) has ZERO AI involvement - it strictly fetches missing historical data that cannot be retrieved via standard APIs.
+**Note**: Step 7 (Historical Data Retrieval) uses AI specifically to extract historical data that standard APIs (yfinance/AlphaVantage) cannot provide - such as data from PDF filings, annual reports, and alternative sources. This is distinct from Step 8 where AI provides suggestions for forward-looking assumptions.
 
 ### 3. Valuation Execution
 Each valuation model runs independently:

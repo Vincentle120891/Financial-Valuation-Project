@@ -73,8 +73,8 @@ frontend/
 
 6. **Step 7 - Historical Data Retrieval** (`handleFetchHistoricalData`)
    - API call to `/step-7-fetch-historical-data` (missing historical data from alternative sources)
-   - **ZERO AI involvement** - strictly fetches missing historical data
-   - Displays retrieved historical data in UI
+   - **Uses AI to extract data** from PDF filings, annual reports, and documents that APIs cannot access
+   - Displays retrieved historical data in UI with source attribution
 
 7. **Step 8 - Assumption & AI Suggestion** (`handleGenerateAiAssumptions`)
    - API call to `/step-8-generate-ai-assumptions` (AI suggestions for forward-looking inputs)
