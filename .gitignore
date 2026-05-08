@@ -19,9 +19,31 @@ target/
 *.exe
 
 # Environment
+```
+# Compiled and build artifacts
+*.pyc
+__pycache__/
+*.o
+*.obj
+dist/
+build/
+*.so
+*.dll
+*.exe
+*.class
+
+# Dependencies
+.venv/
+venv/
 .env
 .env.local
 *.env.*
+
+# Logs and temp files
+*.log
+*.tmp
+*.swp
+*.swo
 
 # Editors
 .vscode/
@@ -33,6 +55,7 @@ target/
 *.log
 
 # Coverage
+# Coverage reports
 coverage/
 htmlcov/
 .coverage
@@ -64,4 +87,19 @@ Thumbs.db
 *.tar.bz2
 *.tar.xz
 *.tar.zst
+# Python specific
+.mypy_cache/
+.pytest_cache/
+*.pyc
+__pycache__/
+
+# Build directories
+target/
+.gradle/
+build/
+dist/
+
+# OS generated files
+.DS_Store
+Thumbs.db
 ```

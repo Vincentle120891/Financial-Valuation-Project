@@ -49,6 +49,7 @@ class Settings(BaseSettings):
     google_gemini_api_key: Optional[str] = Field(default=None)
     dashscope_api_key: Optional[str] = Field(default=None)
     alpha_vantage_api_key: Optional[str] = Field(default=None)
+    alphavantage_api_key: Optional[str] = Field(default=None)
     
     @property
     def effective_gemini_key(self) -> Optional[str]:
@@ -63,7 +64,7 @@ class Settings(BaseSettings):
     @property
     def effective_alpha_vantage_key(self) -> Optional[str]:
         """Get effective Alpha Vantage API key from multiple possible env vars."""
-        return self.alpha_vantage_key or self.alpha_vantage_api_key
+        return self.alpha_vantage_key or self.alpha_vantage_api_key or self.alphavantage_api_key
     
     # =========================================================================
     # SESSION MANAGEMENT
