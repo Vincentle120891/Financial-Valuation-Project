@@ -103,3 +103,5 @@ dist/
 .DS_Store
 Thumbs.db
 ```
+# Documentation and source files only - no build artifacts or dependencies detected
+# No .gitignore rules needed for this project based on the file changes provided
