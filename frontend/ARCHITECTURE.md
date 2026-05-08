@@ -43,7 +43,7 @@ frontend/
 - `peerData`: Comparable company analysis
 - `dupontResults`: DuPont decomposition outputs
 - `compsResults`: Trading comps multiples
-- `aiData`: AI-generated suggestions with rationale
+- `missingData`: Retrieved historical data gaps from alternative sources
 - `confirmedValues`: User-confirmed assumptions
 
 **10-Step Workflow**:
@@ -135,6 +135,8 @@ const [dupontResults, setDupontResults] = useState(null);
      setDupontResults(fetchApiData.data.dupont_ratios);
    }
    ```
+2. **Step 7**: Retrieves missing historical data via `/step-7-generate-ai-assumptions`
+3. **Step 8**: User modifies forecast drivers manually
 
 2. **Step 10**: Displays DuPont results
    ```javascript
