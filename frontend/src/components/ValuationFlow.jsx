@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
   searchCompanies, 
+  suggestPeers,
   selectCompany, 
   selectModels, 
   prepareInputs, 
@@ -10,6 +11,8 @@ import {
   runValuation 
 } from '../services/api';
 import SearchStep from './valuation-flow/SearchStep';
+import CompanySelectionStep from './valuation-flow/CompanySelectionStep';
+import PeerSelectionStep from './valuation-flow/PeerSelectionStep';
 import ModelSelectionStep from './valuation-flow/ModelSelectionStep';
 import RequirementsStep from './valuation-flow/RequirementsStep';
 import ApiDataStep from './valuation-flow/ApiDataStep';
@@ -45,6 +48,8 @@ const ValuationFlow = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [selectedCompany, setSelectedCompany] = useState(null);
+  const [suggestedPeers, setSuggestedPeers] = useState([]);
+  const [selectedPeers, setSelectedPeers] = useState([]);
   const [selectedModel, setSelectedModel] = useState(null);
   const [sessionId, setSessionId] = useState(null);
   const [forecastYears, setForecastYears] = useState(5);
@@ -99,6 +104,44 @@ const ValuationFlow = () => {
       setLoading(false);
     }
   }, [searchQuery, market]);
+
+  // ==================== STEP 2: FIND PEERS ====================
+  const handleFindPeers = useCallback(async (company) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await suggestPeers(company.symbol, company.market || market, 10);
+      console.log('Suggest peers response:', data);
+      if (data.peers && data.peers.length > 0) {
+        setSuggestedPeers(data.peers);
+        setCurrentStep(3); // Move to Step 3: Peer Selection
+      } else {
+        setError('No peers found for this company. Try a different company or manually add peers later.');
+      }
+    } catch (err) {
+      console.error('Suggest peers error:', err);
+      setError('Failed to find peers. Please ensure the backend server is running.');
+    } finally {
+      setLoading(false);
+    }
+  }, [market]);
+
+  // ==================== STEP 3: TOGGLE PEER SELECTION ====================
+  const handleTogglePeer = useCallback((peer) => {
+    setSelectedPeers(prev => {
+      const exists = prev.find(p => p.symbol === peer.symbol);
+      if (exists) {
+        return prev.filter(p => p.symbol !== peer.symbol);
+      } else {
+        return [...prev, peer];
+      }
+    });
+  }, []);
+
+  // ==================== STEP 3: CONTINUE TO MODEL SELECTION ====================
+  const handleContinueToModelSelection = useCallback(() => {
+    setCurrentStep(4);
+  }, []);
 
   // ==================== STEP 3: SELECT COMPANY ====================
   const handleSelectCompany = useCallback(async (company) => {
@@ -415,7 +458,30 @@ const ValuationFlow = () => {
             market={market}
             setMarket={setMarket}
             onSearch={handleSearch}
-            onSelectCompany={handleSelectCompany}
+            onSelectCompany={(company) => {
+              setSelectedCompany(company);
+              setCurrentStep(2);
+            }}
+          />
+        );
+      case 2:
+        return (
+          <CompanySelectionStep
+            selectedCompany={selectedCompany}
+            onFindPeers={handleFindPeers}
+            onContinue={() => setCurrentStep(4)}
+            loading={loading}
+          />
+        );
+      case 3:
+        return (
+          <PeerSelectionStep
+            suggestedPeers={suggestedPeers}
+            selectedPeers={selectedPeers}
+            onTogglePeer={handleTogglePeer}
+            onContinue={handleContinueToModelSelection}
+            onBack={() => setCurrentStep(2)}
+            loading={loading}
           />
         );
       case 4:
