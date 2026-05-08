@@ -203,9 +203,9 @@ User Input → Step1 Search → Step2 Company Overview → Step3 Peer Selection
                                                     ↓
                                   Step6 Fetch Financial Data
                                                     ↓
-                                    Step7 Generate AI Assumptions
+                                  Step7 Collect Historical Data
                                                     ↓
-                                  Step8 Modify Forecast Drivers
+                                    Step8 Generate AI Assumptions
                                                     ↓
                                     Step9 Confirm Assumptions
                                                     ↓
