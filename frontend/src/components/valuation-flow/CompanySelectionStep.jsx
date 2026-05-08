@@ -140,7 +140,7 @@ const CompanySelectionStep = ({
             disabled={loading}
             className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Continue to Model Selection →
+            Continue to Peer Selection →
           </button>
         </div>
       </div>
