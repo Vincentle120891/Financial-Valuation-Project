@@ -7,7 +7,7 @@ import {
   selectModels, 
   prepareInputs, 
   fetchApiData, 
-  generateAI, 
+  retrieveHistoricalData, 
   confirmAssumptions, 
   runValuation 
 } from '../services/api';
@@ -236,27 +236,32 @@ const ValuationFlow = () => {
     setCurrentStep(6);
   }, []);
 
-  // ==================== CONTINUE TO AI ASSUMPTIONS (STEP 7) ====================
-  const handleContinueToAiAssumptions = useCallback(async () => {
+  // ==================== CONTINUE TO HISTORICAL DATA RETRIEVAL (STEP 7) ====================
+  const handleContinueToHistoricalDataRetrieval = useCallback(async () => {
     setLoading(true);
     try {
-      // Only generate AI when user explicitly clicks to go to Step 7
-      console.log('🤖 Starting AI generation...');
-      const aiDataResponse = await generateAI(sessionId);
-      console.log('AI response:', aiDataResponse);
+      // Retrieve historical data using AI extraction when user explicitly clicks to go to Step 7
+      console.log('📊 Starting historical data retrieval with AI extraction...');
+      const historicalDataResponse = await retrieveHistoricalData(sessionId);
+      console.log('Historical data response:', historicalDataResponse);
 
-      if (aiDataResponse.suggestions) {
-        setAiData(aiDataResponse.suggestions);
+      if (historicalDataResponse.suggestions) {
+        setAiData(historicalDataResponse.suggestions);
         
         // Check for timeout status
-        if (aiDataResponse.status === 'ai_timeout') {
-          setAiError('⏱️ AI generation timed out after 90 seconds. Using deterministic fallback - assumptions generated from CAPM formula and historical averages.');
+        if (historicalDataResponse.status === 'historical_data_timeout') {
+          setAiError('⏱️ Historical data extraction timed out. Using available API data only.');
         } else {
-          // Build detailed error message from metadata
-          const metadata = aiDataResponse.suggestions._metadata;
-          if (metadata && !metadata.ai_success) {
-            // AI failed, build detailed error message
-            let errorMsg = '⚠️ AI generation failed. ';
+          // Extract gap-filling information from response
+          const gapsFilled = historicalDataResponse.suggestions.total_gaps_filled || 0;
+          const completeness = historicalDataResponse.suggestions.data_completeness_score || 1.0;
+          
+          if (gapsFilled > 0) {
+            setAiError(`✅ Successfully filled ${gapsFilled} historical data gaps with ${(completeness * 100).toFixed(0)}% completeness.`);
+          } else {
+            // No gaps found - API data was complete
+            setAiError(null);
+          }
             
             if (metadata.fallback_reason) {
               errorMsg += `Reason: ${metadata.fallback_reason}. `;

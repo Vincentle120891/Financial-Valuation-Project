@@ -28,7 +28,7 @@ from app.api.schemas import (
 )
 from app.services.international.step5_assumptions_processor import Step5AssumptionsProcessor
 from app.services.international.step6_data_review import Step6DataReviewProcessor
-from app.services.international.step7_ai_suggestions import Step7AISuggestionsProcessor
+from app.services.international.step7_historical_data_processor import Step7HistoricalDataProcessor
 from app.services.international.step8_manual_overrides import Step8ManualOverridesProcessor
 from app.services.international.step10_valuation_processor import Step10ValuationProcessor
 from app.services.international.yfinance_service import YFinanceService
@@ -40,7 +40,7 @@ router = APIRouter(tags=["Valuation"])
 # Initialize processors
 step5_processor = Step5AssumptionsProcessor()
 step6_processor = Step6DataReviewProcessor()
-step7_processor = Step7AISuggestionsProcessor()
+step7_processor = Step7HistoricalDataProcessor()
 step8_processor = Step8ManualOverridesProcessor()
 step10_processor = Step10ValuationProcessor()
 yfinance_service = YFinanceService()
@@ -240,11 +240,22 @@ async def fetch_api_data(request: FetchDataRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/step-7-generate-ai-assumptions", response_model=GenerateAIResponse)
-async def generate_ai_assumptions(request: GenerateAIRequest):
+@router.post("/step-7-retrieve-historical-data", response_model=GenerateAIResponse)
+async def retrieve_historical_data(request: GenerateAIRequest):
     """
-    Step 7: Generate AI-powered assumptions.
-    Uses SessionService for session management and Step7DerivedDataProcessor for advanced derived calculations.
+    Step 7: Retrieve Historical Data Using AI Extraction
+    
+    Uses AI to extract historical financial data that cannot be retrieved via standard APIs 
+    (yfinance/AlphaVantage). This is strictly for HISTORICAL data retrieval - NO forward-looking 
+    assumptions are generated here.
+    
+    Purpose:
+    - Fill gaps in historical financial statements when APIs don't have complete data
+    - Extract historical metrics from PDF reports, filings, or other sources using AI
+    - Provide complete historical dataset for Step 8 assumption generation
+    
+    AI Usage: ZERO AI involvement in generating forward-looking inputs. 
+    AI is ONLY used as a data extraction tool for historical information.
     """
     try:
         # Get session data using SessionService
@@ -255,43 +266,42 @@ async def generate_ai_assumptions(request: GenerateAIRequest):
         ticker = session.get("ticker")
         financial_data = session_service.get_session_value(request.session_id, "financial_data")
         model = session_service.get_session_value(request.session_id, "selected_model", "DCF")
+        market = session_service.get_session_value(request.session_id, "market", "US")
         
         if not financial_data:
             raise HTTPException(status_code=400, detail="No financial data available")
         
-        # Use Step7AISuggestionsProcessor for AI-driven analysis
-        result = await step7_processor.generate_ai_suggestions(
+        # Use Step7HistoricalDataProcessor for AI-powered historical data extraction
+        result = await step7_processor.retrieve_historical_data(
             ticker=ticker,
             company_name=session.get("company_name", ticker),
             valuation_model=model,
-            market=session.get("market", "US"),
-            financial_data=financial_data
+            market=market,
+            step6_financial_data=financial_data
         )
         
-        # Store AI suggestions in session using SessionService
-        session_service.update_session_data(request.session_id, "ai_suggestions", result)
-        session_service.update_session_data(request.session_id, "status", "ai_ready")
+        # Store historical data in session using SessionService
+        session_service.update_session_data(request.session_id, "historical_data_gaps_filled", result)
+        session_service.update_session_data(request.session_id, "status", "historical_data_ready")
         
-        # Convert AISuggestionResponse to dict for GenerateAIResponse
-        # Ensure we get a proper dict, not a Pydantic model
+        # Convert HistoricalDataRetrievalResponse to dict for GenerateAIResponse
         if hasattr(result, 'model_dump'):
-            suggestions_dict = result.model_dump()
+            result_dict = result.model_dump()
         elif hasattr(result, 'dict'):
-            suggestions_dict = result.dict()
+            result_dict = result.dict()
         else:
-            suggestions_dict = dict(result) if isinstance(result, dict) else str(result)
+            result_dict = dict(result) if isinstance(result, dict) else str(result)
         
-        # Debug log to verify conversion
-        logger.info(f"Converted suggestions type: {type(suggestions_dict)}, keys: {suggestions_dict.keys() if isinstance(suggestions_dict, dict) else 'N/A'}")
+        logger.info(f"Step 7 complete: {result.total_gaps_filled}/{result.total_gaps_found} gaps filled, completeness: {result.data_completeness_score:.1%}")
         
         return GenerateAIResponse(
-            status="ai_ready",
-            suggestions=suggestions_dict,
-            message="AI analysis complete. Please review assumptions.",
+            status="historical_data_ready",
+            suggestions=result_dict,
+            message=f"Historical data retrieval complete. {result.total_gaps_filled} gaps filled with {result.data_completeness_score:.1%} completeness.",
             _metadata={"model_version": "v2.0"}
         )
     except Exception as e:
-        logger.error(f"Generate AI assumptions error: {e}")
+        logger.error(f"Step 7 historical data retrieval error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

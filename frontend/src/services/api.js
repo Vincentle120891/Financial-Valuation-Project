@@ -62,14 +62,15 @@ export const fetchApiData = async (sessionId) => {
   return response.data;
 };
 
-// Step 7: Generate AI Assumptions (uses longer timeout)
-export const generateAI = async (sessionId) => {
+// Step 7: Retrieve Historical Data Using AI Extraction (uses longer timeout)
+// Uses AI to extract historical financial data that APIs cannot provide
+export const retrieveHistoricalData = async (sessionId) => {
   try {
-    const response = await aiApi.post('/step-7-generate-ai-assumptions', { session_id: sessionId });
+    const response = await aiApi.post('/step-7-retrieve-historical-data', { session_id: sessionId });
     return response.data;
   } catch (error) {
     if (error.code === 'ECONNABORTED') {
-      throw new Error('AI generation timed out. The request took too long to complete. Please try again or proceed with manual inputs.');
+      throw new Error('Historical data extraction timed out. The request took too long to complete. Please try again or proceed with available data.');
     }
     throw error;
   }
