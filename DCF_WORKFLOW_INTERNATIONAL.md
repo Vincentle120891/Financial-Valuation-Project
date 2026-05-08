@@ -187,17 +187,17 @@ This document traces the complete workflow for the **DCF Model** in the **Intern
 
 **Process:**
 1. Identifies data gaps not available via standard APIs (yfinance/AlphaVantage)
-2. Fetches missing historical data from alternative sources
-3. **ZERO AI involvement** - this step is strictly for historical data retrieval
-4. No forward-looking inputs are generated here
+2. Uses AI to extract missing historical data from PDF filings, annual reports, and alternative sources
+3. **AI is used specifically for data extraction** from documents that APIs cannot access
+4. No forward-looking inputs are generated here - strictly historical data retrieval
 
 **Data Retrieved:**
 ```python
 {
     "missing_historical_data": {
-        # Additional historical metrics not available from primary APIs
+        # Additional historical metrics extracted using AI from documents
     },
-    "data_sources": ["alternative_source_1", "alternative_source_2"]
+    "data_sources": ["PDF_filings", "annual_reports", "alternative_sources"]
 }
 ```
 
@@ -395,8 +395,8 @@ class DCFEngine:
 └──────┬──────┘
        ↓
 ┌─────────────┐
-│ Step 7      │ Fetch: Missing Historical Data (NO AI)
-│ Hist. Data  │
+│ Step 7      │ Fetch: Missing Historical Data (AI Extraction)
+│ Hist. Data  │ from PDFs/Reports
 └──────┬──────┘
        ↓
 ┌─────────────┐

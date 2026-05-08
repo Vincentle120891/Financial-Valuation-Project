@@ -16,7 +16,7 @@ This document describes the complete workflow of the backend valuation system, s
 - **Vietnamese Market**: Separate input managers and calculation engines to handle local GAAP/regulatory differences (e.g., TT99 for Vietnam), VND currency, and .VN ticker suffixes
 
 **AI Usage Clarification:**
-- **Step 7 (Historical Data Retrieval)**: ZERO AI involvement - strictly fetches missing historical data from alternative sources
+- **Step 7 (Historical Data Retrieval)**: Uses AI specifically to extract historical data that standard APIs (yfinance/AlphaVantage) cannot provide - such as data from PDF filings, annual reports, and alternative sources
 - **Step 8 (Assumption & AI Suggestion)**: AI provides suggestions for forward-looking inputs (growth rates, margins, terminal values, etc.), but all calculations remain rigorous and programmatically verified
 
 ---
@@ -101,8 +101,8 @@ This document describes the complete workflow of the backend valuation system, s
 ### Step 7: Historical Data Retrieval
 **Endpoint:** `POST /api/step-7-fetch-historical-data`
 **Processor:** `Step7HistoricalDataProcessor`
-**Description:** Fetch historical data that cannot be retrieved via standard APIs (yfinance/AlphaVantage). ZERO AI involvement in this step.
-**Output:** Missing historical financial data from alternative sources
+**Description:** Fetch historical data that cannot be retrieved via standard APIs (yfinance/AlphaVantage). Uses AI to extract data from PDF filings, annual reports, and alternative sources.
+**Output:** Missing historical financial data extracted using AI from documents and alternative sources
 
 ### Step 8: Assumption & AI Suggestion
 **Endpoint:** `POST /api/step-8-generate-ai-assumptions`
