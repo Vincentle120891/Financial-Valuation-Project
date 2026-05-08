@@ -143,16 +143,17 @@ const ValuationFlow = () => {
     setCurrentStep(4);
   }, []);
 
-  // ==================== STEP 2: SELECT COMPANY ====================
+  // ==================== STEP 1: SELECT COMPANY ====================
   const handleSelectCompany = useCallback(async (company) => {
     setLoading(true);
     try {
-      const data = await selectCompany(sessionId || '', company.symbol, company.market || 'international');
+      // Call backend to create session and get session_id
+      const data = await selectCompany('', company.symbol, company.market || 'international');
       console.log('Select company response:', data);
       if (data.session_id) {
         setSessionId(data.session_id);
         setSelectedCompany(company);
-        setCurrentStep(2); // Move to Step 2: Company Overview (not directly to model selection)
+        setCurrentStep(2); // Move to Step 2: Company Overview
       }
     } catch (err) {
       console.error('Select company error:', err);
@@ -160,7 +161,7 @@ const ValuationFlow = () => {
     } finally {
       setLoading(false);
     }
-  }, [sessionId]);
+  }, []);
 
   // ==================== STEP 4: SELECT MODEL ====================
   const handleSelectModel = useCallback(async (modelType) => {
@@ -458,10 +459,7 @@ const ValuationFlow = () => {
             market={market}
             setMarket={setMarket}
             onSearch={handleSearch}
-            onSelectCompany={(company) => {
-              setSelectedCompany(company);
-              setCurrentStep(2);
-            }}
+            onSelectCompany={handleSelectCompany}
           />
         );
       case 2:
