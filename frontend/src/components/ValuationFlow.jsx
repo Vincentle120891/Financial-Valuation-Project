@@ -143,7 +143,7 @@ const ValuationFlow = () => {
     setCurrentStep(4);
   }, []);
 
-  // ==================== STEP 3: SELECT COMPANY ====================
+  // ==================== STEP 2: SELECT COMPANY ====================
   const handleSelectCompany = useCallback(async (company) => {
     setLoading(true);
     try {
@@ -152,7 +152,7 @@ const ValuationFlow = () => {
       if (data.session_id) {
         setSessionId(data.session_id);
         setSelectedCompany(company);
-        setCurrentStep(4);
+        setCurrentStep(2); // Move to Step 2: Company Overview (not directly to model selection)
       }
     } catch (err) {
       console.error('Select company error:', err);
@@ -469,7 +469,7 @@ const ValuationFlow = () => {
           <CompanySelectionStep
             selectedCompany={selectedCompany}
             onFindPeers={handleFindPeers}
-            onContinue={() => setCurrentStep(4)}
+            onContinue={() => setCurrentStep(3)}
             loading={loading}
           />
         );
