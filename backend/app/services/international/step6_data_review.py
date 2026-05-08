@@ -1471,7 +1471,6 @@ class Step6DataReviewProcessor:
             total_missing=len(critical_missing) + len(optional_missing)
         )
 
-+++ backend/app/services/international/step6_data_review.py (修改后)
 """Step 6: Data Review Layer - Pure Data Aggregation (No Final Calculations)"""
 import logging
 from typing import Dict, List, Optional, Any
