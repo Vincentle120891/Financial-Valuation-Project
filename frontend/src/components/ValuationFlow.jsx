@@ -3,6 +3,7 @@ import {
   searchCompanies, 
   suggestPeers,
   selectCompany, 
+  savePeers,
   selectModels, 
   prepareInputs, 
   fetchApiData, 
@@ -148,9 +149,31 @@ const ValuationFlow = () => {
   }, []);
 
   // ==================== STEP 3: CONTINUE TO MODEL SELECTION ====================
-  const handleContinueToModelSelection = useCallback(() => {
-    setCurrentStep(4);
-  }, []);
+  const handleContinueToModelSelection = useCallback(async () => {
+    if (!sessionId || selectedPeers.length === 0) {
+      setError('No session or peers selected');
+      return;
+    }
+    
+    setLoading(true);
+    try {
+      // Save selected peers to backend session and fetch peer data
+      const saveResponse = await savePeers(sessionId, selectedPeers);
+      console.log('Save peers response:', saveResponse);
+      
+      if (saveResponse.status === 'success') {
+        console.log(`✅ Saved ${saveResponse.peers_saved} peers to session with auto-fetched market data`);
+        setCurrentStep(4);
+      } else {
+        setError('Failed to save peers');
+      }
+    } catch (err) {
+      console.error('Save peers error:', err);
+      setError('Failed to save peers. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  }, [sessionId, selectedPeers]);
 
   // ==================== STEP 1: SELECT COMPANY ====================
   const handleSelectCompany = useCallback(async (company) => {
