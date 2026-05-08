@@ -114,7 +114,16 @@ const ValuationFlow = () => {
       console.log('Suggest peers response:', data);
       if (data.peers && data.peers.length > 0) {
         setSuggestedPeers(data.peers);
-        setCurrentStep(3); // Move to Step 3: Peer Selection
+        
+        // Auto-select top 5 peers with highest scores
+        const sortedPeers = [...data.peers].sort((a, b) => b.score - a.score);
+        const topPeers = sortedPeers.slice(0, Math.min(5, sortedPeers.length));
+        setSelectedPeers(topPeers);
+        
+        console.log(`Auto-selected ${topPeers.length} peers with highest scores:`, topPeers.map(p => p.symbol));
+        
+        // Move to Step 3: Peer Selection
+        setCurrentStep(3);
       } else {
         setError('No peers found for this company. Try a different company or manually add peers later.');
       }
