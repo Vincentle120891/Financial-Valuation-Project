@@ -76,11 +76,27 @@ export const retrieveHistoricalData = async (sessionId) => {
   }
 };
 
+// Step 8: Generate AI Suggestion for a specific category
+export const generateAISuggestion = async (sessionId, category) => {
+  try {
+    const response = await api.post('/step-8-generate-ai-suggestion', { 
+      session_id: sessionId, 
+      category 
+    });
+    return response.data;
+  } catch (error) {
+    if (error.code === 'ECONNABORTED') {
+      throw new Error('AI suggestion generation timed out. Please try again.');
+    }
+    throw error;
+  }
+};
+
 // Step 9: Confirm Assumptions
-export const confirmAssumptions = async (sessionId, assumptions, scenario = 'base_case') => {
+export const confirmAssumptions = async (sessionId, confirmedValues, scenario = 'base_case') => {
   const response = await api.post('/step-9-confirm-assumptions', { 
     session_id: sessionId, 
-    assumptions, 
+    confirmed_values: confirmedValues, 
     scenario 
   });
   return response.data;

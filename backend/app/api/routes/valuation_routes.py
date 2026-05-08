@@ -21,6 +21,8 @@ from app.api.schemas import (
     FetchDataResponse,
     GenerateAIRequest,
     GenerateAIResponse,
+    GenerateAISuggestionRequest,
+    AISuggestionCategoryResponse,
     ConfirmAssumptionsRequest,
     ConfirmAssumptionsResponse,
     ValuateRequest,
@@ -302,6 +304,63 @@ async def retrieve_historical_data(request: GenerateAIRequest):
         )
     except Exception as e:
         logger.error(f"Step 7 historical data retrieval error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/step-8-generate-ai-suggestion", response_model=AISuggestionCategoryResponse)
+async def generate_ai_suggestion(request: GenerateAISuggestionRequest):
+    """
+    Step 8: Generate AI suggestions for a specific assumption category.
+    
+    This endpoint is called when the user clicks an "AI Suggest" button for a specific category.
+    It generates AI-powered suggestions based on historical trends and market data.
+    
+    Categories:
+    - DCF: REVENUE_DRIVERS, COST_MARGINS, WORKING_CAPITAL, WACC_COMPONENTS, TERMINAL_VALUE
+    - DuPont: DUPONT_TARGETS
+    - Comps: COMPS_MULTIPLES
+    """
+    try:
+        # Get session data using SessionService
+        session = session_service.get_session_data(request.session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+        
+        ticker = session.get("ticker")
+        valuation_model = session_service.get_session_value(request.session_id, "selected_model", "DCF")
+        step6_data = session_service.get_session_value(request.session_id, "financial_data", {})
+        step7_data = session_service.get_session_value(request.session_id, "historical_data_gaps_filled", {})
+        
+        if not ticker:
+            raise HTTPException(status_code=400, detail="No ticker found in session")
+        
+        # Use Step8ManualOverridesProcessor to generate AI suggestions for the category
+        result = await step8_processor.generate_ai_suggestions_for_category(
+            ticker=ticker,
+            valuation_model=valuation_model,
+            category=request.category,
+            step6_data=step6_data,
+            step7_data=step7_data if step7_data else None
+        )
+        
+        # Store AI suggestions in session for this category
+        current_suggestions = session_service.get_session_value(request.session_id, "ai_suggestions", {})
+        current_suggestions[request.category] = result.model_dump() if hasattr(result, 'model_dump') else result
+        session_service.update_session_data(request.session_id, "ai_suggestions", current_suggestions)
+        
+        # Convert result to dict for response
+        result_dict = result.model_dump() if hasattr(result, 'model_dump') else result.dict() if hasattr(result, 'dict') else dict(result)
+        
+        return AISuggestionCategoryResponse(
+            status="success",
+            category=result_dict.get('category', request.category),
+            category_name=result_dict.get('category_name', request.category),
+            assumptions=result_dict.get('assumptions', []),
+            ai_generated=True,
+            message=result_dict.get('message', 'AI suggestions generated successfully')
+        )
+    except Exception as e:
+        logger.error(f"Generate AI suggestion error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
