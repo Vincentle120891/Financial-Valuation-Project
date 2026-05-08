@@ -183,7 +183,7 @@ print(result.recommendation)  # BUY/HOLD/SELL
   - Manufacturing: Capacity, utilization, commodity exposure
 - ✅ **Foreign ownership**: FOL, room ngoại
 - ✅ **Market data**: Price, volume, market cap
-- ✅ **AI assumptions**: ERP, CRP, terminal growth
+- ✅ **Missing data retrieval**: Data gaps from PDF reports, alternative sources
 - ✅ **Recommendations**: MUA MẠNH, MUA, NẮM GIỮ, BÁN
 - ✅ **Risk warnings**: Market, credit, liquidity risks
 - ✅ **Messages**: Success, error, loading states

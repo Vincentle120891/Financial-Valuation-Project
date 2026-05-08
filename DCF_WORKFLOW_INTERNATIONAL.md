@@ -179,48 +179,90 @@ This document traces the complete workflow for the **DCF Model** in the **Intern
 
 ---
 
-### Step 7: AI Assumptions
-**Endpoint:** `POST /api/step-7-generate-ai-assumptions`  
-**Frontend Component:** `AiAssumptionsStep.jsx`  
-**Backend Processor:** `Step7AISuggestionsProcessor`  
-**File:** `/backend/app/services/international/step7_ai_suggestions.py`
+### Step 7: Historical Data Retrieval
+**Endpoint:** `POST /api/step-7-fetch-historical-data`  
+**Frontend Component:** `ApiDataStep.jsx` (extended)  
+**Backend Processor:** `Step7HistoricalDataProcessor`  
+**File:** `/backend/app/services/international/step7_historical_data.py`
 
 **Process:**
-1. AI engine (Gemini/Groq) analyzes historical trends
-2. Generates 5-year forecasts for:
+1. Identifies data gaps not available via standard APIs (yfinance/AlphaVantage)
+2. Uses AI to extract missing historical data from PDF filings, annual reports, and alternative sources
+3. **AI is used specifically for data extraction** from documents that APIs cannot access
+4. No forward-looking inputs are generated here - strictly historical data retrieval
+
+**Data Retrieved:**
+```python
+{
+    "missing_historical_data": {
+        # Additional historical metrics extracted using AI from documents
+    },
+    "data_sources": ["PDF_filings", "annual_reports", "alternative_sources"]
+}
+```
+
+---
+
+### Step 8: Assumption & AI Suggestion
+**Endpoint:** `POST /api/step-8-generate-ai-assumptions`  
+**Frontend Component:** `ForecastDriversStep.jsx` / `AssumptionsStep.jsx`  
+**Backend Processor:** `Step8AssumptionProcessor`  
+**File:** `/backend/app/services/international/step8_assumption_processor.py`
+
+**Process:**
+1. Calculates values programmatically based on historical trends
+2. AI engine (Gemini/Groq) generates suggestions for forward-looking inputs:
    - Revenue growth rates
    - Margin assumptions
    - Capex projections
    - Working capital days
    - Terminal value assumptions
+   - WACC components
 3. Provides confidence scores and rationale
 4. Falls back to deterministic calculations if AI fails
 
 **AI Output:**
 ```json
 {
-  "revenue_growth": [0.08, 0.07, 0.06, 0.05, 0.04],
-  "ebitda_margin": [0.32, 0.33, 0.34, 0.34, 0.35],
-  "capex_percent_revenue": [0.03, 0.03, 0.03, 0.03, 0.03],
-  "wacc": 0.089,
-  "terminal_growth": 0.025,
-  "_metadata": {
-    "ai_success": true,
-    "provider": "gemini",
-    "confidence": 0.87
+  "equity_risk_premium": {
+    "value": 0.055,
+    "rationale": "Based on historical market returns and current market conditions",
+    "confidence": "high"
+  },
+  "country_risk_premium": {
+    "value": 0.02,
+    "rationale": "Additional premium for emerging market exposure",
+    "confidence": "medium"
+  },
+  "terminal_growth_rate": {
+    "value": 0.025,
+    "rationale": "Aligned with long-term GDP growth expectations",
+    "confidence": "high"
+  },
+  "terminal_ebitda_multiple": {
+    "value": 10.0,
+    "rationale": "Based on sector peer analysis and industry standards",
+    "confidence": "medium"
   }
 }
 ```
 
+**Vietnam-Specific Considerations:**
+For Vietnamese companies, AI adjusts suggestions for emerging market factors:
+- Higher ERP (6-8%) reflecting VNINDEX volatility
+- CRP (2-5%) for VND currency risk and institutional factors
+- Terminal growth aligned with Vietnam GDP (~5-6%)
+- Lower terminal multiples (8-12x) due to liquidity discount
+
 ---
 
-### Step 8: Modify Forecast Drivers
+### Step 9: Modify Forecast Drivers
 **Frontend Component:** `ForecastDriversStep.jsx`  
-**Backend Processor:** `Step8ManualOverridesProcessor`  
-**File:** `/backend/app/services/international/step8_manual_overrides.py`
+**Backend Processor:** `Step9ManualOverridesProcessor`  
+**File:** `/backend/app/services/international/step9_manual_overrides.py`
 
 **Process:**
-1. User reviews AI-generated assumptions
+1. User reviews AI-suggested assumptions from Step 8
 2. Can manually override any values
 3. Adjust scenario settings (Bull/Base/Bear)
 4. System validates input ranges
@@ -233,11 +275,30 @@ This document traces the complete workflow for the **DCF Model** in the **Intern
 
 ---
 
-### Step 9: Confirm Assumptions
+### Step 9: Modify Forecast Drivers
+**Frontend Component:** `ForecastDriversStep.jsx`  
+**Backend Processor:** `Step9ManualOverridesProcessor`  
+**File:** `/backend/app/services/international/step9_manual_overrides.py`
+
+**Process:**
+1. User reviews AI-suggested assumptions from Step 8
+2. Can manually override any values
+3. Adjust scenario settings (Bull/Base/Bear)
+4. System validates input ranges
+
+**User Actions:**
+- Edit growth rates
+- Modify margin assumptions
+- Change terminal value inputs
+- Select scenario preset
+
+---
+
+### Step 10: Confirm Assumptions
 **Endpoint:** `POST /api/step-9-confirm-assumptions`  
 **Frontend Component:** `AssumptionsStep.jsx`  
-**Backend Processor:** `Step8ManualOverridesProcessor`  
-**File:** `/backend/app/services/international/step8_manual_overrides.py`
+**Backend Processor:** `Step9ManualOverridesProcessor`  
+**File:** `/backend/app/services/international/step9_manual_overrides.py`
 
 **Process:**
 1. Final review of all assumptions
@@ -259,7 +320,7 @@ This document traces the complete workflow for the **DCF Model** in the **Intern
 
 ---
 
-### Step 10: Run Valuation
+### Step 11: Run Valuation
 **Endpoint:** `POST /api/step-10-valuate`  
 **Frontend Component:** `RunValuationStep.jsx`  
 **Backend Processor:** `Step10ValuationProcessor`  
@@ -389,27 +450,27 @@ class DCFEngine:
 └──────┬──────┘
        ↓
 ┌─────────────┐
-│ Step 7      │ Generate: Growth Rates, Margins, WACC
-│ AI Assist   │
+│ Step 7      │ Fetch: Missing Historical Data (AI Extraction)
+│ Hist. Data  │ from PDFs/Reports
 └──────┬──────┘
        ↓
 ┌─────────────┐
-│ Step 8      │ User Adjusts Forecasts
-│ Modify      │
+│ Step 8      │ Generate: AI Suggestions for Assumptions
+│ AI Suggest  │
 └──────┬──────┘
        ↓
 ┌─────────────┐
-│ Step 9      │ Confirm All Assumptions
+│ Step 10     │ Confirm All Assumptions
 │ Confirm     │
 └──────┬──────┘
        ↓
 ┌─────────────┐
-│ Step 10     │ Execute DCF Engine
+│ Step 11     │ Execute DCF Engine
 │ Valuation   │ → Enterprise Value, Equity Value, Share Price
 └──────┬──────┘
        ↓
 ┌─────────────┐
-│ Step 11     │ Display Results, Charts, Sensitivity
+│ Step 12     │ View Results
 │ Results     │
 └─────────────┘
 ```
@@ -423,5 +484,8 @@ This workflow maintains complete model transparency:
 - All calculations follow standard financial methodologies
 - All outputs include audit trails with source attribution
 - No simplifications or hidden assumptions
+- **Step 7**: Collects historical data from non-API sources (NO AI)
+- **Step 8**: AI suggests ONLY 4 forward-looking assumptions for DCF (ERP, CRP, Terminal Growth, Terminal Multiple)
+- **DuPont/Comps**: 100% calculated, NO AI involvement
 
-*Last Updated: Reflects 10-step workflow architecture*
+*Last Updated: Reflects updated workflow with Step 7 (Historical Data Collection) and Step 8 (AI Assumptions Generation)*
