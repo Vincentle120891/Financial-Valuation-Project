@@ -1,43 +1,25 @@
-```gitignore
-# Dependencies
-node_modules/
-.venv/
-venv/
-__pycache__/
-*.pyc
-.mypy_cache/
-.pytest_cache/
-
-# Build artifacts
-dist/
-build/
-target/
-*.o
-*.obj
-*.so
-*.dll
-*.exe
-
-# Environment
-```
 # Compiled and build artifacts
 *.pyc
 __pycache__/
 *.o
 *.obj
-dist/
-build/
-*.so
-*.dll
-*.exe
 *.class
+*.exe
+*.dll
+*.so
+*.a
+*.out
 
 # Dependencies
 .venv/
 venv/
-.env
-.env.local
-*.env.*
+node_modules/
+.mypy_cache/
+.pytest_cache/
+dist/
+build/
+target/
+.gradle/
 
 # Logs and temp files
 *.log
@@ -45,56 +27,23 @@ venv/
 *.swp
 *.swo
 
+# Environment
+.env
+.env.local
+*.env.*
+
 # Editors
 .vscode/
 .idea/
-*.swp
-*.swo
-# Dependencies
-node_modules/
 
-# Environment variables
-.env
-.env.local
-.env.*
-
-# IDE specific
-.vscode/
-.idea/
-
-# Logs
-*.log
+# System files
+.DS_Store
+Thumbs.db
 
 # Coverage
-# Coverage reports
 coverage/
 htmlcov/
 .coverage
-
-# OS
-.DS_Store
-Thumbs.db
-# Temporary files
-*.tmp
-*.swp
-
-# Build artifacts
-dist/
-build/
-target/
-
-# Python
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-.Python
-*.so
-.coverage
-htmlcov/
-.coverage.*
-.pytest_cache/
-.mypy_cache/
 
 # Compressed files
 *.zip
@@ -119,36 +68,3 @@ htmlcov/
 *.tar.bz2
 *.tar.xz
 *.tar.zst
-# Python specific
-.mypy_cache/
-.pytest_cache/
-*.pyc
-__pycache__/
-
-# Build directories
-target/
-.gradle/
-build/
-dist/
-
-# OS generated files
-.DS_Store
-Thumbs.db
-```
-# Documentation and source files only - no build artifacts or dependencies detected
-# No .gitignore rules needed for this project based on the file changes provided
-
-# System files
-.DS_Store
-Thumbs.db
-
-# Virtual environments
-.venv/
-venv/
-.env/
-
-# Gradle
-.gradle/
-
-# Coverage
-coverage/
