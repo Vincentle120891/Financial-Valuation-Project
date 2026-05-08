@@ -83,12 +83,12 @@ This document describes the complete workflow of the backend valuation system, s
 **Description:** Fetch all financial data from yfinance/Alpha Vantage
 **Output:** Complete financial data including historicals, market data, and metrics
 
-### Step 7: AI Assumptions
+### Step 7: AI Assumptions Generation
 **Endpoint:** `POST /api/step-7-generate-ai-assumptions`
 **Processor:** `Step7AISuggestionsProcessor`
-**Description:** Generate AI-powered forward-looking assumptions (ERP, CRP, Terminal Growth, Terminal Multiple) using Gemini/Groq. For DuPont and Comps models, AI is bypassed as all inputs are calculated/fetched from APIs.
-**Output:** AI-generated assumptions with confidence scores, rationale, and provider information
-**No-Hallucination Guarantee:** AI ONLY generates 4 inputs that cannot be fetched from APIs. All other inputs are calculated from API data or user-provided scenario drivers.
+**Description:** Generate forward-looking assumptions that CANNOT be fetched from yfinance or Alpha Vantage APIs. For DCF models, AI generates ONLY 4 inputs: Equity Risk Premium (ERP), Country Risk Premium (CRP), Terminal Growth Rate, and Terminal EBITDA Multiple. For DuPont and Comps models, AI is completely bypassed as all inputs are calculated from financial data.
+**Output:** AI-generated assumptions with rationale, confidence scores, and provider information
+**No-Hallucination Guarantee:** Step 7 ONLY generates the 4 forward-looking assumptions that cannot be obtained from APIs. ALL other inputs (Risk-Free Rate, Beta, Cost of Debt, WACC components, Forecast Drivers) are CALCULATED in Step 8 from fetched data or user scenario inputs.
 
 ### Step 8: Modify Forecast Drivers
 **Frontend:** `ForecastDriversStep`

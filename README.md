@@ -102,7 +102,7 @@ See [MODEL_INTEGRITY_CONFIG.md](./backend/MODEL_INTEGRITY_CONFIG.md) for our com
 | Step | Action | User Interface | Backend Process |
 |------|--------|----------------|-----------------|
 | **6** | View Retrieved Inputs | Display all API-fetched financial data | Step6DataReviewProcessor fetches from yfinance/Alpha Vantage |
-| **7** | AI Assumptions | AI-generated forecasts with confidence scores | Step7AISuggestionsProcessor generates via Gemini/Groq |
+| **7** | AI Assumptions Generation | Display 4 AI-generated inputs for DCF (ERP, CRP, Terminal Growth, Terminal Multiple); Show "No AI Required" for DuPont/Comps | Step7AISuggestionsProcessor generates forward-looking assumptions that cannot be fetched from APIs |
 
 ### Phase 4: Assumption Refinement (Steps 8-9)
 
@@ -227,7 +227,7 @@ AI_CONFIDENCE_THRESHOLD=0.7
 | `POST` | `/api/step-4-select-models` | 4 | Select valuation model | `{session_id, model}` | `{status, next_step}` |
 | `POST` | `/api/step-5-prepare-inputs` | 5 | Get required inputs | `{session_id}` | `{required_inputs: [...]}` |
 | `POST` | `/api/step-6-fetch-api-data` | 6 | Fetch financial data | `{session_id}` | `{financial_data: {...}}` |
-| `POST` | `/api/step-7-generate-ai-assumptions` | 7 | Generate AI assumptions (ERP, CRP, Terminal Growth, Terminal Multiple) | `{session_id}` | `{suggestions: {...}, ai_status: {...}}` |
+| `POST` | `/api/step-7-generate-ai-assumptions` | 7 | Generate AI assumptions for DCF (ERP, CRP, Terminal Growth, Terminal Multiple) | `{session_id}` | `{ai_assumptions: {...}, rationale: "..."}` |
 | `POST` | `/api/step-9-confirm-assumptions` | 9 | Confirm assumptions | `{session_id, confirmed_values}` | `{status}` |
 | `POST` | `/api/step-10-valuate` | 10 | Run valuation | `{session_id}` | `{valuation_results: [...]}` |
 

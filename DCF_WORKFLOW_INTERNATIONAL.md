@@ -179,61 +179,56 @@ This document traces the complete workflow for the **DCF Model** in the **Intern
 
 ---
 
-### Step 7: AI Assumptions
+### Step 7: AI Assumptions Generation
 **Endpoint:** `POST /api/step-7-generate-ai-assumptions`  
 **Frontend Component:** `AiAssumptionsStep.jsx`  
 **Backend Processor:** `Step7AISuggestionsProcessor`  
 **File:** `/backend/app/services/international/step7_ai_suggestions.py`
 
 **Process:**
-1. AI engine (Gemini/Groq) analyzes company data, sector, and market conditions
-2. Generates ONLY 4 forward-looking assumptions that cannot be fetched from APIs:
-   - Equity Risk Premium (ERP)
-   - Country Risk Premium (CRP)
-   - Terminal Growth Rate
-   - Terminal EBITDA Multiple
-3. Provides confidence scores and rationale for each assumption
-4. Falls back to default values if AI fails
-5. For DuPont and Comps models: AI is bypassed (all inputs are calculated/fetched)
+1. Generate forward-looking assumptions that CANNOT be fetched from yfinance or Alpha Vantage APIs
+2. For DCF models: AI generates ONLY 4 inputs (ERP, CRP, Terminal Growth, Terminal Multiple)
+3. For DuPont and Comps models: AI is completely bypassed (all inputs calculated from financial data)
+4. Provide rationale and confidence scores for each AI-generated assumption
+5. Allow users to accept or override AI suggestions in Step 8
 
 **No-Hallucination Guarantee:**
-- AI ONLY generates 4 inputs that cannot be fetched from APIs
-- All other inputs (Risk-Free Rate, Beta, Cost of Debt, WACC, Forecast Drivers) are calculated from API data or user-provided scenario drivers
+- Step 7 ONLY generates the 4 forward-looking assumptions that cannot be obtained from APIs
+- ALL other inputs (Risk-Free Rate, Beta, Cost of Debt, WACC components, Forecast Drivers) are CALCULATED in Step 8
+- For DuPont/Comps: No AI involvement whatsoever - 100% calculated from financial statements
 
-**AI Output (DCF Model):**
+**AI-Generated Assumptions (DCF Only):**
 ```json
 {
   "equity_risk_premium": {
     "value": 0.055,
-    "rationale": "Based on US market historical premium and current volatility..."
+    "rationale": "Based on historical market returns and current market conditions",
+    "confidence": "high"
   },
   "country_risk_premium": {
-    "value": 0.0,
-    "rationale": "No additional premium for developed market..."
+    "value": 0.02,
+    "rationale": "Additional premium for emerging market exposure",
+    "confidence": "medium"
   },
   "terminal_growth_rate": {
     "value": 0.025,
-    "rationale": "Aligned with long-term GDP growth expectations..."
+    "rationale": "Aligned with long-term GDP growth expectations",
+    "confidence": "high"
   },
   "terminal_ebitda_multiple": {
-    "value": 12.0,
-    "rationale": "Consistent with sector peer multiples..."
-  },
-  "_ai_status": {
-    "success": true,
-    "provider_used": "gemini",
-    "confidence": 0.9
+    "value": 10.0,
+    "rationale": "Based on sector peer analysis and industry standards",
+    "confidence": "medium"
   }
 }
 ```
 
-**Vietnam-Specific Adjustments:**
-For Vietnamese companies, AI considers:
-- VNINDEX volatility (25-35% annualized)
-- Foreign ownership limit (FOL) liquidity impact
-- VND/USD exchange rate risk
-- Emerging market institutional factors
-- Vietnam's long-term GDP growth (~5-6%)
+**Vietnam-Specific Considerations:**
+For Vietnamese companies, AI adjusts assumptions for emerging market factors:
+- Higher ERP (6-8%) reflecting VNINDEX volatility
+- CRP (2-5%) for VND currency risk and institutional factors
+- Terminal growth aligned with Vietnam GDP (~5-6%)
+- Lower terminal multiples (8-12x) due to liquidity discount
 
 ---
 
@@ -243,7 +238,7 @@ For Vietnamese companies, AI considers:
 **File:** `/backend/app/services/international/step8_manual_overrides.py`
 
 **Process:**
-1. User reviews AI-generated assumptions
+1. User reviews calculated assumptions from Step 8
 2. Can manually override any values
 3. Adjust scenario settings (Bull/Base/Bear)
 4. System validates input ranges

@@ -43,7 +43,7 @@ frontend/
 - `peerData`: Comparable company analysis
 - `dupontResults`: DuPont decomposition outputs
 - `compsResults`: Trading comps multiples
-- `aiData`: AI-generated suggestions with rationale
+- `missingData`: Retrieved historical data gaps from alternative sources
 - `confirmedValues`: User-confirmed assumptions
 
 **10-Step Workflow**:
@@ -71,12 +71,13 @@ frontend/
    - Fetches financial data from yfinance/Alpha Vantage
    - Populates historicalData, marketData, financial_data
 
-6. **Step 7 - AI Assumptions** (`AiAssumptionsStep.jsx`)
+6. **Step 7 - AI Assumptions Generation** (`AiAssumptionsStep.jsx`)
    - Calls `/step-7-generate-ai-assumptions` endpoint
-   - Displays AI-generated assumptions for DCF models (ERP, CRP, Terminal Growth, Terminal Multiple)
-   - For DuPont/Comps: Shows "No AI Required" message
-   - User can accept AI suggestions or manually override
-   - Vietnam-specific guidance for emerging market inputs
+   - For DCF models: Displays 4 AI-generated inputs (ERP, CRP, Terminal Growth, Terminal Multiple)
+   - For DuPont/Comps models: Shows "No AI Required" message (all inputs calculated from financial data)
+   - For Vietnam DCF: Shows emerging market-specific guidance (VNINDEX volatility, VND risk)
+   - Users can accept AI suggestions or manually override values
+   - Provides rationale and confidence scores for each AI assumption
 
 7. **Step 8 - Modify Forecast Drivers** (`ForecastDriversStep.jsx`)
    - User fine-tunes growth rates, margins, and scenarios
@@ -132,7 +133,7 @@ const [dupontResults, setDupontResults] = useState(null);
      setHistoricalData(fetchApiData.data.financial_data.historical);
    }
    ```
-2. **Step 7**: Generates AI assumptions via `/step-7-generate-ai-assumptions`
+2. **Step 7**: Retrieves missing historical data via `/step-7-generate-ai-assumptions`
 3. **Step 8**: User modifies forecast drivers manually
 
 2. **Step 10**: Displays DuPont results
