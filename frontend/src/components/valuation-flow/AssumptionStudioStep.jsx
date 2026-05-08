@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
+import { generateAISuggestion } from '../../services/api';
 
 const AssumptionStudioStep = ({ 
+  sessionId,
   selectedModel, 
   historicalData, 
   assumptions, 
@@ -11,6 +13,8 @@ const AssumptionStudioStep = ({
   const [localAssumptions, setLocalAssumptions] = useState({ ...assumptions });
   const [validationErrors, setValidationErrors] = useState({});
   const [whatIfPreview, setWhatIfPreview] = useState(null);
+  const [aiLoading, setAiLoading] = useState({});
+  const [aiSuggestions, setAiSuggestions] = useState({});
 
   // Calculate historical trends from historicalData
   const calculateHistoricalTrend = (metric) => {

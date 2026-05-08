@@ -96,6 +96,12 @@ class GenerateAIRequest(BaseModel):
     session_id: str = Field(..., min_length=1, description="Session identifier")
 
 
+class GenerateAISuggestionRequest(BaseModel):
+    """Request model for generating AI suggestions for a specific category (Step 8)."""
+    session_id: str = Field(..., min_length=1, description="Session identifier")
+    category: str = Field(..., description="Assumption category (e.g., REVENUE_DRIVERS, COST_MARGINS)")
+
+
 class ConfirmAssumptionsRequest(BaseModel):
     """Request model for confirming assumptions."""
     session_id: str = Field(..., min_length=1, description="Session identifier")
@@ -224,6 +230,19 @@ class GenerateAIResponse(BaseModel):
     status: str
     suggestions: Dict[str, Any]
     message: str
+    
+    class Config:
+        extra = "allow"
+
+
+class AISuggestionCategoryResponse(BaseModel):
+    """Response model for Step 8 AI suggestion generation for a category."""
+    status: str
+    category: str
+    category_name: str
+    assumptions: List[Dict[str, Any]]
+    ai_generated: bool = True
+    message: str = ""
     
     class Config:
         extra = "allow"
