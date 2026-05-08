@@ -119,3 +119,33 @@ async def validate_ticker(ticker: str, market: str = "US"):
             "valid": False,
             "message": str(e)
         }
+
+
+@router.post("/suggest-peers")
+async def suggest_peers(ticker: str, max_peers: int = 10, market: str = "international"):
+    """
+    Suggest peer companies for a given ticker.
+    Uses Step2MarketDataProcessor with PeerDiscoveryService.
+    
+    Args:
+        ticker: Target ticker symbol
+        max_peers: Maximum number of peers to suggest (default: 10)
+        market: Market type (default: international)
+    
+    Returns:
+        List of peer candidates with similarity scores
+    """
+    logger.info(f"Suggesting peers for ticker='{ticker}', max_peers={max_peers}")
+    
+    try:
+        result = await step2_processor.suggest_peers(
+            ticker=ticker,
+            max_peers=max_peers,
+            market=market
+        )
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Failed to suggest peers: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Peer suggestion failed: {str(e)}")

@@ -169,7 +169,7 @@ class Step1TickerProcessor:
             market: Market type (international or vietnamese)
             
         Returns:
-            List of matching ticker dictionaries
+            List of matching ticker dictionaries with sector, industry, and market cap
         """
         logger.info(f"Searching tickers for query='{query}', market='{market}'")
         
@@ -184,6 +184,7 @@ class Step1TickerProcessor:
                 'exchange': result.get('exchDisp', 'UNKNOWN'),
                 'sector': result.get('sector'),
                 'industry': result.get('industry'),
+                'market_cap': result.get('marketCap'),
                 'market': market
             })
         
