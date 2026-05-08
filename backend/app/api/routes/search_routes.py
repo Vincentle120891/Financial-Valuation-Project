@@ -121,8 +121,8 @@ async def validate_ticker(ticker: str, market: str = "US"):
         }
 
 
-@router.post("/suggest-peers")
-async def suggest_peers(ticker: str, max_peers: int = 10, market: str = "international"):
+@router.post("/step-2-suggest-peers")
+async def suggest_peers_endpoint(request: dict):
     """
     Suggest peer companies for a given ticker.
     Uses Step2MarketDataProcessor with PeerDiscoveryService.
@@ -134,6 +134,31 @@ async def suggest_peers(ticker: str, max_peers: int = 10, market: str = "interna
     
     Returns:
         List of peer candidates with similarity scores
+    """
+    ticker = request.get("ticker")
+    max_peers = request.get("max_peers", 10)
+    market = request.get("market", "international")
+    
+    logger.info(f"Suggesting peers for ticker='{ticker}', max_peers={max_peers}, market={market}")
+    
+    try:
+        result = await step2_processor.suggest_peers(
+            ticker=ticker,
+            max_peers=max_peers,
+            market=market
+        )
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Failed to suggest peers: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Peer suggestion failed: {str(e)}")
+
+
+@router.post("/suggest-peers")
+async def suggest_peers_legacy(ticker: str, max_peers: int = 10, market: str = "international"):
+    """
+    Legacy endpoint for suggesting peers (kept for backward compatibility).
     """
     logger.info(f"Suggesting peers for ticker='{ticker}', max_peers={max_peers}")
     
