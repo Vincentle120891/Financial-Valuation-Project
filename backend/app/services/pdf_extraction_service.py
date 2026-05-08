@@ -976,3 +976,7 @@ def process_vietnamese_reports(report_paths: List[str],
             })
     
     return results
+
+
+# Alias for backward compatibility
+PDFExtractionService = VietnamesePDFExtractor
