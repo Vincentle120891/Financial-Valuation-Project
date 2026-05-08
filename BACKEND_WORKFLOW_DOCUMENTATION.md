@@ -4,6 +4,21 @@
 
 This document describes the complete workflow of the backend valuation system, showing how different valuation models work across international and Vietnamese markets using a 10-step guided process.
 
+### Model & Market Architecture
+
+**3 Distinct Models:**
+- **DCF (Discounted Cash Flow)**: Intrinsic value based on projected free cash flows with rigorous WACC calculation from peer analysis
+- **DuPont Analysis**: ROE decomposition into profit margin, asset turnover, and leverage components  
+- **Trading Comps**: Relative valuation using peer company multiples with statistical analysis
+
+**Market Segregation:**
+- **International Market**: Uses yfinance/AlphaVantage APIs with standard GAAP/IFRS accounting
+- **Vietnamese Market**: Separate input managers and calculation engines to handle local GAAP/regulatory differences (e.g., TT99 for Vietnam), VND currency, and .VN ticker suffixes
+
+**AI Usage Clarification:**
+- **Step 7 (Historical Data Retrieval)**: ZERO AI involvement - strictly fetches missing historical data from alternative sources
+- **Step 8 (Assumption & AI Suggestion)**: AI provides suggestions for forward-looking inputs (growth rates, margins, terminal values, etc.), but all calculations remain rigorous and programmatically verified
+
 ---
 
 ## System Architecture
@@ -83,17 +98,18 @@ This document describes the complete workflow of the backend valuation system, s
 **Description:** Fetch all financial data from yfinance/Alpha Vantage
 **Output:** Complete financial data including historicals, market data, and metrics
 
-### Step 7: AI Assumptions
-**Endpoint:** `POST /api/step-7-generate-ai-assumptions`
-**Processor:** `Step7AISuggestionsProcessor`
-**Description:** Generate AI-powered forecasts using Gemini/Groq
-**Output:** AI-generated assumptions with confidence scores and rationale
+### Step 7: Historical Data Retrieval
+**Endpoint:** `POST /api/step-7-fetch-historical-data`
+**Processor:** `Step7HistoricalDataProcessor`
+**Description:** Fetch historical data that cannot be retrieved via standard APIs (yfinance/AlphaVantage). ZERO AI involvement in this step.
+**Output:** Missing historical financial data from alternative sources
 
-### Step 8: Modify Forecast Drivers
-**Frontend:** `ForecastDriversStep`
-**Processor:** `Step8ManualOverridesProcessor`
-**Description:** User fine-tunes growth rates, margins, and scenarios
-**Output:** Updated forecast drivers
+### Step 8: Assumption & AI Suggestion
+**Endpoint:** `POST /api/step-8-generate-ai-assumptions`
+**Frontend:** `ForecastDriversStep` / `AssumptionsStep`
+**Processor:** `Step8AssumptionProcessor`
+**Description:** Dedicated phase for assumptions. Calculates values programmatically and utilizes AI for suggestions on forward-looking inputs. This is where forward-looking inputs are finalized before confirmation.
+**Output:** AI-generated assumption suggestions with confidence scores and rationale, plus programmatically calculated values
 
 ### Step 9: Confirm Assumptions
 **Endpoint:** `POST /api/step-9-confirm-assumptions`
@@ -127,8 +143,8 @@ The backend uses a modular service processor pattern where each step has a dedic
 | Step4ForecastProcessor | `step4_forecast_processor.py` | Build forecast driver templates |
 | Step5AssumptionsProcessor | `step5_assumptions_processor.py` | Define required inputs per model |
 | Step6DataReviewProcessor | `step6_data_review.py` | Comprehensive data fetching and validation |
-| Step7AISuggestionsProcessor | `step7_ai_suggestions.py` | Generate AI-powered assumptions |
-| Step8ManualOverridesProcessor | `step8_manual_overrides.py` | Handle user overrides and confirmations |
+| Step7HistoricalDataProcessor | `step7_historical_data.py` | Fetch missing historical data from alternative sources (NO AI) |
+| Step8AssumptionProcessor | `step8_assumption_processor.py` | Calculate assumptions programmatically and generate AI suggestions for forward-looking inputs |
 | Step9FinalCalculation | `step9_final_calculation.py` | Pre-calculation validation and preparation |
 | Step10ValuationProcessor | `step10_valuation_processor.py` | Execute valuation engines |
 
@@ -219,7 +235,8 @@ All workflow state is managed through `SessionService` (`/backend/app/core/sessi
     "peer_tickers": ["MSFT", "GOOGL", ...],
     "selected_model": "DCF",
     "financial_data": {...},  # From Step 6
-    "ai_suggestions": {...},  # From Step 7
+    "historical_data": {...},  # From Step 7 (missing historical data)
+    "ai_suggestions": {...},  # From Step 8 (AI assumption suggestions)
     "confirmed_assumptions": {...},  # From Step 9
     "valuation_result": {...},  # From Step 10
     "status": "valuation_complete"

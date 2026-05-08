@@ -67,28 +67,30 @@ frontend/
    - Data requirement summaries
    - "Change Model" back button
 
-5. **Step 6-7 - Data Retrieval** (handled in `handleRetrieveData`)
-   - Parallel API calls:
-     - `/step-7-8-fetch-data` (financial data)
-     - `/step-9-generate-ai` (AI suggestions)
-   - Populates historicalData, forecastDrivers, peerData
+5. **Step 6 - Fetch API Data** (`handleFetchApiData`)
+   - API call to `/step-6-fetch-api-data` (financial data from yfinance/AlphaVantage)
+   - Populates historicalData with standard API data
 
-6. **Step 8 - Review & Confirm** (`renderStep8`)
-   - Historical trends summary (Revenue CAGR, Margins, ROE)
-   - Peer benchmarking display
-   - "Auto-Fill All AI Values" button
+6. **Step 7 - Historical Data Retrieval** (`handleFetchHistoricalData`)
+   - API call to `/step-7-fetch-historical-data` (missing historical data from alternative sources)
+   - **ZERO AI involvement** - strictly fetches missing historical data
+   - Displays retrieved historical data in UI
+
+7. **Step 8 - Assumption & AI Suggestion** (`handleGenerateAiAssumptions`)
+   - API call to `/step-8-generate-ai-assumptions` (AI suggestions for forward-looking inputs)
+   - Renders AI suggestion interface for assumptions
    - Interactive table with:
      - AI suggestions with confidence scores
      - Rationale & sources display
      - Manual input fields
      - Confirm/Use AI buttons
 
-7. **Step 9 - Assumptions Confirmation** (`renderStep9`)
+8. **Step 9 - Assumptions Confirmation** (`renderStep9`)
    - Scenario selection (Best/Base/Worst)
    - Summary of all confirmed inputs
    - "Run Valuation" trigger
 
-8. **Step 10 - Results Display** (`renderStep10`)
+9. **Step 10 - Results Display** (`renderStep10`)
    - Model-specific result rendering
    - Charts and visualizations
    - Export options
@@ -104,12 +106,13 @@ selectModels(sessionId, models)          // POST /step-4-select-models
 
 // Data Preparation
 prepareInputs(sessionId)                 // POST /step-5-6-prepare-inputs
-fetchData(sessionId)                     // POST /step-7-8-fetch-data
-generateAI(sessionId)                    // POST /step-9-generate-ai
+fetchApiData(sessionId)                  // POST /step-6-fetch-api-data
+fetchHistoricalData(sessionId)           // POST /step-7-fetch-historical-data
+generateAI(sessionId)                    // POST /step-8-generate-ai-assumptions
 
 // Valuation Execution
-confirmAssumptions(sessionId, assumptions, scenario) // POST /step-10-confirm-assumptions
-runValuation(sessionId, model, scenario)             // POST /step-11-12-valuate
+confirmAssumptions(sessionId, assumptions, scenario) // POST /step-9-confirm-assumptions
+runValuation(sessionId, model, scenario)             // POST /step-10-valuate
 
 // Specialized Endpoints
 getDcfInputs(sessionId)                  // POST /dcf/inputs
@@ -126,10 +129,10 @@ const [dupontResults, setDupontResults] = useState(null);
 ```
 
 ### Data Flow
-1. **Step 7-8**: Fetches DuPont ratios via `/step-7-8-fetch-data`
+1. **Step 6**: Fetches DuPont ratios via `/step-6-fetch-api-data`
    ```javascript
-   if (fetchData.data.dupont_ratios) {
-     setDupontResults(fetchData.data.dupont_ratios);
+   if (fetchApiData.data.dupont_ratios) {
+     setDupontResults(fetchApiData.data.dupont_ratios);
    }
    ```
 

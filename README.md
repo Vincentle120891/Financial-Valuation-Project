@@ -102,13 +102,13 @@ See [MODEL_INTEGRITY_CONFIG.md](./backend/MODEL_INTEGRITY_CONFIG.md) for our com
 | Step | Action | User Interface | Backend Process |
 |------|--------|----------------|-----------------|
 | **6** | View Retrieved Inputs | Display all API-fetched financial data | Step6DataReviewProcessor fetches from yfinance/Alpha Vantage |
-| **7** | AI Assumptions | AI-generated forecasts with confidence scores | Step7AISuggestionsProcessor generates via Gemini/Groq |
+| **7** | Historical Data Retrieval | Display missing historical data fetched from alternative sources | Step7HistoricalDataProcessor fetches data gaps not available via standard APIs |
 
-### Phase 4: Assumption Refinement (Steps 8-9)
+### Phase 4: Assumption & AI Suggestion (Steps 8-9)
 
 | Step | Action | User Interface | Backend Process |
 |------|--------|----------------|-----------------|
-| **8** | Modify Forecast Drivers | Edit growth rates, margins, scenarios | Step8ManualOverridesProcessor handles overrides |
+| **8** | Assumption & AI Suggestion | Review AI-suggested assumptions with confidence scores, edit forecast drivers | Step8AssumptionProcessor calculates values programmatically and utilizes AI for suggestions on forward-looking inputs |
 | **9** | Confirm Assumptions | Final review before calculation | Store confirmed assumptions with source tags |
 
 ### Phase 5: Valuation & Results (Steps 10-11)
@@ -227,7 +227,8 @@ AI_CONFIDENCE_THRESHOLD=0.7
 | `POST` | `/api/step-4-select-models` | 4 | Select valuation model | `{session_id, model}` | `{status, next_step}` |
 | `POST` | `/api/step-5-prepare-inputs` | 5 | Get required inputs | `{session_id}` | `{required_inputs: [...]}` |
 | `POST` | `/api/step-6-fetch-api-data` | 6 | Fetch financial data | `{session_id}` | `{financial_data: {...}}` |
-| `POST` | `/api/step-7-generate-ai-assumptions` | 7 | Generate AI forecasts | `{session_id}` | `{suggestions: {...}}` |
+| `POST` | `/api/step-7-fetch-historical-data` | 7 | Fetch missing historical data | `{session_id}` | `{historical_data: {...}}` |
+| `POST` | `/api/step-8-generate-ai-assumptions` | 8 | Generate AI assumption suggestions | `{session_id}` | `{suggestions: {...}}` |
 | `POST` | `/api/step-9-confirm-assumptions` | 9 | Confirm assumptions | `{session_id, confirmed_values}` | `{status}` |
 | `POST` | `/api/step-10-valuate` | 10 | Run valuation | `{session_id}` | `{valuation_results: [...]}` |
 
@@ -363,12 +364,14 @@ The platform retrieves live financial data from multiple sources:
 - **Alpha Vantage API**: Income statements, balance sheets, cash flow statements
 - **Damodaran Database**: Industry benchmarks and sector WACC data
 
-### 2. AI-Assisted Assumptions
-When manual inputs are required, the AI engine:
+### 2. AI-Assisted Assumptions (Step 8)
+In Step 8 (Assumption & AI Suggestion), the AI engine provides suggestions for forward-looking inputs:
 - Analyzes historical trends and peer comparisons
 - Generates reasonable assumption ranges with confidence scores
 - Provides transparent explanations for each suggestion
 - Allows users to accept, edit, or override AI recommendations
+
+**Note**: Step 7 (Historical Data Retrieval) has ZERO AI involvement - it strictly fetches missing historical data that cannot be retrieved via standard APIs.
 
 ### 3. Valuation Execution
 Each valuation model runs independently:
