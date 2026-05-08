@@ -67,25 +67,25 @@ frontend/
    - Data requirement summaries
    - "Change Model" back button
 
-5. **Step 6-7 - Data Retrieval** (handled in `handleRetrieveData`)
-   - Parallel API calls:
-     - `/step-7-8-fetch-data` (financial data)
-     - `/step-9-generate-ai` (AI suggestions)
-   - Populates historicalData, forecastDrivers, peerData
+5. **Step 6 - View Retrieved Inputs** (`handleFetchApiData`)
+   - Fetches financial data from yfinance/Alpha Vantage
+   - Populates historicalData, marketData, financial_data
 
-6. **Step 8 - Review & Confirm** (`renderStep8`)
-   - Historical trends summary (Revenue CAGR, Margins, ROE)
-   - Peer benchmarking display
-   - "Auto-Fill All AI Values" button
-   - Interactive table with:
-     - AI suggestions with confidence scores
-     - Rationale & sources display
-     - Manual input fields
-     - Confirm/Use AI buttons
+6. **Step 7 - AI Assumptions** (`AiAssumptionsStep.jsx`)
+   - Calls `/step-7-generate-ai-assumptions` endpoint
+   - Displays AI-generated assumptions for DCF models (ERP, CRP, Terminal Growth, Terminal Multiple)
+   - For DuPont/Comps: Shows "No AI Required" message
+   - User can accept AI suggestions or manually override
+   - Vietnam-specific guidance for emerging market inputs
 
-7. **Step 9 - Assumptions Confirmation** (`renderStep9`)
-   - Scenario selection (Best/Base/Worst)
-   - Summary of all confirmed inputs
+7. **Step 8 - Modify Forecast Drivers** (`ForecastDriversStep.jsx`)
+   - User fine-tunes growth rates, margins, and scenarios
+   - Interactive input fields with validation
+   - Scenario selection (Bull/Base/Bear)
+
+8. **Step 9 - Confirm Assumptions** (`ConfirmAssumptionsStep.jsx`)
+   - Final review of all assumptions
+   - Summary of confirmed inputs
    - "Run Valuation" trigger
 
 8. **Step 10 - Results Display** (`renderStep10`)
@@ -103,13 +103,13 @@ selectCompany(sessionId, ticker, market) // POST /step-3-select-ticker
 selectModels(sessionId, models)          // POST /step-4-select-models
 
 // Data Preparation
-prepareInputs(sessionId)                 // POST /step-5-6-prepare-inputs
-fetchData(sessionId)                     // POST /step-7-8-fetch-data
-generateAI(sessionId)                    // POST /step-9-generate-ai
+prepareInputs(sessionId)                 // POST /step-5-prepare-inputs
+fetchApiData(sessionId)                  // POST /step-6-fetch-api-data
+generateAI(sessionId)                    // POST /step-7-generate-ai-assumptions
 
 // Valuation Execution
-confirmAssumptions(sessionId, assumptions, scenario) // POST /step-10-confirm-assumptions
-runValuation(sessionId, model, scenario)             // POST /step-11-12-valuate
+confirmAssumptions(sessionId, assumptions, scenario) // POST /step-9-confirm-assumptions
+runValuation(sessionId, model, scenario)             // POST /step-10-valuate
 
 // Specialized Endpoints
 getDcfInputs(sessionId)                  // POST /dcf/inputs
@@ -126,12 +126,14 @@ const [dupontResults, setDupontResults] = useState(null);
 ```
 
 ### Data Flow
-1. **Step 7-8**: Fetches DuPont ratios via `/step-7-8-fetch-data`
+1. **Step 6**: Fetches financial data via `/step-6-fetch-api-data`
    ```javascript
-   if (fetchData.data.dupont_ratios) {
-     setDupontResults(fetchData.data.dupont_ratios);
+   if (fetchApiData.data.financial_data) {
+     setHistoricalData(fetchApiData.data.financial_data.historical);
    }
    ```
+2. **Step 7**: Generates AI assumptions via `/step-7-generate-ai-assumptions`
+3. **Step 8**: User modifies forecast drivers manually
 
 2. **Step 10**: Displays DuPont results
    ```javascript

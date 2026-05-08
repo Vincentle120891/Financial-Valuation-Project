@@ -227,7 +227,7 @@ AI_CONFIDENCE_THRESHOLD=0.7
 | `POST` | `/api/step-4-select-models` | 4 | Select valuation model | `{session_id, model}` | `{status, next_step}` |
 | `POST` | `/api/step-5-prepare-inputs` | 5 | Get required inputs | `{session_id}` | `{required_inputs: [...]}` |
 | `POST` | `/api/step-6-fetch-api-data` | 6 | Fetch financial data | `{session_id}` | `{financial_data: {...}}` |
-| `POST` | `/api/step-7-generate-ai-assumptions` | 7 | Generate AI forecasts | `{session_id}` | `{suggestions: {...}}` |
+| `POST` | `/api/step-7-generate-ai-assumptions` | 7 | Generate AI assumptions (ERP, CRP, Terminal Growth, Terminal Multiple) | `{session_id}` | `{suggestions: {...}, ai_status: {...}}` |
 | `POST` | `/api/step-9-confirm-assumptions` | 9 | Confirm assumptions | `{session_id, confirmed_values}` | `{status}` |
 | `POST` | `/api/step-10-valuate` | 10 | Run valuation | `{session_id}` | `{valuation_results: [...]}` |
 

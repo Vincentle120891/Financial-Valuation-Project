@@ -186,31 +186,54 @@ This document traces the complete workflow for the **DCF Model** in the **Intern
 **File:** `/backend/app/services/international/step7_ai_suggestions.py`
 
 **Process:**
-1. AI engine (Gemini/Groq) analyzes historical trends
-2. Generates 5-year forecasts for:
-   - Revenue growth rates
-   - Margin assumptions
-   - Capex projections
-   - Working capital days
-   - Terminal value assumptions
-3. Provides confidence scores and rationale
-4. Falls back to deterministic calculations if AI fails
+1. AI engine (Gemini/Groq) analyzes company data, sector, and market conditions
+2. Generates ONLY 4 forward-looking assumptions that cannot be fetched from APIs:
+   - Equity Risk Premium (ERP)
+   - Country Risk Premium (CRP)
+   - Terminal Growth Rate
+   - Terminal EBITDA Multiple
+3. Provides confidence scores and rationale for each assumption
+4. Falls back to default values if AI fails
+5. For DuPont and Comps models: AI is bypassed (all inputs are calculated/fetched)
 
-**AI Output:**
+**No-Hallucination Guarantee:**
+- AI ONLY generates 4 inputs that cannot be fetched from APIs
+- All other inputs (Risk-Free Rate, Beta, Cost of Debt, WACC, Forecast Drivers) are calculated from API data or user-provided scenario drivers
+
+**AI Output (DCF Model):**
 ```json
 {
-  "revenue_growth": [0.08, 0.07, 0.06, 0.05, 0.04],
-  "ebitda_margin": [0.32, 0.33, 0.34, 0.34, 0.35],
-  "capex_percent_revenue": [0.03, 0.03, 0.03, 0.03, 0.03],
-  "wacc": 0.089,
-  "terminal_growth": 0.025,
-  "_metadata": {
-    "ai_success": true,
-    "provider": "gemini",
-    "confidence": 0.87
+  "equity_risk_premium": {
+    "value": 0.055,
+    "rationale": "Based on US market historical premium and current volatility..."
+  },
+  "country_risk_premium": {
+    "value": 0.0,
+    "rationale": "No additional premium for developed market..."
+  },
+  "terminal_growth_rate": {
+    "value": 0.025,
+    "rationale": "Aligned with long-term GDP growth expectations..."
+  },
+  "terminal_ebitda_multiple": {
+    "value": 12.0,
+    "rationale": "Consistent with sector peer multiples..."
+  },
+  "_ai_status": {
+    "success": true,
+    "provider_used": "gemini",
+    "confidence": 0.9
   }
 }
 ```
+
+**Vietnam-Specific Adjustments:**
+For Vietnamese companies, AI considers:
+- VNINDEX volatility (25-35% annualized)
+- Foreign ownership limit (FOL) liquidity impact
+- VND/USD exchange rate risk
+- Emerging market institutional factors
+- Vietnam's long-term GDP growth (~5-6%)
 
 ---
 

@@ -86,8 +86,9 @@ This document describes the complete workflow of the backend valuation system, s
 ### Step 7: AI Assumptions
 **Endpoint:** `POST /api/step-7-generate-ai-assumptions`
 **Processor:** `Step7AISuggestionsProcessor`
-**Description:** Generate AI-powered forecasts using Gemini/Groq
-**Output:** AI-generated assumptions with confidence scores and rationale
+**Description:** Generate AI-powered forward-looking assumptions (ERP, CRP, Terminal Growth, Terminal Multiple) using Gemini/Groq. For DuPont and Comps models, AI is bypassed as all inputs are calculated/fetched from APIs.
+**Output:** AI-generated assumptions with confidence scores, rationale, and provider information
+**No-Hallucination Guarantee:** AI ONLY generates 4 inputs that cannot be fetched from APIs. All other inputs are calculated from API data or user-provided scenario drivers.
 
 ### Step 8: Modify Forecast Drivers
 **Frontend:** `ForecastDriversStep`
