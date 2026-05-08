@@ -179,20 +179,45 @@ This document traces the complete workflow for the **DCF Model** in the **Intern
 
 ---
 
-### Step 7: AI Assumptions
-**Endpoint:** `POST /api/step-7-generate-ai-assumptions`  
-**Frontend Component:** `AiAssumptionsStep.jsx`  
-**Backend Processor:** `Step7AISuggestionsProcessor`  
-**File:** `/backend/app/services/international/step7_ai_suggestions.py`
+### Step 7: Historical Data Retrieval
+**Endpoint:** `POST /api/step-7-fetch-historical-data`  
+**Frontend Component:** `ApiDataStep.jsx` (extended)  
+**Backend Processor:** `Step7HistoricalDataProcessor`  
+**File:** `/backend/app/services/international/step7_historical_data.py`
 
 **Process:**
-1. AI engine (Gemini/Groq) analyzes historical trends
-2. Generates 5-year forecasts for:
+1. Identifies data gaps not available via standard APIs (yfinance/AlphaVantage)
+2. Fetches missing historical data from alternative sources
+3. **ZERO AI involvement** - this step is strictly for historical data retrieval
+4. No forward-looking inputs are generated here
+
+**Data Retrieved:**
+```python
+{
+    "missing_historical_data": {
+        # Additional historical metrics not available from primary APIs
+    },
+    "data_sources": ["alternative_source_1", "alternative_source_2"]
+}
+```
+
+---
+
+### Step 8: Assumption & AI Suggestion
+**Endpoint:** `POST /api/step-8-generate-ai-assumptions`  
+**Frontend Component:** `ForecastDriversStep.jsx` / `AssumptionsStep.jsx`  
+**Backend Processor:** `Step8AssumptionProcessor`  
+**File:** `/backend/app/services/international/step8_assumption_processor.py`
+
+**Process:**
+1. Calculates values programmatically based on historical trends
+2. AI engine (Gemini/Groq) generates suggestions for forward-looking inputs:
    - Revenue growth rates
    - Margin assumptions
    - Capex projections
    - Working capital days
    - Terminal value assumptions
+   - WACC components
 3. Provides confidence scores and rationale
 4. Falls back to deterministic calculations if AI fails
 
@@ -211,25 +236,6 @@ This document traces the complete workflow for the **DCF Model** in the **Intern
   }
 }
 ```
-
----
-
-### Step 8: Modify Forecast Drivers
-**Frontend Component:** `ForecastDriversStep.jsx`  
-**Backend Processor:** `Step8ManualOverridesProcessor`  
-**File:** `/backend/app/services/international/step8_manual_overrides.py`
-
-**Process:**
-1. User reviews AI-generated assumptions
-2. Can manually override any values
-3. Adjust scenario settings (Bull/Base/Bear)
-4. System validates input ranges
-
-**User Actions:**
-- Edit growth rates
-- Modify margin assumptions
-- Change terminal value inputs
-- Select scenario preset
 
 ---
 
@@ -389,13 +395,13 @@ class DCFEngine:
 └──────┬──────┘
        ↓
 ┌─────────────┐
-│ Step 7      │ Generate: Growth Rates, Margins, WACC
-│ AI Assist   │
+│ Step 7      │ Fetch: Missing Historical Data (NO AI)
+│ Hist. Data  │
 └──────┬──────┘
        ↓
 ┌─────────────┐
-│ Step 8      │ User Adjusts Forecasts
-│ Modify      │
+│ Step 8      │ Generate: AI Suggestions for Assumptions
+│ AI Suggest  │
 └──────┬──────┘
        ↓
 ┌─────────────┐
