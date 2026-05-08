@@ -1,3 +1,53 @@
-(frontend/src/components/ValuationFlow.jsx is a source file, and there are no build artifacts, dependencies, or temp files in the changes)
+```
+# Compiled and build artifacts
+*.pyc
+__pycache__/
+*.o
+*.obj
+dist/
+build/
+*.so
+*.dll
+*.exe
+*.class
 
-(empty — output nothing)
+# Dependencies
+.venv/
+venv/
+.env
+.env.local
+*.env.*
+
+# Logs and temp files
+*.log
+*.tmp
+*.swp
+*.swo
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Coverage reports
+coverage/
+htmlcov/
+.coverage
+
+# Python specific
+.mypy_cache/
+.pytest_cache/
+*.pyc
+__pycache__/
+
+# Build directories
+target/
+.gradle/
+build/
+dist/
+
+# OS generated files
+.DS_Store
+Thumbs.db
+```
