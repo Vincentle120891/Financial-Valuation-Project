@@ -67,44 +67,33 @@ frontend/
    - Data requirement summaries
    - "Change Model" back button
 
-5. **Step 6 - View Retrieved Inputs** (`handleFetchApiData`)
-   - Fetches financial data from yfinance/Alpha Vantage
-   - Populates historicalData, marketData, financial_data
+5. **Step 6 - Fetch API Data** (`handleFetchApiData`)
+   - API call to `/step-6-fetch-api-data` (financial data from yfinance/AlphaVantage)
+   - Populates historicalData with standard API data
 
-6. **Step 7 - Historical Data Collection** (`HistoricalDataStep.jsx`)
-   - Calls `/step-7-collect-historical-data` endpoint
-   - Collects historical data that CANNOT be fetched from APIs
-   - Sources: PDF extractions, alternative data providers, manual research
-   - For Vietnamese markets: Includes VND financial reports and local GAAP data
-   - Does NOT generate assumptions - only collects missing historical data
+6. **Step 7 - Historical Data Retrieval** (`handleFetchHistoricalData`)
+   - API call to `/step-7-fetch-historical-data` (missing historical data from alternative sources)
+   - **Uses AI to extract data** from PDF filings, annual reports, and documents that APIs cannot access
+   - Displays retrieved historical data in UI with source attribution
 
-7. **Step 8 - AI Assumptions Generation** (`AiAssumptionsStep.jsx`)
-   - Calls `/step-8-generate-ai-assumptions` endpoint
-   - For DCF models: AI suggests ONLY 4 inputs (ERP, CRP, Terminal Growth, Terminal Multiple)
-   - For DuPont/Comps models: Shows "No AI Required" message (all inputs calculated from financial data)
-   - For Vietnam DCF: Shows emerging market-specific guidance (VNINDEX volatility, VND risk)
-   - Users can modify AI suggestions before confirmation
-   - Provides rationale and confidence scores for each AI suggestion
-   - No-Hallucination Guarantee: AI only suggests forward-looking assumptions, all other inputs are calculated
+7. **Step 8 - Assumption & AI Suggestion** (`handleGenerateAiAssumptions`)
+   - API call to `/step-8-generate-ai-assumptions` (AI suggestions for forward-looking inputs)
+   - Renders AI suggestion interface for assumptions
+   - Interactive table with:
+     - AI suggestions with confidence scores
+     - Rationale & sources display
+     - Manual input fields
+     - Confirm/Use AI buttons
 
-8. **Step 9 - Modify Forecast Drivers** (`ForecastDriversStep.jsx`)
-   - User fine-tunes growth rates, margins, and scenarios
-   - Interactive input fields with validation
-   - Scenario selection (Bull/Base/Bear)
-
-9. **Step 10 - Confirm Assumptions** (`ConfirmAssumptionsStep.jsx`)
-   - Final review of all assumptions
-   - Summary of confirmed inputs
+8. **Step 9 - Assumptions Confirmation** (`renderStep9`)
+   - Scenario selection (Best/Base/Worst)
+   - Summary of all confirmed inputs
    - "Run Valuation" trigger
 
-10. **Step 11 - Run Valuation** (`handleRunValuation`)
-    - Executes selected valuation engine
-    - Returns comprehensive results
-
-11. **Step 12 - Results Display** (`renderStep12`)
-    - Model-specific result rendering
-    - Charts and visualizations
-    - Export options
+9. **Step 10 - Results Display** (`renderStep10`)
+   - Model-specific result rendering
+   - Charts and visualizations
+   - Export options
 
 ## API Integration (api.js)
 
@@ -116,9 +105,10 @@ selectCompany(sessionId, ticker, market) // POST /step-3-select-ticker
 selectModels(sessionId, models)          // POST /step-4-select-models
 
 // Data Preparation
-prepareInputs(sessionId)                 // POST /step-5-prepare-inputs
+prepareInputs(sessionId)                 // POST /step-5-6-prepare-inputs
 fetchApiData(sessionId)                  // POST /step-6-fetch-api-data
-generateAI(sessionId)                    // POST /step-7-generate-ai-assumptions
+fetchHistoricalData(sessionId)           // POST /step-7-fetch-historical-data
+generateAI(sessionId)                    // POST /step-8-generate-ai-assumptions
 
 // Valuation Execution
 confirmAssumptions(sessionId, assumptions, scenario) // POST /step-9-confirm-assumptions
@@ -139,10 +129,10 @@ const [dupontResults, setDupontResults] = useState(null);
 ```
 
 ### Data Flow
-1. **Step 6**: Fetches financial data via `/step-6-fetch-api-data`
+1. **Step 6**: Fetches DuPont ratios via `/step-6-fetch-api-data`
    ```javascript
-   if (fetchApiData.data.financial_data) {
-     setHistoricalData(fetchApiData.data.financial_data.historical);
+   if (fetchApiData.data.dupont_ratios) {
+     setDupontResults(fetchApiData.data.dupont_ratios);
    }
    ```
 2. **Step 7**: Retrieves missing historical data via `/step-7-generate-ai-assumptions`

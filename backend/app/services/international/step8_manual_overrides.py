@@ -1,10 +1,23 @@
-"""Step 8: Manual Overrides Layer - The Assumption Studio
+"""Step 8: Assumption & AI Suggestion Studio
 
 This is the critical "Brain" of the workflow, bridging historical reality with future valuation.
 
+NEW LOGIC (per documentation updates):
+- Step 8 is the dedicated phase for ASSUMPTIONS
+- It calculates values programmatically from historical data
+- It utilizes AI for SUGGESTIONS on forward-looking assumptions
+- This is where forward-looking inputs are finalized before confirmation (Step 9)
+
+AI Usage in Step 8:
+- AI provides suggestions for assumptions based on historical trends, peer analysis, and market conditions
+- Users can accept AI suggestions or manually override them
+- All AI suggestions include rationale and confidence scores
+- For DuPont/Comps: AI suggestions are minimal (mostly calculated)
+- For DCF: AI suggests key drivers (Revenue Growth, Margins, WACC components, Terminal Value)
+
 Features:
-1. Context-Aware Historical Trendlines (3-5 years from Step 6)
-2. Modular AI Suggestion Engines (5 Button Strategy)
+1. Context-Aware Historical Trendlines (3-5 years from Step 6 + Step 7 gap-filled data)
+2. Modular AI Suggestion Engines (Category-by-category generation)
 3. Smart Validation & Guardrails
 4. What-If Preview (Mini-Step 9 sensitivity)
 """

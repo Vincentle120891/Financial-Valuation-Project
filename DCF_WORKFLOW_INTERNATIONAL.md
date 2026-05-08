@@ -179,59 +179,49 @@ This document traces the complete workflow for the **DCF Model** in the **Intern
 
 ---
 
-### Step 7: Historical Data Collection
-**Endpoint:** `POST /api/step-7-collect-historical-data`  
-**Frontend Component:** `HistoricalDataStep.jsx`  
+### Step 7: Historical Data Retrieval
+**Endpoint:** `POST /api/step-7-fetch-historical-data`  
+**Frontend Component:** `ApiDataStep.jsx` (extended)  
 **Backend Processor:** `Step7HistoricalDataProcessor`  
 **File:** `/backend/app/services/international/step7_historical_data.py`
 
 **Process:**
-1. Collect historical data that CANNOT be fetched from yfinance or Alpha Vantage APIs
-2. Sources include:
-   - Alternative data providers
-   - Manual research inputs
-   - PDF extractions (especially for Vietnamese markets)
-   - Industry reports and sector analysis
-   - Non-standard financial metrics
-3. Stores in session['historical_data']
+1. Identifies data gaps not available via standard APIs (yfinance/AlphaVantage)
+2. Uses AI to extract missing historical data from PDF filings, annual reports, and alternative sources
+3. **AI is used specifically for data extraction** from documents that APIs cannot access
+4. No forward-looking inputs are generated here - strictly historical data retrieval
 
-**Key Principle:** Step 7 does NOT generate assumptions. It only collects missing historical data that APIs cannot provide.
-
-**Data Collected:**
-```json
+**Data Retrieved:**
+```python
 {
-  "alternative_data": {
-    "source": "PDF extraction, industry reports",
-    "metrics": {...}
-  },
-  "manual_inputs": {
-    "source": "User research",
-    "data_points": [...]
-  }
+    "missing_historical_data": {
+        # Additional historical metrics extracted using AI from documents
+    },
+    "data_sources": ["PDF_filings", "annual_reports", "alternative_sources"]
 }
 ```
 
 ---
 
-### Step 8: AI Assumptions Generation
+### Step 8: Assumption & AI Suggestion
 **Endpoint:** `POST /api/step-8-generate-ai-assumptions`  
-**Frontend Component:** `AiAssumptionsStep.jsx`  
-**Backend Processor:** `Step8AISuggestionsProcessor`  
-**File:** `/backend/app/services/international/step8_ai_suggestions.py`
+**Frontend Component:** `ForecastDriversStep.jsx` / `AssumptionsStep.jsx`  
+**Backend Processor:** `Step8AssumptionProcessor`  
+**File:** `/backend/app/services/international/step8_assumption_processor.py`
 
 **Process:**
-1. Generate AI-powered suggestions for forward-looking assumptions that cannot be calculated from historical data
-2. For DCF models: AI suggests ONLY 4 inputs (ERP, CRP, Terminal Growth, Terminal Multiple)
-3. For DuPont and Comps models: AI is completely bypassed (all inputs calculated from financial data)
-4. Provide rationale and confidence scores for each AI suggestion
-5. Users can modify these suggestions before confirmation
+1. Calculates values programmatically based on historical trends
+2. AI engine (Gemini/Groq) generates suggestions for forward-looking inputs:
+   - Revenue growth rates
+   - Margin assumptions
+   - Capex projections
+   - Working capital days
+   - Terminal value assumptions
+   - WACC components
+3. Provides confidence scores and rationale
+4. Falls back to deterministic calculations if AI fails
 
-**No-Hallucination Guarantee:**
-- Step 8 ONLY suggests forward-looking assumptions
-- ALL other inputs (Risk-Free Rate, Beta, Cost of Debt, WACC components, Forecast Drivers) are CALCULATED from fetched data or user scenario inputs
-- For DuPont/Comps: No AI involvement whatsoever - 100% calculated from financial statements
-
-**AI-Suggested Assumptions (DCF Only):**
+**AI Output:**
 ```json
 {
   "equity_risk_premium": {
@@ -460,18 +450,13 @@ class DCFEngine:
 └──────┬──────┘
        ↓
 ┌─────────────┐
-│ Step 7      │ Collect: Non-API Historical Data
-│ Historical  │
+│ Step 7      │ Fetch: Missing Historical Data (AI Extraction)
+│ Hist. Data  │ from PDFs/Reports
 └──────┬──────┘
        ↓
 ┌─────────────┐
-│ Step 8      │ Generate: AI Assumption Suggestions
-│ AI Assist   │
-└──────┬──────┘
-       ↓
-┌─────────────┐
-│ Step 9      │ User Adjusts Forecasts
-│ Modify      │
+│ Step 8      │ Generate: AI Suggestions for Assumptions
+│ AI Suggest  │
 └──────┬──────┘
        ↓
 ┌─────────────┐
