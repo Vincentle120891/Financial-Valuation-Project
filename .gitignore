@@ -50,6 +50,17 @@ venv/
 .idea/
 *.swp
 *.swo
+# Dependencies
+node_modules/
+
+# Environment variables
+.env
+.env.local
+.env.*
+
+# IDE specific
+.vscode/
+.idea/
 
 # Logs
 *.log
@@ -63,6 +74,27 @@ htmlcov/
 # OS
 .DS_Store
 Thumbs.db
+# Temporary files
+*.tmp
+*.swp
+
+# Build artifacts
+dist/
+build/
+target/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+.coverage
+htmlcov/
+.coverage.*
+.pytest_cache/
+.mypy_cache/
 
 # Compressed files
 *.zip
@@ -105,3 +137,18 @@ Thumbs.db
 ```
 # Documentation and source files only - no build artifacts or dependencies detected
 # No .gitignore rules needed for this project based on the file changes provided
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Virtual environments
+.venv/
+venv/
+.env/
+
+# Gradle
+.gradle/
+
+# Coverage
+coverage/
