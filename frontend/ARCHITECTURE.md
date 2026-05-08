@@ -71,28 +71,40 @@ frontend/
    - Fetches financial data from yfinance/Alpha Vantage
    - Populates historicalData, marketData, financial_data
 
-6. **Step 7 - AI Assumptions Generation** (`AiAssumptionsStep.jsx`)
-   - Calls `/step-7-generate-ai-assumptions` endpoint
-   - For DCF models: Displays 4 AI-generated inputs (ERP, CRP, Terminal Growth, Terminal Multiple)
+6. **Step 7 - Historical Data Collection** (`HistoricalDataStep.jsx`)
+   - Calls `/step-7-collect-historical-data` endpoint
+   - Collects historical data that CANNOT be fetched from APIs
+   - Sources: PDF extractions, alternative data providers, manual research
+   - For Vietnamese markets: Includes VND financial reports and local GAAP data
+   - Does NOT generate assumptions - only collects missing historical data
+
+7. **Step 8 - AI Assumptions Generation** (`AiAssumptionsStep.jsx`)
+   - Calls `/step-8-generate-ai-assumptions` endpoint
+   - For DCF models: AI suggests ONLY 4 inputs (ERP, CRP, Terminal Growth, Terminal Multiple)
    - For DuPont/Comps models: Shows "No AI Required" message (all inputs calculated from financial data)
    - For Vietnam DCF: Shows emerging market-specific guidance (VNINDEX volatility, VND risk)
-   - Users can accept AI suggestions or manually override values
-   - Provides rationale and confidence scores for each AI assumption
+   - Users can modify AI suggestions before confirmation
+   - Provides rationale and confidence scores for each AI suggestion
+   - No-Hallucination Guarantee: AI only suggests forward-looking assumptions, all other inputs are calculated
 
-7. **Step 8 - Modify Forecast Drivers** (`ForecastDriversStep.jsx`)
+8. **Step 9 - Modify Forecast Drivers** (`ForecastDriversStep.jsx`)
    - User fine-tunes growth rates, margins, and scenarios
    - Interactive input fields with validation
    - Scenario selection (Bull/Base/Bear)
 
-8. **Step 9 - Confirm Assumptions** (`ConfirmAssumptionsStep.jsx`)
+9. **Step 10 - Confirm Assumptions** (`ConfirmAssumptionsStep.jsx`)
    - Final review of all assumptions
    - Summary of confirmed inputs
    - "Run Valuation" trigger
 
-8. **Step 10 - Results Display** (`renderStep10`)
-   - Model-specific result rendering
-   - Charts and visualizations
-   - Export options
+10. **Step 11 - Run Valuation** (`handleRunValuation`)
+    - Executes selected valuation engine
+    - Returns comprehensive results
+
+11. **Step 12 - Results Display** (`renderStep12`)
+    - Model-specific result rendering
+    - Charts and visualizations
+    - Export options
 
 ## API Integration (api.js)
 

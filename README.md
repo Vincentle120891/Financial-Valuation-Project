@@ -226,8 +226,9 @@ AI_CONFIDENCE_THRESHOLD=0.7
 | `POST` | `/api/step-3-suggest-peers` | 3 | Suggest peer companies | `{ticker, market, limit}` | `{peers: [...]}` |
 | `POST` | `/api/step-4-select-models` | 4 | Select valuation model | `{session_id, model}` | `{status, next_step}` |
 | `POST` | `/api/step-5-prepare-inputs` | 5 | Get required inputs | `{session_id}` | `{required_inputs: [...]}` |
-| `POST` | `/api/step-6-fetch-api-data` | 6 | Fetch financial data | `{session_id}` | `{financial_data: {...}}` |
-| `POST` | `/api/step-7-generate-ai-assumptions` | 7 | Generate AI assumptions for DCF (ERP, CRP, Terminal Growth, Terminal Multiple) | `{session_id}` | `{ai_assumptions: {...}, rationale: "..."}` |
+| `POST` | `/api/step-6-fetch-api-data` | 6 | Fetch financial data from yfinance/Alpha Vantage | `{session_id}` | `{financial_data: {...}}` |
+| `POST` | `/api/step-7-collect-historical-data` | 7 | Collect historical data from non-API sources (PDFs, alternative data) | `{session_id}` | `{historical_data: {...}}` |
+| `POST` | `/api/step-8-generate-ai-assumptions` | 8 | Generate AI suggestions for DCF (ERP, CRP, Terminal Growth, Terminal Multiple) | `{session_id}` | `{ai_suggestions: {...}, rationale: "..."}` |
 | `POST` | `/api/step-9-confirm-assumptions` | 9 | Confirm assumptions | `{session_id, confirmed_values}` | `{status}` |
 | `POST` | `/api/step-10-valuate` | 10 | Run valuation | `{session_id}` | `{valuation_results: [...]}` |
 

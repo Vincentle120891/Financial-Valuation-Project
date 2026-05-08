@@ -83,18 +83,19 @@ This document describes the complete workflow of the backend valuation system, s
 **Description:** Fetch all financial data from yfinance/Alpha Vantage
 **Output:** Complete financial data including historicals, market data, and metrics
 
-### Step 7: AI Assumptions Generation
-**Endpoint:** `POST /api/step-7-generate-ai-assumptions`
-**Processor:** `Step7AISuggestionsProcessor`
-**Description:** Generate forward-looking assumptions that CANNOT be fetched from yfinance or Alpha Vantage APIs. For DCF models, AI generates ONLY 4 inputs: Equity Risk Premium (ERP), Country Risk Premium (CRP), Terminal Growth Rate, and Terminal EBITDA Multiple. For DuPont and Comps models, AI is completely bypassed as all inputs are calculated from financial data.
-**Output:** AI-generated assumptions with rationale, confidence scores, and provider information
-**No-Hallucination Guarantee:** Step 7 ONLY generates the 4 forward-looking assumptions that cannot be obtained from APIs. ALL other inputs (Risk-Free Rate, Beta, Cost of Debt, WACC components, Forecast Drivers) are CALCULATED in Step 8 from fetched data or user scenario inputs.
+### Step 7: Historical Data Collection
+**Endpoint:** `POST /api/step-7-collect-historical-data`
+**Processor:** `Step7HistoricalDataProcessor`
+**Description:** Collect historical data that CANNOT be fetched from yfinance or Alpha Vantage APIs. This includes alternative data sources, manual research, PDF extractions (especially for Vietnamese markets), and other non-API data points required for comprehensive valuation analysis.
+**Output:** Supplementary historical data from alternative sources
+**Key Principle:** Step 7 does NOT generate assumptions. It only collects missing historical data that APIs cannot provide.
 
-### Step 8: Modify Forecast Drivers
-**Frontend:** `ForecastDriversStep`
-**Processor:** `Step8ManualOverridesProcessor`
-**Description:** User fine-tunes growth rates, margins, and scenarios
-**Output:** Updated forecast drivers
+### Step 8: AI Assumptions Generation
+**Endpoint:** `POST /api/step-8-generate-ai-assumptions`
+**Processor:** `Step8AISuggestionsProcessor`
+**Description:** Generate AI-powered suggestions for forward-looking assumptions that cannot be calculated from historical data. For DCF models, AI suggests 4 inputs: Equity Risk Premium (ERP), Country Risk Premium (CRP), Terminal Growth Rate, and Terminal EBITDA Multiple. For DuPont and Comps models, AI is completely bypassed as all inputs are calculated from financial data.
+**Output:** AI-generated assumption suggestions with rationale, confidence scores, and provider information
+**No-Hallucination Guarantee:** Step 8 ONLY suggests forward-looking assumptions. ALL other inputs (Risk-Free Rate, Beta, Cost of Debt, WACC components, Forecast Drivers) are CALCULATED from fetched data or user scenario inputs. User can modify these suggestions before confirmation.
 
 ### Step 9: Confirm Assumptions
 **Endpoint:** `POST /api/step-9-confirm-assumptions`
@@ -128,9 +129,9 @@ The backend uses a modular service processor pattern where each step has a dedic
 | Step4ForecastProcessor | `step4_forecast_processor.py` | Build forecast driver templates |
 | Step5AssumptionsProcessor | `step5_assumptions_processor.py` | Define required inputs per model |
 | Step6DataReviewProcessor | `step6_data_review.py` | Comprehensive data fetching and validation |
-| Step7AISuggestionsProcessor | `step7_ai_suggestions.py` | Generate AI-powered assumptions |
-| Step8ManualOverridesProcessor | `step8_manual_overrides.py` | Handle user overrides and confirmations |
-| Step9FinalCalculation | `step9_final_calculation.py` | Pre-calculation validation and preparation |
+| Step7HistoricalDataProcessor | `step7_historical_data.py` | Collect non-API historical data |
+| Step8AISuggestionsProcessor | `step8_ai_suggestions.py` | Generate AI-powered assumption suggestions |
+| Step9ManualOverridesProcessor | `step9_manual_overrides.py` | Handle user overrides and confirmations |
 | Step10ValuationProcessor | `step10_valuation_processor.py` | Execute valuation engines |
 
 ### Vietnamese Market Services (`/backend/app/services/vietnamese/`)
@@ -188,9 +189,9 @@ User Input → Step1 Search → Step2 Company Overview → Step3 Peer Selection
                                                     ↓
                                   Step6 Fetch Financial Data
                                                     ↓
-                                    Step7 Generate AI Assumptions
+                                  Step7 Collect Historical Data
                                                     ↓
-                                  Step8 Modify Forecast Drivers
+                                    Step8 Generate AI Assumptions
                                                     ↓
                                     Step9 Confirm Assumptions
                                                     ↓
@@ -220,7 +221,8 @@ All workflow state is managed through `SessionService` (`/backend/app/core/sessi
     "peer_tickers": ["MSFT", "GOOGL", ...],
     "selected_model": "DCF",
     "financial_data": {...},  # From Step 6
-    "ai_suggestions": {...},  # From Step 7
+    "historical_data": {...},  # From Step 7 (non-API sources)
+    "ai_suggestions": {...},  # From Step 8
     "confirmed_assumptions": {...},  # From Step 9
     "valuation_result": {...},  # From Step 10
     "status": "valuation_complete"
