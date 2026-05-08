@@ -38,6 +38,12 @@ export const selectCompany = async (sessionId, ticker, market = 'international')
   return response.data;
 };
 
+// Step 3: Save Selected Peers
+export const savePeers = async (sessionId, peers) => {
+  const response = await api.post('/step-3-save-peers', { session_id: sessionId, peers });
+  return response.data;
+};
+
 // Step 4: Select Models
 export const selectModels = async (sessionId, model) => {
   const response = await api.post('/step-4-select-models', { session_id: sessionId, model });

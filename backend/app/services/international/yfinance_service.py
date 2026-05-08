@@ -53,6 +53,75 @@ class YFinanceService:
         self.enable_alphavantage_fallback = enable_alphavantage_fallback
         self.alphavantage_service = None
     
+    def fetch_key_stats(self, ticker_symbol: str) -> Dict[str, Any]:
+        """
+        Fetch key statistics for a single ticker.
+        
+        Args:
+            ticker_symbol: Stock ticker symbol
+            
+        Returns:
+            Dictionary containing key stats (marketCap, beta, totalDebt, cash, effectiveTaxRate)
+        """
+        import yfinance as yf
+        
+        try:
+            logger.info(f"Fetching key stats for ticker='{ticker_symbol}'")
+            yf_ticker = yf.Ticker(ticker_symbol)
+            info = yf_ticker.info
+            
+            if not info:
+                logger.warning(f"No info returned for {ticker_symbol}")
+                return {
+                    'marketCap': None,
+                    'beta': None,
+                    'totalDebt': None,
+                    'cash': None,
+                    'effectiveTaxRate': None,
+                }
+            
+            # Helper to sanitize values
+            def sanitize_value(val):
+                if val is None:
+                    return None
+                if isinstance(val, float) and (val != val):  # NaN check
+                    return None
+                return val
+            
+            # Try to get financials for tax rate calculation
+            effective_tax_rate = None
+            try:
+                income_stmt = yf_ticker.financials
+                if income_stmt is not None and not income_stmt.empty:
+                    # Get the most recent column
+                    latest_col = income_stmt.columns[0]
+                    tax_provision = income_stmt.loc['Tax Provision', latest_col] if 'Tax Provision' in income_stmt.index else None
+                    pretax_income = income_stmt.loc['Pretax Income', latest_col] if 'Pretax Income' in income_stmt.index else None
+                    
+                    if tax_provision and pretax_income and pretax_income != 0:
+                        effective_tax_rate = abs(tax_provision / pretax_income)
+            except Exception as e:
+                logger.debug(f"Could not calculate tax rate for {ticker_symbol}: {e}")
+            
+            return {
+                'marketCap': sanitize_value(info.get('marketCap')),
+                'beta': sanitize_value(info.get('beta', 1.0)),
+                'totalDebt': sanitize_value(info.get('totalDebt') or info.get('TotalDebt')),
+                'cash': sanitize_value(info.get('cash') or info.get('CashAndCashEquivalents') or info.get('TotalCash')),
+                'effectiveTaxRate': effective_tax_rate,
+            }
+            
+        except Exception as e:
+            logger.error(f"Error fetching key stats for '{ticker_symbol}': {str(e)}")
+            return {
+                'marketCap': None,
+                'beta': None,
+                'totalDebt': None,
+                'cash': None,
+                'effectiveTaxRate': None,
+                'error': str(e)
+            }
+    
     def fetch_all_data(self, ticker_symbol: str, market: str = "international") -> Dict[str, Any]:
         """
         Fetch all available financial data from yfinance with AlphaVantage fallback.

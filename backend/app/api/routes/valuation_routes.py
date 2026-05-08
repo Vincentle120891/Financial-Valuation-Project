@@ -9,6 +9,7 @@ from typing import Dict, Any
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from typing import List, Dict, Any
 from app.core.logging_config import get_logger
 from app.core.session_service import session_service
 from app.api.schemas import (
@@ -30,6 +31,7 @@ from app.services.international.step6_data_review import Step6DataReviewProcesso
 from app.services.international.step7_ai_suggestions import Step7AISuggestionsProcessor
 from app.services.international.step8_manual_overrides import Step8ManualOverridesProcessor
 from app.services.international.step10_valuation_processor import Step10ValuationProcessor
+from app.services.international.yfinance_service import YFinanceService
 
 logger = get_logger(__name__)
 
@@ -41,6 +43,90 @@ step6_processor = Step6DataReviewProcessor()
 step7_processor = Step7AISuggestionsProcessor()
 step8_processor = Step8ManualOverridesProcessor()
 step10_processor = Step10ValuationProcessor()
+yfinance_service = YFinanceService()
+
+
+class SavePeersRequest(BaseModel):
+    """Request to save selected peers to session"""
+    session_id: str
+    peers: List[Dict[str, Any]]
+
+
+class SavePeersResponse(BaseModel):
+    """Response after saving peers"""
+    status: str
+    message: str
+    peers_saved: int
+
+
+@router.post("/step-3-save-peers", response_model=SavePeersResponse)
+async def save_peers(request: SavePeersRequest):
+    """
+    Step 3: Save selected peer companies to session.
+    Stores peer tickers and triggers automatic peer data fetching from yfinance/AlphaVantage.
+    """
+    try:
+        # Validate session exists
+        session = session_service.get_session_data(request.session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+        
+        # Extract peer tickers from the peer objects
+        peer_tickers = [peer.get('symbol') or peer.get('ticker') for peer in request.peers]
+        peer_tickers = [t for t in peer_tickers if t]  # Filter out None values
+        
+        if not peer_tickers:
+            raise HTTPException(status_code=400, detail="No valid peer tickers provided")
+        
+        # Save peer tickers to session
+        session_service.update_session_data(request.session_id, "peer_tickers", peer_tickers)
+        session_service.update_session_data(request.session_id, "selected_peers", request.peers)
+        
+        # Automatically fetch peer market data from yfinance
+        logger.info(f"Fetching market data for {len(peer_tickers)} peers: {peer_tickers}")
+        peer_data = {}
+        for ticker in peer_tickers:
+            try:
+                # Fetch key stats for each peer
+                peer_stats = yfinance_service.fetch_key_stats(ticker)
+                
+                # Store in format expected by step6: peer_{TICKER}_info
+                peer_info = {
+                    'marketCap': peer_stats.get('marketCap'),
+                    'beta': peer_stats.get('beta'),
+                    'totalDebt': peer_stats.get('totalDebt'),
+                    'cash': peer_stats.get('cash'),
+                    'effectiveTaxRate': peer_stats.get('effectiveTaxRate'),
+                }
+                peer_data[f"peer_{ticker}_info"] = peer_info
+                logger.info(f"Fetched data for peer {ticker}: marketCap={peer_info['marketCap']}, beta={peer_info['beta']}")
+            except Exception as peer_err:
+                logger.warning(f"Failed to fetch data for peer {ticker}: {peer_err}")
+                peer_data[f"peer_{ticker}_info"] = {
+                    'marketCap': None,
+                    'beta': None,
+                    'totalDebt': None,
+                    'cash': None,
+                    'effectiveTaxRate': None,
+                    'error': str(peer_err)
+                }
+        
+        # Also store list of peers for easy access
+        peer_data['peers'] = peer_tickers
+        
+        # Save all peer data to session
+        session_service.update_session_data(request.session_id, "retrieved_assumptions", peer_data)
+        
+        return SavePeersResponse(
+            status="success",
+            message=f"Saved {len(peer_tickers)} peers and fetched market data",
+            peers_saved=len(peer_tickers)
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Save peers error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/step-4-select-models", response_model=ModelSelectResponse)
