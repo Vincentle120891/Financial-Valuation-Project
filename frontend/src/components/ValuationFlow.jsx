@@ -263,6 +263,10 @@ const ValuationFlow = () => {
             setAiError(null);
           }
             
+          // Check for fallback metadata
+          const metadata = historicalDataResponse.metadata || {};
+          if (metadata?.used_fallback) {
+            let errorMsg = '';
             if (metadata.fallback_reason) {
               errorMsg += `Reason: ${metadata.fallback_reason}. `;
             }
@@ -279,8 +283,6 @@ const ValuationFlow = () => {
             
             errorMsg += ' Using deterministic fallback - assumptions generated from CAPM formula and historical averages.';
             setAiError(errorMsg);
-          } else if (metadata?.used_fallback) {
-            setAiError('⚠️ AI providers unavailable. Using deterministic fallback - assumptions generated from CAPM formula and historical averages.');
           } else {
             setAiError(null); // Clear any previous AI error
           }
