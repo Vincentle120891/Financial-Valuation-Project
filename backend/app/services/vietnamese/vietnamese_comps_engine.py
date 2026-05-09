@@ -228,11 +228,15 @@ class VNTradingCompsOutputs:
     target_company_name: str
     exchange: str
     sector: str
-    currency: str = "VND"
     
     # Peer analysis
     num_peers_initial: int
     num_peers_filtered: int
+    
+    # Target company info (with defaults)
+    currency: str = "VND"
+    
+    # Peer analysis (with defaults)
     excluded_peers: List[str] = field(default_factory=list)
     exclusion_reasons: Dict[str, str] = field(default_factory=dict)
     
