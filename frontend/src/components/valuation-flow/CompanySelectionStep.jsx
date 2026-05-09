@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 /**
  * CompanySelectionStep - Step 2
@@ -13,6 +14,8 @@ const CompanySelectionStep = ({
   hasPeers = false
 }) => {
   const [peerSearchLoading, setPeerSearchLoading] = useState(false);
+  const [priceHistory, setPriceHistory] = useState(null);
+  const [chartLoading, setChartLoading] = useState(false);
 
   const handleFindPeers = async () => {
     setPeerSearchLoading(true);
@@ -22,6 +25,28 @@ const CompanySelectionStep = ({
       setPeerSearchLoading(false);
     }
   };
+
+  // Fetch price history when component mounts or company changes
+  React.useEffect(() => {
+    const fetchPriceHistory = async () => {
+      if (!selectedCompany?.symbol) return;
+      
+      setChartLoading(true);
+      try {
+        const response = await fetch(`/api/market-data/${selectedCompany.symbol}/price-history`);
+        if (response.ok) {
+          const data = await response.json();
+          setPriceHistory(data);
+        }
+      } catch (error) {
+        console.error('Failed to fetch price history:', error);
+      } finally {
+        setChartLoading(false);
+      }
+    };
+
+    fetchPriceHistory();
+  }, [selectedCompany?.symbol]);
 
   if (!selectedCompany) {
     return (
@@ -140,6 +165,61 @@ const CompanySelectionStep = ({
                 Peers discovered! Review and select your peers in the next step.
               </p>
             </div>
+          </div>
+        )}
+      </div>
+
+      {/* Price History Chart */}
+      <div className="bg-white shadow-lg rounded-lg p-6 mb-6">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Price History (3 Months)</h3>
+        {chartLoading ? (
+          <div className="flex items-center justify-center h-64">
+            <svg className="animate-spin h-8 w-8 text-indigo-600" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+            </svg>
+          </div>
+        ) : priceHistory && priceHistory.length > 0 ? (
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={priceHistory}>
+                <defs>
+                  <linearGradient id="colorPrice" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#4f46e5" stopOpacity={0.8}/>
+                    <stop offset="95%" stopColor="#4f46e5" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                <XAxis 
+                  dataKey="date" 
+                  tickFormatter={(date) => new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                  stroke="#6b7280"
+                  fontSize={12}
+                />
+                <YAxis 
+                  stroke="#6b7280"
+                  fontSize={12}
+                  tickFormatter={(value) => `$${value.toFixed(2)}`}
+                />
+                <Tooltip 
+                  contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '8px' }}
+                  formatter={(value) => [`$${value.toFixed(2)}`, 'Price']}
+                  labelFormatter={(label) => new Date(label).toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'long', day: 'numeric' })}
+                />
+                <Area 
+                  type="monotone" 
+                  dataKey="close" 
+                  stroke="#4f46e5" 
+                  strokeWidth={2}
+                  fillOpacity={1} 
+                  fill="url(#colorPrice)" 
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        ) : (
+          <div className="flex items-center justify-center h-64 bg-gray-50 rounded-lg">
+            <p className="text-gray-500">No price history available</p>
           </div>
         )}
       </div>
