@@ -37,6 +37,7 @@ ENV/
 *.log
 
 # Environment
+# Environment variables
 .env
 .env.local
 *.env.*
@@ -46,11 +47,24 @@ ENV/
 coverage/
 htmlcov/
 
-# Testing
-.pytest_cache/
-.mypy_cache/
+# Temporary files
+*.tmp
+.DS_Store
+Thumbs.db
 
-# Distribution / packaging
-.pybuild/
-_target/
-```
+# Compiled files
+*.class
+*.o
+*.obj
+*.out
+*.dll
+*.so
+*.a
+
+# Build systems
+target/
+.gradle/
+.mypy_cache/
+.pytest_cache/
+(frontend/src/components/valuation-flow/AiAssumptionsStep.jsx is a source code file, and there are no build artifacts, dependencies, or temporary files in the changes, so no .gitignore rules are needed)
+Nothing should be ignored based on the provided file changes. The modification of 'frontend/src/components/valuation-flow/AiAssumptionsStep.jsx' is a source code file change, which should not be added to .gitignore.

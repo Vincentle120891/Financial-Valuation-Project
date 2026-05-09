@@ -35,6 +35,24 @@ from app.services.vietnamese.vietnamese_report_scraper import (
     fetch_vietnamese_report,
 )
 
+from app.services.vietnamese.vietnamese_dcf_engine import (
+    VietnameseDCFEngine,
+    get_vietnamese_dcf_engine,
+)
+
+from app.services.vietnamese.vietnamese_comps_engine import (
+    VNTradingCompsAnalyzer,
+    VNTargetCompanyData,
+    VNPeerCompanyData,
+    VNTradingCompsOutputs,
+)
+
+from app.services.vietnamese.vietnamese_dupont_engine import (
+    VNDuPontAnalyzer,
+    VNFinancialStatements,
+    VNDuPontResult,
+)
+
 __all__ = [
     # Input Manager
     "VietnameseInputManager",
@@ -57,4 +75,19 @@ __all__ = [
     # Report Scraper
     "VietnameseReportScraper",
     "fetch_vietnamese_report",
+    
+    # DCF Engine
+    "VietnameseDCFEngine",
+    "get_vietnamese_dcf_engine",
+    
+    # Comps Engine
+    "VNTradingCompsAnalyzer",
+    "VNTargetCompanyData",
+    "VNPeerCompanyData",
+    "VNTradingCompsOutputs",
+    
+    # DuPont Engine
+    "VNDuPontAnalyzer",
+    "VNFinancialStatements",
+    "VNDuPontResult",
 ]
