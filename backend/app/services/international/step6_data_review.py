@@ -897,7 +897,18 @@ class Step6DataReviewProcessor:
         return HistoricalFinancialsDisplay(years=years, data_fields=data_fields)
 
     def _process_dcf_peer_comparables(self, retrieved_assumptions: Dict, overrides: Dict) -> HistoricalFinancialsDisplay:
-        """Process peer comparables for WACC calculation (5 fields × N peers)"""
+        """Process peer comparables for WACC calculation (6 fields × N peers)
+        
+        The 6 key WACC inputs per peer:
+        1. Market Cap - for capital structure weights
+        2. Beta - levered equity beta
+        3. Total Debt - for D/E ratio and cost of debt calculation
+        4. Cash - for net debt calculation
+        5. Effective Tax Rate - for after-tax cost of debt
+        6. Cost of Debt - pre-tax cost of debt (NEW)
+        
+        Note: Risk-free rate is a global input, not peer-specific
+        """
         years = [2024]  # Current year for peer data
         data_fields = []
 
@@ -960,6 +971,18 @@ class Step6DataReviewProcessor:
                 status=DataStatus.CALCULATED if peer_tax_rate else DataStatus.MISSING,
                 source="Calculated from yfinance" if peer_tax_rate else None,
                 formula="Tax Provision / Pre-Tax Income",
+                is_critical=False
+            ))
+
+            # 6. Peer Cost of Debt (NEW - calculated from Interest Expense / Total Debt)
+            peer_cost_of_debt = peer_info.get('costOfDebt')
+            data_fields.append(DataField(
+                field_name=f"Peer_{peer_ticker}_CostOfDebt",
+                value=peer_cost_of_debt,
+                unit="%",
+                status=DataStatus.CALCULATED if peer_cost_of_debt else DataStatus.MISSING,
+                source="Calculated from yfinance" if peer_cost_of_debt else None,
+                formula="Interest Expense / Total Debt",
                 is_critical=False
             ))
 
