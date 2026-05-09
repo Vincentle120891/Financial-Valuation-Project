@@ -53,6 +53,26 @@ from app.services.vietnamese.vietnamese_dupont_engine import (
     VNDuPontResult,
 )
 
+from app.services.vietnamese.step1_ticker_processor import (
+    VNStep1TickerProcessor,
+    VNTickerInfo,
+    VNStep1Response,
+)
+
+from app.services.vietnamese.step2_market_data_processor import (
+    VNStep2MarketDataProcessor,
+    VNMarketDataPoint,
+    VNMarketRiskMetrics,
+    VNStep2Response,
+)
+
+from app.services.vietnamese.step3_historical_processor import (
+    VNStep3HistoricalProcessor,
+    VNHistoricalYearData,
+    VNCalculatedMetrics,
+    VNStep3Response,
+)
+
 __all__ = [
     # Input Manager
     "VietnameseInputManager",
@@ -90,4 +110,19 @@ __all__ = [
     "VNDuPontAnalyzer",
     "VNFinancialStatements",
     "VNDuPontResult",
+    
+    # Step Processors
+    "VNStep1TickerProcessor",
+    "VNTickerInfo",
+    "VNStep1Response",
+    
+    "VNStep2MarketDataProcessor",
+    "VNMarketDataPoint",
+    "VNMarketRiskMetrics",
+    "VNStep2Response",
+    
+    "VNStep3HistoricalProcessor",
+    "VNHistoricalYearData",
+    "VNCalculatedMetrics",
+    "VNStep3Response",
 ]
