@@ -220,11 +220,15 @@ async def fetch_api_data(request: FetchDataRequest):
         market = session.get("market")
         model = session_service.get_session_value(request.session_id, "selected_model", "DCF")
         
+        # Retrieve peer data and other assumptions from session (saved in Step 3)
+        retrieved_assumptions = session_service.get_session_value(request.session_id, "retrieved_assumptions", {})
+        
         # Use Step6DataReviewProcessor for comprehensive data fetching and calculation
         result = await step6_processor.process_data_review(
             ticker=ticker,
             market=market,
-            valuation_model=model
+            valuation_model=model,
+            retrieved_assumptions=retrieved_assumptions
         )
         
         # Store results in session using SessionService (with JSON serialization)
