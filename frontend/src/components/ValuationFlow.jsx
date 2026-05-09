@@ -550,7 +550,7 @@ const ValuationFlow = () => {
             dupontResults={dupontResults}
             compsResults={compsResults}
             onBackToRequirements={handleBackToRequirements}
-            onContinueToAiAssumptions={handleContinueToAiAssumptions}
+            onContinueToAiAssumptions={handleContinueToAssumptions}
             loading={loading}
           />
         );
