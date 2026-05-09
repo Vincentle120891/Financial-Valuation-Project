@@ -1,15 +1,15 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { 
-  searchCompanies, 
+import {
+  searchCompanies,
   suggestPeers,
-  selectCompany, 
+  selectCompany,
   savePeers,
-  selectModels, 
-  prepareInputs, 
-  fetchApiData, 
-  retrieveHistoricalData, 
-  confirmAssumptions, 
-  runValuation 
+  selectModels,
+  prepareInputs,
+  fetchApiData,
+  retrieveHistoricalData,
+  confirmAssumptions,
+  runValuation
 } from '../services/api';
 import SearchStep from './valuation-flow/SearchStep';
 import CompanySelectionStep from './valuation-flow/CompanySelectionStep';
@@ -54,11 +54,11 @@ const ValuationFlow = () => {
   const [selectedModel, setSelectedModel] = useState(null);
   const [sessionId, setSessionId] = useState(null);
   const [forecastYears, setForecastYears] = useState(5);
-  
+
   // Step 5: Required inputs
   const [requiredInputs, setRequiredInputs] = useState(null);
   const [requiredFields, setRequiredFields] = useState(null);
-  
+
   // Financial Data State (used across steps 6-10)
   const [historicalData, setHistoricalData] = useState(null);
   const [forecastDrivers, setForecastDrivers] = useState(null);
@@ -66,22 +66,23 @@ const ValuationFlow = () => {
   const [dcfInputs, setDcfInputs] = useState(null);
   const [dupontResults, setDupontResults] = useState(null);
   const [compsResults, setCompsResults] = useState(null);
+  const [calculatedMetrics, setCalculatedMetrics] = useState(null);
   const [aiData, setAiData] = useState(null);
   const [aiError, setAiError] = useState(null);
-  
+
   // Assumption Management
   const [confirmedValues, setConfirmedValues] = useState({});
   const [selectedScenario, setSelectedScenario] = useState('base_case');
   const [validationErrors, setValidationErrors] = useState([]);
-  
+
   // Step 9-10: Results
   const [valuationResults, setValuationResults] = useState(null);
-  
+
   // UI State
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [market, setMarket] = useState('international');
-  
+
   // ==================== STEP 1: SEARCH COMPANY ====================
   const handleSearch = useCallback(async () => {
     if (!searchQuery.trim()) return;
@@ -115,14 +116,14 @@ const ValuationFlow = () => {
       console.log('Suggest peers response:', data);
       if (data.peers && data.peers.length > 0) {
         setSuggestedPeers(data.peers);
-        
+
         // Auto-select top 5 peers with highest scores
         const sortedPeers = [...data.peers].sort((a, b) => b.score - a.score);
         const topPeers = sortedPeers.slice(0, Math.min(5, sortedPeers.length));
         setSelectedPeers(topPeers);
-        
+
         console.log(`Auto-selected ${topPeers.length} peers with highest scores:`, topPeers.map(p => p.symbol));
-        
+
         // Move to Step 3: Peer Selection
         setCurrentStep(3);
       } else {
@@ -154,13 +155,13 @@ const ValuationFlow = () => {
       setError('No session or peers selected');
       return;
     }
-    
+
     setLoading(true);
     try {
       // Save selected peers to backend session and fetch peer data
       const saveResponse = await savePeers(sessionId, selectedPeers);
       console.log('Save peers response:', saveResponse);
-      
+
       if (saveResponse.status === 'success') {
         console.log(`✅ Saved ${saveResponse.peers_saved} peers to session with auto-fetched market data`);
         setCurrentStep(4);
@@ -247,7 +248,7 @@ const ValuationFlow = () => {
 
       if (historicalDataResponse.suggestions) {
         setAiData(historicalDataResponse.suggestions);
-        
+
         // Check for timeout status
         if (historicalDataResponse.status === 'historical_data_timeout') {
           setAiError('⏱️ Historical data extraction timed out. Using available API data only.');
@@ -255,14 +256,14 @@ const ValuationFlow = () => {
           // Extract gap-filling information from response
           const gapsFilled = historicalDataResponse.suggestions.total_gaps_filled || 0;
           const completeness = historicalDataResponse.suggestions.data_completeness_score || 1.0;
-          
+
           if (gapsFilled > 0) {
             setAiError(`✅ Successfully filled ${gapsFilled} historical data gaps with ${(completeness * 100).toFixed(0)}% completeness.`);
           } else {
             // No gaps found - API data was complete
             setAiError(null);
           }
-            
+
           // Check for fallback metadata
           const metadata = historicalDataResponse.metadata || {};
           if (metadata?.used_fallback) {
@@ -270,7 +271,7 @@ const ValuationFlow = () => {
             if (metadata.fallback_reason) {
               errorMsg += `Reason: ${metadata.fallback_reason}. `;
             }
-            
+
             if (metadata.provider_errors && Object.keys(metadata.provider_errors).length > 0) {
               errorMsg += 'Provider errors: ';
               const errorDetails = Object.entries(metadata.provider_errors)
@@ -280,7 +281,7 @@ const ValuationFlow = () => {
             } else if (!metadata.available_providers || metadata.available_providers.length === 0) {
               errorMsg += 'No AI providers configured. Please add API keys for Groq, Gemini, or Qwen.';
             }
-            
+
             errorMsg += ' Using deterministic fallback - assumptions generated from CAPM formula and historical averages.';
             setAiError(errorMsg);
           } else {
@@ -339,7 +340,7 @@ const ValuationFlow = () => {
   }, [selectedModel, currentStep, sessionId, fetchRequiredInputs]);
 
   // ==================== STEP 6: RETRIEVE API DATA ONLY ====================
-  
+
   const handleRetrieveData = useCallback(async () => {
     setLoading(true);
     try {
@@ -369,7 +370,11 @@ const ValuationFlow = () => {
         if (fetchDataResponse.data.comps_results) {
           setCompsResults(fetchDataResponse.data.comps_results);
         }
-        
+        // Set calculated metrics from Step 6 backend response
+        if (fetchDataResponse.data.calculated_metrics) {
+          setCalculatedMetrics(fetchDataResponse.data.calculated_metrics);
+        }
+
         // Auto-navigate to Step 6 to show retrieved data
         setCurrentStep(6);
       }
@@ -551,6 +556,7 @@ const ValuationFlow = () => {
             dcfInputs={dcfInputs}
             dupontResults={dupontResults}
             compsResults={compsResults}
+            calculatedMetrics={calculatedMetrics}
             onBackToRequirements={handleBackToRequirements}
             onContinueToAiAssumptions={handleContinueToAssumptions}
             loading={loading}

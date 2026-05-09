@@ -20,12 +20,13 @@ const ApiDataStep = ({
   dcfInputs,
   dupontResults,
   compsResults,
+  calculatedMetrics,
   onBackToRequirements,
   onContinueToAiAssumptions,
   loading
 }) => {
   // Check if data has been retrieved
-  const hasRetrievedData = historicalData || peerData || dcfInputs || dupontResults || compsResults;
+  const hasRetrievedData = historicalData || peerData || dcfInputs || dupontResults || compsResults || calculatedMetrics;
 
   // Comprehensive list of ALL expected inputs to display (even if missing/errors)
   const allExpectedInputs = [
