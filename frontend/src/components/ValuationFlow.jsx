@@ -8,6 +8,8 @@ import {
   prepareInputs,
   fetchApiData,
   retrieveHistoricalData,
+  initializeStep8Assumptions,
+  generateAISuggestion,
   confirmAssumptions,
   runValuation
 } from '../services/api';
@@ -124,8 +126,8 @@ const ValuationFlow = () => {
 
         console.log(`Auto-selected ${topPeers.length} peers with highest scores:`, topPeers.map(p => p.symbol));
 
-        // Stay on Step 2 to show success message, let user click Continue
-        // setCurrentStep(3); // Removed auto-navigation
+        // Move to Step 3: Peer Selection
+        setCurrentStep(3);
       } else {
         setError('No peers found for this company. Try a different company or manually add peers later.');
       }
@@ -185,38 +187,7 @@ const ValuationFlow = () => {
       console.log('Select company response:', data);
       if (data.session_id) {
         setSessionId(data.session_id);
-        
-        // Merge backend company data with search results
-        const enrichedCompany = { ...company };
-        if (data.company_data) {
-          // Merge company_data fields into selectedCompany
-          if (data.company_data.current_price !== undefined) {
-            enrichedCompany.currentPrice = data.company_data.current_price;
-          }
-          if (data.company_data.market_cap !== undefined) {
-            enrichedCompany.marketCap = data.company_data.market_cap;
-          }
-          if (data.company_data.beta !== undefined) {
-            enrichedCompany.beta = data.company_data.beta;
-          }
-          if (data.company_data.risk_free_rate !== undefined) {
-            enrichedCompany.riskFreeRate = data.company_data.risk_free_rate;
-          }
-          if (data.company_data.market_risk_premium !== undefined) {
-            enrichedCompany.marketRiskPremium = data.company_data.market_risk_premium;
-          }
-          if (data.company_data.sector !== undefined) {
-            enrichedCompany.sector = data.company_data.sector;
-          }
-          if (data.company_data.industry !== undefined) {
-            enrichedCompany.industry = data.company_data.industry;
-          }
-          if (data.company_data.country !== undefined) {
-            enrichedCompany.country = data.company_data.country;
-          }
-        }
-        
-        setSelectedCompany(enrichedCompany);
+        setSelectedCompany(company);
         setCurrentStep(2); // Move to Step 2: Company Overview
       }
     } catch (err) {
@@ -332,9 +303,27 @@ const ValuationFlow = () => {
   }, [sessionId]);
 
   // ==================== CONTINUE TO FORECAST DRIVERS (STEP 8) ====================
-  const handleContinueToForecastDrivers = useCallback(() => {
-    setCurrentStep(8);
-  }, []);
+  const handleContinueToForecastDrivers = useCallback(async () => {
+    setLoading(true);
+    try {
+      // Initialize Step 8 with historical trendlines before showing the step
+      console.log('📊 Initializing Step 8 assumptions with historical data...');
+      const step8Response = await initializeStep8Assumptions(sessionId);
+      console.log('Step 8 initialization response:', step8Response);
+
+      if (step8Response && step8Response.categories) {
+        // Store the initialized assumptions for use in ForecastDriversStep
+        // The ForecastDriversStep will use these categories to display trendlines
+        window.step8Data = step8Response; // Temporary storage, can be improved with context
+      }
+    } catch (err) {
+      console.error('Failed to initialize Step 8:', err);
+      // Continue anyway - user can still manually input data
+    } finally {
+      setLoading(false);
+      setCurrentStep(8);
+    }
+  }, [sessionId]);
 
   // ==================== CONTINUE TO ASSUMPTIONS (STEP 7) ====================
   const handleContinueToAssumptions = useCallback(() => {
@@ -544,7 +533,6 @@ const ValuationFlow = () => {
             onFindPeers={handleFindPeers}
             onContinue={() => setCurrentStep(3)}
             loading={loading}
-            hasPeers={suggestedPeers.length > 0}
           />
         );
       case 3:
