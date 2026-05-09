@@ -298,35 +298,88 @@ class Step7HistoricalDataProcessor:
         fiscal_years: List[int],
         missing_metrics: Optional[List[str]] = None
     ) -> List[Dict[str, Any]]:
-        """Identify which historical metrics are missing from API data"""
+        """
+        Identify which historical metrics are missing from API data.
+        
+        This method now properly handles the Step 6 response format where data is organized
+        in historical_financials.data_fields[] array with field_name containing year suffix.
+        """
         gaps = []
-
-        # Critical metrics for DCF historical analysis
+        
+        # Critical metrics for DCF historical analysis (matching Step 6 field_name format)
         critical_metrics = [
-            "revenue",
-            "operating_income",
-            "net_income",
-            "total_assets",
-            "total_equity",
-            "operating_cash_flow",
-            "capex",
-            "working_capital"
+            "Revenue",
+            "EBITDA",
+            "Operating_Income",
+            "Net_Income",
+            "Total_Assets",
+            "Shareholders_Equity",
+            "Operating_Cash_Flow",
+            "CapEx",
+            "Working_Capital_Change"
         ]
-
+        
+        # Convert existing_data to check for missing values by parsing data_fields
+        # Step 6 format: {historical_financials: {data_fields: [{field_name, value, status}, ...]}}
+        available_metrics_by_year = {}
+        
+        # Parse historical_financials data_fields
+        historical = existing_data.get('historical_financials', {})
+        if historical:
+            data_fields = historical.get('data_fields', [])
+            for field in data_fields:
+                if isinstance(field, dict):
+                    field_name = field.get('field_name', '')
+                    value = field.get('value')
+                    status = field.get('status', 'RETRIEVED')
+                    
+                    # Extract year from field_name (e.g., "Revenue_2023" -> 2023)
+                    if '_' in field_name:
+                        parts = field_name.rsplit('_', 1)
+                        if len(parts) == 2 and parts[1].isdigit():
+                            metric_name = parts[0]
+                            year = int(parts[1])
+                            
+                            if year not in available_metrics_by_year:
+                                available_metrics_by_year[year] = {}
+                            
+                            # Mark as available only if has value and status is not MISSING
+                            if value is not None and status != 'MISSING':
+                                available_metrics_by_year[year][metric_name] = value
+        
+        # If no metrics found in structured format, fall back to original logic
+        if not available_metrics_by_year:
+            logger.warning("No structured data found in Step 6 format, using fallback logic")
+            for year in fiscal_years:
+                year_key = str(year)
+                year_data = existing_data.get(year_key, existing_data.get(f"FY{year}", {}))
+                
+                metrics_to_check = missing_metrics if missing_metrics else critical_metrics
+                for metric in metrics_to_check:
+                    if metric not in year_data or year_data[metric] is None:
+                        gaps.append({
+                            "metric": metric,
+                            "fiscal_year": year,
+                            "priority": "high" if metric in critical_metrics[:4] else "medium"
+                        })
+            return gaps
+        
+        # Use parsed data to identify gaps
         metrics_to_check = missing_metrics if missing_metrics else critical_metrics
-
+        
         for year in fiscal_years:
-            year_key = str(year)
-            year_data = existing_data.get(year_key, existing_data.get(f"FY{year}", {}))
-
+            year_data = available_metrics_by_year.get(year, {})
+            
             for metric in metrics_to_check:
-                if metric not in year_data or year_data[metric] is None:
+                # Check if metric is missing for this year
+                if metric not in year_data:
                     gaps.append({
                         "metric": metric,
                         "fiscal_year": year,
                         "priority": "high" if metric in critical_metrics[:4] else "medium"
                     })
-
+        
+        logger.info(f"Identified {len(gaps)} data gaps from Step 6 structured data")
         return gaps
 
     async def _extract_historical_metric(
