@@ -30,6 +30,15 @@ from app.models.vietnamese import (
 )
 from app.services.vietnamese import get_vietnamese_input_manager
 from app.services.vietnamese.vietnamese_dcf_engine import get_vietnamese_dcf_engine
+from app.services.vietnamese.vietnamese_comps_engine import (
+    VNTradingCompsAnalyzer,
+    VNTargetCompanyData,
+    VNPeerCompanyData,
+)
+from app.services.vietnamese.vietnamese_dupont_engine import (
+    VNDuPontAnalyzer,
+    VNFinancialStatements,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -267,59 +276,64 @@ async def analyze_vietnamese_comps(request: VnCompsRequest):
             outlier_metric=request.outlier_metric
         )
         
-        # Calculate peer statistics
-        peers = comps_request.peer_multiples
+        # Build target company data for VNTradingCompsAnalyzer
+        # Calculate market cap from book value and estimated P/B (use median peer P/B as proxy)
+        peer_pb_values = [p.pb_ratio for p in request.peer_multiples if p.pb_ratio and p.pb_ratio > 0]
+        median_pb = sorted(peer_pb_values)[len(peer_pb_values)//2] if peer_pb_values else 1.5
         
-        # Extract multiples for statistical analysis
-        ev_ebitda_values = [p.ev_ebitda_ltm for p in peers if p.ev_ebitda_ltm > 0]
-        pe_values = [p.pe_ltm for p in peers if p.pe_ltm != 0]
-        pb_values = [p.pb_ratio for p in peers if p.pb_ratio > 0]
+        target_market_cap_vnd = request.target_book_value_vnd * median_pb
+        target_enterprise_value_vnd = target_market_cap_vnd + request.target_net_income_vnd * 0.5  # Approximate net debt
+        target_shares_outstanding = request.target_book_value_vnd / (request.target_book_value_vnd * 0.1)  # Approximate
+        target_share_price_vnd = target_market_cap_vnd / target_shares_outstanding if target_shares_outstanding > 0 else request.target_eps_vnd * 10
         
-        def calc_stats(values):
-            if not values:
-                return {'mean': 0, 'median': 0, 'min': 0, 'max': 0}
-            sorted_vals = sorted(values)
-            n = len(sorted_vals)
-            mean_val = sum(sorted_vals) / n
-            median_val = sorted_vals[n // 2] if n % 2 == 1 else (sorted_vals[n//2 - 1] + sorted_vals[n//2]) / 2
-            return {
-                'mean': round(mean_val, 2),
-                'median': round(median_val, 2),
-                'min': round(min(sorted_vals), 2),
-                'max': round(max(sorted_vals), 2)
-            }
+        target_company = VNTargetCompanyData(
+            ticker=request.target_ticker,
+            company_name=request.target_company_name,
+            market_cap_vnd=target_market_cap_vnd,
+            enterprise_value_vnd=target_enterprise_value_vnd,
+            ebitda_ltm_vnd=request.target_ebitda_vnd,
+            eps_ltm_vnd=request.target_eps_vnd,
+            net_debt_vnd=target_enterprise_value_vnd - target_market_cap_vnd,
+            shares_outstanding=target_shares_outstanding,
+            share_price_vnd=target_share_price_vnd,
+            sector=request.sector
+        )
         
-        # Calculate implied valuations
-        implied_ev_ebitda = comps_request.target_ebitda_vnd * calc_stats(ev_ebitda_values)['median']
-        implied_pe = comps_request.target_net_income_vnd * calc_stats(pe_values)['median']
+        # Build peer company data list
+        peer_companies = []
+        for peer in request.peer_multiples:
+            # Calculate peer metrics from provided multiples
+            peer_market_cap = peer.book_value * peer.pb_ratio if peer.pb_ratio and peer.book_value else 0
+            peer_ebitda = peer.enterprise_value / peer.ev_ebitda_ltm if peer.ev_ebitda_ltm and peer.ev_ebitda_ltm > 0 else 0
+            peer_eps = peer.share_price / peer.pe_ltm if peer.pe_ltm and peer.pe_ltm > 0 else 0
+            peer_shares = peer_market_cap / peer.share_price if peer.share_price and peer.share_price > 0 else 1
+            
+            peer_company = VNPeerCompanyData(
+                ticker=peer.ticker,
+                company_name=peer.company_name,
+                market_cap_vnd=peer_market_cap,
+                enterprise_value_vnd=peer.enterprise_value,
+                share_price_vnd=peer.share_price,
+                shares_outstanding=peer_shares,
+                ebitda_ltm_vnd=peer_ebitda,
+                eps_ltm_vnd=peer_eps,
+                revenue_ltm_vnd=peer.revenue or 0,
+                net_income_ltm_vnd=peer.net_income or 0,
+                book_value_vnd=peer.book_value or 0,
+                sector=request.sector
+            )
+            peer_companies.append(peer_company)
         
-        results = {
-            "target_ticker": request.target_ticker,
-            "target_company_name": request.target_company_name,
-            "sector": request.sector,
-            "currency": "VND",
-            "peer_analysis": {
-                "num_peers_initial": len(request.peer_multiples),
-                "num_peers_after_filtering": len(peers),
-                "peers_used": [p.ticker for p in peers]
-            },
-            "multiple_statistics": {
-                "ev_ebitda": calc_stats(ev_ebitda_values),
-                "pe_ratio": calc_stats(pe_values),
-                "pb_ratio": calc_stats(pb_values)
-            },
-            "implied_valuations": {
-                "implied_ev_from_ebitda": round(implied_ev_ebitda, 2),
-                "implied_equity_from_pe": round(implied_pe, 2)
-            },
-            "target_metrics": {
-                "revenue_vnd": request.target_revenue_vnd,
-                "ebitda_vnd": request.target_ebitda_vnd,
-                "net_income_vnd": request.target_net_income_vnd,
-                "eps_vnd": request.target_eps_vnd,
-                "book_value_vnd": request.target_book_value_vnd
-            }
-        }
+        # Run comps analysis using VNTradingCompsAnalyzer
+        analyzer = VNTradingCompsAnalyzer(target_company, peer_companies)
+        comps_results = analyzer.run_analysis(
+            apply_outlier_filtering=request.apply_outlier_filtering,
+            iqr_multiplier=request.iqr_multiplier,
+            outlier_metric=request.outlier_metric
+        )
+        
+        # Convert results to API response format
+        results = comps_results.to_dict()
         
         return {
             "success": True,
@@ -397,49 +411,52 @@ async def analyze_vietnamese_dupont(request: VnDupontRequest):
             custom_ratios=request.custom_ratios
         )
         
-        # Process results
-        results = {
-            "ticker": request.ticker,
-            "company_name": request.company_name,
-            "exchange": request.exchange,
-            "currency": "VND",
-            "analysis_years": request.years,
-            "dupont_components": {}
-        }
+        # Build VNFinancialStatements from the request data
+        statements = VNFinancialStatements()
         
-        # Calculate or use provided ratios
-        if dupont_request.custom_ratios:
-            for year in request.years:
-                if year in dupont_request.custom_ratios:
-                    components = dupont_request.custom_ratios[year]
-                    results["dupont_components"][str(year)] = {
-                        "net_profit_margin": round(components.net_profit_margin, 4),
-                        "asset_turnover": round(components.asset_turnover, 4),
-                        "equity_multiplier": round(components.equity_multiplier, 4),
-                        "roe": round(components.roe, 4) if components.roe else None,
-                        "raw_data": {
-                            "net_income_vnd": components.net_income_vnd,
-                            "revenue_vnd": components.revenue_vnd,
-                            "total_assets_vnd": components.total_assets_vnd,
-                            "shareholders_equity_vnd": components.shareholders_equity_vnd
-                        }
-                    }
+        # Map financial data by year to the 8-year arrays
+        # We'll use the first few years based on how many years are requested
+        num_years = min(len(request.years), 8)
         
-        # Add trend analysis if multiple years
-        if len(request.years) > 1 and results["dupont_components"]:
-            years_sorted = sorted(results["dupont_components"].keys())
-            roe_values = [
-                results["dupont_components"][y]["roe"]
-                for y in years_sorted
-                if results["dupont_components"][y]["roe"] is not None
-            ]
-            
-            if len(roe_values) > 1:
-                roe_change = (roe_values[-1] - roe_values[0]) / roe_values[0] if roe_values[0] != 0 else 0
-                results["trend_analysis"] = {
-                    "roe_change_pct": round(roe_change * 100, 2),
-                    "trend_direction": "IMPROVING" if roe_change > 0 else "DECLINING"
-                }
+        if dupont_request.financial_data_by_year:
+            for idx, year in enumerate(request.years[:num_years]):
+                if str(year) in dupont_request.financial_data_by_year or year in dupont_request.financial_data_by_year:
+                    year_key = str(year) if str(year) in dupont_request.financial_data_by_year else year
+                    data = dupont_request.financial_data_by_year[year_key]
+                    
+                    # Map income statement items
+                    if idx < len(statements.revenue):
+                        statements.revenue[idx] = data.get('revenue', 0)
+                        statements.cogs_gross[idx] = -data.get('cogs', abs(data.get('gross_profit', 0)) - data.get('revenue', 0))
+                        statements.sga[idx] = -data.get('sga', 0)
+                        statements.other_operating_expenses[idx] = -data.get('other_operating_expenses', 0)
+                        statements.depreciation[idx] = -data.get('depreciation', 0)
+                        statements.interest_expense[idx] = -data.get('interest_expense', 0)
+                        statements.interest_income[idx] = data.get('interest_income', 0)
+                        statements.tax_current[idx] = -data.get('tax_current', 0)
+                        
+                        # Balance sheet items
+                        statements.cash[idx] = data.get('cash', 0)
+                        statements.accounts_receivable[idx] = data.get('accounts_receivable', 0)
+                        statements.inventories[idx] = data.get('inventories', 0)
+                        statements.ppe_component1[idx] = data.get('ppe', 0)
+                        statements.accounts_payable[idx] = data.get('accounts_payable', 0)
+                        statements.revolving_credit[idx] = data.get('short_term_debt', 0)
+                        statements.long_term_debt[idx] = data.get('long_term_debt', 0)
+                        statements.common_equity[idx] = data.get('shareholders_equity', 0)
+                        statements.retained_earnings[idx] = data.get('retained_earnings', 0)
+                        
+                        # Vietnam-specific
+                        statements.state_ownership_percent[idx] = data.get('state_ownership_percent', 0)
+                        statements.fol_remaining[idx] = data.get('fol_remaining', 49.0)
+        
+        # Run DuPont analysis using VNDuPontAnalyzer
+        analyzer = VNDuPontAnalyzer()
+        analyzer.load_data(statements)
+        dupont_result = analyzer.calculate_all()
+        
+        # Convert results to API response format
+        results = dupont_result.to_dict()
         
         return {
             "success": True,
