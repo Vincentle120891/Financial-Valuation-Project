@@ -59,23 +59,23 @@ class VNTargetCompanyData:
     """
     ticker: str
     company_name: str
-    market_cap_vnd: float  # Tỷ VND
-    enterprise_value_vnd: float  # Tỷ VND
+    market_cap_vnd: float = 0.0  # Tỷ VND
+    enterprise_value_vnd: float = 0.0  # Tỷ VND
 
     # EBITDA metrics (tỷ VND)
-    ebitda_ltm_vnd: float
+    ebitda_ltm_vnd: float = 0.0
     ebitda_fy2023_vnd: Optional[float] = None
     ebitda_fy2024_vnd: Optional[float] = None
 
     # EPS metrics (VND per share)
-    eps_ltm_vnd: float
+    eps_ltm_vnd: float = 0.0
     eps_fy2023_vnd: Optional[float] = None
     eps_fy2024_vnd: Optional[float] = None
 
     # Capital structure
-    net_debt_vnd: float
-    shares_outstanding: float  # In millions
-    share_price_vnd: float  # Per share (VND)
+    net_debt_vnd: float = 0.0
+    shares_outstanding: float = 0.0  # In millions
+    share_price_vnd: float = 0.0  # Per share (VND)
 
     # Vietnam-specific
     exchange: str = "HOSE"
@@ -136,19 +136,19 @@ class VNPeerCompanyData:
     shares_outstanding: float
 
     # EBITDA metrics
-    ebitda_ltm_vnd: float
+    ebitda_ltm_vnd: float = 0.0
     ebitda_fy2023_vnd: Optional[float] = None
     ebitda_fy2024_vnd: Optional[float] = None
 
     # EPS metrics
-    eps_ltm_vnd: float
+    eps_ltm_vnd: float = 0.0
     eps_fy2023_vnd: Optional[float] = None
     eps_fy2024_vnd: Optional[float] = None
 
     # Financials for additional multiples
-    revenue_ltm_vnd: float
-    net_income_ltm_vnd: float
-    book_value_vnd: float
+    revenue_ltm_vnd: float = 0.0
+    net_income_ltm_vnd: float = 0.0
+    book_value_vnd: float = 0.0
 
     # Optional metadata
     industry: str = ""
@@ -168,19 +168,19 @@ class VNPeerMultiples:
     vn30_constituent: bool = False
 
     # EV/EBITDA multiples
-    ev_ebitda_ltm: Optional[float]
-    ev_ebitda_fy23: Optional[float]
-    ev_ebitda_fy24: Optional[float]
+    ev_ebitda_ltm: Optional[float] = None
+    ev_ebitda_fy23: Optional[float] = None
+    ev_ebitda_fy24: Optional[float] = None
 
     # P/E multiples
-    pe_ltm: Optional[float]
-    pe_fy23: Optional[float]
-    pe_fy24: Optional[float]
+    pe_ltm: Optional[float] = None
+    pe_fy23: Optional[float] = None
+    pe_fy24: Optional[float] = None
 
     # Additional multiples common in Vietnam
-    ev_revenue_ltm: Optional[float]
-    pb_ratio: Optional[float]
-    dividend_yield: Optional[float]
+    ev_revenue_ltm: Optional[float] = None
+    pb_ratio: Optional[float] = None
+    dividend_yield: Optional[float] = None
 
 
 @dataclass
@@ -228,11 +228,15 @@ class VNTradingCompsOutputs:
     target_company_name: str
     exchange: str
     sector: str
-    currency: str = "VND"
     
     # Peer analysis
     num_peers_initial: int
     num_peers_filtered: int
+    
+    # Target company info (with defaults)
+    currency: str = "VND"
+    
+    # Peer analysis (with defaults)
     excluded_peers: List[str] = field(default_factory=list)
     exclusion_reasons: Dict[str, str] = field(default_factory=dict)
     
