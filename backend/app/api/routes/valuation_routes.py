@@ -89,19 +89,21 @@ async def save_peers(request: SavePeersRequest):
         peer_data = {}
         for ticker in peer_tickers:
             try:
-                # Fetch key stats for each peer
+                # Fetch key stats for each peer (includes 5 WACC metrics + costOfDebt)
                 peer_stats = yfinance_service.fetch_key_stats(ticker)
                 
                 # Store in format expected by step6: peer_{TICKER}_info
+                # The 5 key WACC inputs per peer: Beta, Market Cap, Cost of Debt, Tax Rate, Risk-free Rate (global)
                 peer_info = {
                     'marketCap': peer_stats.get('marketCap'),
                     'beta': peer_stats.get('beta'),
                     'totalDebt': peer_stats.get('totalDebt'),
                     'cash': peer_stats.get('cash'),
                     'effectiveTaxRate': peer_stats.get('effectiveTaxRate'),
+                    'costOfDebt': peer_stats.get('costOfDebt'),  # NEW: Pre-tax cost of debt
                 }
                 peer_data[f"peer_{ticker}_info"] = peer_info
-                logger.info(f"Fetched data for peer {ticker}: marketCap={peer_info['marketCap']}, beta={peer_info['beta']}")
+                logger.info(f"Fetched data for peer {ticker}: marketCap={peer_info['marketCap']}, beta={peer_info['beta']}, costOfDebt={peer_info['costOfDebt']}")
             except Exception as peer_err:
                 logger.warning(f"Failed to fetch data for peer {ticker}: {peer_err}")
                 peer_data[f"peer_{ticker}_info"] = {
@@ -110,6 +112,7 @@ async def save_peers(request: SavePeersRequest):
                     'totalDebt': None,
                     'cash': None,
                     'effectiveTaxRate': None,
+                    'costOfDebt': None,
                     'error': str(peer_err)
                 }
         
