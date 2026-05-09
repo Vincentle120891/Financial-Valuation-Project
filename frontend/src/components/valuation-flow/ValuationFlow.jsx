@@ -579,8 +579,11 @@ const ValuationFlow = () => {
       case 8:
         return (
           <ForecastDriversStep
+            sessionId={sessionId}
             forecastDrivers={forecastDrivers}
             dcfInputs={dcfInputs}
+            step6Data={calculatedMetrics}
+            step7Data={historicalData}
             onManualInput={handleManualInput}
             onConfirmDrivers={handleConfirmAssumptions}
             onBackToRequirements={handleBackToRequirements}

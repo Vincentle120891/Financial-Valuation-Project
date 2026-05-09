@@ -1,18 +1,23 @@
 import React, { useState } from 'react';
+import { generateAISuggestion } from '../../services/api';
 
 /**
  * ForecastDriversStep Component
- * Step 7: Modify Forecast Drivers and DCF Inputs
+ * Step 8: Modify Forecast Drivers and DCF Inputs with AI Suggestions
  * 
  * Features:
  * - Edit all forecast driver assumptions (Revenue Growth, Volume vs Price, Inflation, etc.)
  * - Edit DCF model inputs (Risk-Free Rate, Beta, WACC, Terminal Growth, etc.)
+ * - Generate AI suggestions for each category
  * - Support for multiple scenarios (Best Case, Base Case, Worst Case)
  * - Real-time validation and feedback
  */
 const ForecastDriversStep = ({
+  sessionId,
   forecastDrivers: initialForecastDrivers,
   dcfInputs: initialDcfInputs,
+  step6Data,
+  step7Data,
   onManualInput,
   onConfirmDrivers,
   onBackToRequirements,
@@ -75,6 +80,128 @@ const ForecastDriversStep = ({
     forecastDrivers: false,
     dcfInputs: false
   });
+  const [aiLoading, setAiLoading] = useState({});
+  const [aiSuggestions, setAiSuggestions] = useState({});
+
+  // Generate AI suggestion for a specific category
+  const handleGenerateAISuggestion = async (category) => {
+    if (!sessionId) {
+      alert('Session ID not available. Please go back and restart the valuation.');
+      return;
+    }
+
+    setAiLoading(prev => ({ ...prev, [category]: true }));
+    try {
+      const response = await generateAISuggestion(sessionId, category);
+      if (response.status === 'success' && response.suggestion) {
+        setAiSuggestions(prev => ({ ...prev, [category]: response.suggestion }));
+        
+        // Auto-apply the suggestion to the current state
+        const suggestion = response.suggestion;
+        if (category === 'revenue_drivers') {
+          // Apply volume growth and price increase to forecast drivers
+          if (suggestion.volume_growth !== undefined) {
+            setLocalForecastDrivers(prev => ({
+              ...prev,
+              [activeScenario]: {
+                ...prev[activeScenario],
+                sales_volume_growth: prev[activeScenario].sales_volume_growth.map(() => suggestion.volume_growth)
+              }
+            }));
+          }
+          if (suggestion.price_increase !== undefined) {
+            // Price increase would affect inflation_rate or could be a separate field
+            setLocalForecastDrivers(prev => ({
+              ...prev,
+              [activeScenario]: {
+                ...prev[activeScenario],
+                inflation_rate: prev[activeScenario].inflation_rate.map(() => suggestion.price_increase)
+              }
+            }));
+          }
+        } else if (category === 'cost_margins') {
+          if (suggestion.cogs_percent !== undefined) {
+            // COGS % affects gross margin
+          }
+          if (suggestion.sgna_percent !== undefined) {
+            // SG&A % affects opex
+            setLocalForecastDrivers(prev => ({
+              ...prev,
+              [activeScenario]: {
+                ...prev[activeScenario],
+                opex_growth: prev[activeScenario].opex_growth.map(() => suggestion.sgna_percent)
+              }
+            }));
+          }
+          if (suggestion.tax_rate !== undefined) {
+            setLocalForecastDrivers(prev => ({
+              ...prev,
+              [activeScenario]: {
+                ...prev[activeScenario],
+                tax_rate: prev[activeScenario].tax_rate.map(() => suggestion.tax_rate)
+              }
+            }));
+          }
+        } else if (category === 'working_capital') {
+          if (suggestion.ar_days !== undefined) {
+            setLocalForecastDrivers(prev => ({
+              ...prev,
+              [activeScenario]: {
+                ...prev[activeScenario],
+                ar_days: prev[activeScenario].ar_days.map(() => suggestion.ar_days)
+              }
+            }));
+          }
+          if (suggestion.inventory_days !== undefined) {
+            setLocalForecastDrivers(prev => ({
+              ...prev,
+              [activeScenario]: {
+                ...prev[activeScenario],
+                inv_days: prev[activeScenario].inv_days.map(() => suggestion.inventory_days)
+              }
+            }));
+          }
+          if (suggestion.ap_days !== undefined) {
+            setLocalForecastDrivers(prev => ({
+              ...prev,
+              [activeScenario]: {
+                ...prev[activeScenario],
+                ap_days: prev[activeScenario].ap_days.map(() => suggestion.ap_days)
+              }
+            }));
+          }
+        } else if (category === 'wacc_components') {
+          if (suggestion.risk_free_rate !== undefined) {
+            setLocalDcfInputs(prev => ({ ...prev, risk_free_rate: suggestion.risk_free_rate }));
+          }
+          if (suggestion.market_risk_premium !== undefined) {
+            setLocalDcfInputs(prev => ({ ...prev, equity_risk_premium: suggestion.market_risk_premium }));
+          }
+          if (suggestion.country_risk_premium !== undefined) {
+            // CRP would need to be added to DCF inputs
+          }
+          if (suggestion.cost_of_debt !== undefined) {
+            setLocalDcfInputs(prev => ({ ...prev, cost_of_debt: suggestion.cost_of_debt }));
+          }
+          if (suggestion.de_equity_ratio !== undefined) {
+            // D/E ratio affects WACC calculation
+          }
+        } else if (category === 'terminal_value') {
+          if (suggestion.terminal_growth_rate !== undefined) {
+            setLocalDcfInputs(prev => ({ ...prev, terminal_growth_rate: suggestion.terminal_growth_rate }));
+          }
+          if (suggestion.terminal_ebitda_multiple !== undefined) {
+            setLocalDcfInputs(prev => ({ ...prev, terminal_ebitda_multiple: suggestion.terminal_ebitda_multiple }));
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Failed to generate AI suggestion:', error);
+      alert(`Failed to generate AI suggestion: ${error.message}`);
+    } finally {
+      setAiLoading(prev => ({ ...prev, [category]: false }));
+    }
+  };
 
   // Handle forecast driver input change
   const handleForecastDriverChange = (scenario, field, yearIndex, value) => {
@@ -237,6 +364,187 @@ const ForecastDriversStep = ({
               {scenario.replace('_', ' ').toUpperCase()}
             </button>
           ))}
+        </div>
+      </div>
+
+      {/* AI Suggestion Studio Section */}
+      <div className="summary-box" style={{ marginBottom: '24px', background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+          <h3>🤖 AI Assumption Studio</h3>
+          <span style={{ fontSize: '13px', color: '#666' }}>Generate AI-powered suggestions for each category</span>
+        </div>
+        
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
+          {/* Revenue Drivers */}
+          <div style={{ background: 'white', padding: '16px', borderRadius: '8px', border: '1px solid #ddd' }}>
+            <h4 style={{ margin: '0 0 8px 0', color: '#1976d2' }}>📈 Revenue Drivers</h4>
+            <p style={{ fontSize: '13px', color: '#666', marginBottom: '12px' }}>Volume Growth & Price Increase assumptions based on historical trends and market analysis</p>
+            <button
+              onClick={() => handleGenerateAISuggestion('revenue_drivers')}
+              disabled={aiLoading.revenue_drivers}
+              style={{
+                width: '100%',
+                padding: '10px',
+                background: aiLoading.revenue_drivers ? '#ccc' : '#2196f3',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                cursor: aiLoading.revenue_drivers ? 'not-allowed' : 'pointer',
+                fontWeight: 'bold'
+              }}
+            >
+              {aiLoading.revenue_drivers ? '⏳ Generating...' : '✨ Generate AI Suggestion'}
+            </button>
+            {aiSuggestions.revenue_drivers && (
+              <div style={{ marginTop: '12px', padding: '8px', background: '#e3f2fd', borderRadius: '4px', fontSize: '12px' }}>
+                <strong>✓ Applied:</strong>
+                {aiSuggestions.revenue_drivers.volume_growth && (
+                  <div>Volume Growth: {(aiSuggestions.revenue_drivers.volume_growth * 100).toFixed(1)}%</div>
+                )}
+                {aiSuggestions.revenue_drivers.price_increase && (
+                  <div>Price Increase: {(aiSuggestions.revenue_drivers.price_increase * 100).toFixed(1)}%</div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Cost & Margins */}
+          <div style={{ background: 'white', padding: '16px', borderRadius: '8px', border: '1px solid #ddd' }}>
+            <h4 style={{ margin: '0 0 8px 0', color: '#1976d2' }}>💰 Cost & Margins</h4>
+            <p style={{ fontSize: '13px', color: '#666', marginBottom: '12px' }}>COGS %, SG&A %, and Tax Rate based on historical margins and peer benchmarks</p>
+            <button
+              onClick={() => handleGenerateAISuggestion('cost_margins')}
+              disabled={aiLoading.cost_margins}
+              style={{
+                width: '100%',
+                padding: '10px',
+                background: aiLoading.cost_margins ? '#ccc' : '#2196f3',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                cursor: aiLoading.cost_margins ? 'not-allowed' : 'pointer',
+                fontWeight: 'bold'
+              }}
+            >
+              {aiLoading.cost_margins ? '⏳ Generating...' : '✨ Generate AI Suggestion'}
+            </button>
+            {aiSuggestions.cost_margins && (
+              <div style={{ marginTop: '12px', padding: '8px', background: '#e3f2fd', borderRadius: '4px', fontSize: '12px' }}>
+                <strong>✓ Applied:</strong>
+                {aiSuggestions.cost_margins.sgna_percent && (
+                  <div>SG&A %: {(aiSuggestions.cost_margins.sgna_percent * 100).toFixed(1)}%</div>
+                )}
+                {aiSuggestions.cost_margins.tax_rate && (
+                  <div>Tax Rate: {(aiSuggestions.cost_margins.tax_rate * 100).toFixed(1)}%</div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Working Capital */}
+          <div style={{ background: 'white', padding: '16px', borderRadius: '8px', border: '1px solid #ddd' }}>
+            <h4 style={{ margin: '0 0 8px 0', color: '#1976d2' }}>🔄 Working Capital</h4>
+            <p style={{ fontSize: '13px', color: '#666', marginBottom: '12px' }}>AR Days, Inventory Days, AP Days based on historical efficiency metrics</p>
+            <button
+              onClick={() => handleGenerateAISuggestion('working_capital')}
+              disabled={aiLoading.working_capital}
+              style={{
+                width: '100%',
+                padding: '10px',
+                background: aiLoading.working_capital ? '#ccc' : '#2196f3',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                cursor: aiLoading.working_capital ? 'not-allowed' : 'pointer',
+                fontWeight: 'bold'
+              }}
+            >
+              {aiLoading.working_capital ? '⏳ Generating...' : '✨ Generate AI Suggestion'}
+            </button>
+            {aiSuggestions.working_capital && (
+              <div style={{ marginTop: '12px', padding: '8px', background: '#e3f2fd', borderRadius: '4px', fontSize: '12px' }}>
+                <strong>✓ Applied:</strong>
+                {aiSuggestions.working_capital.ar_days && (
+                  <div>AR Days: {aiSuggestions.working_capital.ar_days.toFixed(0)}</div>
+                )}
+                {aiSuggestions.working_capital.inventory_days && (
+                  <div>Inventory Days: {aiSuggestions.working_capital.inventory_days.toFixed(0)}</div>
+                )}
+                {aiSuggestions.working_capital.ap_days && (
+                  <div>AP Days: {aiSuggestions.working_capital.ap_days.toFixed(0)}</div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* WACC Components */}
+          <div style={{ background: 'white', padding: '16px', borderRadius: '8px', border: '1px solid #ddd' }}>
+            <h4 style={{ margin: '0 0 8px 0', color: '#1976d2' }}>📊 WACC Components</h4>
+            <p style={{ fontSize: '13px', color: '#666', marginBottom: '12px' }}>Risk-Free Rate, Market Risk Premium, Country Risk Premium, Cost of Debt, D/E Ratio</p>
+            <button
+              onClick={() => handleGenerateAISuggestion('wacc_components')}
+              disabled={aiLoading.wacc_components}
+              style={{
+                width: '100%',
+                padding: '10px',
+                background: aiLoading.wacc_components ? '#ccc' : '#2196f3',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                cursor: aiLoading.wacc_components ? 'not-allowed' : 'pointer',
+                fontWeight: 'bold'
+              }}
+            >
+              {aiLoading.wacc_components ? '⏳ Generating...' : '✨ Generate AI Suggestion'}
+            </button>
+            {aiSuggestions.wacc_components && (
+              <div style={{ marginTop: '12px', padding: '8px', background: '#e3f2fd', borderRadius: '4px', fontSize: '12px' }}>
+                <strong>✓ Applied:</strong>
+                {aiSuggestions.wacc_components.risk_free_rate && (
+                  <div>Risk-Free Rate: {(aiSuggestions.wacc_components.risk_free_rate * 100).toFixed(2)}%</div>
+                )}
+                {aiSuggestions.wacc_components.market_risk_premium && (
+                  <div>Market Risk Premium: {(aiSuggestions.wacc_components.market_risk_premium * 100).toFixed(2)}%</div>
+                )}
+                {aiSuggestions.wacc_components.cost_of_debt && (
+                  <div>Cost of Debt: {(aiSuggestions.wacc_components.cost_of_debt * 100).toFixed(2)}%</div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Terminal Value */}
+          <div style={{ background: 'white', padding: '16px', borderRadius: '8px', border: '1px solid #ddd' }}>
+            <h4 style={{ margin: '0 0 8px 0', color: '#1976d2' }}>🎯 Terminal Value</h4>
+            <p style={{ fontSize: '13px', color: '#666', marginBottom: '12px' }}>Terminal Growth Rate and EBITDA Multiple based on industry standards and peer medians</p>
+            <button
+              onClick={() => handleGenerateAISuggestion('terminal_value')}
+              disabled={aiLoading.terminal_value}
+              style={{
+                width: '100%',
+                padding: '10px',
+                background: aiLoading.terminal_value ? '#ccc' : '#2196f3',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                cursor: aiLoading.terminal_value ? 'not-allowed' : 'pointer',
+                fontWeight: 'bold'
+              }}
+            >
+              {aiLoading.terminal_value ? '⏳ Generating...' : '✨ Generate AI Suggestion'}
+            </button>
+            {aiSuggestions.terminal_value && (
+              <div style={{ marginTop: '12px', padding: '8px', background: '#e3f2fd', borderRadius: '4px', fontSize: '12px' }}>
+                <strong>✓ Applied:</strong>
+                {aiSuggestions.terminal_value.terminal_growth_rate && (
+                  <div>Terminal Growth: {(aiSuggestions.terminal_value.terminal_growth_rate * 100).toFixed(1)}%</div>
+                )}
+                {aiSuggestions.terminal_value.terminal_ebitda_multiple && (
+                  <div>EBITDA Multiple: {aiSuggestions.terminal_value.terminal_ebitda_multiple.toFixed(1)}x</div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
