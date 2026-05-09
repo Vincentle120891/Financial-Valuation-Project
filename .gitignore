@@ -1,1 +1,1 @@
-Nothing needs to be added to .gitignore since only source files (.jsx) were modified and no build artifacts, dependencies, or temporary files are present in the changes.
+Nothing should be ignored based on the provided file changes. The modification of 'frontend/src/components/ValuationFlow.jsx' is a source code file that should be tracked in version control. No build artifacts, dependencies, or temporary files are present in the changes.

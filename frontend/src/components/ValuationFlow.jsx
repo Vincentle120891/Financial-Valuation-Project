@@ -304,9 +304,9 @@ const ValuationFlow = () => {
     setCurrentStep(8);
   }, []);
 
-  // ==================== CONTINUE TO ASSUMPTIONS (STEP 9) ====================
+  // ==================== CONTINUE TO ASSUMPTIONS (STEP 7) ====================
   const handleContinueToAssumptions = useCallback(() => {
-    setCurrentStep(9);
+    setCurrentStep(7);
   }, []);
 
   // ==================== BACK TO REQUIREMENTS (FROM STEP 6/8) ====================
