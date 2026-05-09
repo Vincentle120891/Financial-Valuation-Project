@@ -1669,15 +1669,23 @@ class Step6DataReviewProcessor:
                 peer_data[ticker][metric] = field.value
 
         # Calculate EV/EBITDA and P/E multiples for each peer
+        ev_ebitda_values = []
+        pe_values = []
+        pb_values = []
+        ps_values = []
+        
         for ticker, data in peer_data.items():
             ev = data.get('EV')
             ebitda = data.get('EBITDA')
             price = data.get('Price')
             eps = data.get('EPS')
+            book = data.get('BookValue')
+            revenue = data.get('Revenue')
 
             # EV/EBITDA LTM
             if ev and ebitda and ebitda > 0:
                 ev_ebitda = ev / ebitda
+                ev_ebitda_values.append(ev_ebitda)
                 fields.append(DataField(
                     field_name=f"Peer_{ticker}_EV_EBITDA_LTM",
                     display_name=f"{ticker} EV/EBITDA (LTM)",
@@ -1692,6 +1700,7 @@ class Step6DataReviewProcessor:
             # P/E LTM
             if price and eps and eps > 0:
                 pe = price / eps
+                pe_values.append(pe)
                 fields.append(DataField(
                     field_name=f"Peer_{ticker}_PE_LTM",
                     display_name=f"{ticker} P/E (LTM)",
@@ -1700,6 +1709,105 @@ class Step6DataReviewProcessor:
                     status=DataStatus.CALCULATED,
                     source="Step 6 Calculation",
                     formula="Stock Price / EPS",
+                    is_critical=False
+                ))
+            
+            # P/B LTM
+            if price and book and book > 0:
+                pb = price / book
+                pb_values.append(pb)
+                fields.append(DataField(
+                    field_name=f"Peer_{ticker}_PB_LTM",
+                    display_name=f"{ticker} P/B (LTM)",
+                    value=round(pb, 2),
+                    unit="x",
+                    status=DataStatus.CALCULATED,
+                    source="Step 6 Calculation",
+                    formula="Stock Price / Book Value",
+                    is_critical=False
+                ))
+            
+            # P/S LTM
+            if price and revenue and revenue > 0:
+                ps = price / revenue
+                ps_values.append(ps)
+                fields.append(DataField(
+                    field_name=f"Peer_{ticker}_PS_LTM",
+                    display_name=f"{ticker} P/S (LTM)",
+                    value=round(ps, 2),
+                    unit="x",
+                    status=DataStatus.CALCULATED,
+                    source="Step 6 Calculation",
+                    formula="Stock Price / Revenue",
+                    is_critical=False
+                ))
+
+        # Calculate peer median multiples for Step 8 AI suggestions
+        def calculate_median(values):
+            if not values:
+                return None
+            sorted_vals = sorted(values)
+            n = len(sorted_vals)
+            mid = n // 2
+            if n % 2 == 0:
+                return (sorted_vals[mid - 1] + sorted_vals[mid]) / 2
+            else:
+                return sorted_vals[mid]
+        
+        # Add peer median multiples to calculated metrics
+        if ev_ebitda_values:
+            median_ev_ebitda = calculate_median(ev_ebitda_values)
+            if median_ev_ebitda:
+                fields.append(DataField(
+                    field_name="Peer_Median_EV_EBITDA",
+                    display_name="Peer Median EV/EBITDA",
+                    value=round(median_ev_ebitda, 2),
+                    unit="x",
+                    status=DataStatus.CALCULATED,
+                    source="Step 6 Calculation",
+                    formula="Median of peer EV/EBITDA multiples",
+                    is_critical=False
+                ))
+        
+        if pe_values:
+            median_pe = calculate_median(pe_values)
+            if median_pe:
+                fields.append(DataField(
+                    field_name="Peer_Median_PE",
+                    display_name="Peer Median P/E",
+                    value=round(median_pe, 2),
+                    unit="x",
+                    status=DataStatus.CALCULATED,
+                    source="Step 6 Calculation",
+                    formula="Median of peer P/E multiples",
+                    is_critical=False
+                ))
+        
+        if pb_values:
+            median_pb = calculate_median(pb_values)
+            if median_pb:
+                fields.append(DataField(
+                    field_name="Peer_Median_PB",
+                    display_name="Peer Median P/B",
+                    value=round(median_pb, 2),
+                    unit="x",
+                    status=DataStatus.CALCULATED,
+                    source="Step 6 Calculation",
+                    formula="Median of peer P/B multiples",
+                    is_critical=False
+                ))
+        
+        if ps_values:
+            median_ps = calculate_median(ps_values)
+            if median_ps:
+                fields.append(DataField(
+                    field_name="Peer_Median_PS",
+                    display_name="Peer Median P/S",
+                    value=round(median_ps, 2),
+                    unit="x",
+                    status=DataStatus.CALCULATED,
+                    source="Step 6 Calculation",
+                    formula="Median of peer P/S multiples",
                     is_critical=False
                 ))
 
