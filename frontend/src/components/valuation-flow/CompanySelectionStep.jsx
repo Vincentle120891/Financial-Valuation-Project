@@ -9,7 +9,8 @@ const CompanySelectionStep = ({
   selectedCompany, 
   onFindPeers, 
   onContinue, 
-  loading 
+  loading,
+  hasPeers = false
 }) => {
   const [peerSearchLoading, setPeerSearchLoading] = useState(false);
 
@@ -99,6 +100,20 @@ const CompanySelectionStep = ({
             </p>
           </div>
         )}
+
+        {/* Peer Found Success Message */}
+        {hasPeers && (
+          <div className="mt-6 bg-green-50 border-l-4 border-green-400 p-4 rounded">
+            <div className="flex items-center gap-2">
+              <svg className="w-5 h-5 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+              </svg>
+              <p className="text-green-700 font-medium">
+                Peers discovered! Review and select your peers in the next step.
+              </p>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Action Buttons */}
@@ -137,7 +152,7 @@ const CompanySelectionStep = ({
           
           <button
             onClick={onContinue}
-            disabled={loading}
+            disabled={!hasPeers || loading}
             className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Continue to Peer Selection →
