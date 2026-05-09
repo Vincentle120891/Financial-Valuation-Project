@@ -1011,6 +1011,66 @@ const ApiDataStep = ({
     );
   };
 
+  // Render calculated metrics section (intermediate metrics calculated by backend)
+  const renderCalculatedMetrics = () => {
+    if (!calculatedMetrics || !calculatedMetrics.data_fields || calculatedMetrics.data_fields.length === 0) return null;
+
+    return (
+      <div className="summary-box" style={{ background: 'linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%)', marginBottom: '20px' }}>
+        <h3>🧮 Calculated Intermediate Metrics</h3>
+        <p style={{ color: '#666', marginBottom: '16px', fontStyle: 'italic' }}>
+          These metrics are automatically calculated from retrieved data (not final valuations).
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
+          {calculatedMetrics.data_fields.map((metric, idx) => (
+            <div key={idx} style={{ 
+              background: 'white', 
+              padding: '12px', 
+              borderRadius: '6px',
+              border: '2px solid #4caf50',
+              position: 'relative'
+            }}>
+              <div style={{ 
+                position: 'absolute', 
+                top: '4px', 
+                right: '4px', 
+                background: '#4caf50', 
+                color: 'white', 
+                padding: '2px 6px', 
+                borderRadius: '4px',
+                fontSize: '10px',
+                fontWeight: 600
+              }}>
+                CALCULATED
+              </div>
+              <strong style={{ display: 'block', marginBottom: '8px', color: '#2e7d32', paddingRight: '70px' }}>
+                {metric.field_name || metric.display_name || 'Unknown Metric'}
+              </strong>
+              <div style={{ fontSize: '18px', fontWeight: 700, color: '#1b5e20' }}>
+                {metric.unit === '%' 
+                  ? `${(metric.value * 100).toFixed(2)}%`
+                  : metric.unit === 'USD' 
+                    ? formatCurrency(metric.value)
+                    : formatNumber(metric.value, 2)
+                }
+              </div>
+              {metric.formula && (
+                <div style={{ fontSize: '11px', color: '#999', marginTop: '6px', fontStyle: 'italic' }}>
+                  Formula: {metric.formula}
+                </div>
+              )}
+              {metric.source && (
+                <div style={{ fontSize: '10px', color: '#aaa', marginTop: '4px' }}>
+                  Source: {metric.source}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="step-container">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
@@ -1043,6 +1103,7 @@ const ApiDataStep = ({
           {renderDcfInputs()}
           {renderDupontResults()}
           {renderCompsResults()}
+          {renderCalculatedMetrics()}
 
           <div style={{ marginTop: '20px', display: 'flex', gap: '10px' }}>
             <button
