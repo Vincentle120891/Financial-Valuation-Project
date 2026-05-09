@@ -14,6 +14,7 @@ Total: ~33 granular endpoints for precise frontend integration
 """
 
 from fastapi import APIRouter, HTTPException, Query, Path
+import pandas as pd
 from typing import Optional, Dict, Any, List
 from pydantic import BaseModel
 import logging
@@ -302,37 +303,40 @@ async def get_company_profile(
 async def get_price_history(
     ticker: str = Path(..., description="Ticker symbol"),
     market_code: str = Query("VN", description="Market code"),
-    period: str = Query("2y", description="Period: 1mo, 3mo, 6mo, 1y, 2y, 5y, max")
+    period: str = Query("3mo", description="Period: 1mo, 3mo, 6mo, 1y, 2y, 5y, max")
 ):
     """
     Get historical price data for volatility and beta calculations.
+    Returns formatted data for charts.
     """
     try:
         result = intl_service.fetch_international_data(ticker, market_code)
-        
+
         if not result['success']:
             raise HTTPException(status_code=404, detail=result.get('error', 'Failed to fetch'))
-        
+
         historical_prices = result.get('historical_prices')
-        
-        volatility = None
+
+        # Format data for chart
+        chart_data = []
         if historical_prices is not None and not historical_prices.empty:
-            returns = historical_prices['Close'].pct_change().dropna()
-            volatility = float(returns.std()) * (252 ** 0.5)
-        
-        return {
-            "ticker": result['ticker'],
-            "52_week_high": result['key_stats'].get('52_week_high'),
-            "52_week_low": result['key_stats'].get('52_week_low'),
-            "average_volume": result['key_stats'].get('average_volume'),
-            "volatility_annualized": volatility,
-            "period": period
-        }
+            for date, row in historical_prices.iterrows():
+                chart_data.append({
+                    "date": date.strftime('%Y-%m-%d'),
+                    "open": float(row['Open']) if pd.notna(row['Open']) else None,
+                    "high": float(row['High']) if pd.notna(row['High']) else None,
+                    "low": float(row['Low']) if pd.notna(row['Low']) else None,
+                    "close": float(row['Close']) if pd.notna(row['Close']) else None,
+                    "volume": int(row['Volume']) if pd.notna(row['Volume']) else None
+                })
+
+        return chart_data
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error fetching price history: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
 
 
 @router.get("/market-data/{ticker}/key-statistics")
