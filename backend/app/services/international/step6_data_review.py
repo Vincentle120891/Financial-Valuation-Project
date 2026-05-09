@@ -54,6 +54,31 @@ class MarketDataDisplay(BaseModel):
     currency: Optional[DataField] = None
     data_fields: List[DataField] = []
 
+class PeerCompany(BaseModel):
+    """Individual peer company data"""
+    ticker: str
+    name: Optional[str] = None
+    market_cap: Optional[float] = None
+    enterprise_value: Optional[float] = None
+    ev_ebitda: Optional[float] = None
+    pe_ratio: Optional[float] = None
+    ev_revenue: Optional[float] = None
+    pb_ratio: Optional[float] = None
+    beta: Optional[float] = None
+    total_debt: Optional[float] = None
+    cash: Optional[float] = None
+    tax_rate: Optional[float] = None
+    cost_of_debt: Optional[float] = None
+
+class PeerComparablesDisplay(BaseModel):
+    """Peer comparables display with individual companies and medians"""
+    companies: List[PeerCompany] = []
+    median_ev_ebitda: Optional[float] = None
+    median_pe: Optional[float] = None
+    median_ev_revenue: Optional[float] = None
+    median_pb: Optional[float] = None
+    data_fields: List[DataField] = []  # Keep for backward compatibility
+
 class CalculatedMetricsDisplay(BaseModel):
     """Calculated metrics from retrieved data (NOT final valuations)"""
     data_fields: List[DataField] = []
@@ -76,6 +101,7 @@ class Step6DataReviewResponse(BaseModel):
     historical_financials: Optional[HistoricalFinancialsDisplay] = None
     forecast_drivers: Optional[ForecastDriversDisplay] = None
     market_data: Optional[MarketDataDisplay] = None
+    peer_comparables: Optional[PeerComparablesDisplay] = None
     calculated_metrics: Optional[CalculatedMetricsDisplay] = None
     missing_data_summary: Optional[MissingDataSummary] = None
     manual_overrides_applied: Dict[str, Any] = {}
@@ -198,7 +224,10 @@ class Step6DataReviewProcessor:
         )
 
         # Aggregate missing data
-        all_displays = [historical_display, market_display, opening_display, peer_display, calculated_display]
+        all_displays = [historical_display, market_display, opening_display, calculated_display]
+        # Add peer data fields to missing data check
+        if peer_display and peer_display.data_fields:
+            all_displays.append(HistoricalFinancialsDisplay(data_fields=peer_display.data_fields))
         missing_summary = self._aggregate_missing_data(all_displays)
 
         ready = len(missing_summary.critical_missing) == 0
@@ -209,8 +238,9 @@ class Step6DataReviewProcessor:
             timestamp=datetime.now(),
             valuation_model=ValuationModel.DCF,
             historical_financials=historical_display,
-            forecast_drivers=ForecastDriversDisplay(data_fields=opening_display.data_fields + peer_display.data_fields),
+            forecast_drivers=ForecastDriversDisplay(data_fields=opening_display.data_fields + (peer_display.data_fields if peer_display else [])),
             market_data=market_display,
+            peer_comparables=peer_display,
             calculated_metrics=calculated_display,
             missing_data_summary=missing_summary,
             manual_overrides_applied=user_overrides,
@@ -896,9 +926,9 @@ class Step6DataReviewProcessor:
 
         return HistoricalFinancialsDisplay(years=years, data_fields=data_fields)
 
-    def _process_dcf_peer_comparables(self, retrieved_assumptions: Dict, overrides: Dict) -> HistoricalFinancialsDisplay:
+    def _process_dcf_peer_comparables(self, retrieved_assumptions: Dict, overrides: Dict) -> PeerComparablesDisplay:
         """Process peer comparables for WACC calculation (6 fields × N peers)
-        
+
         The 6 key WACC inputs per peer:
         1. Market Cap - for capital structure weights
         2. Beta - levered equity beta
@@ -906,11 +936,18 @@ class Step6DataReviewProcessor:
         4. Cash - for net debt calculation
         5. Effective Tax Rate - for after-tax cost of debt
         6. Cost of Debt - pre-tax cost of debt (NEW)
-        
+
         Note: Risk-free rate is a global input, not peer-specific
         """
         years = [2024]  # Current year for peer data
         data_fields = []
+        companies = []
+
+        # Collect metrics for median calculation
+        ev_ebitda_values = []
+        pe_values = []
+        ev_revenue_values = []
+        pb_values = []
 
         peers = retrieved_assumptions.get("peers", [])
         if not peers:
@@ -919,8 +956,60 @@ class Step6DataReviewProcessor:
         for i, peer_ticker in enumerate(peers[:5]):  # Limit to 5 peers
             peer_info = retrieved_assumptions.get(f"peer_{peer_ticker}_info", {})
 
-            # 1. Peer Market Cap
+            # Extract individual metrics
             peer_mcap = peer_info.get('marketCap')
+            peer_beta = peer_info.get('beta')
+            peer_debt = peer_info.get('totalDebt')
+            peer_cash = peer_info.get('cash')
+            peer_tax_rate = peer_info.get('effectiveTaxRate')
+            peer_cost_of_debt = peer_info.get('costOfDebt')
+            peer_ev = peer_info.get('enterpriseValue')
+            peer_ebitda = peer_info.get('ebitda')
+            peer_net_income = peer_info.get('netIncome')
+            peer_revenue = peer_info.get('revenue')
+            peer_book_value = peer_info.get('bookValue')
+            peer_name = peer_info.get('name', peer_ticker)
+
+            # Calculate valuation multiples if data available
+            peer_ev_ebitda = None
+            if peer_ev and peer_ebitda and peer_ebitda != 0:
+                peer_ev_ebitda = peer_ev / peer_ebitda
+                ev_ebitda_values.append(peer_ev_ebitda)
+
+            peer_pe = None
+            if peer_mcap and peer_net_income and peer_net_income != 0:
+                peer_pe = peer_mcap / peer_net_income
+                pe_values.append(peer_pe)
+
+            peer_ev_revenue = None
+            if peer_ev and peer_revenue and peer_revenue != 0:
+                peer_ev_revenue = peer_ev / peer_revenue
+                ev_revenue_values.append(peer_ev_revenue)
+
+            peer_pb = None
+            if peer_mcap and peer_book_value and peer_book_value != 0:
+                peer_pb = peer_mcap / peer_book_value
+                pb_values.append(peer_pb)
+
+            # Add to companies list for frontend display
+            companies.append(PeerCompany(
+                ticker=peer_ticker,
+                name=peer_name,
+                market_cap=peer_mcap,
+                enterprise_value=peer_ev,
+                ev_ebitda=peer_ev_ebitda,
+                pe_ratio=peer_pe,
+                ev_revenue=peer_ev_revenue,
+                pb_ratio=peer_pb,
+                beta=peer_beta,
+                total_debt=peer_debt,
+                cash=peer_cash,
+                tax_rate=peer_tax_rate,
+                cost_of_debt=peer_cost_of_debt
+            ))
+
+            # Keep data_fields for backward compatibility
+            # 1. Peer Market Cap
             data_fields.append(DataField(
                 field_name=f"Peer_{peer_ticker}_MarketCap",
                 value=peer_mcap,
@@ -931,7 +1020,6 @@ class Step6DataReviewProcessor:
             ))
 
             # 2. Peer Beta
-            peer_beta = peer_info.get('beta')
             data_fields.append(DataField(
                 field_name=f"Peer_{peer_ticker}_Beta",
                 value=peer_beta,
@@ -941,7 +1029,6 @@ class Step6DataReviewProcessor:
             ))
 
             # 3. Peer Total Debt
-            peer_debt = peer_info.get('totalDebt')
             data_fields.append(DataField(
                 field_name=f"Peer_{peer_ticker}_TotalDebt",
                 value=peer_debt,
@@ -952,7 +1039,6 @@ class Step6DataReviewProcessor:
             ))
 
             # 4. Peer Cash
-            peer_cash = peer_info.get('cash')
             data_fields.append(DataField(
                 field_name=f"Peer_{peer_ticker}_Cash",
                 value=peer_cash,
@@ -963,7 +1049,6 @@ class Step6DataReviewProcessor:
             ))
 
             # 5. Peer Tax Rate (calculated from financials)
-            peer_tax_rate = peer_info.get('effectiveTaxRate')
             data_fields.append(DataField(
                 field_name=f"Peer_{peer_ticker}_TaxRate",
                 value=peer_tax_rate,
@@ -975,7 +1060,6 @@ class Step6DataReviewProcessor:
             ))
 
             # 6. Peer Cost of Debt (NEW - calculated from Interest Expense / Total Debt)
-            peer_cost_of_debt = peer_info.get('costOfDebt')
             data_fields.append(DataField(
                 field_name=f"Peer_{peer_ticker}_CostOfDebt",
                 value=peer_cost_of_debt,
@@ -986,9 +1070,31 @@ class Step6DataReviewProcessor:
                 is_critical=False
             ))
 
-        return HistoricalFinancialsDisplay(years=years, data_fields=data_fields)
+        # Calculate medians
+        def calculate_median(values):
+            if not values:
+                return None
+            sorted_vals = sorted(values)
+            n = len(sorted_vals)
+            if n % 2 == 0:
+                return (sorted_vals[n//2 - 1] + sorted_vals[n//2]) / 2
+            return sorted_vals[n//2]
 
-    def _calculate_dcf_intermediate_metrics(self, hist: HistoricalFinancialsDisplay, market: MarketDataDisplay, opening: HistoricalFinancialsDisplay, peers: HistoricalFinancialsDisplay) -> CalculatedMetricsDisplay:
+        median_ev_ebitda = calculate_median(ev_ebitda_values)
+        median_pe = calculate_median(pe_values)
+        median_ev_revenue = calculate_median(ev_revenue_values)
+        median_pb = calculate_median(pb_values)
+
+        return PeerComparablesDisplay(
+            data_fields=data_fields,
+            companies=companies,
+            median_ev_ebitda=median_ev_ebitda,
+            median_pe=median_pe,
+            median_ev_revenue=median_ev_revenue,
+            median_pb=median_pb
+        )
+
+    def _calculate_dcf_intermediate_metrics(self, hist: HistoricalFinancialsDisplay, market: MarketDataDisplay, opening: HistoricalFinancialsDisplay, peers: PeerComparablesDisplay) -> CalculatedMetricsDisplay:
         """Calculate ONLY intermediate metrics (margins, growth rates, ratios) - NOT WACC/TV/Fair Value"""
         fields = []
 
@@ -1669,23 +1775,15 @@ class Step6DataReviewProcessor:
                 peer_data[ticker][metric] = field.value
 
         # Calculate EV/EBITDA and P/E multiples for each peer
-        ev_ebitda_values = []
-        pe_values = []
-        pb_values = []
-        ps_values = []
-        
         for ticker, data in peer_data.items():
             ev = data.get('EV')
             ebitda = data.get('EBITDA')
             price = data.get('Price')
             eps = data.get('EPS')
-            book = data.get('BookValue')
-            revenue = data.get('Revenue')
 
             # EV/EBITDA LTM
             if ev and ebitda and ebitda > 0:
                 ev_ebitda = ev / ebitda
-                ev_ebitda_values.append(ev_ebitda)
                 fields.append(DataField(
                     field_name=f"Peer_{ticker}_EV_EBITDA_LTM",
                     display_name=f"{ticker} EV/EBITDA (LTM)",
@@ -1700,7 +1798,6 @@ class Step6DataReviewProcessor:
             # P/E LTM
             if price and eps and eps > 0:
                 pe = price / eps
-                pe_values.append(pe)
                 fields.append(DataField(
                     field_name=f"Peer_{ticker}_PE_LTM",
                     display_name=f"{ticker} P/E (LTM)",
@@ -1709,105 +1806,6 @@ class Step6DataReviewProcessor:
                     status=DataStatus.CALCULATED,
                     source="Step 6 Calculation",
                     formula="Stock Price / EPS",
-                    is_critical=False
-                ))
-            
-            # P/B LTM
-            if price and book and book > 0:
-                pb = price / book
-                pb_values.append(pb)
-                fields.append(DataField(
-                    field_name=f"Peer_{ticker}_PB_LTM",
-                    display_name=f"{ticker} P/B (LTM)",
-                    value=round(pb, 2),
-                    unit="x",
-                    status=DataStatus.CALCULATED,
-                    source="Step 6 Calculation",
-                    formula="Stock Price / Book Value",
-                    is_critical=False
-                ))
-            
-            # P/S LTM
-            if price and revenue and revenue > 0:
-                ps = price / revenue
-                ps_values.append(ps)
-                fields.append(DataField(
-                    field_name=f"Peer_{ticker}_PS_LTM",
-                    display_name=f"{ticker} P/S (LTM)",
-                    value=round(ps, 2),
-                    unit="x",
-                    status=DataStatus.CALCULATED,
-                    source="Step 6 Calculation",
-                    formula="Stock Price / Revenue",
-                    is_critical=False
-                ))
-
-        # Calculate peer median multiples for Step 8 AI suggestions
-        def calculate_median(values):
-            if not values:
-                return None
-            sorted_vals = sorted(values)
-            n = len(sorted_vals)
-            mid = n // 2
-            if n % 2 == 0:
-                return (sorted_vals[mid - 1] + sorted_vals[mid]) / 2
-            else:
-                return sorted_vals[mid]
-        
-        # Add peer median multiples to calculated metrics
-        if ev_ebitda_values:
-            median_ev_ebitda = calculate_median(ev_ebitda_values)
-            if median_ev_ebitda:
-                fields.append(DataField(
-                    field_name="Peer_Median_EV_EBITDA",
-                    display_name="Peer Median EV/EBITDA",
-                    value=round(median_ev_ebitda, 2),
-                    unit="x",
-                    status=DataStatus.CALCULATED,
-                    source="Step 6 Calculation",
-                    formula="Median of peer EV/EBITDA multiples",
-                    is_critical=False
-                ))
-        
-        if pe_values:
-            median_pe = calculate_median(pe_values)
-            if median_pe:
-                fields.append(DataField(
-                    field_name="Peer_Median_PE",
-                    display_name="Peer Median P/E",
-                    value=round(median_pe, 2),
-                    unit="x",
-                    status=DataStatus.CALCULATED,
-                    source="Step 6 Calculation",
-                    formula="Median of peer P/E multiples",
-                    is_critical=False
-                ))
-        
-        if pb_values:
-            median_pb = calculate_median(pb_values)
-            if median_pb:
-                fields.append(DataField(
-                    field_name="Peer_Median_PB",
-                    display_name="Peer Median P/B",
-                    value=round(median_pb, 2),
-                    unit="x",
-                    status=DataStatus.CALCULATED,
-                    source="Step 6 Calculation",
-                    formula="Median of peer P/B multiples",
-                    is_critical=False
-                ))
-        
-        if ps_values:
-            median_ps = calculate_median(ps_values)
-            if median_ps:
-                fields.append(DataField(
-                    field_name="Peer_Median_PS",
-                    display_name="Peer Median P/S",
-                    value=round(median_ps, 2),
-                    unit="x",
-                    status=DataStatus.CALCULATED,
-                    source="Step 6 Calculation",
-                    formula="Median of peer P/S multiples",
                     is_critical=False
                 ))
 
