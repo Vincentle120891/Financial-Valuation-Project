@@ -124,8 +124,8 @@ const ValuationFlow = () => {
 
         console.log(`Auto-selected ${topPeers.length} peers with highest scores:`, topPeers.map(p => p.symbol));
 
-        // Move to Step 3: Peer Selection
-        setCurrentStep(3);
+        // Stay on Step 2 to show success message, let user click Continue
+        // setCurrentStep(3); // Removed auto-navigation
       } else {
         setError('No peers found for this company. Try a different company or manually add peers later.');
       }
@@ -513,6 +513,7 @@ const ValuationFlow = () => {
             onFindPeers={handleFindPeers}
             onContinue={() => setCurrentStep(3)}
             loading={loading}
+            hasPeers={suggestedPeers.length > 0}
           />
         );
       case 3:
