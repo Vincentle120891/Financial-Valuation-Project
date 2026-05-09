@@ -76,12 +76,27 @@ export const retrieveHistoricalData = async (sessionId) => {
   }
 };
 
+// Step 8: Initialize assumptions with historical trendlines
+export const initializeStep8Assumptions = async (sessionId) => {
+  try {
+    const response = await api.post('/step-8-initialize', {
+      session_id: sessionId
+    });
+    return response.data;
+  } catch (error) {
+    if (error.code === 'ECONNABORTED') {
+      throw new Error('Step 8 initialization timed out. Please try again.');
+    }
+    throw error;
+  }
+};
+
 // Step 8: Generate AI Suggestion for a specific category
 export const generateAISuggestion = async (sessionId, category) => {
   try {
-    const response = await api.post('/step-8-generate-ai-suggestion', { 
-      session_id: sessionId, 
-      category 
+    const response = await api.post('/step-8-generate-ai-suggestion', {
+      session_id: sessionId,
+      category
     });
     return response.data;
   } catch (error) {
@@ -94,20 +109,20 @@ export const generateAISuggestion = async (sessionId, category) => {
 
 // Step 9: Confirm Assumptions
 export const confirmAssumptions = async (sessionId, confirmedValues, scenario = 'base_case') => {
-  const response = await api.post('/step-9-confirm-assumptions', { 
-    session_id: sessionId, 
-    confirmed_values: confirmedValues, 
-    scenario 
+  const response = await api.post('/step-9-confirm-assumptions', {
+    session_id: sessionId,
+    confirmed_values: confirmedValues,
+    scenario
   });
   return response.data;
 };
 
 // Step 10: Run Valuation
 export const runValuation = async (sessionId, model, scenario = 'base_case') => {
-  const response = await api.post('/step-10-valuate', { 
-    session_id: sessionId, 
-    model, 
-    scenario 
+  const response = await api.post('/step-10-valuate', {
+    session_id: sessionId,
+    model,
+    scenario
   });
   return response.data;
 };
@@ -189,10 +204,10 @@ export const fetchVietnameseTicker = async (ticker, marketCode = 'VN') => {
 // Fetch Vietnamese ticker (enhanced with peers, index data, etc.)
 export const fetchVietnameseTickerEnhanced = async (ticker, includePeers = true, includeIndexData = true) => {
   const response = await api.get('/vietnam/fetch-enhanced', {
-    params: { 
-      ticker, 
-      include_peers: includePeers, 
-      include_index_data: includeIndexData 
+    params: {
+      ticker,
+      include_peers: includePeers,
+      include_index_data: includeIndexData
     }
   });
   return response.data;
