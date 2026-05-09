@@ -754,9 +754,19 @@ class Step8ManualOverridesProcessor:
                 reasoning = "Capped at long-term GDP growth expectation of 2.5%. Conservative terminal assumption."
             
             elif metric == "Terminal EBITDA Multiple":
-                # Use peer median from Step 7
-                if step7_data and 'peer_median_ev_ebitda' in step7_data:
-                    suggested_value = step7_data['peer_median_ev_ebitda']
+                # Use peer median from Step 6 calculated_metrics (preferred) or Step 7
+                peer_median = None
+                if step6_data and 'calculated_metrics' in step6_data:
+                    calc_metrics = step6_data['calculated_metrics']
+                    # Check for Peer_Median_EV_EBITDA in calculated metrics
+                    if isinstance(calc_metrics, dict):
+                        peer_median = calc_metrics.get('peer_median_ev_ebitda') or calc_metrics.get('Peer_Median_EV_EBITDA')
+                
+                if peer_median is None and step7_data and 'peer_median_ev_ebitda' in step7_data:
+                    peer_median = step7_data['peer_median_ev_ebitda']
+                
+                if peer_median is not None:
+                    suggested_value = peer_median
                     reasoning = f"Based on peer median EV/EBITDA multiple of {suggested_value:.1f}x."
                 elif historical_avg is not None:
                     suggested_value = historical_avg
@@ -823,8 +833,18 @@ class Step8ManualOverridesProcessor:
             
             # Comps Model Metrics
             elif metric == "P/E Multiple":
-                if step7_data and 'peer_median_pe' in step7_data:
-                    suggested_value = step7_data['peer_median_pe']
+                # Use peer median from Step 6 calculated_metrics (preferred) or Step 7
+                peer_median = None
+                if step6_data and 'calculated_metrics' in step6_data:
+                    calc_metrics = step6_data['calculated_metrics']
+                    if isinstance(calc_metrics, dict):
+                        peer_median = calc_metrics.get('peer_median_pe') or calc_metrics.get('Peer_Median_PE')
+                
+                if peer_median is None and step7_data and 'peer_median_pe' in step7_data:
+                    peer_median = step7_data['peer_median_pe']
+                
+                if peer_median is not None:
+                    suggested_value = peer_median
                     reasoning = f"Based on peer median P/E of {suggested_value:.1f}x."
                 elif historical_avg is not None:
                     suggested_value = historical_avg
@@ -835,8 +855,18 @@ class Step8ManualOverridesProcessor:
                     confidence = "low"
             
             elif metric == "EV/EBITDA Multiple":
-                if step7_data and 'peer_median_ev_ebitda' in step7_data:
-                    suggested_value = step7_data['peer_median_ev_ebitda']
+                # Use peer median from Step 6 calculated_metrics (preferred) or Step 7
+                peer_median = None
+                if step6_data and 'calculated_metrics' in step6_data:
+                    calc_metrics = step6_data['calculated_metrics']
+                    if isinstance(calc_metrics, dict):
+                        peer_median = calc_metrics.get('peer_median_ev_ebitda') or calc_metrics.get('Peer_Median_EV_EBITDA')
+                
+                if peer_median is None and step7_data and 'peer_median_ev_ebitda' in step7_data:
+                    peer_median = step7_data['peer_median_ev_ebitda']
+                
+                if peer_median is not None:
+                    suggested_value = peer_median
                     reasoning = f"Based on peer median EV/EBITDA of {suggested_value:.1f}x."
                 elif historical_avg is not None:
                     suggested_value = historical_avg
@@ -847,8 +877,18 @@ class Step8ManualOverridesProcessor:
                     confidence = "low"
             
             elif metric == "P/B Multiple":
-                if step7_data and 'peer_median_pb' in step7_data:
-                    suggested_value = step7_data['peer_median_pb']
+                # Use peer median from Step 6 calculated_metrics (preferred) or Step 7
+                peer_median = None
+                if step6_data and 'calculated_metrics' in step6_data:
+                    calc_metrics = step6_data['calculated_metrics']
+                    if isinstance(calc_metrics, dict):
+                        peer_median = calc_metrics.get('peer_median_pb') or calc_metrics.get('Peer_Median_PB')
+                
+                if peer_median is None and step7_data and 'peer_median_pb' in step7_data:
+                    peer_median = step7_data['peer_median_pb']
+                
+                if peer_median is not None:
+                    suggested_value = peer_median
                     reasoning = f"Based on peer median P/B of {suggested_value:.1f}x."
                 elif historical_avg is not None:
                     suggested_value = historical_avg
@@ -859,8 +899,18 @@ class Step8ManualOverridesProcessor:
                     confidence = "low"
             
             elif metric == "P/S Multiple":
-                if step7_data and 'peer_median_ps' in step7_data:
-                    suggested_value = step7_data['peer_median_ps']
+                # Use peer median from Step 6 calculated_metrics (preferred) or Step 7
+                peer_median = None
+                if step6_data and 'calculated_metrics' in step6_data:
+                    calc_metrics = step6_data['calculated_metrics']
+                    if isinstance(calc_metrics, dict):
+                        peer_median = calc_metrics.get('peer_median_ps') or calc_metrics.get('Peer_Median_PS')
+                
+                if peer_median is None and step7_data and 'peer_median_ps' in step7_data:
+                    peer_median = step7_data['peer_median_ps']
+                
+                if peer_median is not None:
+                    suggested_value = peer_median
                     reasoning = f"Based on peer median P/S of {suggested_value:.1f}x."
                 elif historical_avg is not None:
                     suggested_value = historical_avg
