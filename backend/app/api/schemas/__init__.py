@@ -175,6 +175,7 @@ class SessionCreateResponse(BaseModel):
     session_id: str
     status: str
     message: Optional[str] = None
+    company_data: Optional[Dict[str, Any]] = None
 
 
 class SessionStatusResponse(BaseModel):

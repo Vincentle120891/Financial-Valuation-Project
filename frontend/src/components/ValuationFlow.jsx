@@ -185,7 +185,38 @@ const ValuationFlow = () => {
       console.log('Select company response:', data);
       if (data.session_id) {
         setSessionId(data.session_id);
-        setSelectedCompany(company);
+        
+        // Merge backend company data with search results
+        const enrichedCompany = { ...company };
+        if (data.company_data) {
+          // Merge company_data fields into selectedCompany
+          if (data.company_data.current_price !== undefined) {
+            enrichedCompany.currentPrice = data.company_data.current_price;
+          }
+          if (data.company_data.market_cap !== undefined) {
+            enrichedCompany.marketCap = data.company_data.market_cap;
+          }
+          if (data.company_data.beta !== undefined) {
+            enrichedCompany.beta = data.company_data.beta;
+          }
+          if (data.company_data.risk_free_rate !== undefined) {
+            enrichedCompany.riskFreeRate = data.company_data.risk_free_rate;
+          }
+          if (data.company_data.market_risk_premium !== undefined) {
+            enrichedCompany.marketRiskPremium = data.company_data.market_risk_premium;
+          }
+          if (data.company_data.sector !== undefined) {
+            enrichedCompany.sector = data.company_data.sector;
+          }
+          if (data.company_data.industry !== undefined) {
+            enrichedCompany.industry = data.company_data.industry;
+          }
+          if (data.company_data.country !== undefined) {
+            enrichedCompany.country = data.company_data.country;
+          }
+        }
+        
+        setSelectedCompany(enrichedCompany);
         setCurrentStep(2); // Move to Step 2: Company Overview
       }
     } catch (err) {
