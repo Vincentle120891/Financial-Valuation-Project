@@ -108,7 +108,7 @@ class Step7HistoricalDataProcessor:
             company_name: Company name
             valuation_model: DCF, DUPONT, or COMPS
             market: Market/country (e.g., "US", "International")
-            step6_financial_data: Historical data already fetched from APIs
+            step6_financial_data: Historical data already fetched from APIs (Step 6 response)
             missing_metrics: Specific metrics that need to be filled (optional)
             fiscal_years_needed: List of fiscal years requiring data (default: last 5 years)
 
@@ -123,7 +123,15 @@ class Step7HistoricalDataProcessor:
         current_year = datetime.now().year
         if fiscal_years_needed is None:
             fiscal_years_needed = list(range(current_year - 5, current_year))
-
+        
+        # Extract missing metrics from Step 6 response format
+        # Step 6 returns Step6DataReviewResponse with nested structures
+        extracted_missing = await self._extract_missing_metrics_from_step6(step6_financial_data)
+        
+        # Use provided missing_metrics or extract from Step 6 data
+        if missing_metrics is None:
+            missing_metrics = extracted_missing
+        
         # Identify gaps in historical data
         gaps_to_fill = await self._identify_data_gaps(
             ticker=ticker,
@@ -219,7 +227,70 @@ class Step7HistoricalDataProcessor:
             extraction_methodology=self._get_extraction_methodology_description(),
             ready_for_assumptions=completeness > 0.7  # Ready if >70% gaps filled
         )
-
+    
+    async def _extract_missing_metrics_from_step6(self, step6_data: Dict[str, Any]) -> List[str]:
+        """
+        Extract missing metric names from Step 6 response format.
+        
+        Step 6 returns a Step6DataReviewResponse with nested structures:
+        - historical_financials.data_fields[] with status=MISSING
+        - market_data.data_fields[] with status=MISSING
+        - forecast_drivers.data_fields[] with status=MISSING
+        
+        This method parses these structures and returns a list of missing metric names.
+        """
+        missing_metrics = []
+        
+        # Check if step6_data is already a dict or needs conversion
+        if hasattr(step6_data, 'model_dump'):
+            step6_dict = step6_data.model_dump()
+        elif hasattr(step6_data, 'dict'):
+            step6_dict = step6_data.dict()
+        else:
+            step6_dict = step6_data
+        
+        # Extract from historical_financials
+        historical = step6_dict.get('historical_financials', {})
+        if historical:
+            data_fields = historical.get('data_fields', [])
+            for field in data_fields:
+                if isinstance(field, dict):
+                    if field.get('status') == 'MISSING':
+                        # Extract base metric name (remove year suffix)
+                        field_name = field.get('field_name', '')
+                        if field_name and field_name not in missing_metrics:
+                            # Remove year suffix to get base metric name
+                            base_name = '_'.join(field_name.split('_')[:-1]) if '_' in field_name else field_name
+                            if base_name not in missing_metrics:
+                                missing_metrics.append(base_name)
+        
+        # Extract from market_data
+        market = step6_dict.get('market_data', {})
+        if market:
+            data_fields = market.get('data_fields', [])
+            for field in data_fields:
+                if isinstance(field, dict):
+                    if field.get('status') == 'MISSING':
+                        field_name = field.get('field_name', '')
+                        if field_name and field_name not in missing_metrics:
+                            missing_metrics.append(field_name)
+        
+        # Extract from forecast_drivers
+        drivers = step6_dict.get('forecast_drivers', {})
+        if drivers:
+            data_fields = drivers.get('data_fields', [])
+            for field in data_fields:
+                if isinstance(field, dict):
+                    if field.get('status') == 'MISSING':
+                        field_name = field.get('field_name', '')
+                        if field_name and field_name not in missing_metrics:
+                            base_name = '_'.join(field_name.split('_')[:-1]) if '_' in field_name else field_name
+                            if base_name not in missing_metrics:
+                                missing_metrics.append(base_name)
+        
+        logger.info(f"Extracted {len(missing_metrics)} missing metrics from Step 6 data")
+        return missing_metrics
+    
     async def _identify_data_gaps(
         self,
         ticker: str,
