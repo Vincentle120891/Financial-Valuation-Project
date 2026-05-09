@@ -27,6 +27,7 @@ from pydantic import BaseModel, Field
 from enum import Enum
 from datetime import datetime
 import json
+from .ai_engine import AIFallbackEngine
 
 logger = logging.getLogger(__name__)
 
@@ -355,7 +356,7 @@ class Step8ManualOverridesProcessor:
     }
     
     def __init__(self):
-        pass
+        self.ai_fallback = AIFallbackEngine()
     
     async def initialize_assumptions(
         self,
@@ -691,265 +692,381 @@ class Step8ManualOverridesProcessor:
         step7_data: Optional[Dict[str, Any]],
         validation_rules: Dict[str, float]
     ) -> Optional[AISuggestion]:
-        """Generate AI suggestion for a single metric"""
+        """Generate AI suggestion for a single metric using LLM with fallback"""
         try:
             # Get historical average as baseline
             historical_avg = trendline.average if trendline else None
             trend_direction = trendline.trend_direction if trendline else "stable"
             volatility = trendline.volatility if trendline else "low"
             
-            # Generate suggestion based on metric type
-            suggested_value = None
-            reasoning = ""
-            confidence = "medium"
-            
-            if metric == "Revenue Volume Growth":
-                if historical_avg is not None:
-                    # Adjust based on trend
-                    if trend_direction == "increasing":
-                        suggested_value = historical_avg * 1.1
-                        reasoning = f"Historical avg {historical_avg:.1%} with upward trend. Suggesting 10% increase."
-                    elif trend_direction == "decreasing":
-                        suggested_value = historical_avg * 0.9
-                        reasoning = f"Historical avg {historical_avg:.1%} with downward trend. Suggesting conservative 10% decrease."
-                    else:
-                        suggested_value = historical_avg
-                        reasoning = f"Stable historical performance at {historical_avg:.1%}. Maintaining average."
-                else:
-                    suggested_value = 0.05
-                    reasoning = "No historical data. Using industry default of 5%."
-                    confidence = "low"
-            
-            elif metric == "Revenue Price Increase":
-                if historical_avg is not None:
-                    suggested_value = max(0.02, min(historical_avg, 0.05))
-                    reasoning = f"Based on historical pricing power ({historical_avg:.1%}), suggesting moderate increases aligned with inflation."
-                else:
-                    suggested_value = 0.02
-                    reasoning = "No historical data. Using inflation-based default of 2%."
-                    confidence = "low"
-            
-            elif metric == "COGS % of Revenue":
-                if historical_avg is not None:
-                    # Assume efficiency improvements
-                    suggested_value = historical_avg * 0.98
-                    reasoning = f"Historical avg {historical_avg:.1%}. Assuming slight efficiency gains (2% reduction)."
-                else:
-                    suggested_value = 0.60
-                    reasoning = "No historical data. Using industry default of 60%."
-                    confidence = "low"
-            
-            elif metric == "Effective Tax Rate":
-                if historical_avg is not None:
-                    suggested_value = historical_avg
-                    reasoning = f"Using historical effective tax rate of {historical_avg:.1%}."
-                else:
-                    suggested_value = 0.21
-                    reasoning = "No historical data. Using statutory rate of 21%."
-                    confidence = "low"
-            
-            elif metric == "Terminal Growth Rate":
-                # Always capped at GDP growth
-                suggested_value = 0.025
-                reasoning = "Capped at long-term GDP growth expectation of 2.5%. Conservative terminal assumption."
-            
-            elif metric == "Terminal EBITDA Multiple":
-                # Use peer median from Step 6 calculated_metrics (preferred) or Step 7
-                peer_median = None
-                if step6_data and 'calculated_metrics' in step6_data:
-                    calc_metrics = step6_data['calculated_metrics']
-                    # Check for Peer_Median_EV_EBITDA in calculated metrics
-                    if isinstance(calc_metrics, dict):
-                        peer_median = calc_metrics.get('peer_median_ev_ebitda') or calc_metrics.get('Peer_Median_EV_EBITDA')
-                
-                if peer_median is None and step7_data and 'peer_median_ev_ebitda' in step7_data:
-                    peer_median = step7_data['peer_median_ev_ebitda']
-                
-                if peer_median is not None:
-                    suggested_value = peer_median
-                    reasoning = f"Based on peer median EV/EBITDA multiple of {suggested_value:.1f}x."
-                elif historical_avg is not None:
-                    suggested_value = historical_avg
-                    reasoning = f"Using historical average multiple of {historical_avg:.1f}x."
-                else:
-                    suggested_value = 10.0
-                    reasoning = "No data available. Using industry default of 10x."
-                    confidence = "low"
-            
-            elif metric == "Risk-Free Rate":
-                # Use current 10Y Treasury
-                suggested_value = 0.045
-                reasoning = "Current 10-year US Treasury yield (~4.5%)."
-            
-            elif metric == "Market Risk Premium":
-                suggested_value = 0.055
-                reasoning = "Historical market risk premium of 5.5%."
-            
-            elif metric == "Pre-Tax Cost of Debt":
-                if historical_avg is not None:
-                    suggested_value = historical_avg
-                    reasoning = f"Using historical cost of debt {historical_avg:.1%}."
-                else:
-                    suggested_value = 0.06
-                    reasoning = "No historical data. Using estimated cost of 6%."
-                    confidence = "low"
-            
-            # DuPont Model Metrics
-            elif metric == "Target Net Profit Margin":
-                if historical_avg is not None:
-                    # Suggest slight improvement based on trend
-                    if trend_direction == "increasing":
-                        suggested_value = historical_avg * 1.05
-                        reasoning = f"Historical avg {historical_avg:.1%} with upward trend. Suggesting 5% improvement."
-                    elif trend_direction == "decreasing":
-                        suggested_value = historical_avg * 0.95
-                        reasoning = f"Historical avg {historical_avg:.1%} with downward trend. Conservative 5% reduction target."
-                    else:
-                        suggested_value = historical_avg
-                        reasoning = f"Stable historical performance at {historical_avg:.1%}. Maintaining average."
-                else:
-                    suggested_value = 0.10
-                    reasoning = "No historical data. Using industry default net margin of 10%."
-                    confidence = "low"
-            
-            elif metric == "Target Asset Turnover":
-                if historical_avg is not None:
-                    suggested_value = historical_avg
-                    reasoning = f"Using historical asset turnover of {historical_avg:.2f}x. Maintain efficiency."
-                else:
-                    suggested_value = 1.0
-                    reasoning = "No historical data. Using industry default asset turnover of 1.0x."
-                    confidence = "low"
-            
-            elif metric == "Target Equity Multiplier":
-                if historical_avg is not None:
-                    # Suggest maintaining or slightly reducing leverage
-                    suggested_value = min(historical_avg, historical_avg * 1.05)
-                    reasoning = f"Historical equity multiplier of {historical_avg:.2f}x. Suggesting stable to slightly reduced leverage."
-                else:
-                    suggested_value = 2.0
-                    reasoning = "No historical data. Using industry default equity multiplier of 2.0x."
-                    confidence = "low"
-            
-            # Comps Model Metrics
-            elif metric == "P/E Multiple":
-                # Use peer median from Step 6 calculated_metrics (preferred) or Step 7
-                peer_median = None
-                if step6_data and 'calculated_metrics' in step6_data:
-                    calc_metrics = step6_data['calculated_metrics']
-                    if isinstance(calc_metrics, dict):
-                        peer_median = calc_metrics.get('peer_median_pe') or calc_metrics.get('Peer_Median_PE')
-                
-                if peer_median is None and step7_data and 'peer_median_pe' in step7_data:
-                    peer_median = step7_data['peer_median_pe']
-                
-                if peer_median is not None:
-                    suggested_value = peer_median
-                    reasoning = f"Based on peer median P/E of {suggested_value:.1f}x."
-                elif historical_avg is not None:
-                    suggested_value = historical_avg
-                    reasoning = f"Using historical P/E of {historical_avg:.1f}x."
-                else:
-                    suggested_value = 15.0
-                    reasoning = "No data available. Using industry default P/E of 15x."
-                    confidence = "low"
-            
-            elif metric == "EV/EBITDA Multiple":
-                # Use peer median from Step 6 calculated_metrics (preferred) or Step 7
-                peer_median = None
-                if step6_data and 'calculated_metrics' in step6_data:
-                    calc_metrics = step6_data['calculated_metrics']
-                    if isinstance(calc_metrics, dict):
-                        peer_median = calc_metrics.get('peer_median_ev_ebitda') or calc_metrics.get('Peer_Median_EV_EBITDA')
-                
-                if peer_median is None and step7_data and 'peer_median_ev_ebitda' in step7_data:
-                    peer_median = step7_data['peer_median_ev_ebitda']
-                
-                if peer_median is not None:
-                    suggested_value = peer_median
-                    reasoning = f"Based on peer median EV/EBITDA of {suggested_value:.1f}x."
-                elif historical_avg is not None:
-                    suggested_value = historical_avg
-                    reasoning = f"Using historical EV/EBITDA of {historical_avg:.1f}x."
-                else:
-                    suggested_value = 10.0
-                    reasoning = "No data available. Using industry default EV/EBITDA of 10x."
-                    confidence = "low"
-            
-            elif metric == "P/B Multiple":
-                # Use peer median from Step 6 calculated_metrics (preferred) or Step 7
-                peer_median = None
-                if step6_data and 'calculated_metrics' in step6_data:
-                    calc_metrics = step6_data['calculated_metrics']
-                    if isinstance(calc_metrics, dict):
-                        peer_median = calc_metrics.get('peer_median_pb') or calc_metrics.get('Peer_Median_PB')
-                
-                if peer_median is None and step7_data and 'peer_median_pb' in step7_data:
-                    peer_median = step7_data['peer_median_pb']
-                
-                if peer_median is not None:
-                    suggested_value = peer_median
-                    reasoning = f"Based on peer median P/B of {suggested_value:.1f}x."
-                elif historical_avg is not None:
-                    suggested_value = historical_avg
-                    reasoning = f"Using historical P/B of {historical_avg:.1f}x."
-                else:
-                    suggested_value = 2.0
-                    reasoning = "No data available. Using industry default P/B of 2x."
-                    confidence = "low"
-            
-            elif metric == "P/S Multiple":
-                # Use peer median from Step 6 calculated_metrics (preferred) or Step 7
-                peer_median = None
-                if step6_data and 'calculated_metrics' in step6_data:
-                    calc_metrics = step6_data['calculated_metrics']
-                    if isinstance(calc_metrics, dict):
-                        peer_median = calc_metrics.get('peer_median_ps') or calc_metrics.get('Peer_Median_PS')
-                
-                if peer_median is None and step7_data and 'peer_median_ps' in step7_data:
-                    peer_median = step7_data['peer_median_ps']
-                
-                if peer_median is not None:
-                    suggested_value = peer_median
-                    reasoning = f"Based on peer median P/S of {suggested_value:.1f}x."
-                elif historical_avg is not None:
-                    suggested_value = historical_avg
-                    reasoning = f"Using historical P/S of {historical_avg:.1f}x."
-                else:
-                    suggested_value = 3.0
-                    reasoning = "No data available. Using industry default P/S of 3x."
-                    confidence = "low"
-            
-            elif metric == "Outlier Filter Std Dev":
-                # Default to 2 standard deviations for outlier removal
-                suggested_value = 2.0
-                reasoning = "Standard practice: exclude peers beyond 2 standard deviations from median."
-            
-            # Apply validation bounds
-            if suggested_value is not None and validation_rules:
-                min_val = validation_rules.get("min", 0)
-                max_val = validation_rules.get("max", 1)
-                # For multiples, allow higher max
-                if "Multiple" in metric or "Multiplier" in metric or "Turnover" in metric:
-                    max_val = validation_rules.get("max", 10)
-                suggested_value = max(min_val, min(suggested_value, max_val))
-            
-            if suggested_value is None:
-                return None
-            
-            return AISuggestion(
+            # Build comprehensive prompt for AI
+            prompt = self._build_assumption_prompt(
                 metric=metric,
-                suggested_value=suggested_value,
-                reasoning=reasoning,
-                confidence_level=confidence,
-                min_range=validation_rules.get("warning_min", suggested_value * 0.8),
-                max_range=validation_rules.get("warning_max", suggested_value * 1.2),
-                category=category
+                category=category,
+                trendline=trendline,
+                step6_data=step6_data,
+                step7_data=step7_data,
+                validation_rules=validation_rules
             )
+            
+            # Execute AI call with fallback
+            ai_result = self.ai_fallback.execute_with_fallback(
+                prompt=prompt,
+                timeout=60,
+                max_retries=2,
+                operation_name=f"assumption_{metric}"
+            )
+            
+            if ai_result["success"] and ai_result["response"]:
+                # Parse AI response
+                try:
+                    import re
+                    response_text = ai_result["response"]
+                    # Extract JSON from response (handle markdown code blocks)
+                    json_match = re.search(r'\{[^{}]*\}', response_text, re.DOTALL)
+                    if json_match:
+                        response_json = json.loads(json_match.group())
+                        suggested_value = float(response_json.get("suggested_value", 0))
+                        reasoning = response_json.get("reasoning", "AI-generated suggestion")
+                        confidence = response_json.get("confidence", "medium")
+                        
+                        # Apply validation bounds
+                        if validation_rules:
+                            min_val = validation_rules.get("min", 0)
+                            max_val = validation_rules.get("max", 1)
+                            # For multiples, allow higher max
+                            if "Multiple" in metric or "Multiplier" in metric or "Turnover" in metric:
+                                max_val = validation_rules.get("max", 10)
+                            suggested_value = max(min_val, min(suggested_value, max_val))
+                        
+                        return AISuggestion(
+                            metric=metric,
+                            suggested_value=suggested_value,
+                            reasoning=reasoning,
+                            confidence_level=confidence,
+                            min_range=validation_rules.get("warning_min", suggested_value * 0.8),
+                            max_range=validation_rules.get("warning_max", suggested_value * 1.2),
+                            category=category
+                        )
+                except Exception as parse_error:
+                    logger.warning(f"Failed to parse AI response for {metric}: {parse_error}")
+                    # Fall through to deterministic fallback
+            
+            # Deterministic fallback if AI fails
+            logger.info(f"Using deterministic fallback for {metric}")
+            return self._generate_deterministic_fallback(
+                metric=metric,
+                category=category,
+                historical_avg=historical_avg,
+                trend_direction=trend_direction,
+                volatility=volatility,
+                step6_data=step6_data,
+                step7_data=step7_data,
+                validation_rules=validation_rules
+            )
+            
         except Exception as e:
             logger.error(f"Failed to generate AI suggestion for {metric}: {e}")
-            return None
+            return self._generate_deterministic_fallback(
+                metric=metric,
+                category=category,
+                historical_avg=historical_avg,
+                trend_direction=trend_direction,
+                volatility=volatility,
+                step6_data=step6_data,
+                step7_data=step7_data,
+                validation_rules=validation_rules
+            )
     
+    def _build_assumption_prompt(
+        self,
+        metric: str,
+        category: AssumptionCategory,
+        trendline: Optional[HistoricalTrendline],
+        step6_data: Dict[str, Any],
+        step7_data: Optional[Dict[str, Any]],
+        validation_rules: Dict[str, float]
+    ) -> str:
+        """Build AI prompt for assumption generation"""
+        historical_avg = trendline.average if trendline else None
+        trend_direction = trendline.trend_direction if trendline else "stable"
+        
+        # Get peer data if available
+        peer_median = None
+        if step6_data and 'calculated_metrics' in step6_data:
+            calc_metrics = step6_data['calculated_metrics']
+            if isinstance(calc_metrics, dict):
+                if "Multiple" in metric:
+                    peer_median = calc_metrics.get('peer_median_ev_ebitda') or calc_metrics.get('Peer_Median_EV_EBITDA')
+        
+        return f"""SYSTEM:
+You are a financial analyst assistant. Output ONLY raw JSON. No markdown. No explanation outside the JSON.
+
+USER:
+Generate a forward-looking assumption for: {metric}
+
+## Context
+- Metric: {metric}
+- Category: {category.value}
+- Historical Average: {historical_avg if historical_avg else 'N/A'}
+- Trend Direction: {trend_direction}
+{f"- Peer Median Multiple: {peer_median}" if peer_median else ""}
+
+## Return exactly this JSON structure
+{{
+  "suggested_value": <number>,
+  "reasoning": "<one sentence explaining the suggestion>",
+  "confidence": "<low|medium|high>"
+}}
+
+## Guidelines
+- Use historical data as baseline when available
+- Consider trend direction (increasing/decreasing/stable)
+- Apply conservative adjustments for forward-looking estimates
+- For multiples, use peer median when available
+- Ensure value is reasonable within typical ranges
+
+Now return the JSON:""".strip()
+    
+    def _generate_deterministic_fallback(
+        self,
+        metric: str,
+        category: AssumptionCategory,
+        historical_avg: Optional[float],
+        trend_direction: str,
+        volatility: str,
+        step6_data: Dict[str, Any],
+        step7_data: Optional[Dict[str, Any]],
+        validation_rules: Dict[str, float]
+    ) -> Optional[AISuggestion]:
+        """Deterministic fallback when AI fails - maintains existing logic"""
+        suggested_value = None
+        reasoning = ""
+        confidence = "medium"
+        if metric == "Revenue Volume Growth":
+            if historical_avg is not None:
+                # Adjust based on trend
+                if trend_direction == "increasing":
+                    suggested_value = historical_avg * 1.1
+                    reasoning = f"Historical avg {historical_avg:.1%} with upward trend. Suggesting 10% increase."
+                elif trend_direction == "decreasing":
+                    suggested_value = historical_avg * 0.9
+                    reasoning = f"Historical avg {historical_avg:.1%} with downward trend. Suggesting conservative 10% decrease."
+                else:
+                    suggested_value = historical_avg
+                    reasoning = f"Stable historical performance at {historical_avg:.1%}. Maintaining average."
+            else:
+                suggested_value = 0.05
+                reasoning = "No historical data. Using industry default of 5%."
+                confidence = "low"
+        
+        elif metric == "Revenue Price Increase":
+            if historical_avg is not None:
+                suggested_value = max(0.02, min(historical_avg, 0.05))
+                reasoning = f"Based on historical pricing power ({historical_avg:.1%}), suggesting moderate increases aligned with inflation."
+            else:
+                suggested_value = 0.02
+                reasoning = "No historical data. Using inflation-based default of 2%."
+                confidence = "low"
+        
+        elif metric == "COGS % of Revenue":
+            if historical_avg is not None:
+                # Assume efficiency improvements
+                suggested_value = historical_avg * 0.98
+                reasoning = f"Historical avg {historical_avg:.1%}. Assuming slight efficiency gains (2% reduction)."
+            else:
+                suggested_value = 0.60
+                reasoning = "No historical data. Using industry default of 60%."
+                confidence = "low"
+        
+        elif metric == "Effective Tax Rate":
+            if historical_avg is not None:
+                suggested_value = historical_avg
+                reasoning = f"Using historical effective tax rate of {historical_avg:.1%}."
+            else:
+                suggested_value = 0.21
+                reasoning = "No historical data. Using statutory rate of 21%."
+                confidence = "low"
+        
+        elif metric == "Terminal Growth Rate":
+            # Always capped at GDP growth
+            suggested_value = 0.025
+            reasoning = "Capped at long-term GDP growth expectation of 2.5%. Conservative terminal assumption."
+        
+        elif metric == "Terminal EBITDA Multiple":
+            # Use peer median from Step 6 calculated_metrics (preferred) or Step 7
+            peer_median = None
+            if step6_data and 'calculated_metrics' in step6_data:
+                calc_metrics = step6_data['calculated_metrics']
+                # Check for Peer_Median_EV_EBITDA in calculated metrics
+                if isinstance(calc_metrics, dict):
+                    peer_median = calc_metrics.get('peer_median_ev_ebitda') or calc_metrics.get('Peer_Median_EV_EBITDA')
+            
+            if peer_median is None and step7_data and 'peer_median_ev_ebitda' in step7_data:
+                peer_median = step7_data['peer_median_ev_ebitda']
+            
+            if peer_median is not None:
+                suggested_value = peer_median
+                reasoning = f"Based on peer median EV/EBITDA multiple of {suggested_value:.1f}x."
+            elif historical_avg is not None:
+                suggested_value = historical_avg
+                reasoning = f"Using historical average multiple of {historical_avg:.1f}x."
+            else:
+                suggested_value = 10.0
+                reasoning = "No data available. Using industry default of 10x."
+                confidence = "low"
+        
+        elif metric == "Risk-Free Rate":
+            # Use current 10Y Treasury
+            suggested_value = 0.045
+            reasoning = "Current 10-year US Treasury yield (~4.5%)."
+        
+        elif metric == "Market Risk Premium":
+            suggested_value = 0.055
+            reasoning = "Historical market risk premium of 5.5%."
+        
+        elif metric == "Pre-Tax Cost of Debt":
+            if historical_avg is not None:
+                suggested_value = historical_avg
+                reasoning = f"Using historical cost of debt {historical_avg:.1%}."
+            else:
+                suggested_value = 0.06
+                reasoning = "No historical data. Using estimated cost of 6%."
+                confidence = "low"
+        
+        # DuPont Model Metrics
+        elif metric == "Target Net Profit Margin":
+            if historical_avg is not None:
+                # Suggest slight improvement based on trend
+                if trend_direction == "increasing":
+                    suggested_value = historical_avg * 1.05
+                    reasoning = f"Historical avg {historical_avg:.1%} with upward trend. Suggesting 5% improvement."
+                elif trend_direction == "decreasing":
+                    suggested_value = historical_avg * 0.95
+                    reasoning = f"Historical avg {historical_avg:.1%} with downward trend. Conservative 5% reduction target."
+                else:
+                    suggested_value = historical_avg
+                    reasoning = f"Stable historical performance at {historical_avg:.1%}. Maintaining average."
+            else:
+                suggested_value = 0.10
+                reasoning = "No historical data. Using industry default net margin of 10%."
+                confidence = "low"
+        
+        elif metric == "Target Asset Turnover":
+            if historical_avg is not None:
+                suggested_value = historical_avg
+                reasoning = f"Using historical asset turnover of {historical_avg:.2f}x. Maintain efficiency."
+            else:
+                suggested_value = 1.0
+                reasoning = "No historical data. Using industry default asset turnover of 1.0x."
+                confidence = "low"
+        
+        elif metric == "Target Equity Multiplier":
+            if historical_avg is not None:
+                # Suggest maintaining or slightly reducing leverage
+                suggested_value = min(historical_avg, historical_avg * 1.05)
+                reasoning = f"Historical equity multiplier of {historical_avg:.2f}x. Suggesting stable to slightly reduced leverage."
+            else:
+                suggested_value = 2.0
+                reasoning = "No historical data. Using industry default equity multiplier of 2.0x."
+                confidence = "low"
+        
+        # Comps Model Metrics
+        elif metric == "P/E Multiple":
+            # Use peer median from Step 6 calculated_metrics (preferred) or Step 7
+            peer_median = None
+            if step6_data and 'calculated_metrics' in step6_data:
+                calc_metrics = step6_data['calculated_metrics']
+                if isinstance(calc_metrics, dict):
+                    peer_median = calc_metrics.get('peer_median_pe') or calc_metrics.get('Peer_Median_PE')
+            
+            if peer_median is None and step7_data and 'peer_median_pe' in step7_data:
+                peer_median = step7_data['peer_median_pe']
+            
+            if peer_median is not None:
+                suggested_value = peer_median
+                reasoning = f"Based on peer median P/E of {suggested_value:.1f}x."
+            elif historical_avg is not None:
+                suggested_value = historical_avg
+                reasoning = f"Using historical P/E of {historical_avg:.1f}x."
+            else:
+                suggested_value = 15.0
+                reasoning = "No data available. Using industry default P/E of 15x."
+                confidence = "low"
+        
+        elif metric == "EV/EBITDA Multiple":
+            # Use peer median from Step 6 calculated_metrics (preferred) or Step 7
+            peer_median = None
+            if step6_data and 'calculated_metrics' in step6_data:
+                calc_metrics = step6_data['calculated_metrics']
+                if isinstance(calc_metrics, dict):
+                    peer_median = calc_metrics.get('peer_median_ev_ebitda') or calc_metrics.get('Peer_Median_EV_EBITDA')
+            
+            if peer_median is None and step7_data and 'peer_median_ev_ebitda' in step7_data:
+                peer_median = step7_data['peer_median_ev_ebitda']
+            
+            if peer_median is not None:
+                suggested_value = peer_median
+                reasoning = f"Based on peer median EV/EBITDA of {suggested_value:.1f}x."
+            elif historical_avg is not None:
+                suggested_value = historical_avg
+                reasoning = f"Using historical EV/EBITDA of {historical_avg:.1f}x."
+            else:
+                suggested_value = 10.0
+                reasoning = "No data available. Using industry default EV/EBITDA of 10x."
+                confidence = "low"
+        
+        elif metric == "P/B Multiple":
+            # Use peer median from Step 6 calculated_metrics (preferred) or Step 7
+            peer_median = None
+            if step6_data and 'calculated_metrics' in step6_data:
+                calc_metrics = step6_data['calculated_metrics']
+                if isinstance(calc_metrics, dict):
+                    peer_median = calc_metrics.get('peer_median_pb') or calc_metrics.get('Peer_Median_PB')
+            
+            if peer_median is None and step7_data and 'peer_median_pb' in step7_data:
+                peer_median = step7_data['peer_median_pb']
+            
+            if peer_median is not None:
+                suggested_value = peer_median
+                reasoning = f"Based on peer median P/B of {suggested_value:.1f}x."
+            elif historical_avg is not None:
+                suggested_value = historical_avg
+                reasoning = f"Using historical P/B of {historical_avg:.1f}x."
+            else:
+                suggested_value = 2.0
+                reasoning = "No data available. Using industry default P/B of 2x."
+                confidence = "low"
+        
+        elif metric == "P/S Multiple":
+            # Use peer median from Step 6 calculated_metrics (preferred) or Step 7
+            peer_median = None
+            if step6_data and 'calculated_metrics' in step6_data:
+                calc_metrics = step6_data['calculated_metrics']
+                if isinstance(calc_metrics, dict):
+                    peer_median = calc_metrics.get('peer_median_ps') or calc_metrics.get('Peer_Median_PS')
+            
+            if peer_median is None and step7_data and 'peer_median_ps' in step7_data:
+                peer_median = step7_data['peer_median_ps']
+            
+            if peer_median is not None:
+                suggested_value = peer_median
+                reasoning = f"Based on peer median P/S of {suggested_value:.1f}x."
+            elif historical_avg is not None:
+                suggested_value = historical_avg
+                reasoning = f"Using historical P/S of {historical_avg:.1f}x."
+            else:
+                suggested_value = 3.0
+                reasoning = "No data available. Using industry default P/S of 3x."
+                confidence = "low"
+        
+        elif metric == "Outlier Filter Std Dev":
+            # Default to 2 standard deviations for outlier removal
+            suggested_value = 2.0
+            reasoning = "Standard practice: exclude peers beyond 2 standard deviations from median."
+        
+        # Apply validation bounds
+
     async def apply_user_override(
         self,
         ticker: str,
