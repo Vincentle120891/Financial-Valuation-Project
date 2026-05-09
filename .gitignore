@@ -1,1 +1,60 @@
-Nothing should be ignored based on the provided file changes. The modified file is a Python source file (.py), which is a legitimate source code file that should not be ignored. No build artifacts, dependencies, or temporary files are present in the changes.
+```
+# Dependencies
+node_modules/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+.ENV
+.python-version
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.log
+.git/modules/
+*.sublime-workspace
+.pytest_cache/
+.mypy_cache/
+.hypothesis/
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+.eggs/
+
+# Frontend build
+target/
+
+# Environment variables
+.env
+.env.local
+.env.*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*.tmp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Coverage
+coverage/
+htmlcov/
+```

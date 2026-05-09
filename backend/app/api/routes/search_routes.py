@@ -65,7 +65,7 @@ async def select_ticker(request: TickerSelectRequest):
         request: Ticker selection request
 
     Returns:
-        New session ID and status
+        New session ID and status with company data including current price, beta, risk-free rate, and market risk premium
     """
     logger.info(f"Creating session for ticker='{request.ticker}', market='{request.market}'")
 
@@ -86,10 +86,61 @@ async def select_ticker(request: TickerSelectRequest):
         # Update session status from processor result
         session_service.update_session_data(session_id, "status", result["status"])
 
+        # Extract company data from the result if available
+        company_data = None
+        if result.get("data"):
+            data = result["data"]
+            # Build company_data dict with key metrics
+            company_data = {
+                "current_price": None,
+                "market_cap": None,
+                "beta": None,
+                "risk_free_rate": None,
+                "market_risk_premium": None,
+                "sector": None,
+                "industry": None,
+                "country": None
+            }
+            
+            # Extract from market_data array
+            if "market_data" in data:
+                for md in data["market_data"]:
+                    if md.get("metric") == "current_price":
+                        company_data["current_price"] = md.get("value")
+                    elif md.get("metric") == "market_cap":
+                        company_data["market_cap"] = md.get("value")
+                    elif md.get("metric") == "beta":
+                        company_data["beta"] = md.get("value")
+                    elif md.get("metric") == "risk_free_rate":
+                        company_data["risk_free_rate"] = md.get("value")
+                    elif md.get("metric") == "market_risk_premium":
+                        company_data["market_risk_premium"] = md.get("value")
+            
+            # Extract from risk_metrics
+            if "risk_metrics" in data:
+                risk_metrics = data["risk_metrics"]
+                if not company_data["beta"] and risk_metrics.get("beta"):
+                    company_data["beta"] = risk_metrics.get("beta")
+                if not company_data["risk_free_rate"] and risk_metrics.get("risk_free_rate"):
+                    company_data["risk_free_rate"] = risk_metrics.get("risk_free_rate")
+                if not company_data["market_risk_premium"] and risk_metrics.get("market_risk_premium"):
+                    company_data["market_risk_premium"] = risk_metrics.get("market_risk_premium")
+            
+            # Get sector/industry/country from yfinance ticker info
+            ticker_info = step2_processor.yfinance_service.get_ticker_info(request.ticker)
+            if ticker_info:
+                if not company_data["sector"]:
+                    company_data["sector"] = ticker_info.get("sector")
+                if not company_data["industry"]:
+                    company_data["industry"] = ticker_info.get("industry")
+                if not company_data["country"]:
+                    company_data["country"] = ticker_info.get("country") or ticker_info.get("state") or "N/A"
+
         return SessionCreateResponse(
             session_id=session_id,
             status=result["status"],
-            message=result.get("message", "Session created successfully")
+            message=result.get("message", "Session created successfully"),
+            company_data=company_data
         )
 
     except Exception as e:

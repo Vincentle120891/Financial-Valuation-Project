@@ -3,10 +3,14 @@
   "version": "1.0.0",
   "private": true,
   "dependencies": {
+    "@tailwindcss/vite": "^4.3.0",
+    "autoprefixer": "^10.5.0",
     "axios": "^1.6.0",
+    "postcss": "^8.5.14",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "recharts": "^2.10.0"
+    "recharts": "^2.10.0",
+    "tailwindcss": "^4.3.0"
   },
   "scripts": {
     "dev": "vite",

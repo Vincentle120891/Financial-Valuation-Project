@@ -90,6 +90,34 @@ const CompanySelectionStep = ({
               <p className="font-medium text-gray-900">{selectedCompany.country}</p>
             </div>
           )}
+          
+          {selectedCompany.currentPrice !== undefined && (
+            <div className="bg-blue-50 p-4 rounded-lg border-l-4 border-blue-500">
+              <p className="text-sm text-gray-500 mb-1">Current Price</p>
+              <p className="font-bold text-blue-900 text-lg">${selectedCompany.currentPrice.toFixed(2)}</p>
+            </div>
+          )}
+          
+          {selectedCompany.beta !== undefined && (
+            <div className="bg-purple-50 p-4 rounded-lg border-l-4 border-purple-500">
+              <p className="text-sm text-gray-500 mb-1">Beta</p>
+              <p className="font-bold text-purple-900 text-lg">{selectedCompany.beta.toFixed(2)}</p>
+            </div>
+          )}
+          
+          {selectedCompany.riskFreeRate !== undefined && (
+            <div className="bg-green-50 p-4 rounded-lg border-l-4 border-green-500">
+              <p className="text-sm text-gray-500 mb-1">Risk-Free Rate</p>
+              <p className="font-bold text-green-900 text-lg">{(selectedCompany.riskFreeRate * 100).toFixed(2)}%</p>
+            </div>
+          )}
+          
+          {selectedCompany.marketRiskPremium !== undefined && (
+            <div className="bg-orange-50 p-4 rounded-lg border-l-4 border-orange-500">
+              <p className="text-sm text-gray-500 mb-1">Market Risk Premium</p>
+              <p className="font-bold text-orange-900 text-lg">{(selectedCompany.marketRiskPremium * 100).toFixed(2)}%</p>
+            </div>
+          )}
         </div>
 
         {selectedCompany.description && (
