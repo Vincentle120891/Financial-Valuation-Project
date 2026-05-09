@@ -1,3 +1,1 @@
-(frontend/src/components/valuation-flow/ApiDataStep.jsx is a source file, and there are no build artifacts, dependencies, or temp files in the changes - only a modified JSX source file)
-
-(empty - no output)
+Nothing should be ignored since the changes only include Python source files (.py) which are legitimate code files and not build artifacts, dependencies, or temporary files.
