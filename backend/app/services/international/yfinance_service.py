@@ -61,7 +61,7 @@ class YFinanceService:
             ticker_symbol: Stock ticker symbol
             
         Returns:
-            Dictionary containing key stats (marketCap, beta, totalDebt, cash, effectiveTaxRate)
+            Dictionary containing key stats (marketCap, beta, totalDebt, cash, effectiveTaxRate, costOfDebt)
         """
         import yfinance as yf
         
@@ -78,6 +78,7 @@ class YFinanceService:
                     'totalDebt': None,
                     'cash': None,
                     'effectiveTaxRate': None,
+                    'costOfDebt': None,
                 }
             
             # Helper to sanitize values
@@ -88,20 +89,54 @@ class YFinanceService:
                     return None
                 return val
             
-            # Try to get financials for tax rate calculation
+            # Try to get financials for tax rate and cost of debt calculation
             effective_tax_rate = None
+            cost_of_debt = None
             try:
                 income_stmt = yf_ticker.financials
+                balance_sheet = yf_ticker.balance_sheet
                 if income_stmt is not None and not income_stmt.empty:
                     # Get the most recent column
                     latest_col = income_stmt.columns[0]
+                    
+                    # Calculate effective tax rate
                     tax_provision = income_stmt.loc['Tax Provision', latest_col] if 'Tax Provision' in income_stmt.index else None
                     pretax_income = income_stmt.loc['Pretax Income', latest_col] if 'Pretax Income' in income_stmt.index else None
                     
                     if tax_provision and pretax_income and pretax_income != 0:
                         effective_tax_rate = abs(tax_provision / pretax_income)
+                    
+                    # Calculate cost of debt (Interest Expense / Total Debt)
+                    interest_expense = None
+                    total_debt = None
+                    
+                    # Try to get interest expense from income statement
+                    for interest_key in ['Interest Expense', 'Interest Expense Non Operating', 'Net Interest Income']:
+                        if interest_key in income_stmt.index:
+                            interest_expense = abs(income_stmt.loc[interest_key, latest_col])
+                            break
+                    
+                    # Try to get total debt from balance sheet
+                    if balance_sheet is not None and not balance_sheet.empty:
+                        bs_latest_col = balance_sheet.columns[0]
+                        for debt_key in ['Total Debt', 'Long Term Debt', 'Short Long Term Debt', 'Long-Term Debt', 'Short/Current Long Term Debt']:
+                            if debt_key in balance_sheet.index:
+                                total_debt = balance_sheet.loc[debt_key, bs_latest_col]
+                                break
+                        
+                        # If total debt not found directly, try to sum long-term and short-term
+                        if total_debt is None:
+                            long_term = balance_sheet.loc['Long Term Debt', bs_latest_col] if 'Long Term Debt' in balance_sheet.index else 0
+                            short_term = balance_sheet.loc['Short/Current Long Term Debt', bs_latest_col] if 'Short/Current Long Term Debt' in balance_sheet.index else 0
+                            total_debt = long_term + short_term
+                    
+                    # Calculate cost of debt if both values available
+                    if interest_expense and total_debt and total_debt != 0:
+                        cost_of_debt = interest_expense / total_debt
+                        logger.debug(f"Calculated cost of debt for {ticker_symbol}: {cost_of_debt:.4f}")
+                        
             except Exception as e:
-                logger.debug(f"Could not calculate tax rate for {ticker_symbol}: {e}")
+                logger.debug(f"Could not calculate tax rate or cost of debt for {ticker_symbol}: {e}")
             
             return {
                 'marketCap': sanitize_value(info.get('marketCap')),
@@ -109,6 +144,7 @@ class YFinanceService:
                 'totalDebt': sanitize_value(info.get('totalDebt') or info.get('TotalDebt')),
                 'cash': sanitize_value(info.get('cash') or info.get('CashAndCashEquivalents') or info.get('TotalCash')),
                 'effectiveTaxRate': effective_tax_rate,
+                'costOfDebt': cost_of_debt,
             }
             
         except Exception as e:
@@ -119,6 +155,7 @@ class YFinanceService:
                 'totalDebt': None,
                 'cash': None,
                 'effectiveTaxRate': None,
+                'costOfDebt': None,
                 'error': str(e)
             }
     
