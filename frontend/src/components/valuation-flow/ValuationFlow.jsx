@@ -558,7 +558,7 @@ const ValuationFlow = () => {
             compsResults={compsResults}
             calculatedMetrics={calculatedMetrics}
             onBackToRequirements={handleBackToRequirements}
-            onContinueToAiAssumptions={handleContinueToAssumptions}
+            onContinueToAiAssumptions={handleContinueToHistoricalDataRetrieval}
             loading={loading}
           />
         );
