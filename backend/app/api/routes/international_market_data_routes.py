@@ -308,6 +308,15 @@ async def get_price_history(
     """
     Get historical price data for volatility and beta calculations.
     Returns formatted data for charts.
+    
+    Period options:
+    - 1mo: ~21 trading days
+    - 3mo: ~63 trading days
+    - 6mo: ~126 trading days
+    - 1y: ~252 trading days
+    - 2y: ~504 trading days
+    - 5y: ~1260 trading days
+    - max: All available data
     """
     try:
         result = intl_service.fetch_international_data(ticker, market_code)
@@ -317,9 +326,26 @@ async def get_price_history(
 
         historical_prices = result.get('historical_prices')
 
+        # Map period to number of trading days
+        period_map = {
+            '1mo': 21,
+            '3mo': 63,
+            '6mo': 126,
+            '1y': 252,
+            '2y': 504,
+            '5y': 1260,
+            'max': None  # No limit
+        }
+        
+        num_days = period_map.get(period, 63)  # Default to 3mo
+        
         # Format data for chart
         chart_data = []
         if historical_prices is not None and not historical_prices.empty:
+            # Filter by period if specified
+            if num_days is not None:
+                historical_prices = historical_prices.tail(num_days)
+            
             for date, row in historical_prices.iterrows():
                 chart_data.append({
                     "date": date.strftime('%Y-%m-%d'),
