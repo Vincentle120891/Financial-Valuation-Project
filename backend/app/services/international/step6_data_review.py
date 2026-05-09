@@ -338,7 +338,10 @@ class Step6DataReviewProcessor:
         balance_sheet = historical_data.get("balance_sheet")
 
         if financials is not None:
-            for col in financials.columns:
+            # Sort columns by year ascending (oldest first) for correct growth calculations
+            sorted_columns = sorted(financials.columns, key=lambda x: x.year)
+            
+            for col in sorted_columns:
                 year = int(col.year)
                 if year not in years:  # Avoid duplicate years
                     years.append(year)
@@ -676,9 +679,9 @@ class Step6DataReviewProcessor:
                     is_critical=False
                 ))
 
-                # 21. Cash & Equivalents
+                # 21. Cash & Equivalents - try multiple field name variations
                 cash_val = None
-                for cash_key in ['Cash Cash Equivalents And Short Term Investments', 'Cash And Cash Equivalents', 'cash_and_equivalents', 'cash']:
+                for cash_key in ['Cash Cash Equivalents And Short Term Investments', 'Cash And Cash Equivalents', 'Cash Equivalents', 'cash_and_equivalents', 'cash']:
                     if cash_key in balance_sheet.index:
                         cash_val = balance_sheet.loc[cash_key, col]
                         break
@@ -1133,7 +1136,9 @@ class Step6DataReviewProcessor:
             ))
 
         # Calculate historical growth rates (YoY)
+        # Note: revenues list is now in ascending order (oldest first) due to sorted columns
         if len(revenues) >= 2:
+            # revenues[0] = oldest year, revenues[-1] = most recent year
             revenue_growth = (revenues[-1] - revenues[0]) / revenues[0]
             fields.append(DataField(
                 field_name="Revenue Growth Rate (Period)",
