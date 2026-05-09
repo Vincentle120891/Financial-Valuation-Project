@@ -17,6 +17,7 @@ Note: For DuPont and Comps models, this step may be bypassed if all historical d
 is available from APIs. For DCF models, ensures complete 3-5 year historical data.
 """
 import logging
+import os
 from typing import Dict, List, Optional, Any
 from pydantic import BaseModel
 from enum import Enum
@@ -26,6 +27,7 @@ from app.services.pdf_extraction_service import (
     PDFExtractionService,
     ExtractedFinancialData
 )
+from app.services.international.ai_engine import AIFallbackEngine
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +90,7 @@ class Step7HistoricalDataProcessor:
 
     def __init__(self):
         self.pdf_extractor = PDFExtractionService()
+        self.ai_fallback = AIFallbackEngine()
         # Future: Add web scraper, filing API integrations
 
     async def retrieve_historical_data(
@@ -573,16 +576,38 @@ Response format (JSON):
     "notes": "<any relevant notes>"
 }}"""
 
-            # Call AI engine for extraction
-            # TODO: Integrate with actual LLM service
-            # For now, use placeholder
-            logger.info(f"AI prompt extraction called for {metric} {fiscal_year} (LLM integration pending)")
-
-            # Placeholder - will be replaced with actual LLM call
-            # result = await ai_engine.extract_with_prompt(prompt, response_format="json")
-            # if result and result.get('confidence', 0) > 0.7:
-            #     return result.get('value')
-
+            # Call AI engine with proper wait time handling
+            logger.info(f"🤖 Requesting AI extraction for {metric} ({fiscal_year}) from document...")
+            
+            # Use AIFallbackEngine with 60-second timeout per provider
+            # This handles wait times, retries, and provider switching automatically
+            ai_result = self.ai_fallback.execute_with_fallback(
+                prompt=prompt,
+                timeout=60,  # 60 seconds per provider
+                max_retries=2,
+                operation_name=f"historical_extraction_{metric}_{fiscal_year}"
+            )
+            
+            if ai_result and ai_result.get('success'):
+                response_data = ai_result['response']
+                # Parse JSON response
+                import json
+                try:
+                    parsed = json.loads(response_data) if isinstance(response_data, str) else response_data
+                    value = parsed.get('value')
+                    confidence = parsed.get('confidence', 0.5)
+                    
+                    if value is not None and confidence > 0.5:
+                        logger.info(f"✅ AI successfully extracted {metric}: {value} (confidence: {confidence:.2f})")
+                        return float(value)
+                    else:
+                        logger.warning(f"⚠️ AI response parsed but value is null or low confidence for {metric}")
+                except (json.JSONDecodeError, ValueError) as e:
+                    logger.error(f"❌ Failed to parse AI response JSON: {e}")
+            else:
+                error_msg = ai_result.get('error', 'Unknown AI error') if ai_result else 'No response from AI'
+                logger.warning(f"⚠️ AI extraction failed for {metric}: {error_msg}")
+            
             return None
 
         except Exception as e:

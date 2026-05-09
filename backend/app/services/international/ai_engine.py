@@ -409,6 +409,73 @@ class AIFallbackEngine:
         else:
             status["qwen"] = "missing_key"
         return status
+    
+    def execute_with_fallback(
+        self, 
+        prompt: str, 
+        timeout: int = 50, 
+        max_retries: int = 2,
+        operation_name: str = "ai_operation"
+    ) -> Dict[str, Any]:
+        """
+        Generic method to execute any AI prompt with fallback logic.
+        
+        This is a reusable method for both forward-looking assumptions (Step 8)
+        and historical data extraction (Step 7).
+        
+        Args:
+            prompt: The prompt to send to AI
+            timeout: Timeout in seconds per provider (default: 50s)
+            max_retries: Number of retry attempts per provider (default: 2)
+            operation_name: Name for logging purposes
+            
+        Returns:
+            Dict with 'success', 'response', 'provider_used', 'error' keys
+        """
+        last_error = None
+        provider_errors = {}
+        
+        logger.info(f"🚀 Starting {operation_name} with {len(self.providers)} available providers...")
+        
+        # Try each provider in order
+        for provider_name, provider_func in self.providers:
+            for attempt in range(max_retries):
+                try:
+                    logger.info(f"🤖 Attempting {operation_name} via {provider_name.upper()} (attempt {attempt + 1}/{max_retries})...")
+                    logger.info(f"⏳ Waiting for {provider_name.upper()} response (timeout: {timeout}s)...")
+                    
+                    response = provider_func(prompt)
+                    
+                    if response:
+                        logger.info(f"✅ Successfully completed {operation_name} via {provider_name.upper()}")
+                        return {
+                            "success": True,
+                            "response": response,
+                            "provider_used": provider_name,
+                            "errors": provider_errors
+                        }
+                    else:
+                        logger.warning(f"⚠️ {provider_name.upper()} returned empty response")
+                        provider_errors[f"{provider_name}_attempt_{attempt + 1}"] = "Empty response"
+                        
+                except Exception as e:
+                    error_msg = f"{provider_name.upper()}: {str(e)}"
+                    logger.error(f"❌ {error_msg}")
+                    provider_errors[f"{provider_name}_attempt_{attempt + 1}"] = str(e)
+                    last_error = error_msg
+                    logger.info(f"🔄 Retrying with next attempt..." if attempt < max_retries - 1 else "🔄 Falling back to next provider...")
+                    continue
+        
+        # All providers exhausted
+        logger.warning(f"⚠️ All AI providers exhausted for {operation_name}, returning failure status...")
+        
+        return {
+            "success": False,
+            "response": None,
+            "provider_used": None,
+            "error": last_error or "No AI providers configured",
+            "errors": provider_errors
+        }
 
     def generate_assumptions(self, company_data: Dict[str, Any], model_type: str, market: str = "US") -> Dict[str, Any]:
         """
