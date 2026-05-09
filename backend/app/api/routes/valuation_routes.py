@@ -28,6 +28,7 @@ from app.api.schemas import (
     ValuateRequest,
     ValuateResponse
 )
+from app.services.international.step8_manual_overrides import FullAssumptionsResponse
 from app.services.international.step5_assumptions_processor import Step5AssumptionsProcessor
 from app.services.international.step6_data_review import Step6DataReviewProcessor
 from app.services.international.step7_historical_data_processor import Step7HistoricalDataProcessor
@@ -301,28 +302,56 @@ async def retrieve_historical_data(request: GenerateAIRequest):
         else:
             result_dict = dict(result) if isinstance(result, dict) else str(result)
 
-        # Add metadata about fallback usage
-        metadata = {"model_version": "v2.0"}
-        if result.total_gaps_filled > 0 and result.total_gaps_found > 0:
-            # Check if any gaps were filled using deterministic fallback
-            has_fallback = any(
-                gap.get('data_source') == 'Deterministic_Fallback_Calculation'
-                for gap in result_dict.get('historical_gaps_filled', [])
-            )
-            if has_fallback:
-                metadata["used_fallback"] = True
-                metadata["fallback_reason"] = "AI extraction unavailable, using deterministic calculations"
-
         logger.info(f"Step 7 complete: {result.total_gaps_filled}/{result.total_gaps_found} gaps filled, completeness: {result.data_completeness_score:.1%}")
 
         return GenerateAIResponse(
             status="historical_data_ready",
             suggestions=result_dict,
             message=f"Historical data retrieval complete. {result.total_gaps_filled} gaps filled with {result.data_completeness_score:.1%} completeness.",
-            _metadata=metadata
+            _metadata={"model_version": "v2.0"}
         )
     except Exception as e:
         logger.error(f"Step 7 historical data retrieval error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/step-8-initialize", response_model=FullAssumptionsResponse)
+async def initialize_step8_assumptions(request: GenerateAISuggestionRequest):
+    """
+    Step 8: Initialize assumptions with historical trendlines from Step 6.
+
+    This endpoint loads historical data and prepares the assumption categories
+    with trendlines. No AI suggestions are generated yet - user must click
+    buttons to generate them per category.
+    """
+    try:
+        # Get session data using SessionService
+        session = session_service.get_session_data(request.session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        ticker = session.get("ticker")
+        valuation_model = session_service.get_session_value(request.session_id, "selected_model", "DCF")
+        step6_data = session_service.get_session_value(request.session_id, "financial_data", {})
+        step7_data = session_service.get_session_value(request.session_id, "historical_data_gaps_filled", {})
+
+        if not ticker:
+            raise HTTPException(status_code=400, detail="No ticker found in session")
+
+        # Use Step8ManualOverridesProcessor to initialize assumptions with historical trendlines
+        result = await step8_processor.initialize_assumptions(
+            ticker=ticker,
+            valuation_model=valuation_model,
+            step6_data=step6_data,
+            step7_data=step7_data if step7_data else None
+        )
+
+        # Store initial assumptions in session
+        session_service.update_session_data(request.session_id, "step8_assumptions", result.model_dump() if hasattr(result, 'model_dump') else result.dict())
+
+        return result
+    except Exception as e:
+        logger.error(f"Step 8 initialization error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -395,17 +424,46 @@ async def confirm_assumptions(request: ConfirmAssumptionsRequest):
         if not session:
             raise HTTPException(status_code=404, detail="Session not found")
 
+        ticker = session.get("ticker")
+        valuation_model = session_service.get_session_value(request.session_id, "selected_model", "DCF")
+        step6_data = session_service.get_session_value(request.session_id, "financial_data", {})
+        step7_data = session_service.get_session_value(request.session_id, "historical_data_gaps_filled", {})
         ai_suggestions = session_service.get_session_value(request.session_id, "ai_suggestions", {})
 
-        # Use Step8ManualOverridesProcessor to handle confirmations
-        result = await step8_processor.initialize_assumptions(
-            session_id=request.session_id,
-            ai_suggestions=ai_suggestions,
-            user_overrides=request.confirmed_values
+        if not ticker:
+            raise HTTPException(status_code=400, detail="No ticker found in session")
+
+        # First initialize assumptions with historical data
+        initial_result = await step8_processor.initialize_assumptions(
+            ticker=ticker,
+            valuation_model=valuation_model,
+            step6_data=step6_data,
+            step7_data=step7_data if step7_data else None
         )
 
+        # Apply user overrides to the initialized assumptions
+        final_result = initial_result
+        if request.confirmed_values:
+            for category, metrics in request.confirmed_values.items():
+                if isinstance(metrics, dict):
+                    for metric, value in metrics.items():
+                        try:
+                            final_result = await step8_processor.apply_user_override(
+                                ticker=ticker,
+                                valuation_model=valuation_model,
+                                category=category,
+                                metric=metric,
+                                user_value=float(value),
+                                current_response=final_result
+                            )
+                        except Exception as e:
+                            logger.warning(f"Failed to apply override for {category}.{metric}: {e}")
+
+        # Validate all assumptions
+        final_result = await step8_processor.validate_all_assumptions(final_result)
+
         # Store confirmed assumptions using SessionService
-        session_service.update_session_data(request.session_id, "confirmed_assumptions", result)
+        session_service.update_session_data(request.session_id, "confirmed_assumptions", final_result.model_dump() if hasattr(final_result, 'model_dump') else final_result.dict())
         session_service.update_session_data(request.session_id, "status", "assumptions_confirmed")
 
         return ConfirmAssumptionsResponse(
