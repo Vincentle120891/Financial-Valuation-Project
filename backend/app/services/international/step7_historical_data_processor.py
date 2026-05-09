@@ -62,7 +62,7 @@ class HistoricalDataRetrievalResponse(BaseModel):
     total_gaps_found: int
     total_gaps_filled: int
     data_completeness_score: float  # 0.0 to 1.0
-    sources_used: List[str]  # e.g., ["PDF_Annual_Report_2023", "HOSE_Filing_Q4_2022"]
+    sources_used: List[str]  # e.g., ["PDF_Annual_Report_2023", "SEC_Filing_Q4_2022"]
     extraction_methodology: Optional[str] = None
     ready_for_assumptions: bool = True
 
@@ -107,7 +107,7 @@ class Step7HistoricalDataProcessor:
             ticker: Stock ticker symbol
             company_name: Company name
             valuation_model: DCF, DUPONT, or COMPS
-            market: Market/country (e.g., "US", "Vietnam")
+            market: Market/country (e.g., "US", "International")
             step6_financial_data: Historical data already fetched from APIs
             missing_metrics: Specific metrics that need to be filled (optional)
             fiscal_years_needed: List of fiscal years requiring data (default: last 5 years)
@@ -249,10 +249,10 @@ class Step7HistoricalDataProcessor:
         Extract a specific historical metric using AI-powered methods.
         
         Uses LLM-based extraction with structured prompts to pull data from:
-        - PDF annual reports (Vietnamese market with TT99 compliance)
         - SEC EDGAR filings (10-K, 10-Q, 20-F for US/International)
         - Company investor relations websites
         - Stock exchange official filings
+        - PDF annual reports for international markets
         
         AI Prompt Strategy:
         - Structured JSON extraction prompts
@@ -263,33 +263,7 @@ class Step7HistoricalDataProcessor:
         Returns:
             Tuple of (extracted_value, source_description, extraction_notes)
         """
-        # Priority 1: Try PDF extraction for Vietnamese market
-        if market == "Vietnam":
-            try:
-                # Download PDF from HOSE/HNX/Cafef/Vietstock
-                pdf_downloader = self._get_pdf_downloader()
-                pdf_path = await pdf_downloader.download_from_hose(ticker, fiscal_year)
-                
-                if pdf_path and os.path.exists(pdf_path):
-                    # Use AI-powered prompt-based extraction
-                    extracted_value = await self._extract_with_ai_prompt(
-                        file_path=pdf_path,
-                        metric=metric,
-                        fiscal_year=fiscal_year,
-                        company_name=company_name,
-                        market=market
-                    )
-                    
-                    if extracted_value is not None:
-                        return (
-                            extracted_value,
-                            f"PDF_Annual_Report_{fiscal_year}_AI_Extracted",
-                            f"Extracted from Vietnamese annual report using AI prompt-based extraction with TT99 mapping"
-                        )
-            except Exception as e:
-                logger.debug(f"Vietnamese PDF extraction failed for {ticker} {fiscal_year}: {e}")
-        
-        # Priority 2: Try SEC EDGAR filings for US market
+        # Priority 1: Try SEC EDGAR filings for US market
         if market in ["US", "International"]:
             try:
                 # Download 10-K/10-Q from SEC EDGAR
@@ -314,7 +288,7 @@ class Step7HistoricalDataProcessor:
             except Exception as e:
                 logger.debug(f"SEC filing extraction failed for {ticker} {fiscal_year}: {e}")
         
-        # Priority 3: AI-powered web scraping from investor relations sites
+        # Priority 2: AI-powered web scraping from investor relations sites
         try:
             extracted_value = await self._extract_from_ir_website(
                 ticker=ticker,
@@ -332,12 +306,36 @@ class Step7HistoricalDataProcessor:
         except Exception as e:
             logger.debug(f"IR website extraction failed: {e}")
         
+        # Priority 3: Try PDF extraction for international markets
+        try:
+            pdf_downloader = self._get_pdf_downloader()
+            pdf_path = await pdf_downloader.download_international_report(ticker, fiscal_year, market)
+            
+            if pdf_path and os.path.exists(pdf_path):
+                # Use AI-powered prompt-based extraction
+                extracted_value = await self._extract_with_ai_prompt(
+                    file_path=pdf_path,
+                    metric=metric,
+                    fiscal_year=fiscal_year,
+                    company_name=company_name,
+                    market=market
+                )
+                
+                if extracted_value is not None:
+                    return (
+                        extracted_value,
+                        f"PDF_Annual_Report_{fiscal_year}_AI_Extracted",
+                        f"Extracted from international annual report using AI prompt-based extraction"
+                    )
+        except Exception as e:
+            logger.debug(f"International PDF extraction failed for {ticker} {fiscal_year}: {e}")
+        
         return (None, "", "No suitable source found for historical data extraction")
     
     def _get_pdf_downloader(self):
-        """Get PDF downloader instance for Vietnamese market"""
-        from app.services.pdf_extraction_service import VietnameseReportDownloader
-        return VietnameseReportDownloader()
+        """Get PDF downloader instance for international markets"""
+        from app.services.pdf_extraction_service import PDFExtractionService
+        return PDFExtractionService()
     
     async def _download_sec_filing(self, ticker: str, fiscal_year: int) -> Optional[str]:
         """
@@ -395,7 +393,7 @@ class Step7HistoricalDataProcessor:
             metric: Financial metric to extract (e.g., "revenue", "net_income")
             fiscal_year: Target fiscal year
             company_name: Company name for context
-            market: Market type (Vietnam, US, International)
+            market: Market type (US, International)
             
         Returns:
             Extracted numeric value or None if not found
@@ -485,8 +483,8 @@ Response format (JSON):
             "(1) PDF document parsing with text extraction, "
             "(2) Structured JSON prompts for metric extraction, "
             "(3) Few-shot learning for financial table parsing, "
-            "(4) Vietnamese TT99 compliance mapping for local reports, "
-            "(5) SEC EDGAR integration for US filings, "
+            "(4) SEC EDGAR integration for US filings, "
+            "(5) International PDF report extraction, "
             "(6) Cross-validation against accounting relationships, "
             "(7) Confidence scoring based on extraction clarity. "
             "All extracted data includes source attribution and confidence scores for audit trail."

@@ -248,14 +248,14 @@ const renderAiOnlyInputs = () => {
   );
 };
 
-// Render the 4 AI-only inputs for Vietnam DCF with EM-specific guidance
-const renderVietnamAiInputs = () => {
+// Render the 4 AI-only inputs for International DCF with market-specific guidance
+const renderInternationalAiInputs = () => {
   return (
     <>
       {renderAssumptionField({
         fieldKey: 'equity_risk_premium',
         label: 'Equity Risk Premium (ERP)',
-        description: 'Vietnam emerging market premium. Typical range: 6.0% - 8.0%. Consider VNINDEX volatility (25-35% annualized) and FOL liquidity impact.',
+        description: 'Expected excess return of the market over the risk-free rate. Typical range: 4.5% - 6.5% for developed markets.',
         min: 0,
         max: 15,
         showRationale: true
@@ -264,7 +264,7 @@ const renderVietnamAiInputs = () => {
       {renderAssumptionField({
         fieldKey: 'country_risk_premium',
         label: 'Country Risk Premium (CRP)',
-        description: 'Vietnam-specific political/economic/currency risk. Range: 2.0% - 5.0%. Consider VND/USD exchange risk and emerging market institutional factors.',
+        description: 'Additional risk premium for the company\'s primary operating country. 0% for stable developed markets like US.',
         min: 0,
         max: 10,
         showRationale: false
@@ -273,20 +273,20 @@ const renderVietnamAiInputs = () => {
       {renderAssumptionField({
         fieldKey: 'terminal_growth_rate',
         label: 'Terminal Growth Rate',
-        description: 'Aligned with Vietnam\'s long-term GDP growth (~5-6%). Range: 4.0% - 6.0%. Must be less than WACC.',
+        description: 'Perpetual growth rate for terminal value calculation. Should not exceed long-term GDP growth (typically 2-3%).',
         min: 0,
-        max: 10,
+        max: 5,
         showRationale: false
       })}
 
       {renderAssumptionField({
         fieldKey: 'terminal_ebitda_multiple',
         label: 'Terminal EBITDA Multiple',
-        description: 'Vietnamese market conditions with liquidity discount. Range: 8x - 12x. Consider HOSE/HNX peer multiples.',
+        description: 'Expected exit multiple at end of forecast period. Varies by sector: Tech (10-15x), Consumer (10-14x), Industrials (8-12x).',
         isPercentage: false,
         step: 0.5,
         min: 0,
-        max: 20
+        max: 30
       })}
     </>
   );
@@ -469,7 +469,7 @@ return (
           <><strong>✅ No AI Required:</strong> For {selectedModel} model, all inputs are 100% calculated from financial data. No AI assumptions needed.</>
         )}
         {isVietnamMarket && (
-          <><strong>🇻🇳 Vietnam DCF:</strong> AI generates 4 inputs with emerging market constraints. Consider VNINDEX volatility, VND currency risk, and FOL liquidity factors.</>
+          <><strong>🇻🇳 Vietnam DCF:</strong> Uses a separate pipeline with different data sources and compliance requirements.</>
         )}
         {isInternationalDcf && (
           <><strong>ℹ️ About this step:</strong> AI generates ONLY 4 forward-looking assumptions (ERP, CRP, Terminal Growth, Terminal Multiple). All other inputs are calculated from API data.</>
@@ -486,7 +486,7 @@ return (
       <div style={{ background: 'linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%)', border: '2px solid #ff9800', padding: '20px', borderRadius: '8px', marginBottom: '20px' }}>
         <h3 style={{ color: '#e65100', margin: '0 0 12px 0' }}>🇻🇳 Vietnam Market - Separate Pipeline</h3>
         <p style={{ margin: 0, color: '#e65100', lineHeight: '1.6' }}>
-          Vietnamese market historical data extraction uses a separate pipeline with TT99 compliance, HOSE/HNX filings, and Vietstock/Cafef sources.
+          Vietnamese market uses a separate pipeline with different data sources and compliance requirements.
         </p>
       </div>
     ) : isInternationalDcf ? (
