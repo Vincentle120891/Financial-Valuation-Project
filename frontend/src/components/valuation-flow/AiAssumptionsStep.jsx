@@ -1,19 +1,19 @@
---- frontend/src/components/valuation-flow/AiAssumptionsStep.jsx (原始)
 import React from 'react';
 
 /**
  * AiAssumptionsStep Component
- * Step 7: Review AI-Generated Assumptions
+ * Step 7: Historical Data Retrieval (International Market Only)
  *
- * Dynamic Rendering Logic based on Model Type:
- * - DuPont/Comps: Shows "No AI Assumptions Required" message, displays calculated metrics directly
- * - DCF (US/International): Shows 4 specific input fields (ERP, CRP, Terminal Growth, Terminal Multiple)
- * - DCF (Vietnam): Shows 4 fields with Vietnam-specific helper text (VNINDEX volatility, FOL, VND context)
+ * UPDATED LOGIC:
+ * - Step 7 uses AI to extract HISTORICAL financial data that APIs cannot provide
+ * - Displays extracted historical data gaps, sources, and completeness score
+ * - NO forward-looking assumptions are generated here
+ * - Forward-looking assumptions happen in Step 8
  *
- * No-Hallucination Guarantee:
- * - AI ONLY generates 4 inputs that cannot be fetched from APIs
- * - All other inputs (Risk-Free Rate, Beta, Cost of Debt, WACC, Forecast Drivers)
- *   are calculated from API data or user-provided scenario drivers
+ * Market Segregation:
+ * - International Market: Shows historical data extraction results
+ * - Vietnam Market: Separate implementation (not handled here)
+ * - DuPont/Comps: May bypass this step if API data is complete
  */
 const AiAssumptionsStep = ({
   aiData,
@@ -411,44 +411,6 @@ const AiAssumptionsStep = ({
   );
 };
 
-export default AiAssumptionsStep;
-
-+++ frontend/src/components/valuation-flow/AiAssumptionsStep.jsx (修改后)
-import React from 'react';
-
-/**
- * AiAssumptionsStep Component
- * Step 7: Historical Data Retrieval (International Market Only)
- *
- * UPDATED LOGIC:
- * - Step 7 uses AI to extract HISTORICAL financial data that APIs cannot provide
- * - Displays extracted historical data gaps, sources, and completeness score
- * - NO forward-looking assumptions are generated here
- * - Forward-looking assumptions happen in Step 8
- *
- * Market Segregation:
- * - International Market: Shows historical data extraction results
- * - Vietnam Market: Separate implementation (not handled here)
- * - DuPont/Comps: May bypass this step if API data is complete
- */
-const AiAssumptionsStep = ({
-  aiData,
-  aiError,
-  confirmedValues,
-  selectedModel,
-  market = 'US',
-  onManualInput,
-  onUseAI,
-  onBackToApiData,
-  onContinueToForecastDrivers,
-  loading
-}) => {
-  // Handle using AI suggestion
-  const handleUseAiSuggestion = (field, value) => {
-    if (onUseAI) {
-      onUseAI(field, value);
-    }
-  };
 
   // Handle manual input
   const handleManualInputChange = (field, value) => {

@@ -65,3 +65,4 @@ target/
 .gradle/
 .mypy_cache/
 .pytest_cache/
+(frontend/src/components/valuation-flow/AiAssumptionsStep.jsx is a source code file, and there are no build artifacts, dependencies, or temporary files in the changes, so no .gitignore rules are needed)
