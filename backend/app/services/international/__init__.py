@@ -30,6 +30,13 @@ from app.services.international.metrics_calculator import (
     fetch_and_calculate_all_metrics,
 )
 
+# Shared Context Service - Centralized data fetching for common company information
+from app.services.international.shared_context_service import (
+    SharedContextService,
+    SharedContextData,
+    shared_context_service,
+)
+
 # Step Processors - Complete 10-Step Workflow
 from app.services.international.step1_ticker_processor import Step1TickerProcessor
 from app.services.international.step2_market_data_processor import Step2MarketDataProcessor
@@ -37,6 +44,10 @@ from app.services.international.step3_historical_processor import Step3Historica
 from app.services.international.step4_forecast_processor import Step4ForecastProcessor
 from app.services.international.step5_assumptions_processor import Step5AssumptionsProcessor
 from app.services.international.step6_data_review import Step6DataReviewProcessor
+# Step 6 Specialized Processors - Individual Valuation Method Processors
+from app.services.international.step6_dcf_data_review import DCFStep6Processor as DCFDataReviewProcessor
+from app.services.international.step6_dupont_data_review import DuPontStep6Processor as DuPontDataReviewProcessor
+from app.services.international.step6_comps_data_review import CompsStep6Processor as CompsDataReviewProcessor
 from app.services.international.step7_historical_data_processor import Step7HistoricalDataProcessor
 from app.services.international.step8_manual_overrides import Step8ManualOverridesProcessor
 from app.services.international.step9_final_calculation import Step9FinalCalculationProcessor
@@ -62,6 +73,11 @@ __all__ = [
     "calculate_metrics",
     "fetch_and_calculate_all_metrics",
     
+    # Shared Context Service
+    "SharedContextService",
+    "SharedContextData",
+    "shared_context_service",
+    
     # Step Processors - Complete 10-Step Workflow
     "Step1TickerProcessor",
     "Step2MarketDataProcessor",
@@ -69,6 +85,9 @@ __all__ = [
     "Step4ForecastProcessor",
     "Step5AssumptionsProcessor",
     "Step6DataReviewProcessor",
+    "DCFDataReviewProcessor",  # Step 6 DCF-specific processor alias
+    "DuPontDataReviewProcessor",  # Step 6 DuPont-specific processor alias
+    "CompsDataReviewProcessor",  # Step 6 Comps-specific processor alias
     "Step7HistoricalDataProcessor",
     "Step8ManualOverridesProcessor",
     "Step9FinalCalculationProcessor",
