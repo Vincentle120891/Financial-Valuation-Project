@@ -597,6 +597,7 @@ const ValuationFlow = () => {
             selectedCompany={selectedCompany}
             onFindPeers={handleFindPeers}
             onContinue={() => setCurrentStep(3)}
+            onBack={() => setCurrentStep(1)}
             loading={loading}
             hasPeers={suggestedPeers.length > 0}
           />
