@@ -104,7 +104,13 @@ const CompanySelectionStep = ({
             <div className="bg-gray-50 p-4 rounded-lg">
               <p className="text-sm text-gray-500 mb-1">Market Cap</p>
               <p className="font-medium text-gray-900">
-                ${selectedCompany.marketCap.toLocaleString()}M
+                ${(() => {
+                  const marketCap = selectedCompany.marketCap;
+                  if (marketCap >= 1e12) return `${(marketCap / 1e12).toFixed(2)}T`;
+                  if (marketCap >= 1e9) return `${(marketCap / 1e9).toFixed(2)}B`;
+                  if (marketCap >= 1e6) return `${(marketCap / 1e6).toFixed(2)}M`;
+                  return marketCap.toLocaleString();
+                })()}
               </p>
             </div>
           )}
