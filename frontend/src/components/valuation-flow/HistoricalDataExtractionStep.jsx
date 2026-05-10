@@ -1,7 +1,7 @@
 import React from 'react';
 
 /**
- * AiAssumptionsStep Component
+ * HistoricalDataExtractionStep Component
  * Step 7: Historical Data Extraction Results (3 Valuation Methods × 2 Markets)
  *
  * CORRECTED LOGIC:
@@ -17,7 +17,7 @@ import React from 'react';
  * 4. AI searches public reports/filings to fill gaps
  * 5. Show extraction results with confidence scores and sources
  */
-const AiAssumptionsStep = ({
+const HistoricalDataExtractionStep = ({
   aiData,
   aiError,
   confirmedValues,
@@ -284,4 +284,4 @@ const AiAssumptionsStep = ({
   );
 };
 
-export default AiAssumptionsStep;
+export default HistoricalDataExtractionStep;

@@ -19,7 +19,7 @@ import PeerSelectionStep from './valuation-flow/PeerSelectionStep';
 import ModelSelectionStep from './valuation-flow/ModelSelectionStep';
 import RequirementsStep from './valuation-flow/RequirementsStep';
 import ApiDataStep from './valuation-flow/ApiDataStep';
-import AiAssumptionsStep from './valuation-flow/AiAssumptionsStep';
+import HistoricalDataExtractionStep from './valuation-flow/HistoricalDataExtractionStep';
 import ForecastDriversStep from './valuation-flow/ForecastDriversStep';
 import AssumptionsStep from './valuation-flow/AssumptionsStep';
 import RunValuationStep from './valuation-flow/RunValuationStep';
@@ -62,15 +62,20 @@ const ValuationFlow = () => {
   const [requiredFields, setRequiredFields] = useState(null);
 
   // Financial Data State (used across steps 6-10)
-  const [historicalData, setHistoricalData] = useState(null);
+  const [step6ApiData, setStep6ApiData] = useState(null);  // Step 6: API-fetched financial data
+  const [step7ExtractionResults, setStep7ExtractionResults] = useState(null);  // Step 7: AI historical gap-filling results
   const [forecastDrivers, setForecastDrivers] = useState(null);
   const [peerData, setPeerData] = useState(null);
   const [dcfInputs, setDcfInputs] = useState(null);
   const [dupontResults, setDupontResults] = useState(null);
   const [compsResults, setCompsResults] = useState(null);
   const [calculatedMetrics, setCalculatedMetrics] = useState(null);
-  const [aiData, setAiData] = useState(null);
+  const [aiAssumptions, setAiAssumptions] = useState(null);  // Step 8: Forward-looking AI assumptions
   const [aiError, setAiError] = useState(null);
+  
+  // Legacy state aliases for backward compatibility (to be removed in future refactor)
+  const historicalData = step6ApiData;  // Deprecated: use step6ApiData instead
+  const aiData = step7ExtractionResults;  // Deprecated: use step7ExtractionResults instead
 
   // Assumption Management
   const [confirmedValues, setConfirmedValues] = useState({});
@@ -252,9 +257,10 @@ const ValuationFlow = () => {
     setSelectedModel(null);
     setRequiredFields([]);
     setConfirmedValues({});
-    setAiData(null);
+    setStep7ExtractionResults(null);  // Clear Step 7 AI extraction results
+    setAiAssumptions(null);  // Clear Step 8 AI assumptions
     setAiError(null); // Clear AI errors
-    setHistoricalData(null);
+    setStep6ApiData(null);  // Clear Step 6 API data
     setForecastDrivers(null);
     setPeerData(null);
     setDupontResults(null);
@@ -279,7 +285,8 @@ const ValuationFlow = () => {
       console.log('Historical data response:', historicalDataResponse);
 
       if (historicalDataResponse.suggestions) {
-        setAiData(historicalDataResponse.suggestions);
+        // Store historical gap-filling results in Step 7 state
+        setStep7ExtractionResults(historicalDataResponse.suggestions);
 
         // Check for timeout status
         if (historicalDataResponse.status === 'historical_data_timeout') {
@@ -320,8 +327,8 @@ const ValuationFlow = () => {
             setAiError(null); // Clear any previous AI error
           }
         }
-      } else if (aiDataResponse.detail) {
-        setAiError(aiDataResponse.detail);
+      } else if (historicalDataResponse.detail) {
+        setAiError(historicalDataResponse.detail);
       }
     } catch (aiErr) {
       console.error('AI generation failed:', aiErr);
@@ -405,7 +412,7 @@ const ValuationFlow = () => {
         // New format: data is wrapped in objects with data_fields arrays
         // Old format: direct property access
         if (fetchDataResponse.data.historical_financials) {
-          setHistoricalData(fetchDataResponse.data.historical_financials);
+          setStep6ApiData(fetchDataResponse.data.historical_financials);  // Step 6 API data
         }
         if (fetchDataResponse.data.forecast_drivers) {
           setForecastDrivers(fetchDataResponse.data.forecast_drivers);
@@ -552,14 +559,14 @@ const ValuationFlow = () => {
     setSelectedModel(null);
     setSessionId(null);
     setRequiredFields([]);
-    setAiData(null);
+    setStep7ExtractionResults(null);  // Clear Step 7 extraction results
     setAiError(null); // Clear AI errors on reset
     setConfirmedValues({});
     setSelectedScenario('base_case');
     setValuationResults(null);
     setError(null);
     setMarket('international');
-    setHistoricalData(null);
+    setStep6ApiData(null);  // Clear Step 6 API data
     setForecastDrivers(null);
     setPeerData(null);
     setDupontResults(null);
@@ -613,13 +620,13 @@ const ValuationFlow = () => {
             onBackToModelSelection={handleBackToModelSelection}
             onRetrieveData={handleRetrieveData}
             loading={loading}
-            historicalData={historicalData}
+            historicalData={step6ApiData}
             forecastDrivers={forecastDrivers}
             peerData={peerData}
             dcfInputs={dcfInputs}
             dupontResults={dupontResults}
             compsResults={compsResults}
-            aiData={aiData}
+            aiData={step7ExtractionResults}
             aiError={aiError}
             requiredFields={requiredFields}
             onShowInputs={handleShowApiData}
@@ -628,7 +635,7 @@ const ValuationFlow = () => {
       case 6:
         return (
           <ApiDataStep
-            historicalData={historicalData}
+            historicalData={step6ApiData}
             forecastDrivers={forecastDrivers}
             peerData={peerData}
             dcfInputs={dcfInputs}
@@ -642,19 +649,19 @@ const ValuationFlow = () => {
         );
       case 7:
         return (
-          <AiAssumptionsStep
-            aiData={aiData}
+          <HistoricalDataExtractionStep
+            aiData={step7ExtractionResults}
             aiError={aiError}
             confirmedValues={confirmedValues}
             selectedModel={selectedModel}
             market={market}
-            historicalData={historicalData}
+            historicalData={step6ApiData}
             apiData={calculatedMetrics}
             onManualInput={handleManualInput}
             onUseAI={handleUseAI}
             onBackToApiData={handleBackToApiData}
             onContinueToForecastDrivers={handleContinueToForecastDrivers}
-            onRetryAiExtraction={handleRetrieveHistoricalData}
+            onRetryAiExtraction={handleContinueToHistoricalDataRetrieval}
             loading={loading}
           />
         );
@@ -665,7 +672,7 @@ const ValuationFlow = () => {
             forecastDrivers={forecastDrivers}
             dcfInputs={dcfInputs}
             step6Data={calculatedMetrics}
-            step7Data={historicalData}
+            step7Data={step7ExtractionResults}
             market={market}
             onManualInput={handleManualInput}
             onConfirmDrivers={handleConfirmAssumptions}
@@ -677,9 +684,9 @@ const ValuationFlow = () => {
       case 9:
         return (
           <AssumptionsStep
-            historicalData={historicalData}
+            historicalData={step6ApiData}
             peerData={peerData}
-            aiData={aiData}
+            aiData={step7ExtractionResults}
             aiError={aiError}
             confirmedValues={confirmedValues}
             selectedModel={selectedModel}
