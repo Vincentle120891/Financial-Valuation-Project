@@ -9,7 +9,8 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 const CompanySelectionStep = ({ 
   selectedCompany, 
   onFindPeers, 
-  onContinue, 
+  onContinue,
+  onBack,
   loading,
   hasPeers = false
 }) => {
