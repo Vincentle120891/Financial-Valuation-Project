@@ -1,1 +1,26 @@
-Nothing should be ignored based on the provided file changes. The only modified file is a source code file (`frontend/src/components/valuation-flow/PeerSelectionStep.jsx`), which should not be ignored.
+# Examples 1:
+(empty — output nothing)
+
+# Example 2 (Project with artifacts):
+# Compiled and build artifacts
+*.pyc
+__pycache__/
+*.o
+*.obj
+dist/
+build/
+# Dependencies
+.venv/
+venv/
+node_modules/
+# Logs and temp files
+*.log
+*.tmp
+*.swp
+# Environment
+.env
+.env.local
+.env.*
+# Editors
+.vscode/
+.idea/
