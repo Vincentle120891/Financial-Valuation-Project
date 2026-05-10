@@ -327,7 +327,7 @@ class Step2MarketDataProcessor:
                         "sector": peer.sector,
                         "industry": peer.industry,
                         "market_cap": peer.market_cap,
-                        "similarity_score": peer.similarity_score,
+                        "score": peer.similarity_score,
                         "match_reasons": peer.match_reasons
                     }
                     for peer in response.peers
