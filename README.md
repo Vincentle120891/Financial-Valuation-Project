@@ -1,6 +1,6 @@
 # 📊 Financial Valuation Platform
 
-> **Professional-grade company valuation platform** implementing a comprehensive 10-11 step guided workflow for DCF, DuPont Analysis, and Trading Comps valuations.
+> **Professional-grade company valuation platform** implementing a comprehensive 11-step guided workflow for DCF, DuPont Analysis, and Trading Comps valuations.
 > 
 > **Version 2.0** - Now with AI-powered peer company suggestions for WACC calculation and trading comparables.
 
@@ -37,7 +37,7 @@ See [MODEL_INTEGRITY_CONFIG.md](./backend/MODEL_INTEGRITY_CONFIG.md) for our com
 ┌─────────────────────────────────────────────────────────────┐
 │                     Frontend (React 18)                      │
 │  ┌──────────────────────────────────────────────────────┐   │
-│  │  10-Step Guided Wizard Interface                     │   │
+│  │  11-Step Guided Wizard Interface                     │   │
 │  │  • Market Toggle (VN/International)                  │   │
 │  │  • Interactive Data Visualization                    │   │
 │  │  • AI Assumption Review & Editing                    │   │
@@ -80,7 +80,7 @@ See [MODEL_INTEGRITY_CONFIG.md](./backend/MODEL_INTEGRITY_CONFIG.md) for our com
 
 ---
 
-## 🔄 The 10-Step Workflow
+## 🔄 The 11-Step Workflow
 
 ### Phase 1: Company & Peer Selection (Steps 1-3)
 
@@ -287,7 +287,7 @@ AI_CONFIDENCE_THRESHOLD=0.7
 │   │   └── index.html                # HTML entry point
 │   └── src/
 │       ├── components/
-│       │   ├── ValuationFlow.jsx     # Main 10-step wizard component
+│       │   ├── ValuationFlow.jsx     # Main 11-step wizard component
 │       │   └── valuation-flow/       # Individual step components
 │       │       ├── SearchStep.jsx
 │       │       ├── CompanySelectionStep.jsx
@@ -312,7 +312,7 @@ AI_CONFIDENCE_THRESHOLD=0.7
 
 ## ✨ Key Features
 
-- ✅ **10-Step Guided Workflow**: Structured user journey from company search to valuation results
+- ✅ **11-Step Guided Workflow**: Structured user journey from company search to valuation results
 - ✅ **Multiple Valuation Models**: DCF, Trading Comps, DuPont Analysis
 - ✅ **Market Toggle**: Support for Vietnamese (.VN) and international markets
 - ✅ **Live Data Integration**: Real-time financial data via yfinance + Alpha Vantage API
@@ -421,7 +421,7 @@ npm run lint
 
 ### Completed ✅
 - [x] Python backend migration from Node.js
-- [x] 10-step workflow implementation
+- [x] 11-step workflow implementation
 - [x] AI integration (Gemini/Groq)
 - [x] yfinance and Alpha Vantage integration
 - [x] DCF, DuPont, and Comps engines
