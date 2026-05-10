@@ -238,20 +238,23 @@ const CompanySelectionStep = ({
       </div>
 
       {/* Action Buttons */}
-      <div className="flex justify-between items-center mt-8">
+      <div className="flex justify-between items-center mt-8 gap-4">
         <button
-          onClick={() => window.history.back()}
-          className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+          onClick={onBack}
+          className="px-6 py-3 border border-gray-300 text-gray-700 bg-white rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-sm"
           disabled={loading}
         >
-          ← Back to Search
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+          </svg>
+          Back to Search
         </button>
         
         <div className="flex gap-4">
           <button
             onClick={handleFindPeers}
             disabled={peerSearchLoading || loading}
-            className="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            className="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-md"
           >
             {peerSearchLoading ? (
               <>
@@ -274,9 +277,12 @@ const CompanySelectionStep = ({
           <button
             onClick={onContinue}
             disabled={!hasPeers || loading}
-            className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-md"
           >
-            Continue to Peer Selection →
+            Continue to Peer Selection
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+            </svg>
           </button>
         </div>
       </div>
