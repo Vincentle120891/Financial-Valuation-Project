@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { generateAISuggestion } from '../../services/api';
 
 /**
@@ -22,7 +22,8 @@ const ForecastDriversStep = ({
   onConfirmDrivers,
   onBackToRequirements,
   onContinueToAssumptions,
-  loading
+  loading,
+  market = 'international'
 }) => {
   // Initialize local state for forecast drivers
   const [localForecastDrivers, setLocalForecastDrivers] = useState(
@@ -60,15 +61,15 @@ const ForecastDriversStep = ({
     }
   );
 
-  // Initialize local state for DCF inputs
+  // Initialize local state for DCF inputs with market-specific defaults
   const [localDcfInputs, setLocalDcfInputs] = useState(
     initialDcfInputs || {
-      risk_free_rate: 0.045,
-      equity_risk_premium: 0.06,
+      risk_free_rate: market === 'vietnamese' ? 0.065 : 0.045,
+      equity_risk_premium: market === 'vietnamese' ? 0.075 : 0.06,
       beta: 1.0,
-      cost_of_debt: 0.05,
-      wacc: 0.085,
-      terminal_growth_rate: 0.02,
+      cost_of_debt: market === 'vietnamese' ? 0.08 : 0.05,
+      wacc: market === 'vietnamese' ? 0.11 : 0.085,
+      terminal_growth_rate: market === 'vietnamese' ? 0.05 : 0.02,
       terminal_ebitda_multiple: 10.0,
       useful_life_existing: 10,
       useful_life_new: 10
@@ -616,11 +617,18 @@ const ForecastDriversStep = ({
           ← Back to Requirements
         </button>
         <button
-          onClick={onContinueToAssumptions}
+          onClick={() => {
+            // Call onConfirmDrivers if provided, otherwise proceed directly
+            if (onConfirmDrivers) {
+              onConfirmDrivers();
+            } else {
+              onContinueToAssumptions();
+            }
+          }}
           className="btn-primary btn-large"
           disabled={loading}
         >
-          Continue to Confirm Assumptions →
+          {loading ? '⏳ Processing...' : 'Continue to Confirm Assumptions →'}
         </button>
       </div>
     </div>
