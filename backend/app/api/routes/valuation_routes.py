@@ -148,6 +148,11 @@ async def select_models(request: ModelSelectRequest):
     - Stores model selection in valuations[market][method] track
     - Does NOT overwrite other models - each model runs independently
     - Market defaults to 'international' if not specified
+    
+    METHOD-AGNOSTIC DESIGN:
+    - This endpoint accepts a SINGLE method per request
+    - For multiple methods, frontend should fire parallel requests OR use /step-10-valuate-multi
+    - No reliance on global session.selected_model - uses request.method only
     """
     try:
         # Get session data using SessionService
@@ -155,7 +160,7 @@ async def select_models(request: ModelSelectRequest):
         if not session:
             raise HTTPException(status_code=404, detail="Session not found")
 
-        # Normalize market and method
+        # Normalize market and method from request ONLY (no session fallback)
         market = request.market.lower()  # 'international' or 'vietnam'
         method = request.model.upper()  # 'DCF', 'DUPONT', 'COMPS'
         
@@ -167,7 +172,7 @@ async def select_models(request: ModelSelectRequest):
             status="selected"
         )
         
-        # Store selected_model for backward compatibility with existing code
+        # Store selected_model in the specific valuation track (not root session)
         session_service.update_session_data(
             request.session_id, 
             "selected_model", 
@@ -201,8 +206,12 @@ async def prepare_inputs(request: PrepareInputsRequest):
     Uses SessionService for session management and Step5AssumptionsProcessor for international markets.
     
     MATRIX WORKFLOW:
-    - Retrieves model/method from request or falls back to session
+    - Retrieves model/method from request (REQUIRED - no fallback to session)
     - Prepares inputs specific to the valuation track
+    
+    METHOD-AGNOSTIC DESIGN:
+    - Method MUST be provided in request.method - no session.selected_model fallback
+    - Each method operates independently with its own data track
     """
     try:
         # Get session data using SessionService
@@ -210,28 +219,22 @@ async def prepare_inputs(request: PrepareInputsRequest):
         if not session:
             raise HTTPException(status_code=404, detail="Session not found")
 
-        # Use market/method from request, fallback to session
+        # Use market/method from request ONLY (no fallback to session)
         market = request.market.lower() if request.market else "international"
-        method = request.method.upper() if request.method else "DCF"
         
-        # Try to get from valuation track first, then fallback
-        model = session_service.get_session_value(
-            request.session_id, 
-            "selected_model", 
-            method,
-            market=market,
-            method=method.lower()
-        )
-        if not model:
-            model = method
-            
+        # Validate method is provided
+        if not request.method:
+            raise HTTPException(status_code=400, detail="Method parameter is required")
+        
+        method = request.method.upper()
+        
         ticker = session.get("ticker")
         peer_tickers = session.get("peer_tickers", [])
 
         # Use Step5AssumptionsProcessor to get required inputs from international service
         result = step5_processor.process_data_retrieval_inputs(
             ticker=ticker or "UNKNOWN",
-            valuation_model=model,
+            valuation_model=method,
             peer_tickers=peer_tickers
         )
 
@@ -271,9 +274,13 @@ async def fetch_api_data(request: FetchDataRequest):
     Uses SessionService for session management and Step6DataReviewProcessor for comprehensive data review.
     
     MATRIX WORKFLOW:
-    - Uses market/method from request parameters
+    - Uses market/method from request parameters (REQUIRED - no fallback)
     - Stores financial data in the specific valuation track
     - Each model's data is stored independently
+    
+    METHOD-AGNOSTIC DESIGN:
+    - Method MUST be provided in request.method - no session.selected_model fallback
+    - Each method operates independently with its own data track
     """
     try:
         # Get session data using SessionService
@@ -282,9 +289,14 @@ async def fetch_api_data(request: FetchDataRequest):
             raise HTTPException(status_code=404, detail="Session not found")
 
         ticker = session.get("ticker")
-        # Use market from request, fallback to session
-        market = request.market.lower() if request.market else session.get("market", "international")
-        method = request.method.upper() if request.method else "DCF"
+        # Use market from request ONLY (no fallback to session)
+        market = request.market.lower() if request.market else "international"
+        
+        # Validate method is provided
+        if not request.method:
+            raise HTTPException(status_code=400, detail="Method parameter is required")
+        
+        method = request.method.upper()
         
         # Retrieve peer data and other assumptions from session (saved in Step 3)
         retrieved_assumptions = session_service.get_session_value(
@@ -347,9 +359,13 @@ async def retrieve_historical_data(request: GenerateAIRequest):
     AI is ONLY used as a data extraction tool for historical information.
     
     MATRIX WORKFLOW:
-    - Uses market/method from request parameters
+    - Uses market/method from request parameters (REQUIRED - no fallback)
     - Stores historical data in the specific valuation track
     - Each model's historical data is stored independently
+    
+    METHOD-AGNOSTIC DESIGN:
+    - Method MUST be provided in request.method - no session.selected_model fallback
+    - Each method operates independently with its own data track
     """
     try:
         # Get session data using SessionService
@@ -358,9 +374,14 @@ async def retrieve_historical_data(request: GenerateAIRequest):
             raise HTTPException(status_code=404, detail="Session not found")
 
         ticker = session.get("ticker")
-        # Use market/method from request
+        # Use market/method from request ONLY (no fallback)
         market = request.market.lower() if request.market else "international"
-        method = request.method.upper() if request.method else "DCF"
+        
+        # Validate method is provided
+        if not request.method:
+            raise HTTPException(status_code=400, detail="Method parameter is required")
+        
+        method = request.method.upper()
         
         # Get financial data from the specific valuation track
         financial_data = session_service.get_session_value(
@@ -433,8 +454,12 @@ async def initialize_step8_assumptions(request: GenerateAISuggestionRequest):
     buttons to generate them per category.
     
     MATRIX WORKFLOW:
-    - Uses market/method from request parameters
+    - Uses market/method from request parameters (REQUIRED - no fallback)
     - Initializes assumptions for the specific valuation track
+    
+    METHOD-AGNOSTIC DESIGN:
+    - Method MUST be provided in request.method - no session.selected_model fallback
+    - Each method operates independently with its own data track
     """
     try:
         # Get session data using SessionService
@@ -443,9 +468,14 @@ async def initialize_step8_assumptions(request: GenerateAISuggestionRequest):
             raise HTTPException(status_code=404, detail="Session not found")
 
         ticker = session.get("ticker")
-        # Use market/method from request
+        # Use market/method from request ONLY (no fallback)
         market = request.market.lower() if hasattr(request, 'market') and request.market else "international"
-        method = request.method.upper() if hasattr(request, 'method') and request.method else "DCF"
+        
+        # Validate method is provided
+        if not hasattr(request, 'method') or not request.method:
+            raise HTTPException(status_code=400, detail="Method parameter is required")
+        
+        method = request.method.upper()
         
         # Get data from the specific valuation track
         step6_data = session_service.get_session_value(
@@ -503,8 +533,12 @@ async def generate_ai_suggestion(request: GenerateAISuggestionRequest):
     - Comps: COMPS_MULTIPLES
     
     MATRIX WORKFLOW:
-    - Uses market/method from request parameters
+    - Uses market/method from request parameters (REQUIRED - no fallback)
     - Generates AI suggestions for the specific valuation track
+    
+    METHOD-AGNOSTIC DESIGN:
+    - Method MUST be provided in request.method - no session.selected_model fallback
+    - Each method operates independently with its own data track
     """
     try:
         # Get session data using SessionService
@@ -513,9 +547,14 @@ async def generate_ai_suggestion(request: GenerateAISuggestionRequest):
             raise HTTPException(status_code=404, detail="Session not found")
 
         ticker = session.get("ticker")
-        # Use market/method from request
+        # Use market/method from request ONLY (no fallback)
         market = request.market.lower() if hasattr(request, 'market') and request.market else "international"
-        method = request.method.upper() if hasattr(request, 'method') and request.method else "DCF"
+        
+        # Validate method is provided
+        if not hasattr(request, 'method') or not request.method:
+            raise HTTPException(status_code=400, detail="Method parameter is required")
+        
+        method = request.method.upper()
         
         # Get data from the specific valuation track
         step6_data = session_service.get_session_value(
@@ -585,8 +624,12 @@ async def confirm_assumptions(request: ConfirmAssumptionsRequest):
     Uses SessionService for session management and Step8ManualOverridesProcessor for assumption management.
     
     MATRIX WORKFLOW:
-    - Uses market/method from request parameters
+    - Uses market/method from request parameters (REQUIRED - no fallback)
     - Confirms assumptions for the specific valuation track
+    
+    METHOD-AGNOSTIC DESIGN:
+    - Method MUST be provided in request.method - no session.selected_model fallback
+    - Each method operates independently with its own data track
     """
     try:
         # Get session data using SessionService
@@ -595,9 +638,14 @@ async def confirm_assumptions(request: ConfirmAssumptionsRequest):
             raise HTTPException(status_code=404, detail="Session not found")
 
         ticker = session.get("ticker")
-        # Use market/method from request
+        # Use market/method from request ONLY (no fallback)
         market = request.market.lower() if request.market else "international"
-        method = request.method.upper() if request.method else "DCF"
+        
+        # Validate method is provided
+        if not request.method:
+            raise HTTPException(status_code=400, detail="Method parameter is required")
+        
+        method = request.method.upper()
         
         # Get data from the specific valuation track
         step6_data = session_service.get_session_value(
@@ -686,10 +734,14 @@ async def valuate(request: ValuateRequest):
     Uses SessionService for session management and Step10ValuationProcessor for comprehensive multi-model valuation.
     
     MATRIX WORKFLOW:
-    - Uses market/method from request parameters
+    - Uses market/method from request parameters (REQUIRED - no fallback)
     - Runs valuation for the specific track
     - Stores results in the specific valuation track
     - Does NOT overwrite other models' results
+    
+    METHOD-AGNOSTIC DESIGN:
+    - Method MUST be provided in request.method - no session.selected_model fallback
+    - Each method operates independently with its own data track
     """
     try:
         # Get session data using SessionService
@@ -698,9 +750,14 @@ async def valuate(request: ValuateRequest):
             raise HTTPException(status_code=404, detail="Session not found")
 
         ticker = session.get("ticker")
-        # Use market/method from request
+        # Use market/method from request ONLY (no fallback)
         market = request.market.lower() if request.market else "international"
-        method = request.method.upper() if request.method else "DCF"
+        
+        # Validate method is provided
+        if not request.method:
+            raise HTTPException(status_code=400, detail="Method parameter is required")
+        
+        method = request.method.upper()
         
         # Get confirmed assumptions from the specific valuation track
         confirmed_assumptions = session_service.get_session_value(

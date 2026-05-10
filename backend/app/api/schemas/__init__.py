@@ -136,6 +136,40 @@ class ValuateRequest(BaseModel):
     method: str = Field(default="DCF", description="Valuation method")
 
 
+class MultiMethodValuateRequest(BaseModel):
+    """Request model for running multi-method valuation in parallel.
+    
+    This endpoint allows executing multiple valuation methods simultaneously
+    using asyncio.gather for true parallel processing.
+    """
+    session_id: str = Field(..., min_length=1, description="Session identifier")
+    methods: List[str] = Field(..., min_items=1, description="List of valuation methods to execute", examples=[["dcf", "dupont", "comps"]])
+    market: str = Field(default="international", description="Market version")
+    
+    @field_validator('methods')
+    @classmethod
+    def validate_methods(cls, v: List[str]) -> List[str]:
+        """Validate valuation methods."""
+        allowed_methods = ["dcf", "dupont", "comps", "DCF", "DuPont", "COMPS"]
+        normalized = [m.lower() for m in v]
+        for method in normalized:
+            if method not in ["dcf", "dupont", "comps"]:
+                raise ValueError(f"Method must be one of: dcf, dupont, comps")
+        return normalized
+
+
+class MultiMethodValuateResponse(BaseModel):
+    """Response model for multi-method valuation endpoint."""
+    status: str
+    market: str
+    methods_requested: List[str]
+    methods_completed: List[str]
+    methods_failed: List[str]
+    summary: Dict[str, Any]
+    results: List[Dict[str, Any]]
+    message: str
+
+
 class ConfirmAssumptionsResponse(BaseModel):
     """Response model for confirm assumptions endpoint."""
     status: str
