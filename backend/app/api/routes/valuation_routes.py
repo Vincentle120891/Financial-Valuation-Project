@@ -139,7 +139,12 @@ async def save_peers(request: SavePeersRequest):
 async def select_models(request: ModelSelectRequest):
     """
     Step 4: User selects valuation model.
-    Uses SessionService for session management.
+    Uses SessionService for session management with matrix workflow support.
+    
+    MATRIX WORKFLOW:
+    - Stores model selection in valuations[market][method] track
+    - Does NOT overwrite other models - each model runs independently
+    - Market defaults to 'international' if not specified
     """
     try:
         # Get session data using SessionService
@@ -147,14 +152,39 @@ async def select_models(request: ModelSelectRequest):
         if not session:
             raise HTTPException(status_code=404, detail="Session not found")
 
-        # Update session with selected model
-        session_service.update_session_data(request.session_id, "selected_model", request.model.upper())
-        session_service.update_session_data(request.session_id, "status", "ready_for_data_fetch")
+        # Normalize market and method
+        market = request.market.lower()  # 'international' or 'vietnam'
+        method = request.model.upper()  # 'DCF', 'DUPONT', 'COMPS'
+        
+        # Update the specific valuation track (matrix structure)
+        session_service.update_valuation_status(
+            request.session_id, 
+            market=market, 
+            method=method.lower(), 
+            status="selected"
+        )
+        
+        # Store selected_model for backward compatibility with existing code
+        session_service.update_session_data(
+            request.session_id, 
+            "selected_model", 
+            method,
+            market=market,
+            method=method.lower()
+        )
+        
+        session_service.update_session_data(
+            request.session_id, 
+            "status", 
+            "ready_for_data_fetch",
+            market=market,
+            method=method.lower()
+        )
 
         return ModelSelectResponse(
-            message="Model selected",
+            message=f"Model {method} selected for {market} market",
             next_step="fetch_data",
-            selected_model=request.model.upper()
+            selected_model=method
         )
     except Exception as e:
         logger.error(f"Model selection error: {e}")
@@ -166,6 +196,10 @@ async def prepare_inputs(request: PrepareInputsRequest):
     """
     Step 5: Prepare required inputs for selected model.
     Uses SessionService for session management and Step5AssumptionsProcessor for international markets.
+    
+    MATRIX WORKFLOW:
+    - Retrieves model/method from request or falls back to session
+    - Prepares inputs specific to the valuation track
     """
     try:
         # Get session data using SessionService
@@ -173,7 +207,21 @@ async def prepare_inputs(request: PrepareInputsRequest):
         if not session:
             raise HTTPException(status_code=404, detail="Session not found")
 
-        model = session_service.get_session_value(request.session_id, "selected_model", "DCF")
+        # Use market/method from request, fallback to session
+        market = request.market.lower() if request.market else "international"
+        method = request.method.upper() if request.method else "DCF"
+        
+        # Try to get from valuation track first, then fallback
+        model = session_service.get_session_value(
+            request.session_id, 
+            "selected_model", 
+            method,
+            market=market,
+            method=method.lower()
+        )
+        if not model:
+            model = method
+            
         ticker = session.get("ticker")
         peer_tickers = session.get("peer_tickers", [])
 
@@ -196,7 +244,12 @@ async def prepare_inputs(request: PrepareInputsRequest):
                     "unit": None
                 })
 
-        session_service.update_session_data(request.session_id, "status", "ready_to_fetch")
+        session_service.update_session_step(
+            request.session_id, 
+            step_number=5,
+            market=market,
+            method=method.lower()
+        )
 
         return PrepareInputsResponse(
             status="ready_to_fetch",
@@ -213,6 +266,11 @@ async def fetch_api_data(request: FetchDataRequest):
     """
     Step 6: Fetch financial data from APIs and calculate metrics.
     Uses SessionService for session management and Step6DataReviewProcessor for comprehensive data review.
+    
+    MATRIX WORKFLOW:
+    - Uses market/method from request parameters
+    - Stores financial data in the specific valuation track
+    - Each model's data is stored independently
     """
     try:
         # Get session data using SessionService
@@ -221,24 +279,42 @@ async def fetch_api_data(request: FetchDataRequest):
             raise HTTPException(status_code=404, detail="Session not found")
 
         ticker = session.get("ticker")
-        market = session.get("market")
-        model = session_service.get_session_value(request.session_id, "selected_model", "DCF")
-
+        # Use market from request, fallback to session
+        market = request.market.lower() if request.market else session.get("market", "international")
+        method = request.method.upper() if request.method else "DCF"
+        
         # Retrieve peer data and other assumptions from session (saved in Step 3)
-        retrieved_assumptions = session_service.get_session_value(request.session_id, "retrieved_assumptions", {})
+        retrieved_assumptions = session_service.get_session_value(
+            request.session_id, 
+            "retrieved_assumptions", 
+            {}
+        )
 
         # Use Step6DataReviewProcessor for comprehensive data fetching and calculation
         result = await step6_processor.process_data_review(
             ticker=ticker,
             market=market,
-            valuation_model=model,
+            valuation_model=method,
             retrieved_assumptions=retrieved_assumptions
         )
 
         # Store results in session using SessionService (with JSON serialization)
+        # Store in the specific valuation track
         result_dict = result.model_dump(mode='json') if hasattr(result, 'model_dump') else result
-        session_service.update_session_data(request.session_id, "financial_data", result_dict)
-        session_service.update_session_data(request.session_id, "status", "data_ready")
+        session_service.update_session_data(
+            request.session_id, 
+            "financial_data", 
+            result_dict,
+            market=market,
+            method=method.lower()
+        )
+        
+        session_service.update_session_step(
+            request.session_id,
+            step_number=6,
+            market=market,
+            method=method.lower()
+        )
 
         return FetchDataResponse(
             status="data_ready",
@@ -266,6 +342,11 @@ async def retrieve_historical_data(request: GenerateAIRequest):
 
     AI Usage: ZERO AI involvement in generating forward-looking inputs.
     AI is ONLY used as a data extraction tool for historical information.
+    
+    MATRIX WORKFLOW:
+    - Uses market/method from request parameters
+    - Stores historical data in the specific valuation track
+    - Each model's historical data is stored independently
     """
     try:
         # Get session data using SessionService
@@ -274,9 +355,21 @@ async def retrieve_historical_data(request: GenerateAIRequest):
             raise HTTPException(status_code=404, detail="Session not found")
 
         ticker = session.get("ticker")
-        financial_data = session_service.get_session_value(request.session_id, "financial_data")
-        model = session_service.get_session_value(request.session_id, "selected_model", "DCF")
-        market = session_service.get_session_value(request.session_id, "market", "US")
+        # Use market/method from request
+        market = request.market.lower() if request.market else "international"
+        method = request.method.upper() if request.method else "DCF"
+        
+        # Get financial data from the specific valuation track
+        financial_data = session_service.get_session_value(
+            request.session_id, 
+            "financial_data",
+            market=market,
+            method=method.lower()
+        )
+        
+        # Fallback to shared context if not found in track
+        if not financial_data:
+            financial_data = session_service.get_session_value(request.session_id, "financial_data")
 
         if not financial_data:
             raise HTTPException(status_code=400, detail="No financial data available")
@@ -285,14 +378,26 @@ async def retrieve_historical_data(request: GenerateAIRequest):
         result = await step7_processor.retrieve_historical_data(
             ticker=ticker,
             company_name=session.get("company_name", ticker),
-            valuation_model=model,
+            valuation_model=method,
             market=market,
             step6_financial_data=financial_data
         )
 
-        # Store historical data in session using SessionService
-        session_service.update_session_data(request.session_id, "historical_data_gaps_filled", result)
-        session_service.update_session_data(request.session_id, "status", "historical_data_ready")
+        # Store historical data in session using SessionService - in the specific valuation track
+        session_service.update_session_data(
+            request.session_id, 
+            "historical_data_gaps_filled", 
+            result,
+            market=market,
+            method=method.lower()
+        )
+        
+        session_service.update_session_step(
+            request.session_id,
+            step_number=7,
+            market=market,
+            method=method.lower()
+        )
 
         # Convert HistoricalDataRetrievalResponse to dict for GenerateAIResponse
         if hasattr(result, 'model_dump'):
@@ -323,6 +428,10 @@ async def initialize_step8_assumptions(request: GenerateAISuggestionRequest):
     This endpoint loads historical data and prepares the assumption categories
     with trendlines. No AI suggestions are generated yet - user must click
     buttons to generate them per category.
+    
+    MATRIX WORKFLOW:
+    - Uses market/method from request parameters
+    - Initializes assumptions for the specific valuation track
     """
     try:
         # Get session data using SessionService
@@ -331,9 +440,25 @@ async def initialize_step8_assumptions(request: GenerateAISuggestionRequest):
             raise HTTPException(status_code=404, detail="Session not found")
 
         ticker = session.get("ticker")
-        valuation_model = session_service.get_session_value(request.session_id, "selected_model", "DCF")
-        step6_data = session_service.get_session_value(request.session_id, "financial_data", {})
-        step7_data = session_service.get_session_value(request.session_id, "historical_data_gaps_filled", {})
+        # Use market/method from request
+        market = request.market.lower() if hasattr(request, 'market') and request.market else "international"
+        method = request.method.upper() if hasattr(request, 'method') and request.method else "DCF"
+        
+        # Get data from the specific valuation track
+        step6_data = session_service.get_session_value(
+            request.session_id, 
+            "financial_data", 
+            {},
+            market=market,
+            method=method.lower()
+        )
+        step7_data = session_service.get_session_value(
+            request.session_id, 
+            "historical_data_gaps_filled", 
+            {},
+            market=market,
+            method=method.lower()
+        )
 
         if not ticker:
             raise HTTPException(status_code=400, detail="No ticker found in session")
@@ -341,13 +466,19 @@ async def initialize_step8_assumptions(request: GenerateAISuggestionRequest):
         # Use Step8ManualOverridesProcessor to initialize assumptions with historical trendlines
         result = await step8_processor.initialize_assumptions(
             ticker=ticker,
-            valuation_model=valuation_model,
+            valuation_model=method,
             step6_data=step6_data,
             step7_data=step7_data if step7_data else None
         )
 
-        # Store initial assumptions in session
-        session_service.update_session_data(request.session_id, "step8_assumptions", result.model_dump() if hasattr(result, 'model_dump') else result.dict())
+        # Store initial assumptions in the specific valuation track
+        session_service.update_session_data(
+            request.session_id, 
+            "step8_assumptions", 
+            result.model_dump() if hasattr(result, 'model_dump') else result.dict(),
+            market=market,
+            method=method.lower()
+        )
 
         return result
     except Exception as e:
@@ -367,6 +498,10 @@ async def generate_ai_suggestion(request: GenerateAISuggestionRequest):
     - DCF: REVENUE_DRIVERS, COST_MARGINS, WORKING_CAPITAL, WACC_COMPONENTS, TERMINAL_VALUE
     - DuPont: DUPONT_TARGETS
     - Comps: COMPS_MULTIPLES
+    
+    MATRIX WORKFLOW:
+    - Uses market/method from request parameters
+    - Generates AI suggestions for the specific valuation track
     """
     try:
         # Get session data using SessionService
@@ -375,9 +510,25 @@ async def generate_ai_suggestion(request: GenerateAISuggestionRequest):
             raise HTTPException(status_code=404, detail="Session not found")
 
         ticker = session.get("ticker")
-        valuation_model = session_service.get_session_value(request.session_id, "selected_model", "DCF")
-        step6_data = session_service.get_session_value(request.session_id, "financial_data", {})
-        step7_data = session_service.get_session_value(request.session_id, "historical_data_gaps_filled", {})
+        # Use market/method from request
+        market = request.market.lower() if hasattr(request, 'market') and request.market else "international"
+        method = request.method.upper() if hasattr(request, 'method') and request.method else "DCF"
+        
+        # Get data from the specific valuation track
+        step6_data = session_service.get_session_value(
+            request.session_id, 
+            "financial_data", 
+            {},
+            market=market,
+            method=method.lower()
+        )
+        step7_data = session_service.get_session_value(
+            request.session_id, 
+            "historical_data_gaps_filled", 
+            {},
+            market=market,
+            method=method.lower()
+        )
 
         if not ticker:
             raise HTTPException(status_code=400, detail="No ticker found in session")
@@ -385,16 +536,28 @@ async def generate_ai_suggestion(request: GenerateAISuggestionRequest):
         # Use Step8ManualOverridesProcessor to generate AI suggestions for the category
         result = await step8_processor.generate_ai_suggestions_for_category(
             ticker=ticker,
-            valuation_model=valuation_model,
+            valuation_model=method,
             category=request.category,
             step6_data=step6_data,
             step7_data=step7_data if step7_data else None
         )
 
-        # Store AI suggestions in session for this category
-        current_suggestions = session_service.get_session_value(request.session_id, "ai_suggestions", {})
+        # Store AI suggestions in the specific valuation track
+        current_suggestions = session_service.get_session_value(
+            request.session_id, 
+            "ai_suggestions", 
+            {},
+            market=market,
+            method=method.lower()
+        )
         current_suggestions[request.category] = result.model_dump() if hasattr(result, 'model_dump') else result
-        session_service.update_session_data(request.session_id, "ai_suggestions", current_suggestions)
+        session_service.update_session_data(
+            request.session_id, 
+            "ai_suggestions", 
+            current_suggestions,
+            market=market,
+            method=method.lower()
+        )
 
         # Convert result to dict for response
         result_dict = result.model_dump() if hasattr(result, 'model_dump') else result.dict() if hasattr(result, 'dict') else dict(result)
@@ -417,6 +580,10 @@ async def confirm_assumptions(request: ConfirmAssumptionsRequest):
     """
     Step 9: User confirms or overrides assumptions.
     Uses SessionService for session management and Step8ManualOverridesProcessor for assumption management.
+    
+    MATRIX WORKFLOW:
+    - Uses market/method from request parameters
+    - Confirms assumptions for the specific valuation track
     """
     try:
         # Get session data using SessionService
@@ -425,10 +592,32 @@ async def confirm_assumptions(request: ConfirmAssumptionsRequest):
             raise HTTPException(status_code=404, detail="Session not found")
 
         ticker = session.get("ticker")
-        valuation_model = session_service.get_session_value(request.session_id, "selected_model", "DCF")
-        step6_data = session_service.get_session_value(request.session_id, "financial_data", {})
-        step7_data = session_service.get_session_value(request.session_id, "historical_data_gaps_filled", {})
-        ai_suggestions = session_service.get_session_value(request.session_id, "ai_suggestions", {})
+        # Use market/method from request
+        market = request.market.lower() if request.market else "international"
+        method = request.method.upper() if request.method else "DCF"
+        
+        # Get data from the specific valuation track
+        step6_data = session_service.get_session_value(
+            request.session_id, 
+            "financial_data", 
+            {},
+            market=market,
+            method=method.lower()
+        )
+        step7_data = session_service.get_session_value(
+            request.session_id, 
+            "historical_data_gaps_filled", 
+            {},
+            market=market,
+            method=method.lower()
+        )
+        ai_suggestions = session_service.get_session_value(
+            request.session_id, 
+            "ai_suggestions", 
+            {},
+            market=market,
+            method=method.lower()
+        )
 
         if not ticker:
             raise HTTPException(status_code=400, detail="No ticker found in session")
@@ -436,7 +625,7 @@ async def confirm_assumptions(request: ConfirmAssumptionsRequest):
         # First initialize assumptions with historical data
         initial_result = await step8_processor.initialize_assumptions(
             ticker=ticker,
-            valuation_model=valuation_model,
+            valuation_model=method,
             step6_data=step6_data,
             step7_data=step7_data if step7_data else None
         )
@@ -450,7 +639,7 @@ async def confirm_assumptions(request: ConfirmAssumptionsRequest):
                         try:
                             final_result = await step8_processor.apply_user_override(
                                 ticker=ticker,
-                                valuation_model=valuation_model,
+                                valuation_model=method,
                                 category=category,
                                 metric=metric,
                                 user_value=float(value),
@@ -462,9 +651,21 @@ async def confirm_assumptions(request: ConfirmAssumptionsRequest):
         # Validate all assumptions
         final_result = await step8_processor.validate_all_assumptions(final_result)
 
-        # Store confirmed assumptions using SessionService
-        session_service.update_session_data(request.session_id, "confirmed_assumptions", final_result.model_dump() if hasattr(final_result, 'model_dump') else final_result.dict())
-        session_service.update_session_data(request.session_id, "status", "assumptions_confirmed")
+        # Store confirmed assumptions in the specific valuation track
+        session_service.update_session_data(
+            request.session_id, 
+            "confirmed_assumptions", 
+            final_result.model_dump() if hasattr(final_result, 'model_dump') else final_result.dict(),
+            market=market,
+            method=method.lower()
+        )
+        
+        session_service.update_session_step(
+            request.session_id,
+            step_number=9,
+            market=market,
+            method=method.lower()
+        )
 
         return ConfirmAssumptionsResponse(
             status="assumptions_confirmed",
@@ -480,6 +681,12 @@ async def valuate(request: ValuateRequest):
     """
     Step 10: Run valuation engine.
     Uses SessionService for session management and Step10ValuationProcessor for comprehensive multi-model valuation.
+    
+    MATRIX WORKFLOW:
+    - Uses market/method from request parameters
+    - Runs valuation for the specific track
+    - Stores results in the specific valuation track
+    - Does NOT overwrite other models' results
     """
     try:
         # Get session data using SessionService
@@ -488,8 +695,17 @@ async def valuate(request: ValuateRequest):
             raise HTTPException(status_code=404, detail="Session not found")
 
         ticker = session.get("ticker")
-        model = session_service.get_session_value(request.session_id, "selected_model", "DCF")
-        confirmed_assumptions = session_service.get_session_value(request.session_id, "confirmed_assumptions")
+        # Use market/method from request
+        market = request.market.lower() if request.market else "international"
+        method = request.method.upper() if request.method else "DCF"
+        
+        # Get confirmed assumptions from the specific valuation track
+        confirmed_assumptions = session_service.get_session_value(
+            request.session_id, 
+            "confirmed_assumptions",
+            market=market,
+            method=method.lower()
+        )
 
         if not confirmed_assumptions:
             raise HTTPException(status_code=400, detail="No confirmed assumptions available")
@@ -497,18 +713,22 @@ async def valuate(request: ValuateRequest):
         # Use Step10ValuationProcessor for comprehensive valuation
         result = await step10_processor.run_valuation(
             ticker=ticker,
-            model=model,
+            model=method,
             assumptions=confirmed_assumptions
         )
 
-        # Store valuation result using SessionService
-        session_service.update_session_data(request.session_id, "valuation_result", result)
-        session_service.update_session_data(request.session_id, "status", "valuation_complete")
+        # Store valuation result in the specific valuation track
+        session_service.save_valuation_results(
+            session_id=request.session_id,
+            market=market,
+            method=method.lower(),
+            results=result
+        )
 
         return ValuateResponse(
             status="success",
             valuation_results=[result],
-            message="Valuation completed successfully"
+            message=f"Valuation completed successfully for {method} ({market})"
         )
     except Exception as e:
         logger.error(f"Valuation error: {e}")

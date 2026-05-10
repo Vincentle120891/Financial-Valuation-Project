@@ -63,6 +63,7 @@ class ModelSelectRequest(BaseModel):
     """Request model for model selection."""
     session_id: str = Field(..., min_length=1, description="Session identifier")
     model: str = Field(..., min_length=1, description="Valuation model", examples=["DCF", "DuPont", "COMPS"])
+    market: str = Field(default="international", description="Market version", examples=["international", "vietnam"])
     
     @field_validator('model')
     @classmethod
@@ -72,6 +73,16 @@ class ModelSelectRequest(BaseModel):
         if v.upper() not in [m.upper() for m in allowed_models] and v.lower() not in allowed_models:
             raise ValueError(f"Model must be one of: DCF, DuPont, COMPS")
         return v
+    
+    @field_validator('market')
+    @classmethod
+    def validate_market(cls, v: str) -> str:
+        """Validate market parameter."""
+        allowed_markets = ["international", "vietnam", "vietnamese"]
+        if v.lower() not in allowed_markets:
+            raise ValueError(f"Market must be one of: international, vietnam")
+        # Normalize to 'international' or 'vietnam'
+        return "vietnam" if v.lower() in ["vietnam", "vietnamese"] else "international"
 
 
 class ModelSelectResponse(BaseModel):
@@ -84,33 +95,45 @@ class ModelSelectResponse(BaseModel):
 class PrepareInputsRequest(BaseModel):
     """Request model for prepare inputs."""
     session_id: str = Field(..., min_length=1, description="Session identifier")
+    market: str = Field(default="international", description="Market version")
+    method: str = Field(default="DCF", description="Valuation method")
 
 
 class FetchDataRequest(BaseModel):
     """Request model for fetching data."""
     session_id: str = Field(..., min_length=1, description="Session identifier")
+    market: str = Field(default="international", description="Market version")
+    method: str = Field(default="DCF", description="Valuation method")
 
 
 class GenerateAIRequest(BaseModel):
     """Request model for generating AI assumptions."""
     session_id: str = Field(..., min_length=1, description="Session identifier")
+    market: str = Field(default="international", description="Market version")
+    method: str = Field(default="DCF", description="Valuation method")
 
 
 class GenerateAISuggestionRequest(BaseModel):
     """Request model for generating AI suggestions for a specific category (Step 8)."""
     session_id: str = Field(..., min_length=1, description="Session identifier")
     category: str = Field(..., description="Assumption category (e.g., REVENUE_DRIVERS, COST_MARGINS)")
+    market: str = Field(default="international", description="Market version")
+    method: str = Field(default="DCF", description="Valuation method")
 
 
 class ConfirmAssumptionsRequest(BaseModel):
     """Request model for confirming assumptions."""
     session_id: str = Field(..., min_length=1, description="Session identifier")
     confirmed_values: Dict[str, Any] = Field(..., description="User confirmed or modified values")
+    market: str = Field(default="international", description="Market version")
+    method: str = Field(default="DCF", description="Valuation method")
 
 
 class ValuateRequest(BaseModel):
     """Request model for running valuation."""
     session_id: str = Field(..., min_length=1, description="Session identifier")
+    market: str = Field(default="international", description="Market version")
+    method: str = Field(default="DCF", description="Valuation method")
 
 
 class ConfirmAssumptionsResponse(BaseModel):
