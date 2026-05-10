@@ -396,6 +396,7 @@ class VNStep2MarketDataProcessor:
             suggested_peers = sector_peers[:max_peers]
             
             return {
+                'status': 'success',
                 'ticker': ticker_clean,
                 'market_code': market_code,
                 'peers': suggested_peers,
