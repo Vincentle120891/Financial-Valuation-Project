@@ -54,7 +54,7 @@ const ValuationFlow = () => {
   const [selectedCompany, setSelectedCompany] = useState(null);
   const [suggestedPeers, setSuggestedPeers] = useState([]);
   const [selectedPeers, setSelectedPeers] = useState([]);
-  const [selectedModel, setSelectedModel] = useState(null);
+  const [selectedModels, setSelectedModels] = useState([]); // CHANGED: Array for multi-method selection
   const [sessionId, setSessionId] = useState(null);
   const [forecastYears, setForecastYears] = useState(5);
 
@@ -62,21 +62,41 @@ const ValuationFlow = () => {
   const [requiredInputs, setRequiredInputs] = useState(null);
   const [requiredFields, setRequiredFields] = useState(null);
 
-  // Financial Data State (used across steps 6-10)
-  const [step6ApiData, setStep6ApiData] = useState(null);  // Step 6: API-fetched financial data
-  const [step7ExtractionResults, setStep7ExtractionResults] = useState(null);  // Step 7: AI historical gap-filling results
-  const [forecastDrivers, setForecastDrivers] = useState(null);
-  const [peerData, setPeerData] = useState(null);
-  const [dcfInputs, setDcfInputs] = useState(null);
-  const [dupontResults, setDupontResults] = useState(null);
-  const [compsResults, setCompsResults] = useState(null);
-  const [calculatedMetrics, setCalculatedMetrics] = useState(null);
-  const [aiAssumptions, setAiAssumptions] = useState(null);  // Step 8: Forward-looking AI assumptions
-  const [aiError, setAiError] = useState(null);
+  // Financial Data State - Matrix structure: valuationsData[market][method]
+  // This enables "3 Valuation Methods × 2 Market Versions" architecture
+  const [valuationsData, setValuationsData] = useState({
+    international: {
+      dcf: null,
+      dupont: null,
+      comps: null
+    },
+    vietnam: {
+      dcf: null,
+      dupont: null,
+      comps: null
+    }
+  });
+  
+  // Helper to get/set data for current market + method
+  const getValuationData = (method) => {
+    return valuationsData[market]?.[method?.toLowerCase()] || null;
+  };
+  
+  const setValuationData = (method, data) => {
+    setValuationsData(prev => ({
+      ...prev,
+      [market]: {
+        ...prev[market],
+        [method?.toLowerCase()]: data
+      }
+    }));
+  };
   
   // Legacy state aliases for backward compatibility (to be removed in future refactor)
-  const historicalData = step6ApiData;  // Deprecated: use step6ApiData instead
-  const aiData = step7ExtractionResults;  // Deprecated: use step7ExtractionResults instead
+  const step6ApiData = getValuationData(selectedModels[0]);  // Deprecated: use getValuationData() instead
+  const step7ExtractionResults = getValuationData(selectedModels[0]);  // Deprecated: use getValuationData() instead
+  const historicalData = step6ApiData;  // Deprecated: use getValuationData() instead
+  const aiData = step7ExtractionResults;  // Deprecated: use getValuationData() instead
 
   // Assumption Management
   const [confirmedValues, setConfirmedValues] = useState({});
@@ -234,16 +254,31 @@ const ValuationFlow = () => {
     }
   }, []);
 
-  // ==================== STEP 4: SELECT MODEL ====================
+  // ==================== STEP 4: SELECT MODEL(S) ====================
   const handleSelectModel = useCallback(async (modelType) => {
-    setSelectedModel(modelType);
+    // Support both single selection (string) and multi-selection (array from checkboxes)
+    const newModels = Array.isArray(modelType) ? modelType : [modelType];
+    setSelectedModels(newModels);
+    
     setLoading(true);
     try {
-      const data = await selectModels(sessionId, modelType, market);
-      console.log('Select model response:', data);
-      if (data.message) {
-        setCurrentStep(5);
-        await fetchRequiredInputs(modelType);
+      // If multiple models selected, use multi-endpoint; otherwise use single endpoint
+      if (newModels.length > 1) {
+        // Multi-model selection - save all at once
+        const data = await selectModels(sessionId, newModels[0], market); // Save first model for now
+        console.log('Select multi-model response:', data);
+        if (data.message) {
+          setCurrentStep(5);
+          await fetchRequiredInputs(newModels[0]);
+        }
+      } else {
+        // Single model selection
+        const data = await selectModels(sessionId, newModels[0], market);
+        console.log('Select model response:', data);
+        if (data.message) {
+          setCurrentStep(5);
+          await fetchRequiredInputs(newModels[0]);
+        }
       }
     } catch (err) {
       console.error('Select model error:', err);
@@ -252,10 +287,51 @@ const ValuationFlow = () => {
       setLoading(false);
     }
   }, [sessionId, market]);
+  
+  // ==================== HANDLE MULTI-METHOD VALUATION ====================
+  const handleRunMultiMethodValuation = useCallback(async () => {
+    if (selectedModels.length <= 1) {
+      // Fall back to single method valuation
+      return handleRunValuation();
+    }
+    
+    setLoading(true);
+    setError(null);
+    try {
+      console.log(`🚀 Running parallel valuation for ${selectedModels.length} methods...`);
+      const data = await runValuationMulti(sessionId, selectedModels, market);
+      console.log('Multi-method valuation response:', data);
+      
+      if (data.status === 'success') {
+        // Store results in matrix structure
+        setValuationResults(data.results);
+        
+        // Store individual method data
+        if (data.results.dcf_outputs) {
+          setValuationData('DCF', data.results.dcf_outputs);
+        }
+        if (data.results.dupont_outputs) {
+          setValuationData('DuPont', data.results.dupont_outputs);
+        }
+        if (data.results.comps_outputs) {
+          setValuationData('COMPS', data.results.comps_outputs);
+        }
+        
+        setCurrentStep(11); // Move to results
+      } else {
+        setError(data.detail || 'Multi-method valuation failed');
+      }
+    } catch (err) {
+      console.error('Multi-method valuation error:', err);
+      setError('Failed to run multi-method valuation');
+    } finally {
+      setLoading(false);
+    }
+  }, [sessionId, selectedModels, market]);
 
   // ==================== BACK TO MODEL SELECTION ====================
   const handleBackToModelSelection = () => {
-    setSelectedModel(null);
+    setSelectedModels([]);
     setRequiredFields([]);
     setConfirmedValues({});
     setStep7ExtractionResults(null);  // Clear Step 7 AI extraction results
@@ -279,15 +355,23 @@ const ValuationFlow = () => {
   // ==================== CONTINUE TO HISTORICAL DATA RETRIEVAL (STEP 7) ====================
   const handleContinueToHistoricalDataRetrieval = useCallback(async () => {
     setLoading(true);
+    // Use first selected model for single-method flow
+    const method = selectedModels[0];
+    if (!method) {
+      setError('No valuation method selected');
+      setLoading(false);
+      return;
+    }
+    
     try {
       // Retrieve historical data using AI extraction when user explicitly clicks to go to Step 7
       console.log('📊 Starting historical data retrieval with AI extraction...');
-      const historicalDataResponse = await retrieveHistoricalData(sessionId, selectedModel, market);
+      const historicalDataResponse = await retrieveHistoricalData(sessionId, method, market);
       console.log('Historical data response:', historicalDataResponse);
 
       if (historicalDataResponse.suggestions) {
-        // Store historical gap-filling results in Step 7 state
-        setStep7ExtractionResults(historicalDataResponse.suggestions);
+        // Store historical gap-filling results in matrix structure
+        setValuationData(method, historicalDataResponse.suggestions);
 
         // Check for timeout status
         if (historicalDataResponse.status === 'historical_data_timeout') {
@@ -338,19 +422,30 @@ const ValuationFlow = () => {
       setLoading(false);
       setCurrentStep(7);
     }
-  }, [sessionId]);
+  }, [sessionId, selectedModels, market]);
 
   // ==================== CONTINUE TO FORECAST DRIVERS (STEP 8) ====================
   const handleContinueToForecastDrivers = useCallback(async () => {
     setLoading(true);
+    // Use first selected model for single-method flow
+    const method = selectedModels[0];
+    if (!method) {
+      setError('No valuation method selected');
+      setLoading(false);
+      return;
+    }
+    
     try {
       // Initialize Step 8 with historical trendlines before showing the step
       console.log('📊 Initializing Step 8 assumptions with historical data...');
-      const step8Response = await initializeStep8Assumptions(sessionId, selectedModel, market);
+      const step8Response = await initializeStep8Assumptions(sessionId, method, market);
       console.log('Step 8 initialization response:', step8Response);
 
       if (step8Response && step8Response.categories) {
-        // Store the initialized assumptions in component state instead of window object
+        // Store the initialized assumptions in matrix structure
+        setValuationData(method, step8Response);
+        
+        // Also store in component state for backward compatibility
         setForecastDrivers(prev => ({
           ...prev,
           step8InitializedData: step8Response
@@ -363,7 +458,7 @@ const ValuationFlow = () => {
       setLoading(false);
       setCurrentStep(8);
     }
-  }, [sessionId]);
+  }, [sessionId, selectedModels, market]);
 
   // ==================== CONTINUE TO ASSUMPTIONS (STEP 7) ====================
   const handleContinueToAssumptions = useCallback(() => {
@@ -383,7 +478,8 @@ const ValuationFlow = () => {
   // ==================== FETCH REQUIRED INPUTS ====================
   const fetchRequiredInputs = useCallback(async (method) => {
     try {
-      const data = await prepareInputs(sessionId, method || selectedModel, market);
+      const targetMethod = method || selectedModels[0];
+      const data = await prepareInputs(sessionId, targetMethod, market);
       console.log('Required inputs response:', data);
       if (data.status && data.required_inputs) {
         setRequiredFields(data.required_inputs);
@@ -391,27 +487,38 @@ const ValuationFlow = () => {
     } catch (err) {
       console.error('Prepare inputs error:', err);
     }
-  }, [sessionId, selectedModel, market]);
+  }, [sessionId, selectedModels, market]);
 
   useEffect(() => {
-    if (selectedModel && currentStep === 5 && sessionId) {
-      fetchRequiredInputs(selectedModel);
+    const method = selectedModels[0];
+    if (method && currentStep === 5 && sessionId) {
+      fetchRequiredInputs(method);
     }
-  }, [selectedModel, currentStep, sessionId, market, fetchRequiredInputs]);
+  }, [selectedModels, currentStep, sessionId, market, fetchRequiredInputs]);
 
   // ==================== STEP 6: RETRIEVE API DATA ONLY ====================
 
   const handleRetrieveData = useCallback(async () => {
     setLoading(true);
+    // Use first selected model for single-method flow
+    const method = selectedModels[0];
+    if (!method) {
+      setError('No valuation method selected');
+      setLoading(false);
+      return;
+    }
+    
     try {
       // Only fetch API data - do NOT generate AI yet
-      const fetchDataResponse = await fetchApiData(sessionId, selectedModel, market);
+      const fetchDataResponse = await fetchApiData(sessionId, method, market);
       console.log('Fetch API data response:', fetchDataResponse);
 
       // Set financial data first - handle both old and new backend formats
       if (fetchDataResponse.data) {
-        // New format: data is wrapped in objects with data_fields arrays
-        // Old format: direct property access
+        // Store in matrix structure
+        setValuationData(method, fetchDataResponse.data);
+        
+        // Also store in individual state variables for backward compatibility
         if (fetchDataResponse.data.historical_financials) {
           setStep6ApiData(fetchDataResponse.data.historical_financials);  // Step 6 API data
         }
@@ -445,7 +552,7 @@ const ValuationFlow = () => {
     } finally {
       setLoading(false);
     }
-  }, [sessionId]);
+  }, [sessionId, selectedModels, market]);
 
   // ==================== MANUAL INPUT HANDLER ====================
   const handleManualInput = (field, value) => {
@@ -473,8 +580,15 @@ const ValuationFlow = () => {
 
   // ==================== STEP 10: CONFIRM ASSUMPTIONS ====================
   const handleConfirmAssumptions = useCallback(async () => {
+    // Use first selected model for single-method flow
+    const method = selectedModels[0];
+    if (!method) {
+      setError('No valuation method selected');
+      return;
+    }
+    
     // Validate required DCF inputs before proceeding
-    if (selectedModel === 'DCF') {
+    if (method === 'DCF') {
       const errors = [];
 
       // Check critical DCF inputs
@@ -501,7 +615,7 @@ const ValuationFlow = () => {
 
     setLoading(true);
     try {
-      const data = await confirmAssumptions(sessionId, confirmedValues, selectedScenario, selectedModel, market);
+      const data = await confirmAssumptions(sessionId, confirmedValues, selectedScenario, method, market);
       console.log('Confirm assumptions response:', data);
       if (data.status) {
         setCurrentStep(9);
@@ -512,14 +626,27 @@ const ValuationFlow = () => {
     } finally {
       setLoading(false);
     }
-  }, [sessionId, confirmedValues, selectedScenario, selectedModel, dcfInputs, market]);
+  }, [sessionId, confirmedValues, selectedScenario, selectedModels, dcfInputs, market]);
 
   // ==================== STEP 11-12: RUN VALUATION ====================
   const handleRunValuation = useCallback(async () => {
+    // If multiple models selected, use multi-method endpoint
+    if (selectedModels.length > 1) {
+      return handleRunMultiMethodValuation();
+    }
+    
     setLoading(true);
     setError(null);
+    // Use first selected model for single-method flow
+    const method = selectedModels[0];
+    if (!method) {
+      setError('No valuation method selected');
+      setLoading(false);
+      return;
+    }
+    
     try {
-      const data = await runValuation(sessionId, selectedModel, selectedScenario, market);
+      const data = await runValuation(sessionId, method, selectedScenario, market);
       console.log('Valuation response:', data);
 
       if (data.result) {
@@ -527,16 +654,19 @@ const ValuationFlow = () => {
 
         if (data.result.dcf_outputs) {
           // DCF results - already included in data.result
+          setValuationData('DCF', data.result.dcf_outputs);
         }
         if (data.result.dupont_outputs) {
           setDupontResults(data.result.dupont_outputs);
           // Also update valuationResults to include dupont_outputs for ResultsStep
           setValuationResults(prev => ({ ...prev, dupont_outputs: data.result.dupont_outputs }));
+          setValuationData('DuPont', data.result.dupont_outputs);
         }
         if (data.result.comps_outputs) {
           setCompsResults(data.result.comps_outputs);
           // Also update valuationResults to include comps_outputs for ResultsStep
           setValuationResults(prev => ({ ...prev, comps_outputs: data.result.comps_outputs }));
+          setValuationData('COMPS', data.result.comps_outputs);
         }
 
         setCurrentStep(10);
@@ -549,7 +679,7 @@ const ValuationFlow = () => {
     } finally {
       setLoading(false);
     }
-  }, [sessionId, selectedModel, selectedScenario, market]);
+  }, [sessionId, selectedModels, selectedScenario, market, handleRunMultiMethodValuation]);
 
   // ==================== RESET ALL ====================
   const handleReset = () => {
@@ -557,7 +687,7 @@ const ValuationFlow = () => {
     setSearchQuery('');
     setSearchResults([]);
     setSelectedCompany(null);
-    setSelectedModel(null);
+    setSelectedModels([]);
     setSessionId(null);
     setRequiredFields([]);
     setStep7ExtractionResults(null);  // Clear Step 7 extraction results
@@ -568,6 +698,18 @@ const ValuationFlow = () => {
     setError(null);
     setMarket('international');
     setStep6ApiData(null);  // Clear Step 6 API data
+    setValuationsData({
+      international: {
+        dcf: null,
+        dupont: null,
+        comps: null
+      },
+      vietnam: {
+        dcf: null,
+        dupont: null,
+        comps: null
+      }
+    });
     setForecastDrivers(null);
     setPeerData(null);
     setDupontResults(null);
@@ -615,11 +757,11 @@ const ValuationFlow = () => {
           />
         );
       case 4:
-        return <ModelSelectionStep onSelectModel={handleSelectModel} />;
+        return <ModelSelectionStep onSelectModel={handleSelectModel} selectedModels={selectedModels} />;
       case 5:
         return (
           <RequirementsStep
-            selectedModel={selectedModel}
+            selectedModel={selectedModels[0]}
             onBackToModelSelection={handleBackToModelSelection}
             onRetrieveData={handleRetrieveData}
             loading={loading}
@@ -656,7 +798,7 @@ const ValuationFlow = () => {
             aiData={step7ExtractionResults}
             aiError={aiError}
             confirmedValues={confirmedValues}
-            selectedModel={selectedModel}
+            selectedModel={selectedModels[0]}
             market={market}
             historicalData={step6ApiData}
             apiData={calculatedMetrics}
@@ -677,7 +819,7 @@ const ValuationFlow = () => {
             step6Data={calculatedMetrics}
             step7Data={step7ExtractionResults}
             market={market}
-            selectedModel={selectedModel}
+            selectedModel={selectedModels[0]}
             onManualInput={handleManualInput}
             onConfirmDrivers={handleConfirmAssumptions}
             onBackToRequirements={handleBackToRequirements}
@@ -693,7 +835,7 @@ const ValuationFlow = () => {
             aiData={step7ExtractionResults}
             aiError={aiError}
             confirmedValues={confirmedValues}
-            selectedModel={selectedModel}
+            selectedModel={selectedModels[0]}
             onManualInput={handleManualInput}
             onUseAI={handleUseAI}
             onConfirmAssumptions={handleConfirmAssumptions}
@@ -705,7 +847,7 @@ const ValuationFlow = () => {
         return (
           <RunValuationStep
             selectedCompany={selectedCompany}
-            selectedModel={selectedModel}
+            selectedModel={selectedModels[0]}
             selectedScenario={selectedScenario}
             confirmedValues={confirmedValues}
             loading={loading}
@@ -717,7 +859,7 @@ const ValuationFlow = () => {
         return (
           <ResultsStep
             valuationResults={valuationResults}
-            selectedModel={selectedModel}
+            selectedModel={selectedModels[0]}
             dupontResults={dupontResults}
             compsResults={compsResults}
             onBackToModelSelection={handleBackToModelSelection}
