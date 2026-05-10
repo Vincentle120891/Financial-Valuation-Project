@@ -23,7 +23,8 @@ const ForecastDriversStep = ({
   onBackToRequirements,
   onContinueToAssumptions,
   loading,
-  market = 'international'
+  market = 'international',
+  selectedModel = 'DCF'
 }) => {
   // Initialize local state for forecast drivers
   const [localForecastDrivers, setLocalForecastDrivers] = useState(
@@ -93,7 +94,7 @@ const ForecastDriversStep = ({
 
     setAiLoading(prev => ({ ...prev, [category]: true }));
     try {
-      const response = await generateAISuggestion(sessionId, category);
+      const response = await generateAISuggestion(sessionId, category, selectedModel, market);
       if (response.status === 'success' && response.suggestion) {
         setAiSuggestions(prev => ({ ...prev, [category]: response.suggestion }));
         

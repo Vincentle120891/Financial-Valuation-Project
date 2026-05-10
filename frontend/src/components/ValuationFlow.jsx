@@ -11,7 +11,8 @@ import {
   initializeStep8Assumptions,
   generateAISuggestion,
   confirmAssumptions,
-  runValuation
+  runValuation,
+  runValuationMulti
 } from '../services/api';
 import SearchStep from './valuation-flow/SearchStep';
 import CompanySelectionStep from './valuation-flow/CompanySelectionStep';
@@ -238,11 +239,11 @@ const ValuationFlow = () => {
     setSelectedModel(modelType);
     setLoading(true);
     try {
-      const data = await selectModels(sessionId, modelType);
+      const data = await selectModels(sessionId, modelType, market);
       console.log('Select model response:', data);
       if (data.message) {
         setCurrentStep(5);
-        await fetchRequiredInputs();
+        await fetchRequiredInputs(modelType);
       }
     } catch (err) {
       console.error('Select model error:', err);
@@ -250,7 +251,7 @@ const ValuationFlow = () => {
     } finally {
       setLoading(false);
     }
-  }, [sessionId]);
+  }, [sessionId, market]);
 
   // ==================== BACK TO MODEL SELECTION ====================
   const handleBackToModelSelection = () => {
@@ -281,7 +282,7 @@ const ValuationFlow = () => {
     try {
       // Retrieve historical data using AI extraction when user explicitly clicks to go to Step 7
       console.log('📊 Starting historical data retrieval with AI extraction...');
-      const historicalDataResponse = await retrieveHistoricalData(sessionId);
+      const historicalDataResponse = await retrieveHistoricalData(sessionId, selectedModel, market);
       console.log('Historical data response:', historicalDataResponse);
 
       if (historicalDataResponse.suggestions) {
@@ -345,7 +346,7 @@ const ValuationFlow = () => {
     try {
       // Initialize Step 8 with historical trendlines before showing the step
       console.log('📊 Initializing Step 8 assumptions with historical data...');
-      const step8Response = await initializeStep8Assumptions(sessionId);
+      const step8Response = await initializeStep8Assumptions(sessionId, selectedModel, market);
       console.log('Step 8 initialization response:', step8Response);
 
       if (step8Response && step8Response.categories) {
@@ -380,9 +381,9 @@ const ValuationFlow = () => {
   }, []);
 
   // ==================== FETCH REQUIRED INPUTS ====================
-  const fetchRequiredInputs = useCallback(async () => {
+  const fetchRequiredInputs = useCallback(async (method) => {
     try {
-      const data = await prepareInputs(sessionId);
+      const data = await prepareInputs(sessionId, method || selectedModel, market);
       console.log('Required inputs response:', data);
       if (data.status && data.required_inputs) {
         setRequiredFields(data.required_inputs);
@@ -390,13 +391,13 @@ const ValuationFlow = () => {
     } catch (err) {
       console.error('Prepare inputs error:', err);
     }
-  }, [sessionId]);
+  }, [sessionId, selectedModel, market]);
 
   useEffect(() => {
     if (selectedModel && currentStep === 5 && sessionId) {
-      fetchRequiredInputs();
+      fetchRequiredInputs(selectedModel);
     }
-  }, [selectedModel, currentStep, sessionId, fetchRequiredInputs]);
+  }, [selectedModel, currentStep, sessionId, market, fetchRequiredInputs]);
 
   // ==================== STEP 6: RETRIEVE API DATA ONLY ====================
 
@@ -404,7 +405,7 @@ const ValuationFlow = () => {
     setLoading(true);
     try {
       // Only fetch API data - do NOT generate AI yet
-      const fetchDataResponse = await fetchApiData(sessionId);
+      const fetchDataResponse = await fetchApiData(sessionId, selectedModel, market);
       console.log('Fetch API data response:', fetchDataResponse);
 
       // Set financial data first - handle both old and new backend formats
@@ -500,7 +501,7 @@ const ValuationFlow = () => {
 
     setLoading(true);
     try {
-      const data = await confirmAssumptions(sessionId, confirmedValues, selectedScenario);
+      const data = await confirmAssumptions(sessionId, confirmedValues, selectedScenario, selectedModel, market);
       console.log('Confirm assumptions response:', data);
       if (data.status) {
         setCurrentStep(9);
@@ -511,14 +512,14 @@ const ValuationFlow = () => {
     } finally {
       setLoading(false);
     }
-  }, [sessionId, confirmedValues, selectedScenario, selectedModel, dcfInputs]);
+  }, [sessionId, confirmedValues, selectedScenario, selectedModel, dcfInputs, market]);
 
   // ==================== STEP 11-12: RUN VALUATION ====================
   const handleRunValuation = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const data = await runValuation(sessionId, selectedModel, selectedScenario);
+      const data = await runValuation(sessionId, selectedModel, selectedScenario, market);
       console.log('Valuation response:', data);
 
       if (data.result) {
@@ -548,7 +549,7 @@ const ValuationFlow = () => {
     } finally {
       setLoading(false);
     }
-  }, [sessionId, selectedModel, selectedScenario]);
+  }, [sessionId, selectedModel, selectedScenario, market]);
 
   // ==================== RESET ALL ====================
   const handleReset = () => {
@@ -676,6 +677,7 @@ const ValuationFlow = () => {
             step6Data={calculatedMetrics}
             step7Data={step7ExtractionResults}
             market={market}
+            selectedModel={selectedModel}
             onManualInput={handleManualInput}
             onConfirmDrivers={handleConfirmAssumptions}
             onBackToRequirements={handleBackToRequirements}
