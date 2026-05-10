@@ -100,7 +100,7 @@ const PeerSelectionStep = ({
       </div>
 
       {/* Peer Cards Grid */}
-      <div className="max-w-7xl grid grid-cols-5 gap-4 mb-8">
+      <div className="grid grid-cols-5 gap-4 mb-8">
         {suggestedPeers.map((peer) => {
           const isSelected = selectedPeers.find(p => p.symbol === peer.symbol);
 
