@@ -5,7 +5,7 @@ The DCF engine handles all core mathematical logic (WACC, FCF, Terminal Value, N
 This processor orchestrates the final output formatting and blending with Comps.
 """
 import logging
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 from pydantic import BaseModel
 
 from app.services.international.dcf_engine import (
@@ -51,6 +51,110 @@ class Step10ValuationProcessor:
     3. Blending DCF value with Comps (if available)
     4. Generating sensitivity analysis and recommendations
     """
+    
+    async def run_valuation(
+        self,
+        ticker: str,
+        model: str,
+        assumptions: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Async wrapper for running valuation - supports multiple models.
+        
+        Args:
+            ticker: Stock ticker symbol
+            model: Valuation model ('DCF', 'DUPONT', 'COMPS')
+            assumptions: Confirmed assumptions from step 8/9
+            
+        Returns:
+            Dict containing valuation results
+        """
+        model_upper = model.upper()
+        
+        if model_upper == 'DCF':
+            return await self._run_dcf_valuation(ticker, assumptions)
+        elif model_upper == 'DUPONT':
+            return await self._run_dupont_valuation(ticker, assumptions)
+        elif model_upper == 'COMPS':
+            return await self._run_comps_valuation(ticker, assumptions)
+        else:
+            raise ValueError(f"Unknown model: {model}")
+    
+    async def _run_dcf_valuation(self, ticker: str, assumptions: Dict) -> Dict[str, Any]:
+        """Run DCF valuation using the DCF engine."""
+        # Use existing process_final_valuation logic
+        result = self.process_final_valuation(
+            ticker=ticker,
+            dcf_inputs=assumptions,
+            comps_value=assumptions.get('comps_value')
+        )
+        return result.model_dump() if hasattr(result, 'model_dump') else result
+    
+    async def _run_dupont_valuation(self, ticker: str, assumptions: Dict) -> Dict[str, Any]:
+        """Run DuPont valuation."""
+        from app.services.international.dupont_engine import DuPontEngine
+        
+        try:
+            engine = DuPontEngine()
+            # Extract DuPont-specific inputs from assumptions
+            dupont_inputs = {
+                'net_profit_margin': assumptions.get('net_profit_margin', 0.15),
+                'asset_turnover': assumptions.get('asset_turnover', 1.0),
+                'equity_multiplier': assumptions.get('equity_multiplier', 2.0),
+                'revenue': assumptions.get('revenue', 100000),
+                'net_income': assumptions.get('net_income', 15000),
+                'total_assets': assumptions.get('total_assets', 100000),
+                'shareholders_equity': assumptions.get('shareholders_equity', 50000),
+            }
+            result = engine.calculate(dupont_inputs)
+            return {
+                'ticker': ticker,
+                'model': 'DUPONT',
+                'roe': result.roe if hasattr(result, 'roe') else result.get('roe', 0),
+                'components': result.components if hasattr(result, 'components') else result.get('components', {}),
+                'analysis': result.analysis if hasattr(result, 'analysis') else {}
+            }
+        except Exception as e:
+            logger.error(f"DuPont valuation failed: {e}")
+            return {
+                'ticker': ticker,
+                'model': 'DUPONT',
+                'error': str(e),
+                'roe': 0,
+                'components': {},
+                'analysis': {}
+            }
+    
+    async def _run_comps_valuation(self, ticker: str, assumptions: Dict) -> Dict[str, Any]:
+        """Run Comparable Companies valuation."""
+        from app.services.international.comps_engine import CompsEngine
+        
+        try:
+            engine = CompsEngine()
+            # Extract Comps-specific inputs
+            comps_inputs = {
+                'peer_multiples': assumptions.get('peer_multiples', []),
+                'target_metrics': assumptions.get('target_metrics', {}),
+                'selected_multiple': assumptions.get('selected_multiple', 'EV/EBITDA'),
+            }
+            result = engine.calculate_implied_value(comps_inputs)
+            return {
+                'ticker': ticker,
+                'model': 'COMPS',
+                'implied_value': result.implied_value if hasattr(result, 'implied_value') else result.get('implied_value', 0),
+                'multiple_analysis': result.multiple_analysis if hasattr(result, 'multiple_analysis') else result.get('multiple_analysis', {}),
+                'peer_comparison': result.peer_comparison if hasattr(result, 'peer_comparison') else result.get('peer_comparison', {})
+            }
+        except Exception as e:
+            logger.error(f"Comps valuation failed: {e}")
+            return {
+                'ticker': ticker,
+                'model': 'COMPS',
+                'error': str(e),
+                'implied_value': 0,
+                'multiple_analysis': {},
+                'peer_comparison': {}
+            }
     
     def process_final_valuation(
         self, 
