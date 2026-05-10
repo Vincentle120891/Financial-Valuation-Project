@@ -26,7 +26,9 @@ from app.api.schemas import (
     ConfirmAssumptionsRequest,
     ConfirmAssumptionsResponse,
     ValuateRequest,
-    ValuateResponse
+    ValuateResponse,
+    MultiMethodValuateRequest,
+    MultiMethodValuateResponse
 )
 from app.services.international.step8_manual_overrides import FullAssumptionsResponse
 from app.services.international.step5_assumptions_processor import Step5AssumptionsProcessor
@@ -35,6 +37,7 @@ from app.services.international.step7_historical_data_processor import Step7Hist
 from app.services.international.step8_manual_overrides import Step8ManualOverridesProcessor
 from app.services.international.step10_valuation_processor import Step10ValuationProcessor
 from app.services.international.yfinance_service import YFinanceService
+from app.services.international.valuation_orchestrator import orchestrator
 
 logger = get_logger(__name__)
 
@@ -732,4 +735,74 @@ async def valuate(request: ValuateRequest):
         )
     except Exception as e:
         logger.error(f"Valuation error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/step-10-valuate-multi", response_model=MultiMethodValuateResponse)
+async def valuate_multi_method(request: MultiMethodValuateRequest):
+    """
+    Step 10 (Multi-Method): Run valuation for multiple methods simultaneously.
+    
+    This endpoint uses the ValuationOrchestrator to execute DCF, DuPont, and/or COMPS
+    valuations in parallel using asyncio.gather, then returns a unified response.
+    
+    SUPPORTS:
+    - Multiple methods: ["dcf", "dupont", "comps"]
+    - Both markets: "international" or "vietnam"
+    - Parallel execution with comprehensive error handling
+    - Unified response with cross-method comparison
+    
+    USAGE EXAMPLE:
+    ```json
+    {
+        "session_id": "xxx",
+        "methods": ["dcf", "dupont", "comps"],
+        "market": "international"
+    }
+    ```
+    """
+    try:
+        # Validate session exists
+        session = session_service.get_session_data(request.session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+        
+        # Validate at least one method provided
+        if not request.methods or len(request.methods) == 0:
+            raise HTTPException(status_code=400, detail="At least one valuation method must be specified")
+        
+        # Normalize market
+        market = request.market.lower() if request.market else "international"
+        if market not in ["international", "vietnam"]:
+            raise HTTPException(status_code=400, detail="Market must be 'international' or 'vietnam'")
+        
+        # Use orchestrator to run all methods in parallel
+        logger.info(f"Starting multi-method valuation: methods={request.methods}, market={market}")
+        
+        result = await orchestrator.execute_multi_method_valuation(
+            session_id=request.session_id,
+            methods=request.methods,
+            market=market,
+            start_step=4  # Start from model selection
+        )
+        
+        # Check for errors
+        if result.get("status") == "error":
+            raise HTTPException(status_code=500, detail=result.get("message", "Multi-method valuation failed"))
+        
+        return MultiMethodValuateResponse(
+            status=result.get("status", "success"),
+            market=result.get("market", market),
+            methods_requested=result.get("methods_requested", []),
+            methods_completed=result.get("methods_completed", []),
+            methods_failed=result.get("methods_failed", []),
+            summary=result.get("summary", {}),
+            results=result.get("results", []),
+            message=f"Multi-method valuation completed: {len(result.get('methods_completed', []))}/{len(request.methods)} methods successful"
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Multi-method valuation error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
