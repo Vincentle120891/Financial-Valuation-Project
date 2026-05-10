@@ -6,7 +6,7 @@ import {
 
 /**
  * ResultsStep Component
- * Step 10: View Valuation Results
+ * Step 11: View Valuation Results
  * 
  * Features:
  * - Model-specific results display (DCF, DuPont, COMPS)
@@ -14,6 +14,8 @@ import {
  * - Key metrics highlights
  * - Upside/downside analysis
  * - Export and reset actions
+ * 
+ * FIX #15: Conditional rendering based on selectedModel only shows relevant outputs
  */
 const ResultsStep = ({ 
   valuationResults, 
@@ -38,12 +40,15 @@ const ResultsStep = ({
 
   // Prepare DuPont trend data
   const prepareDupontTrendData = () => {
-    if (!dupontResults?.roe_history) return [];
-    return Object.entries(dupontResults.roe_history).map(([year, roe]) => ({
+    if (!dupontResults?.roe_history && !valuationResults.dupont_outputs?.roe_history) return [];
+    const roeHistory = dupontResults?.roe_history || valuationResults.dupont_outputs?.roe_history;
+    const netMarginHistory = dupontResults?.net_margin_history || valuationResults.dupont_outputs?.net_margin_history;
+    
+    return Object.entries(roeHistory).map(([year, roe]) => ({
       year,
       roe: (roe * 100).toFixed(1),
-      netMargin: dupontResults.net_margin_history?.[year] 
-        ? (dupontResults.net_margin_history[year] * 100).toFixed(1) 
+      netMargin: netMarginHistory?.[year] 
+        ? (netMarginHistory[year] * 100).toFixed(1) 
         : 'N/A'
     }));
   };
@@ -56,7 +61,7 @@ const ResultsStep = ({
       <h2>Step 11: Valuation Results & Analysis</h2>
       <p style={{ marginBottom: '24px', color: '#666' }}>Comprehensive valuation output including intrinsic value estimates, sensitivity analysis, and comparative metrics.</p>
       
-      {/* DCF Results */}
+      {/* DCF Results - Only shown when DCF model is selected */}
       {selectedModel === 'DCF' && valuationResults.dcf_outputs && (
         <div className="results-dashboard">
           <div className="primary-result">
@@ -110,33 +115,33 @@ const ResultsStep = ({
         </div>
       )}
       
-      {/* DuPont Results */}
-      {selectedModel === 'DuPont' && valuationResults.dupont_outputs && (
+      {/* DuPont Results - Only shown when DuPont model is selected */}
+      {selectedModel === 'DuPont' && (dupontResults || valuationResults.dupont_outputs) && (
         <div className="results-dashboard">
           <div className="primary-result">
             <h3>DuPont Analysis Summary</h3>
             <div className="result-highlight">
               <span className="label">ROE (Latest Year)</span>
               <span className="value">
-                {(valuationResults.dupont_outputs.roe_latest * 100).toFixed(1)}%
+                {((dupontResults?.roe_latest || valuationResults.dupont_outputs?.roe_latest || 0) * 100).toFixed(1)}%
               </span>
             </div>
             <div className="result-highlight">
               <span className="label">Net Profit Margin</span>
               <span className="value">
-                {(valuationResults.dupont_outputs.net_margin_latest * 100).toFixed(1)}%
+                {((dupontResults?.net_margin_latest || valuationResults.dupont_outputs?.net_margin_latest || 0) * 100).toFixed(1)}%
               </span>
             </div>
             <div className="result-highlight">
               <span className="label">Asset Turnover</span>
               <span className="value">
-                {valuationResults.dupont_outputs.asset_turnover_latest.toFixed(2)}x
+                {(dupontResults?.asset_turnover_latest || valuationResults.dupont_outputs?.asset_turnover_latest || 0).toFixed(2)}x
               </span>
             </div>
             <div className="result-highlight">
               <span className="label">Equity Multiplier</span>
               <span className="value">
-                {valuationResults.dupont_outputs.equity_multiplier_latest.toFixed(2)}x
+                {(dupontResults?.equity_multiplier_latest || valuationResults.dupont_outputs?.equity_multiplier_latest || 0).toFixed(2)}x
               </span>
             </div>
           </div>
@@ -182,7 +187,7 @@ const ResultsStep = ({
         </div>
       )}
       
-      {/* Trading Comps Results */}
+      {/* Trading Comps Results - Only shown when COMPS model is selected */}
       {selectedModel === 'COMPS' && valuationResults.comps_outputs && (
         <div className="results-dashboard">
           <div className="primary-result">

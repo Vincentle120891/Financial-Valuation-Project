@@ -342,9 +342,11 @@ const ValuationFlow = () => {
       console.log('Step 8 initialization response:', step8Response);
 
       if (step8Response && step8Response.categories) {
-        // Store the initialized assumptions for use in ForecastDriversStep
-        // The ForecastDriversStep will use these categories to display trendlines
-        window.step8Data = step8Response; // Temporary storage, can be improved with context
+        // Store the initialized assumptions in component state instead of window object
+        setForecastDrivers(prev => ({
+          ...prev,
+          step8InitializedData: step8Response
+        }));
       }
     } catch (err) {
       console.error('Failed to initialize Step 8:', err);
@@ -463,6 +465,32 @@ const ValuationFlow = () => {
 
   // ==================== STEP 10: CONFIRM ASSUMPTIONS ====================
   const handleConfirmAssumptions = useCallback(async () => {
+    // Validate required DCF inputs before proceeding
+    if (selectedModel === 'DCF') {
+      const errors = [];
+      
+      // Check critical DCF inputs
+      if (!dcfInputs?.wacc || dcfInputs.wacc <= 0) {
+        errors.push('WACC must be greater than 0');
+      }
+      if (!dcfInputs?.terminal_growth_rate || dcfInputs.terminal_growth_rate < 0) {
+        errors.push('Terminal growth rate must be non-negative');
+      }
+      if (!dcfInputs?.risk_free_rate || dcfInputs.risk_free_rate < 0) {
+        errors.push('Risk-free rate must be non-negative');
+      }
+      
+      if (errors.length > 0) {
+        setValidationErrors(errors);
+        setError('Please fix the following validation errors:\n• ' + errors.join('\n• '));
+        return;
+      }
+    }
+    
+    // Clear any previous validation errors
+    setValidationErrors([]);
+    setError(null);
+    
     setLoading(true);
     try {
       const data = await confirmAssumptions(sessionId, confirmedValues, selectedScenario);
@@ -472,11 +500,11 @@ const ValuationFlow = () => {
       }
     } catch (err) {
       console.error('Confirm assumptions error:', err);
-      setError('Failed to confirm assumptions');
+      setError('Failed to confirm assumptions: ' + (err.message || 'Unknown error'));
     } finally {
       setLoading(false);
     }
-  }, [sessionId, confirmedValues, selectedScenario]);
+  }, [sessionId, confirmedValues, selectedScenario, selectedModel, dcfInputs]);
 
   // ==================== STEP 11-12: RUN VALUATION ====================
   const handleRunValuation = useCallback(async () => {
@@ -634,6 +662,7 @@ const ValuationFlow = () => {
             dcfInputs={dcfInputs}
             step6Data={calculatedMetrics}
             step7Data={historicalData}
+            market={market}
             onManualInput={handleManualInput}
             onConfirmDrivers={handleConfirmAssumptions}
             onBackToRequirements={handleBackToRequirements}
@@ -690,30 +719,65 @@ const ValuationFlow = () => {
     <div className="valuation-flow-app">
       <header className="app-header">
         <h1>Unified Valuation Platform</h1>
-        <div className="progress-indicator">
-          {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(step => (
+        
+        {/* Progress Indicator with Step Counter */}
+        <div className="progress-indicator" role="progressbar" aria-valuenow={currentStep} aria-valuemin="1" aria-valuemax="11">
+          {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map(step => (
             <div
               key={step}
-              className={`step-dot ${currentStep >= step ? 'active' : ''}`}
+              className={`step-dot ${currentStep >= step ? 'active' : ''} ${currentStep === step ? 'current' : ''}`}
               title={`Step ${step}`}
+              aria-label={`Step ${step}`}
             />
           ))}
         </div>
+        
+        {/* Enhanced Step Label with Progress */}
         <div className="step-label">
-          Step {currentStep} of 10: {' '}
-          {
-            currentStep === 1 ? 'Search Company' :
-            currentStep === 4 ? 'Select Model' :
-            currentStep === 5 ? 'Review Requirements' :
-            currentStep === 6 ? 'View Retrieved Inputs' :
-            currentStep === 7 ? 'AI Assumptions' :
-            currentStep === 8 ? 'Modify Forecast Drivers & DCF Inputs' :
-            currentStep === 9 ? 'Confirm Assumptions' :
-            currentStep === 10 ? 'Run Valuation' :
-            currentStep === 11 ? 'View Results' : 'In Progress'
-          }
+          <span className="step-counter">Step {currentStep} of 11</span>
+          <span className="step-name">
+            {currentStep === 1 ? 'Search Company' :
+             currentStep === 2 ? 'Company Overview' :
+             currentStep === 3 ? 'Peer Selection' :
+             currentStep === 4 ? 'Select Model' :
+             currentStep === 5 ? 'Review Requirements' :
+             currentStep === 6 ? 'View Retrieved Inputs' :
+             currentStep === 7 ? 'Historical Data Extraction' :
+             currentStep === 8 ? 'Forecast Drivers & DCF Inputs' :
+             currentStep === 9 ? 'Confirm Assumptions' :
+             currentStep === 10 ? 'Run Valuation' :
+             currentStep === 11 ? 'View Results' : 'In Progress'}
+          </span>
+          <span className="step-progress">{Math.round((currentStep / 11) * 100)}% Complete</span>
         </div>
       </header>
+
+      {/* Error Display - Consistent Error Handling */}
+      {error && (
+        <div className="error-banner" role="alert">
+          <div className="error-content">
+            <span className="error-icon">⚠️</span>
+            <div className="error-message">
+              <strong>Error:</strong> {error}
+            </div>
+            <button 
+              className="error-dismiss" 
+              onClick={() => setError(null)}
+              aria-label="Dismiss error"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Loading Overlay */}
+      {loading && (
+        <div className="loading-overlay" aria-live="polite">
+          <div className="loading-spinner"></div>
+          <p>Processing...</p>
+        </div>
+      )}
 
       <main className="app-main">
         {renderStep()}
