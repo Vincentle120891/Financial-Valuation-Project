@@ -468,7 +468,7 @@ const ValuationFlow = () => {
     // Validate required DCF inputs before proceeding
     if (selectedModel === 'DCF') {
       const errors = [];
-      
+
       // Check critical DCF inputs
       if (!dcfInputs?.wacc || dcfInputs.wacc <= 0) {
         errors.push('WACC must be greater than 0');
@@ -479,18 +479,18 @@ const ValuationFlow = () => {
       if (!dcfInputs?.risk_free_rate || dcfInputs.risk_free_rate < 0) {
         errors.push('Risk-free rate must be non-negative');
       }
-      
+
       if (errors.length > 0) {
         setValidationErrors(errors);
         setError('Please fix the following validation errors:\n• ' + errors.join('\n• '));
         return;
       }
     }
-    
+
     // Clear any previous validation errors
     setValidationErrors([]);
     setError(null);
-    
+
     setLoading(true);
     try {
       const data = await confirmAssumptions(sessionId, confirmedValues, selectedScenario);
@@ -647,10 +647,14 @@ const ValuationFlow = () => {
             aiError={aiError}
             confirmedValues={confirmedValues}
             selectedModel={selectedModel}
+            market={market}
+            historicalData={historicalData}
+            apiData={calculatedMetrics}
             onManualInput={handleManualInput}
             onUseAI={handleUseAI}
             onBackToApiData={handleBackToApiData}
             onContinueToForecastDrivers={handleContinueToForecastDrivers}
+            onRetryAiExtraction={handleRetrieveHistoricalData}
             loading={loading}
           />
         );
@@ -719,7 +723,7 @@ const ValuationFlow = () => {
     <div className="valuation-flow-app">
       <header className="app-header">
         <h1>Unified Valuation Platform</h1>
-        
+
         {/* Progress Indicator with Step Counter */}
         <div className="progress-indicator" role="progressbar" aria-valuenow={currentStep} aria-valuemin="1" aria-valuemax="11">
           {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map(step => (
@@ -731,7 +735,7 @@ const ValuationFlow = () => {
             />
           ))}
         </div>
-        
+
         {/* Enhanced Step Label with Progress */}
         <div className="step-label">
           <span className="step-counter">Step {currentStep} of 11</span>
@@ -760,8 +764,8 @@ const ValuationFlow = () => {
             <div className="error-message">
               <strong>Error:</strong> {error}
             </div>
-            <button 
-              className="error-dismiss" 
+            <button
+              className="error-dismiss"
               onClick={() => setError(null)}
               aria-label="Dismiss error"
             >
