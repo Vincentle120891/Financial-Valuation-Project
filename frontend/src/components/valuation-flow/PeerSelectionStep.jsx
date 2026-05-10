@@ -100,7 +100,7 @@ const PeerSelectionStep = ({
       </div>
 
       {/* Peer Cards Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+      <div className="grid grid-cols-5 gap-4 mb-8">
         {suggestedPeers.map((peer) => {
           const isSelected = selectedPeers.find(p => p.symbol === peer.symbol);
 
@@ -108,7 +108,7 @@ const PeerSelectionStep = ({
             <div
               key={peer.symbol}
               onClick={() => handleTogglePeer(peer)}
-              className={`cursor-pointer rounded-lg p-4 border-2 transition-all ${
+              className={`w-full cursor-pointer rounded-lg p-4 border-2 transition-all ${
                 isSelected
                   ? 'border-green-500 bg-green-50 shadow-md'
                   : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm'
