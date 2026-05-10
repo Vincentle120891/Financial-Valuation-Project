@@ -49,6 +49,10 @@ from app.services.international.step6_dcf_data_review import DCFStep6Processor a
 from app.services.international.step6_dupont_data_review import DuPontStep6Processor as DuPontDataReviewProcessor
 from app.services.international.step6_comps_data_review import CompsStep6Processor as CompsDataReviewProcessor
 from app.services.international.step7_historical_data_processor import Step7HistoricalDataProcessor
+# Step 7 Specialized Processors - Individual Valuation Method Processors
+from app.services.international.step7_dcf_historical_data import DCFStep7Processor as DCFHistoricalDataProcessor
+from app.services.international.step7_dupont_historical_data import DuPontStep7Processor as DuPontHistoricalDataProcessor
+from app.services.international.step7_comps_historical_data import CompsStep7Processor as CompsHistoricalDataProcessor
 from app.services.international.step8_manual_overrides import Step8ManualOverridesProcessor
 from app.services.international.step9_final_calculation import Step9FinalCalculationProcessor
 from app.services.international.step10_valuation_processor import Step10ValuationProcessor
@@ -89,6 +93,9 @@ __all__ = [
     "DuPontDataReviewProcessor",  # Step 6 DuPont-specific processor alias
     "CompsDataReviewProcessor",  # Step 6 Comps-specific processor alias
     "Step7HistoricalDataProcessor",
+    "DCFHistoricalDataProcessor",  # Step 7 DCF-specific processor alias
+    "DuPontHistoricalDataProcessor",  # Step 7 DuPont-specific processor alias
+    "CompsHistoricalDataProcessor",  # Step 7 Comps-specific processor alias
     "Step8ManualOverridesProcessor",
     "Step9FinalCalculationProcessor",
     "Step10ValuationProcessor",
