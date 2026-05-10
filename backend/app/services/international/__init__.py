@@ -53,6 +53,10 @@ from app.services.international.step7_historical_data_processor import Step7Hist
 from app.services.international.step7_dcf_historical_data import DCFStep7Processor as DCFHistoricalDataProcessor
 from app.services.international.step7_dupont_historical_data import DuPontStep7Processor as DuPontHistoricalDataProcessor
 from app.services.international.step7_comps_historical_data import CompsStep7Processor as CompsHistoricalDataProcessor
+# Step 8 Specialized Processors - Individual Valuation Method Assumption Processors
+from app.services.international.step8_dcf_assumptions import DCFStep8Processor as DCFAssumptionsProcessor
+from app.services.international.step8_dupont_assumptions import DuPontStep8Processor as DuPontAssumptionsProcessor
+from app.services.international.step8_comps_assumptions import CompsStep8Processor as CompsAssumptionsProcessor
 from app.services.international.step8_manual_overrides import Step8ManualOverridesProcessor
 from app.services.international.step9_final_calculation import Step9FinalCalculationProcessor
 from app.services.international.step10_valuation_processor import Step10ValuationProcessor
@@ -97,6 +101,9 @@ __all__ = [
     "DuPontHistoricalDataProcessor",  # Step 7 DuPont-specific processor alias
     "CompsHistoricalDataProcessor",  # Step 7 Comps-specific processor alias
     "Step8ManualOverridesProcessor",
+    "DCFAssumptionsProcessor",  # Step 8 DCF-specific assumption processor alias
+    "DuPontAssumptionsProcessor",  # Step 8 DuPont-specific assumption processor alias
+    "CompsAssumptionsProcessor",  # Step 8 Comps-specific assumption processor alias
     "Step9FinalCalculationProcessor",
     "Step10ValuationProcessor",
 ]
