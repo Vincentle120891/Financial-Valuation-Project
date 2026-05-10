@@ -44,29 +44,46 @@ export const savePeers = async (sessionId, peers) => {
   return response.data;
 };
 
-// Step 4: Select Models
-export const selectModels = async (sessionId, model) => {
-  const response = await api.post('/step-4-select-models', { session_id: sessionId, model });
+// Step 4: Select Models - Updated to support matrix workflow
+// Accepts single model per request (for parallel frontend calls) or use /step-10-valuate-multi for batch
+export const selectModels = async (sessionId, model, market = 'international') => {
+  const response = await api.post('/step-4-select-models', { 
+    session_id: sessionId, 
+    model,
+    market 
+  });
   return response.data;
 };
 
-// Step 5: Prepare Inputs
-export const prepareInputs = async (sessionId) => {
-  const response = await api.post('/step-5-prepare-inputs', { session_id: sessionId });
+// Step 5: Prepare Inputs - Now requires method and market parameters
+export const prepareInputs = async (sessionId, method, market = 'international') => {
+  const response = await api.post('/step-5-prepare-inputs', { 
+    session_id: sessionId,
+    method,
+    market 
+  });
   return response.data;
 };
 
-// Step 6: Fetch API Data
-export const fetchApiData = async (sessionId) => {
-  const response = await api.post('/step-6-fetch-api-data', { session_id: sessionId });
+// Step 6: Fetch API Data - Now requires method and market parameters
+export const fetchApiData = async (sessionId, method, market = 'international') => {
+  const response = await api.post('/step-6-fetch-api-data', { 
+    session_id: sessionId,
+    method,
+    market 
+  });
   return response.data;
 };
 
 // Step 7: Retrieve Historical Data Using AI Extraction (uses longer timeout)
-// Uses AI to extract historical financial data that APIs cannot provide
-export const retrieveHistoricalData = async (sessionId) => {
+// Now requires method and market parameters
+export const retrieveHistoricalData = async (sessionId, method, market = 'international') => {
   try {
-    const response = await aiApi.post('/step-7-retrieve-historical-data', { session_id: sessionId });
+    const response = await aiApi.post('/step-7-retrieve-historical-data', { 
+      session_id: sessionId,
+      method,
+      market 
+    });
     return response.data;
   } catch (error) {
     if (error.code === 'ECONNABORTED') {
@@ -77,10 +94,13 @@ export const retrieveHistoricalData = async (sessionId) => {
 };
 
 // Step 8: Initialize assumptions with historical trendlines
-export const initializeStep8Assumptions = async (sessionId) => {
+// Now requires method and market parameters
+export const initializeStep8Assumptions = async (sessionId, method, market = 'international') => {
   try {
     const response = await api.post('/step-8-initialize', {
-      session_id: sessionId
+      session_id: sessionId,
+      method,
+      market
     });
     return response.data;
   } catch (error) {
@@ -92,11 +112,14 @@ export const initializeStep8Assumptions = async (sessionId) => {
 };
 
 // Step 8: Generate AI Suggestion for a specific category
-export const generateAISuggestion = async (sessionId, category) => {
+// Now requires method and market parameters
+export const generateAISuggestion = async (sessionId, category, method, market = 'international') => {
   try {
     const response = await api.post('/step-8-generate-ai-suggestion', {
       session_id: sessionId,
-      category
+      category,
+      method,
+      market
     });
     return response.data;
   } catch (error) {
@@ -108,21 +131,37 @@ export const generateAISuggestion = async (sessionId, category) => {
 };
 
 // Step 9: Confirm Assumptions
-export const confirmAssumptions = async (sessionId, confirmedValues, scenario = 'base_case') => {
+// Now requires method and market parameters
+export const confirmAssumptions = async (sessionId, confirmedValues, scenario = 'base_case', method, market = 'international') => {
   const response = await api.post('/step-9-confirm-assumptions', {
     session_id: sessionId,
     confirmed_values: confirmedValues,
-    scenario
+    scenario,
+    method,
+    market
   });
   return response.data;
 };
 
-// Step 10: Run Valuation
-export const runValuation = async (sessionId, model, scenario = 'base_case') => {
+// Step 10: Run Valuation (Single Method)
+// Now requires method and market parameters
+export const runValuation = async (sessionId, method, scenario = 'base_case', market = 'international') => {
   const response = await api.post('/step-10-valuate', {
     session_id: sessionId,
-    model,
-    scenario
+    method,
+    scenario,
+    market
+  });
+  return response.data;
+};
+
+// Step 10: Run Valuation (Multiple Methods - Parallel Execution)
+// NEW: Orchestrates multiple valuation methods in a single request
+export const runValuationMulti = async (sessionId, methods, market = 'international') => {
+  const response = await api.post('/step-10-valuate-multi', {
+    session_id: sessionId,
+    methods,
+    market
   });
   return response.data;
 };
