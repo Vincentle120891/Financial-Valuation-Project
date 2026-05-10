@@ -117,7 +117,7 @@ class VietnameseTickerService(InternationalTickerService):
         
         return data
     
-    def _get_vietnam_sector_peers(self, ticker: str) -> List[Dict[str, str]]:
+    def _get_vietnam_sector_peers(self, ticker: str) -> List[Dict[str, Any]]:
         """Get peer companies in the same Vietnamese sector"""
         sector = None
         for sector_name, tickers in self.VIETNAM_SECTORS.items():
@@ -129,8 +129,16 @@ class VietnameseTickerService(InternationalTickerService):
         if not sector:
             return []
         
+        # Return peers with score field for frontend compatibility
         return [
-            {'ticker': p, 'market': 'VN', 'sector': sector}
+            {
+                'symbol': p, 
+                'name': p,
+                'market': 'VN', 
+                'sector': sector,
+                'score': 85.0,  # Default high score for sector peers
+                'match_reasons': [f'Same sector: {sector}', 'Vietnamese market peer']
+            }
             for p in peers[:5]  # Top 5 peers
         ]
     
