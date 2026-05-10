@@ -296,8 +296,8 @@ class ValuationOrchestrator:
                 assumptions=confirmed
             )
             
-            # Store valuation results
-            session_service.save_valuation_results(
+            # Store valuation results (async-safe for parallel execution)
+            await session_service.save_valuation_results(
                 session_id=session_id,
                 market=market,
                 method=method,
@@ -562,7 +562,7 @@ class ValuationOrchestrator:
                     model=method_upper,
                     assumptions=confirmed
                 )
-                session_service.save_valuation_results(
+                await session_service.save_valuation_results(
                     session_id=session_id,
                     market=market,
                     method=method,

@@ -777,8 +777,8 @@ async def valuate(request: ValuateRequest):
             assumptions=confirmed_assumptions
         )
 
-        # Store valuation result in the specific valuation track
-        session_service.save_valuation_results(
+        # Store valuation result in the specific valuation track (async-safe)
+        await session_service.save_valuation_results(
             session_id=request.session_id,
             market=market,
             method=method.lower(),
