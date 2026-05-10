@@ -10,6 +10,7 @@ MATRIX WORKFLOW SUPPORT (Phase 1):
 from typing import Dict, Any, Optional, List
 from datetime import datetime
 import uuid
+import asyncio
 
 
 class SessionService:
@@ -53,6 +54,8 @@ class SessionService:
     def __init__(self):
         # In-memory storage (can be replaced with Redis/DB later)
         self._sessions: Dict[str, Dict[str, Any]] = {}
+        # Async lock for thread-safe session updates during parallel execution
+        self._lock = asyncio.Lock()
     
     def create_session(self, ticker: str, market: str) -> str:
         """
@@ -448,10 +451,13 @@ class SessionService:
         
         return None
     
-    def save_valuation_results(self, session_id: str, market: str, method: str, 
+    async def save_valuation_results(self, session_id: str, market: str, method: str, 
                               results: Dict[str, Any]) -> bool:
         """
-        Save valuation results to a specific track.
+        Save valuation results to a specific track (async-safe for parallel execution).
+        
+        Uses asyncio.Lock to prevent race conditions when multiple methods
+        save results simultaneously during parallel execution.
         
         Args:
             session_id: The session identifier
@@ -462,23 +468,24 @@ class SessionService:
         Returns:
             True if successful, False if session/track not found
         """
-        session = self._sessions.get(session_id)
-        if not session:
+        async with self._lock:
+            session = self._sessions.get(session_id)
+            if not session:
+                return False
+            
+            session = self._migrate_legacy_session(session)
+            
+            market = market.lower()
+            method = method.lower()
+            
+            if market in session["valuations"] and method in session["valuations"][market]:
+                session["valuations"][market][method]["results"] = results
+                session["valuations"][market][method]["status"] = "completed"
+                session["valuations"][market][method]["last_updated"] = datetime.utcnow().isoformat()
+                session["updated_at"] = datetime.utcnow().isoformat()
+                return True
+            
             return False
-        
-        session = self._migrate_legacy_session(session)
-        
-        market = market.lower()
-        method = method.lower()
-        
-        if market in session["valuations"] and method in session["valuations"][market]:
-            session["valuations"][market][method]["results"] = results
-            session["valuations"][market][method]["status"] = "completed"
-            session["valuations"][market][method]["last_updated"] = datetime.utcnow().isoformat()
-            session["updated_at"] = datetime.utcnow().isoformat()
-            return True
-        
-        return False
     
     def get_all_valuations(self, session_id: str) -> Optional[Dict[str, Dict[str, Dict[str, Any]]]]:
         """
