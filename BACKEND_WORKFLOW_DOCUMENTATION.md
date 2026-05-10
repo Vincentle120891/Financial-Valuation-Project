@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document describes the complete workflow of the backend valuation system, showing how different valuation models work across international and Vietnamese markets using a 10-step guided process.
+This document describes the complete workflow of the backend valuation system, showing how different valuation models work across international and Vietnamese markets using an 11-step guided process.
 
 ### Model & Market Architecture
 
@@ -60,7 +60,7 @@ This document describes the complete workflow of the backend valuation system, s
 
 ---
 
-## The 10-Step Workflow
+## The 11-Step Workflow
 
 ### Step 1: Search Company
 **Endpoint:** `POST /api/step-1-search`
@@ -270,4 +270,4 @@ Each processor implements comprehensive error handling:
 
 ---
 
-*Last Updated: Reflects 10-step workflow architecture*
+*Last Updated: Reflects 11-step workflow architecture*

@@ -1,10 +1,10 @@
-# DCF Model (International Market) - Complete 10-Step Workflow
+# DCF Model (International Market) - Complete 11-Step Workflow
 
-This document traces the complete workflow for the **DCF Model** in the **International Market**, following the updated 10-step process from company search to valuation results.
+This document traces the complete workflow for the **DCF Model** in the **International Market**, following the updated 11-step process from company search to valuation results.
 
 ---
 
-## 🔄 The Complete 10-Step DCF Workflow
+## 🔄 The Complete 11-Step DCF Workflow
 
 ### Step 1: Search Company
 **Endpoint:** `POST /api/step-1-search`  
@@ -256,71 +256,26 @@ For Vietnamese companies, AI adjusts suggestions for emerging market factors:
 
 ---
 
-### Step 9: Modify Forecast Drivers
-**Frontend Component:** `ForecastDriversStep.jsx`  
-**Backend Processor:** `Step9ManualOverridesProcessor`  
-**File:** `/backend/app/services/international/step9_manual_overrides.py`
-
-**Process:**
-1. User reviews AI-suggested assumptions from Step 8
-2. Can manually override any values
-3. Adjust scenario settings (Bull/Base/Bear)
-4. System validates input ranges
-
-**User Actions:**
-- Edit growth rates
-- Modify margin assumptions
-- Change terminal value inputs
-- Select scenario preset
-
----
-
-### Step 9: Modify Forecast Drivers
-**Frontend Component:** `ForecastDriversStep.jsx`  
-**Backend Processor:** `Step9ManualOverridesProcessor`  
-**File:** `/backend/app/services/international/step9_manual_overrides.py`
-
-**Process:**
-1. User reviews AI-suggested assumptions from Step 8
-2. Can manually override any values
-3. Adjust scenario settings (Bull/Base/Bear)
-4. System validates input ranges
-
-**User Actions:**
-- Edit growth rates
-- Modify margin assumptions
-- Change terminal value inputs
-- Select scenario preset
-
----
-
-### Step 10: Confirm Assumptions
+### Step 9: Confirm Assumptions
 **Endpoint:** `POST /api/step-9-confirm-assumptions`  
 **Frontend Component:** `AssumptionsStep.jsx`  
 **Backend Processor:** `Step9ManualOverridesProcessor`  
-**File:** `/backend/app/services/international/step9_manual_overrides.py`
 
 **Process:**
-1. Final review of all assumptions
-2. User confirms or makes final adjustments
-3. Backend stores confirmed_assumptions in session
-4. Validates completeness before proceeding
+1. User reviews AI-suggested assumptions from Step 8
+2. Can manually override any values
+3. Adjust scenario settings (Bull/Base/Bear)
+4. System validates input ranges
 
-**Confirmed Assumptions Structure:**
-```python
-{
-    "revenue_growth": [...],
-    "ebitda_margin": [...],
-    "tax_rate": 0.21,
-    "wacc": 0.089,
-    "terminal_growth": 0.025,
-    "scenario": "base_case"
-}
-```
+**User Actions:**
+- Edit growth rates
+- Modify margin assumptions
+- Change terminal value inputs
+- Select scenario preset
 
 ---
 
-### Step 11: Run Valuation
+### Step 10: Run Valuation
 **Endpoint:** `POST /api/step-10-valuate`  
 **Frontend Component:** `RunValuationStep.jsx`  
 **Backend Processor:** `Step10ValuationProcessor`  
@@ -460,17 +415,17 @@ class DCFEngine:
 └──────┬──────┘
        ↓
 ┌─────────────┐
-│ Step 10     │ Confirm All Assumptions
+│ Step 9      │ Confirm All Assumptions
 │ Confirm     │
 └──────┬──────┘
        ↓
 ┌─────────────┐
-│ Step 11     │ Execute DCF Engine
+│ Step 10     │ Execute DCF Engine
 │ Valuation   │ → Enterprise Value, Equity Value, Share Price
 └──────┬──────┘
        ↓
 ┌─────────────┐
-│ Step 12     │ View Results
+│ Step 11     │ View Results
 │ Results     │
 └─────────────┘
 ```
