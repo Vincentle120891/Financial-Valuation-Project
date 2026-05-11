@@ -39,6 +39,15 @@ from app.services.vietnamese.vietnamese_dupont_engine import (
     VNDuPontAnalyzer,
     VNFinancialStatements,
 )
+from app.services.vietnamese.step7_historical_processor import (
+    VNStep7HistoricalProcessor,
+    VNHistoricalDataInput,
+)
+from app.services.vietnamese.step8_assumptions_processor import (
+    VNStep8AssumptionsProcessor,
+    VNAIAssumptionsInput,
+)
+from app.core.session_service import session_service
 
 logger = logging.getLogger(__name__)
 
@@ -515,3 +524,333 @@ async def get_vietnamese_workflow_info():
             "Company official reports"
         ]
     }
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Step 7: Historical Data Retrieval (Vietnamese Market)
+# ──────────────────────────────────────────────────────────────────────────────
+
+class VNStep7Request(BaseModel):
+    """Request model for Vietnamese Step 7 historical data retrieval."""
+    session_id: str = Field(..., description="Session identifier")
+    method: str = Field(..., description="Valuation method: DCF, DuPont, or Comps")
+    
+    @field_validator('method')
+    @classmethod
+    def validate_method(cls, v: str) -> str:
+        """Validate valuation method."""
+        allowed_methods = ["DCF", "DuPont", "COMPS", "dcf", "dupont", "comps"]
+        if v.upper() not in [m.upper() for m in allowed_methods]:
+            raise ValueError(f"Method must be one of: DCF, DuPont, COMPS")
+        return v.upper()
+
+
+class VNStep7Response(BaseModel):
+    """Response model for Vietnamese Step 7 historical data retrieval."""
+    status: str
+    ticker: str
+    success: bool
+    completeness_score: float
+    periods_covered: List[str]
+    missing_critical_fields: List[str]
+    data_warnings: List[str]
+    source_breakdown: Dict[str, int]
+    message: str
+
+
+@router.post("/vn-step-7-retrieve-historical-data", response_model=VNStep7Response)
+async def retrieve_vn_historical_data(request: VNStep7Request):
+    """
+    Step 7: Retrieve Historical Data Using AI Extraction (Vietnamese Market)
+    
+    Uses AI to extract historical financial data from Vietnamese sources when
+    standard APIs don't have complete data. This is strictly for HISTORICAL data
+    retrieval - NO forward-looking assumptions are generated here.
+    
+    Purpose:
+    - Fill gaps in historical financial statements from Vietnamese sources
+    - Extract historical metrics from PDF reports (annual reports, filings) using AI
+    - Provide complete historical dataset for Step 8 assumption generation
+    
+    Vietnam-Specific Features:
+    - Maps Vietnamese accounting terms (TT99) to standard English keys
+    - Validates accounting identity (Assets = Liabilities + Equity)
+    - Extracts from Vietnamese PDF sources (cafef.vn, company reports)
+    - Handles VND currency units properly
+    
+    Args:
+        request: VNStep7Request with session_id and method
+        
+    Returns:
+        VNStep7Response with:
+        - Completeness score (0-1)
+        - Periods covered
+        - Missing critical fields
+        - Data warnings
+        - Source breakdown (API vs AI)
+        
+    Example:
+        POST /vietnamese/vn-step-7-retrieve-historical-data
+        {
+            "session_id": "vn-session-123",
+            "method": "DCF"
+        }
+    """
+    try:
+        # Get session data
+        session = session_service.get_session_data(request.session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+        
+        ticker = session.get("ticker")
+        company_name = session.get("company_name", ticker)
+        exchange = session.get("exchange", "HOSE")
+        
+        if not ticker:
+            raise HTTPException(status_code=400, detail="No ticker found in session")
+        
+        # Get financial data from the specific valuation track
+        market = "vietnam"
+        method = request.method.upper()
+        
+        financial_data = session_service.get_session_value(
+            request.session_id,
+            "financial_data",
+            market=market,
+            method=method.lower()
+        )
+        
+        # Fallback to shared context if not found in track
+        if not financial_data:
+            financial_data = session_service.get_session_value(
+                request.session_id,
+                "financial_data"
+            )
+        
+        if not financial_data:
+            raise HTTPException(status_code=400, detail="No financial data available")
+        
+        # Build input for Vietnamese Step 7 processor
+        vn_input = VNHistoricalDataInput(
+            ticker=ticker,
+            company_name=company_name,
+            exchange=exchange,
+            currency_unit=financial_data.get("currency_unit", "millions_VND"),
+            income_statement_raw=financial_data.get("income_statement", {}),
+            balance_sheet_raw=financial_data.get("balance_sheet", {}),
+            cash_flow_raw=financial_data.get("cash_flow", {}),
+            data_quality_flags=financial_data.get("quality_flags", []),
+            pdf_sources=financial_data.get("pdf_sources", []),
+            fallback_to_ai=True,
+            selected_model=method
+        )
+        
+        # Execute Vietnamese Step 7 processor
+        processor = VNStep7HistoricalProcessor()
+        result = await processor.execute(vn_input)
+        
+        # Store historical data in session
+        session_service.update_session_data(
+            request.session_id,
+            "historical_data_gaps_filled",
+            result.model_dump() if hasattr(result, 'model_dump') else result.dict(),
+            market=market,
+            method=method.lower()
+        )
+        
+        session_service.update_session_step(
+            request.session_id,
+            step_number=7,
+            market=market,
+            method=method.lower()
+        )
+        
+        logger.info(
+            f"VN Step 7 complete for {ticker}: "
+            f"{result.completeness_score:.1%} completeness, "
+            f"{len(result.periods_covered)} periods covered"
+        )
+        
+        return VNStep7Response(
+            status="historical_data_ready" if result.success else "partial_success",
+            ticker=ticker,
+            success=result.success,
+            completeness_score=result.completeness_score,
+            periods_covered=result.periods_covered,
+            missing_critical_fields=result.missing_critical_fields,
+            data_warnings=result.data_warnings,
+            source_breakdown=result.source_breakdown,
+            message=f"Historical data retrieval complete. "
+                    f"Completeness: {result.completeness_score:.1%}. "
+                    f"Periods: {', '.join(result.periods_covered)}."
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"VN Step 7 historical data retrieval error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Step 8: AI Assumptions Generation (Vietnamese Market)
+# ──────────────────────────────────────────────────────────────────────────────
+
+class VNStep8InitializeRequest(BaseModel):
+    """Request model for Vietnamese Step 8 initialization."""
+    session_id: str = Field(..., description="Session identifier")
+    method: str = Field(..., description="Valuation method: DCF, DuPont, or Comps")
+    
+    @field_validator('method')
+    @classmethod
+    def validate_method(cls, v: str) -> str:
+        """Validate valuation method."""
+        allowed_methods = ["DCF", "DuPont", "COMPS", "dcf", "dupont", "comps"]
+        if v.upper() not in [m.upper() for m in allowed_methods]:
+            raise ValueError(f"Method must be one of: DCF, DuPont, COMPS")
+        return v.upper()
+
+
+class VNStep8InitializeResponse(BaseModel):
+    """Response model for Vietnamese Step 8 initialization."""
+    session_id: str
+    model_type: str
+    assumptions: List[Dict[str, Any]]
+    sector_analysis: Dict[str, Any]
+    macro_integration: Dict[str, Any]
+    warnings: List[str]
+    status: str
+    message: str
+
+
+@router.post("/vn-step-8-initialize", response_model=VNStep8InitializeResponse)
+async def initialize_vn_step8_assumptions(request: VNStep8InitializeRequest):
+    """
+    Step 8: Initialize AI Assumptions (Vietnamese Market)
+    
+    Generates forward-looking assumptions calibrated for Vietnamese market conditions.
+    Uses historical data from Step 7 and Vietnam-specific macroeconomic indicators.
+    
+    Vietnam-Specific Features:
+    - Sector-specific growth ranges for Vietnamese industries
+    - Vietnam macroeconomic integration (GDP growth, inflation, risk-free rate)
+    - Country risk premium calibration
+    - TT99 accounting standard compliance
+    - Exchange-specific considerations (HOSE, HNX, UPCOM)
+    
+    Args:
+        request: VNStep8InitializeRequest with session_id and method
+        
+    Returns:
+        VNStep8InitializeResponse with:
+        - AI-generated assumptions with confidence scores
+        - Sector analysis for Vietnamese market
+        - Macro integration details
+        - Warnings for Vietnam-specific risks
+        
+    Example:
+        POST /vietnamese/vn-step-8-initialize
+        {
+            "session_id": "vn-session-123",
+            "method": "DCF"
+        }
+    """
+    try:
+        # Get session data
+        session = session_service.get_session_data(request.session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+        
+        ticker = session.get("ticker")
+        company_name = session.get("company_name", ticker)
+        exchange = session.get("exchange", "HOSE")
+        sector = session.get("sector", "General")
+        industry = session.get("industry", sector)
+        
+        if not ticker:
+            raise HTTPException(status_code=400, detail="No ticker found in session")
+        
+        # Get data from the specific valuation track
+        market = "vietnam"
+        method = request.method.upper()
+        
+        step6_data = session_service.get_session_value(
+            request.session_id,
+            "financial_data",
+            {},
+            market=market,
+            method=method.lower()
+        )
+        
+        step7_data = session_service.get_session_value(
+            request.session_id,
+            "historical_data_gaps_filled",
+            {},
+            market=market,
+            method=method.lower()
+        )
+        
+        # Build input for Vietnamese Step 8 processor
+        vn_input = VNAIAssumptionsInput(
+            session_id=request.session_id,
+            company_name=company_name,
+            ticker=ticker,
+            exchange=exchange,  # type: ignore
+            selected_model=method.lower(),  # type: ignore
+            sector=sector,
+            industry=industry,
+            historical_financials=step7_data.get("normalized_financials", {}) if step7_data else step6_data,
+            vietnam_macro={
+                "gdp_growth": 0.055,
+                "inflation_target": 0.04,
+                "risk_free_rate": 0.068,
+                "country_risk_premium": 0.035
+            }
+        )
+        
+        # Execute Vietnamese Step 8 processor
+        processor = VNStep8AssumptionsProcessor()
+        result = await processor.process(vn_input)
+        
+        # Store assumptions in session
+        session_service.update_session_data(
+            request.session_id,
+            "step8_assumptions",
+            result.model_dump() if hasattr(result, 'model_dump') else result.dict(),
+            market=market,
+            method=method.lower()
+        )
+        
+        session_service.update_session_step(
+            request.session_id,
+            step_number=8,
+            market=market,
+            method=method.lower()
+        )
+        
+        logger.info(
+            f"VN Step 8 initialized for {ticker}: "
+            f"{len(result.assumptions)} assumptions generated"
+        )
+        
+        # Convert assumptions to dict format
+        assumptions_dict = []
+        for assumption in result.assumptions:
+            assumptions_dict.append(assumption.model_dump() if hasattr(assumption, 'model_dump') else assumption.dict())
+        
+        return VNStep8InitializeResponse(
+            session_id=request.session_id,
+            model_type=result.model_type,
+            assumptions=assumptions_dict,
+            sector_analysis=result.sector_analysis,
+            macro_integration=result.macro_integration,
+            warnings=result.warnings,
+            status=result.status,
+            message=f"Generated {len(result.assumptions)} AI assumptions for {method} valuation"
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"VN Step 8 initialization error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
