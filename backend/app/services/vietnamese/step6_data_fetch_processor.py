@@ -172,6 +172,25 @@ class VNStep6DataFetchProcessor:
 
         await self._initialize_services()
 
+        # FIX Issue #2 (Vietnam): Check cache before fetching
+        if session_cache and 'vietnamese_market_data' in session_cache:
+            cached_data = session_cache['vietnamese_market_data']
+            cache_timestamp = cached_data.get('fetch_timestamp')
+            if cache_timestamp:
+                from datetime import datetime, timedelta
+                cache_age = datetime.now() - cache_timestamp
+                if cache_age < timedelta(minutes=5):
+                    logger.info(f"Using cached Vietnamese market data (age: {cache_age.seconds}s)")
+                    # Return cached data bundle
+                    return VNDataFetchOutput(
+                        success=True,
+                        ticker=input_data.ticker,
+                        data_bundle=RawDataBundle(**cached_data['data_bundle']),
+                        message=f"Using cached data for {input_data.ticker}",
+                        fetch_duration_ms=0,
+                        sources_accessed=cached_data.get('sources_accessed', ['cache'])
+                    )
+
         sources_accessed = []
         data_quality_flags = []
         missing_periods = []
