@@ -17,7 +17,7 @@ NO CROSS-CONTAMINATION:
 
 from fastapi import APIRouter, HTTPException, status
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List, Dict, Any
 import logging
 
