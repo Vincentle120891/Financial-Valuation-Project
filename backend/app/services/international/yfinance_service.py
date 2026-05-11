@@ -231,8 +231,17 @@ class InternationalDataStrategy:
                 tax_provision = income_stmt.loc['Tax Provision', latest_col] if 'Tax Provision' in income_stmt.index else None
                 pretax_income = income_stmt.loc['Pretax Income', latest_col] if 'Pretax Income' in income_stmt.index else None
                 
-                if tax_provision and pretax_income and pretax_income != 0:
-                    effective_tax_rate = abs(tax_provision / pretax_income)
+                if tax_provision is not None and pretax_income is not None and pretax_income != 0:
+                    # Handle negative pretax income (losses) - tax rate not meaningful
+                    if pretax_income > 0:
+                        effective_tax_rate = abs(tax_provision / pretax_income)
+                        # Cap tax rate at reasonable bounds (0-50%)
+                        if effective_tax_rate < 0:
+                            effective_tax_rate = None
+                        elif effective_tax_rate > 0.50:
+                            logger.debug(f"Tax rate {effective_tax_rate:.2%} exceeds 50% cap for {ticker_symbol}, setting to None")
+                            effective_tax_rate = None
+                    # If pretax_income is negative, leave tax_rate as None
                 
                 # Calculate cost of debt
                 interest_expense = None
@@ -257,6 +266,10 @@ class InternationalDataStrategy:
                 
                 if interest_expense and total_debt and total_debt != 0:
                     cost_of_debt = interest_expense / total_debt
+                    # Cap cost of debt at reasonable bounds (0-20%)
+                    if cost_of_debt < 0 or cost_of_debt > 0.20:
+                        logger.debug(f"Cost of debt {cost_of_debt:.2%} outside 0-20% bounds for {ticker_symbol}, setting to None")
+                        cost_of_debt = None
                     
         except Exception as e:
             logger.debug(f"Could not calculate tax rate or cost of debt: {e}")
@@ -594,8 +607,17 @@ class YFinanceService:
                     tax_provision = income_stmt.loc['Tax Provision', latest_col] if 'Tax Provision' in income_stmt.index else None
                     pretax_income = income_stmt.loc['Pretax Income', latest_col] if 'Pretax Income' in income_stmt.index else None
                     
-                    if tax_provision and pretax_income and pretax_income != 0:
-                        effective_tax_rate = abs(tax_provision / pretax_income)
+                    if tax_provision is not None and pretax_income is not None and pretax_income != 0:
+                        # Handle negative pretax income (losses) - tax rate not meaningful
+                        if pretax_income > 0:
+                            effective_tax_rate = abs(tax_provision / pretax_income)
+                            # Cap tax rate at reasonable bounds (0-50%)
+                            if effective_tax_rate < 0:
+                                effective_tax_rate = None
+                            elif effective_tax_rate > 0.50:
+                                logger.debug(f"Tax rate {effective_tax_rate:.2%} exceeds 50% cap for {ticker_symbol}, setting to None")
+                                effective_tax_rate = None
+                        # If pretax_income is negative, leave tax_rate as None
                     
                     # Calculate cost of debt (Interest Expense / Total Debt)
                     interest_expense = None
@@ -624,7 +646,12 @@ class YFinanceService:
                     # Calculate cost of debt if both values available
                     if interest_expense and total_debt and total_debt != 0:
                         cost_of_debt = interest_expense / total_debt
-                        logger.debug(f"Calculated cost of debt for {ticker_symbol}: {cost_of_debt:.4f}")
+                        # Cap cost of debt at reasonable bounds (0-20%)
+                        if cost_of_debt < 0 or cost_of_debt > 0.20:
+                            logger.debug(f"Cost of debt {cost_of_debt:.2%} outside 0-20% bounds for {ticker_symbol}, setting to None")
+                            cost_of_debt = None
+                        else:
+                            logger.debug(f"Calculated cost of debt for {ticker_symbol}: {cost_of_debt:.4f}")
                         
             except Exception as e:
                 logger.debug(f"Could not calculate tax rate or cost of debt for {ticker_symbol}: {e}")
