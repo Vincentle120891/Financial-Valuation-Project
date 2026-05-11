@@ -59,6 +59,39 @@ class TickerSelectRequest(BaseModel):
         return v.lower()
 
 
+class ManualPeerRequest(BaseModel):
+    """Request model for manually adding peer tickers."""
+    session_id: str = Field(..., min_length=1, description="Session identifier")
+    tickers: List[str] = Field(..., min_items=1, max_items=20, description="List of peer ticker symbols to validate and add")
+    market: str = Field(default="international", description="Market type")
+    
+    @field_validator('tickers')
+    @classmethod
+    def validate_tickers(cls, v: List[str]) -> List[str]:
+        """Validate ticker list."""
+        if not v:
+            raise ValueError("Ticker list cannot be empty")
+        validated = []
+        import re
+        for ticker in v:
+            if not ticker or not ticker.strip():
+                raise ValueError("Ticker cannot be empty")
+            cleaned = ticker.strip().upper()
+            if not re.match(r'^[A-Za-z0-9.\-]+$', cleaned):
+                raise ValueError(f"Ticker '{ticker}' contains invalid characters")
+            validated.append(cleaned)
+        return validated
+    
+    @field_validator('market')
+    @classmethod
+    def validate_market(cls, v: str) -> str:
+        """Validate market parameter."""
+        allowed_markets = ["international", "vietnamese"]
+        if v.lower() not in allowed_markets:
+            raise ValueError(f"Market must be one of: {allowed_markets}")
+        return v.lower()
+
+
 class ModelSelectRequest(BaseModel):
     """Request model for model selection."""
     session_id: str = Field(..., min_length=1, description="Session identifier")
