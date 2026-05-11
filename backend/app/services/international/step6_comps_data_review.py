@@ -339,73 +339,93 @@ class CompsStep6Processor:
         for peer_ticker in peers:
             try:
                 logger.info(f"Fetching data for peer company: {peer_ticker}")
-                peer_data = self.yfinance_service.fetch_all_data(peer_ticker, "international")
-
-                # Extract peer market data
-                peer_market_data = peer_data.get('key_stats', {})
-                peer_financials = peer_data.get('income_statement', {})
-
-                # Calculate peer metrics
-                market_cap = peer_market_data.get('market_cap')
-                enterprise_value = peer_market_data.get('enterprise_value')
-
-                # Get latest EBITDA for multiple calculation
-                ebitda = None
-                if peer_financials and 'EBITDA' in peer_financials:
-                    ebitda_values = list(peer_financials['EBITDA'].values())
-                    ebitda = ebitda_values[0] if ebitda_values else None
-
-                # Get latest Net Income for P/E calculation
-                net_income = None
-                if peer_financials and 'Net Income' in peer_financials:
-                    ni_values = list(peer_financials['Net Income'].values())
-                    net_income = ni_values[0] if ni_values else None
-
-                # Get latest Revenue for EV/Revenue calculation
-                revenue = None
-                if peer_financials and 'Total Revenue' in peer_financials:
-                    rev_values = list(peer_financials['Total Revenue'].values())
-                    revenue = rev_values[0] if rev_values else None
-
-                # Get Book Value for P/B calculation
-                book_value = peer_market_data.get('book_value')
-
-                # Calculate valuation multiples
-                ev_ebitda = None
-                if enterprise_value and ebitda and ebitda != 0:
-                    ev_ebitda = enterprise_value / ebitda
-
-                pe_ratio = None
-                if market_cap and net_income and net_income != 0:
-                    pe_ratio = market_cap / net_income
-
-                ev_revenue = None
-                if enterprise_value and revenue and revenue != 0:
-                    ev_revenue = enterprise_value / revenue
-
-                pb_ratio = None
-                if market_cap and book_value and book_value != 0:
-                    pb_ratio = market_cap / book_value
-
-                # Get additional peer metrics
-                beta = peer_market_data.get('beta')
-                total_debt = peer_market_data.get('total_debt')
-                cash = peer_market_data.get('cash')
+                
+                # Use get_ticker_info which provides direct access to valuation multiples
+                peer_info = self.yfinance_service.get_ticker_info(peer_ticker)
+                
+                if not peer_info:
+                    logger.warning(f"No info available for peer {peer_ticker}")
+                    companies.append(PeerCompany(
+                        ticker=peer_ticker,
+                        name="Data unavailable"
+                    ))
+                    continue
+                
+                # Extract valuation multiples directly from yfinance info
+                # These are more reliable than calculating from financials
+                trailing_pe = peer_info.get('trailingPE')
+                forward_pe = peer_info.get('forwardPE')
+                ev_to_ebitda = peer_info.get('enterpriseToEbitda')
+                ev_to_revenue = peer_info.get('enterpriseToRevenue')
+                price_to_book = peer_info.get('priceToBook')
+                
+                # Get market data
+                market_cap = peer_info.get('marketCap')
+                enterprise_value = peer_info.get('enterpriseValue')
+                
+                # Use direct multiples from yfinance as primary source
+                # Fallback to calculation only if direct values not available
+                pe_ratio = trailing_pe  # Use trailing PE as primary
+                ev_ebitda = ev_to_ebitda
+                ev_revenue = ev_to_revenue
+                pb_ratio = price_to_book
+                
+                # If direct multiples not available, try to calculate from financials
+                if pe_ratio is None and market_cap:
+                    # Try to calculate P/E from net income
+                    peer_financials = self.yfinance_service.get_financial_statements(peer_ticker)
+                    if peer_financials and peer_financials.get('income_stmt') is not None:
+                        income_stmt = peer_financials['income_stmt']
+                        if not income_stmt.empty:
+                            latest_col = income_stmt.columns[0]
+                            net_income = income_stmt.loc['Net Income', latest_col] if 'Net Income' in income_stmt.index else None
+                            if net_income and net_income != 0:
+                                pe_ratio = market_cap / abs(net_income)
+                
+                if ev_ebitda is None and enterprise_value:
+                    # Try to calculate EV/EBITDA from EBITDA
+                    peer_financials = self.yfinance_service.get_financial_statements(peer_ticker)
+                    if peer_financials and peer_financials.get('income_stmt') is not None:
+                        income_stmt = peer_financials['income_stmt']
+                        if not income_stmt.empty:
+                            latest_col = income_stmt.columns[0]
+                            ebitda = income_stmt.loc['EBITDA', latest_col] if 'EBITDA' in income_stmt.index else None
+                            if ebitda and ebitda != 0:
+                                ev_ebitda = enterprise_value / abs(ebitda)
+                
+                if ev_revenue is None and enterprise_value:
+                    # Try to calculate EV/Revenue from revenue
+                    peer_financials = self.yfinance_service.get_financial_statements(peer_ticker)
+                    if peer_financials and peer_financials.get('income_stmt') is not None:
+                        income_stmt = peer_financials['income_stmt']
+                        if not income_stmt.empty:
+                            latest_col = income_stmt.columns[0]
+                            revenue = income_stmt.loc['Total Revenue', latest_col] if 'Total Revenue' in income_stmt.index else None
+                            if revenue and revenue != 0:
+                                ev_revenue = enterprise_value / abs(revenue)
+                
+                if pb_ratio is None and market_cap:
+                    # Try to calculate P/B from book value
+                    peer_financials = self.yfinance_service.get_financial_statements(peer_ticker)
+                    if peer_financials and peer_financials.get('balance_sheet') is not None:
+                        balance_sheet = peer_financials['balance_sheet']
+                        if not balance_sheet.empty:
+                            latest_col = balance_sheet.columns[0]
+                            book_value = balance_sheet.loc['Stockholders Equity', latest_col] if 'Stockholders Equity' in balance_sheet.index else None
+                            if book_value is None:
+                                book_value = balance_sheet.loc['Total Equity Gross Minority Interest', latest_col] if 'Total Equity Gross Minority Interest' in balance_sheet.index else None
+                            if book_value and book_value != 0:
+                                pb_ratio = market_cap / abs(book_value)
 
                 companies.append(PeerCompany(
                     ticker=peer_ticker,
-                    name=peer_market_data.get('company_name'),
+                    name=peer_info.get('longName', peer_ticker),
                     market_cap=market_cap,
                     enterprise_value=enterprise_value,
                     ev_ebitda=ev_ebitda,
                     pe_ratio=pe_ratio,
                     ev_revenue=ev_revenue,
                     pb_ratio=pb_ratio,
-                    beta=beta,
-                    total_debt=total_debt,
-                    cash=cash,
-                    tax_rate=peer_market_data.get('tax_rate'),
-                    cost_of_debt=peer_market_data.get('cost_of_debt')
                 ))
 
             except Exception as e:
