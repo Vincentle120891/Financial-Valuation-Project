@@ -34,10 +34,7 @@ const ModelSelectionStep = ({ onSelectModel, selectedModels }) => {
   };
 
   const isSelected = (modelId) => {
-    // Handle both string (single) and array (legacy) formats
-    if (Array.isArray(selectedModels)) {
-      return selectedModels.includes(modelId);
-    }
+    // Single selection - selectedModels is now a string (not array)
     return selectedModels === modelId;
   };
 
@@ -86,9 +83,9 @@ const ModelSelectionStep = ({ onSelectModel, selectedModels }) => {
       </div>
       <div style={{ marginTop: '20px', textAlign: 'center' }}>
         <p style={{ color: '#666', fontSize: '14px' }}>
-          {!selectedModels || (Array.isArray(selectedModels) && selectedModels.length === 0)
+          {!selectedModels
             ? 'Select one model to continue'
-            : `${Array.isArray(selectedModels) ? selectedModels.length : 1} model(s) selected`}
+            : `1 model selected: ${selectedModels}`}
         </p>
       </div>
     </div>

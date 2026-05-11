@@ -93,8 +93,8 @@ const ValuationFlow = () => {
   };
   
   // Legacy state aliases for backward compatibility (to be removed in future refactor)
-  const step6ApiData = getValuationData(selectedModels[0]);  // Deprecated: use getValuationData() instead
-  const step7ExtractionResults = getValuationData(selectedModels[0]);  // Deprecated: use getValuationData() instead
+  const step6ApiData = getValuationData(selectedModels);  // Deprecated: use getValuationData() instead
+  const step7ExtractionResults = getValuationData(selectedModels);  // Deprecated: use getValuationData() instead
   const historicalData = step6ApiData;  // Deprecated: use getValuationData() instead
   const aiData = step7ExtractionResults;  // Deprecated: use getValuationData() instead
 
@@ -313,44 +313,10 @@ const ValuationFlow = () => {
   
   // ==================== HANDLE MULTI-METHOD VALUATION ====================
   const handleRunMultiMethodValuation = useCallback(async () => {
-    if (selectedModels.length <= 1) {
-      // Fall back to single method valuation
-      return handleRunValuation();
-    }
-    
-    setLoading(true);
-    setError(null);
-    try {
-      console.log(`🚀 Running parallel valuation for ${selectedModels.length} methods...`);
-      const data = await runValuationMulti(sessionId, selectedModels, market);
-      console.log('Multi-method valuation response:', data);
-      
-      if (data.status === 'success') {
-        // Store results in matrix structure
-        setValuationResults(data.results);
-        
-        // Store individual method data
-        if (data.results.dcf_outputs) {
-          setValuationData('DCF', data.results.dcf_outputs);
-        }
-        if (data.results.dupont_outputs) {
-          setValuationData('DuPont', data.results.dupont_outputs);
-        }
-        if (data.results.comps_outputs) {
-          setValuationData('COMPS', data.results.comps_outputs);
-        }
-        
-        setCurrentStep(11); // Move to results
-      } else {
-        setError(data.detail || 'Multi-method valuation failed');
-      }
-    } catch (err) {
-      console.error('Multi-method valuation error:', err);
-      setError('Failed to run multi-method valuation');
-    } finally {
-      setLoading(false);
-    }
-  }, [sessionId, selectedModels, market]);
+    // Multi-select is now forbidden per documentation - this function is deprecated
+    // Fall back to single method valuation
+    return handleRunValuation();
+  }, [handleRunValuation]);
 
   // ==================== BACK TO MODEL SELECTION ====================
   const handleBackToModelSelection = () => {
@@ -385,8 +351,8 @@ const ValuationFlow = () => {
   // ==================== CONTINUE TO HISTORICAL DATA RETRIEVAL (STEP 7) ====================
   const handleContinueToHistoricalDataRetrieval = useCallback(async () => {
     setLoading(true);
-    // Use first selected model for single-method flow
-    const method = selectedModels[0];
+    // Use selected model (single string, not array)
+    const method = selectedModels;
     if (!method) {
       setError('No valuation method selected');
       setLoading(false);
@@ -457,8 +423,8 @@ const ValuationFlow = () => {
   // ==================== CONTINUE TO FORECAST DRIVERS (STEP 8) ====================
   const handleContinueToForecastDrivers = useCallback(async () => {
     setLoading(true);
-    // Use first selected model for single-method flow
-    const method = selectedModels[0];
+    // Use selected model (single string, not array)
+    const method = selectedModels;
     if (!method) {
       setError('No valuation method selected');
       setLoading(false);
@@ -508,7 +474,7 @@ const ValuationFlow = () => {
   // ==================== FETCH REQUIRED INPUTS ====================
   const fetchRequiredInputs = useCallback(async (method) => {
     try {
-      const targetMethod = method || selectedModels[0];
+      const targetMethod = method || selectedModels;
       const data = await prepareInputs(sessionId, targetMethod, market);
       console.log('Required inputs response:', data);
       if (data.status && data.required_inputs) {
@@ -520,7 +486,7 @@ const ValuationFlow = () => {
   }, [sessionId, selectedModels, market]);
 
   useEffect(() => {
-    const method = selectedModels[0];
+    const method = selectedModels;
     if (method && currentStep === 5 && sessionId) {
       fetchRequiredInputs(method);
     }
@@ -530,8 +496,8 @@ const ValuationFlow = () => {
 
   const handleRetrieveData = useCallback(async () => {
     setLoading(true);
-    // Use first selected model for single-method flow
-    const method = selectedModels[0];
+    // Use selected model (single string, not array)
+    const method = selectedModels;
     if (!method) {
       setError('No valuation method selected');
       setLoading(false);
@@ -611,8 +577,8 @@ const ValuationFlow = () => {
 
   // ==================== STEP 10: CONFIRM ASSUMPTIONS ====================
   const handleConfirmAssumptions = useCallback(async () => {
-    // Use first selected model for single-method flow
-    const method = selectedModels[0];
+    // Use selected model (single string, not array)
+    const method = selectedModels;
     if (!method) {
       setError('No valuation method selected');
       return;
@@ -661,15 +627,11 @@ const ValuationFlow = () => {
 
   // ==================== STEP 11-12: RUN VALUATION ====================
   const handleRunValuation = useCallback(async () => {
-    // If multiple models selected, use multi-method endpoint
-    if (selectedModels.length > 1) {
-      return handleRunMultiMethodValuation();
-    }
-    
+    // Multi-select is now forbidden per documentation - always use single method
     setLoading(true);
     setError(null);
-    // Use first selected model for single-method flow
-    const method = selectedModels[0];
+    // Use selected model (single string, not array)
+    const method = selectedModels;
     if (!method) {
       setError('No valuation method selected');
       setLoading(false);
@@ -806,7 +768,7 @@ const ValuationFlow = () => {
       case 5:
         return (
           <RequirementsStep
-            selectedModel={selectedModels[0]}
+            selectedModel={selectedModels}
             onBackToModelSelection={handleBackToModelSelection}
             onRetrieveData={handleRetrieveData}
             loading={loading}
@@ -843,7 +805,7 @@ const ValuationFlow = () => {
             aiData={step7ExtractionResults}
             aiError={aiError}
             confirmedValues={confirmedValues}
-            selectedModel={selectedModels[0]}
+            selectedModel={selectedModels}
             market={market}
             historicalData={step6ApiData}
             apiData={calculatedMetrics}
@@ -864,7 +826,7 @@ const ValuationFlow = () => {
             step6Data={calculatedMetrics}
             step7Data={step7ExtractionResults}
             market={market}
-            selectedModel={selectedModels[0]}
+            selectedModel={selectedModels}
             onManualInput={handleManualInput}
             onConfirmDrivers={handleConfirmAssumptions}
             onBackToRequirements={handleBackToRequirements}
@@ -880,7 +842,7 @@ const ValuationFlow = () => {
             aiData={step7ExtractionResults}
             aiError={aiError}
             confirmedValues={confirmedValues}
-            selectedModel={selectedModels[0]}
+            selectedModel={selectedModels}
             onManualInput={handleManualInput}
             onUseAI={handleUseAI}
             onConfirmAssumptions={handleConfirmAssumptions}
@@ -892,7 +854,7 @@ const ValuationFlow = () => {
         return (
           <RunValuationStep
             selectedCompany={selectedCompany}
-            selectedModel={selectedModels[0]}
+            selectedModel={selectedModels}
             selectedScenario={selectedScenario}
             confirmedValues={confirmedValues}
             loading={loading}
