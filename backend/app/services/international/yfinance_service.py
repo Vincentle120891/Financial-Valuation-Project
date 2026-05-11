@@ -1216,11 +1216,18 @@ class YFinanceService:
         """
         Search for tickers by company name or symbol.
         
+        Filters out:
+        - Market indices (symbols starting with ^)
+        - ETFs and mutual funds (typeDisp = 'ETF' or 'Mutual Fund')
+        - Currency pairs (symbols ending with =X)
+        - Cryptocurrencies (symbols ending with -USD, etc.)
+        - Symbols without valid exchange
+        
         Args:
             query: Search query string
             
         Returns:
-            List of matching ticker results
+            List of matching ticker results (only valid equities)
         """
         import yfinance as yf
         
@@ -1228,22 +1235,56 @@ class YFinanceService:
             logger.info(f"Searching tickers for query='{query}'")
             results = yf.Search(query=query, max_results=10)
             
-            # Convert to list of dicts
+            # Convert to list of dicts with validation
             ticker_list = []
             if hasattr(results, 'quotes'):
                 for quote in results.quotes:
+                    symbol = quote.get('symbol', '')
+                    type_disp = quote.get('typeDisp', '')
+                    exchange = quote.get('exchange', '')
+                    
+                    # FILTER 1: Exclude market indices (start with ^)
+                    if symbol.startswith('^'):
+                        logger.debug(f"Excluding index symbol: {symbol}")
+                        continue
+                    
+                    # FILTER 2: Exclude ETFs and Mutual Funds
+                    if type_disp in ['ETF', 'Mutual Fund']:
+                        logger.debug(f"Excluding {type_disp}: {symbol}")
+                        continue
+                    
+                    # FILTER 3: Exclude currency pairs (end with =X)
+                    if symbol.endswith('=X'):
+                        logger.debug(f"Excluding currency pair: {symbol}")
+                        continue
+                    
+                    # FILTER 4: Exclude cryptocurrencies
+                    if any(symbol.endswith(suffix) for suffix in ['-USD', '-EUR', '-BTC', '-ETH', '-USDT']):
+                        logger.debug(f"Excluding cryptocurrency: {symbol}")
+                        continue
+                    
+                    # FILTER 5: Require valid exchange
+                    if not exchange or exchange == '':
+                        logger.debug(f"Excluding symbol without exchange: {symbol}")
+                        continue
+                    
+                    # FILTER 6: Exclude symbols with known problematic patterns
+                    if any(pattern in symbol for pattern in ['INDEX', 'IDX', '^']):
+                        logger.debug(f"Excluding symbol with problematic pattern: {symbol}")
+                        continue
+                    
                     ticker_list.append({
-                        'symbol': quote.get('symbol', ''),
+                        'symbol': symbol,
                         'shortname': quote.get('shortname', ''),
                         'longname': quote.get('longname', ''),
                         'exchDisp': quote.get('exchDisp', ''),
-                        'typeDisp': quote.get('typeDisp', ''),
-                        'exchange': quote.get('exchange', ''),
+                        'typeDisp': type_disp,
+                        'exchange': exchange,
                         'sector': quote.get('sector'),
                         'industry': quote.get('industry'),
                     })
             
-            logger.info(f"Found {len(ticker_list)} tickers for query='{query}'")
+            logger.info(f"Found {len(ticker_list)} valid tickers for query='{query}' (filtered from raw results)")
             return ticker_list
             
         except Exception as e:
