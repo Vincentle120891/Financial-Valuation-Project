@@ -414,45 +414,46 @@ const ValuationFlow = () => {
 
   // ==================== BACK TO MODEL SELECTION ====================
   const handleBackToModelSelection = () => {
-    setSelectedModels(''); // GAP 2 FIX: Reset to empty string (single selection)
-    setRequiredFields([]);
-    setConfirmedValues({});
-    // Clear all data for current market using matrix structure
+    const currentMethod = selectedModels?.toLowerCase();
+    
+    // Only clear data for the method being switched FROM, preserve other methods' data
+    // This maintains "Fetch Once, Use Many" principle - data stays cached for reuse
     setValuationsData(prev => ({
       ...prev,
       [market]: {
-        dcf: null,
-        dupont: null,
-        comps: null
+        ...prev[market],
+        [currentMethod]: null
       }
     }));
     setForecastDriversData(prev => ({
       ...prev,
       [market]: {
-        dcf: null,
-        dupont: null,
-        comps: null
+        ...prev[market],
+        [currentMethod]: null
       }
     }));
     setDcfInputsData(prev => ({
       ...prev,
       [market]: {
-        dcf: null,
-        dupont: null,
-        comps: null
+        ...prev[market],
+        [currentMethod]: null
       }
     }));
     setAiError(null); // Clear AI errors
     setPeerData(null);
-    // Reset results matrix for current market only
+    // Reset only the current method's results, preserve others
     setValuationResults(prev => ({
       ...prev,
       [market]: {
-        dcf: null,
-        dupont: null,
-        comps: null
+        ...prev[market],
+        [currentMethod]: null
       }
     }));
+    
+    // Reset selection and navigation
+    setSelectedModels('');
+    setRequiredFields([]);
+    setConfirmedValues({});
     setCurrentStep(4);
     setError(null);
   };
