@@ -688,25 +688,27 @@ const ValuationFlow = () => {
         const driverField = parts[2];
         const yearIndex = parseInt(parts[3], 10);
 
-        setForecastDrivers(prev => {
-          if (!prev || !prev[scenario]) return prev;
-          return {
-            ...prev,
-            [scenario]: {
-              ...prev[scenario],
-              [driverField]: prev[scenario][driverField].map((v, idx) =>
-                idx === yearIndex ? parsedValue : v
-              )
-            }
+        const currentDrivers = getForecastDrivers(selectedModels);
+        if (currentDrivers && currentDrivers[scenario]) {
+          const updatedScenario = {
+            ...currentDrivers[scenario],
+            [driverField]: currentDrivers[scenario][driverField].map((v, idx) =>
+              idx === yearIndex ? parsedValue : v
+            )
           };
-        });
+          setForecastDrivers(selectedModels, {
+            ...currentDrivers,
+            [scenario]: updatedScenario
+          });
+        }
       }
     } else if (field.startsWith('dcf_')) {
       const dcfField = field.replace('dcf_', '');
-      setDcfInputs(prev => ({
-        ...prev,
+      const currentInputs = getDcfInputs(selectedModels) || {};
+      setDcfInputs(selectedModels, {
+        ...currentInputs,
         [dcfField]: parsedValue
-      }));
+      });
     }
   };
 
@@ -742,16 +744,16 @@ const ValuationFlow = () => {
     // Validate required DCF inputs before proceeding
     if (method === 'DCF') {
       const errors = [];
-      const currentDcfInputs = getDcfInputs(method);
+      const dcfInputs = getDcfInputs(method);
 
       // Check critical DCF inputs
-      if (!currentDcfInputs?.wacc || currentDcfInputs.wacc <= 0) {
+      if (!dcfInputs?.wacc || dcfInputs.wacc <= 0) {
         errors.push('WACC must be greater than 0');
       }
-      if (!currentDcfInputs?.terminal_growth_rate || currentDcfInputs.terminal_growth_rate < 0) {
+      if (!dcfInputs?.terminal_growth_rate || dcfInputs.terminal_growth_rate < 0) {
         errors.push('Terminal growth rate must be non-negative');
       }
-      if (!currentDcfInputs?.risk_free_rate || currentDcfInputs.risk_free_rate < 0) {
+      if (!dcfInputs?.risk_free_rate || dcfInputs.risk_free_rate < 0) {
         errors.push('Risk-free rate must be non-negative');
       }
 
@@ -779,7 +781,7 @@ const ValuationFlow = () => {
     } finally {
       setLoading(false);
     }
-  }, [sessionId, confirmedValues, selectedScenario, selectedModels, getDcfInputs, market]);
+  }, [sessionId, confirmedValues, selectedScenario, selectedModels, dcfInputsData, market]);
 
   // ==================== STEP 11-12: RUN VALUATION ====================
   const handleRunValuation = useCallback(async () => {
@@ -978,7 +980,7 @@ const ValuationFlow = () => {
       case 7:
         return (
           <HistoricalDataExtractionStep
-            aiData={getValuationData(selectedModels)}
+            historicalGapsData={getValuationData(selectedModels)}
             aiError={aiError}
             confirmedValues={confirmedValues}
             selectedModel={selectedModels}

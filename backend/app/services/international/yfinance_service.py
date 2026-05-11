@@ -279,17 +279,19 @@ class InternationalDataStrategy:
             
             # Get column names (dates)
             columns = financials.columns.tolist()
+            periods = [col.strftime('%Y-%m-%d') if hasattr(col, 'strftime') else str(col) for col in columns]
+            num_periods = len(periods)
             
             # Map yfinance fields to standard format
             result = {
-                'periods': [col.strftime('%Y-%m-%d') if hasattr(col, 'strftime') else str(col) for col in columns],
-                'total_revenue': self._get_series_values(financials, 'Total Revenue'),
-                'cost_of_revenue': self._get_series_values(financials, 'Cost Of Revenue'),
-                'gross_profit': self._get_series_values(financials, 'Gross Profit'),
-                'ebitda': self._get_series_values(financials, 'EBITDA'),
-                'ebit': self._get_series_values(financials, 'Operating Income'),
-                'net_income': self._get_series_values(financials, 'Net Income'),
-                'depreciation_amortization': self._get_series_values(financials, 'Depreciation And Amortization'),
+                'periods': periods,
+                'total_revenue': self._get_series_values(financials, 'Total Revenue', num_periods),
+                'cost_of_revenue': self._get_series_values(financials, 'Cost Of Revenue', num_periods),
+                'gross_profit': self._get_series_values(financials, 'Gross Profit', num_periods),
+                'ebitda': self._get_series_values(financials, 'EBITDA', num_periods),
+                'ebit': self._get_series_values(financials, 'Operating Income', num_periods),
+                'net_income': self._get_series_values(financials, 'Net Income', num_periods),
+                'depreciation_amortization': self._get_series_values(financials, 'Depreciation And Amortization', num_periods),
             }
             
             return result
@@ -305,17 +307,19 @@ class InternationalDataStrategy:
                 return {}
             
             columns = balance_sheet.columns.tolist()
+            periods = [col.strftime('%Y-%m-%d') if hasattr(col, 'strftime') else str(col) for col in columns]
+            num_periods = len(periods)
             
             result = {
-                'periods': [col.strftime('%Y-%m-%d') if hasattr(col, 'strftime') else str(col) for col in columns],
-                'total_debt': self._get_series_values(balance_sheet, 'Total Debt'),
-                'cash_and_equivalents': self._get_series_values(balance_sheet, 'Cash And Cash Equivalents'),
-                'total_equity': self._get_series_values(balance_sheet, 'Total Equity Gross Minority Interest'),
-                'working_capital': self._get_series_values(balance_sheet, 'Working Capital'),
-                'shares_outstanding': self._get_series_values(balance_sheet, 'Ordinary Shares Number'),
-                'accounts_receivable': self._get_series_values(balance_sheet, 'Accounts Receivable'),
-                'inventory': self._get_series_values(balance_sheet, 'Inventory'),
-                'accounts_payable': self._get_series_values(balance_sheet, 'Accounts Payable'),
+                'periods': periods,
+                'total_debt': self._get_series_values(balance_sheet, 'Total Debt', num_periods),
+                'cash_and_equivalents': self._get_series_values(balance_sheet, 'Cash And Cash Equivalents', num_periods),
+                'total_equity': self._get_series_values(balance_sheet, 'Total Equity Gross Minority Interest', num_periods),
+                'working_capital': self._get_series_values(balance_sheet, 'Working Capital', num_periods),
+                'shares_outstanding': self._get_series_values(balance_sheet, 'Ordinary Shares Number', num_periods),
+                'accounts_receivable': self._get_series_values(balance_sheet, 'Accounts Receivable', num_periods),
+                'inventory': self._get_series_values(balance_sheet, 'Inventory', num_periods),
+                'accounts_payable': self._get_series_values(balance_sheet, 'Accounts Payable', num_periods),
             }
             
             return result
@@ -331,13 +335,15 @@ class InternationalDataStrategy:
                 return {}
             
             columns = cashflow.columns.tolist()
+            periods = [col.strftime('%Y-%m-%d') if hasattr(col, 'strftime') else str(col) for col in columns]
+            num_periods = len(periods)
             
             result = {
-                'periods': [col.strftime('%Y-%m-%d') if hasattr(col, 'strftime') else str(col) for col in columns],
-                'free_cash_flow': self._get_series_values(cashflow, 'Free Cash Flow'),
-                'operating_cash_flow': self._get_series_values(cashflow, 'Operating Cash Flow'),
-                'capital_expenditure': self._get_series_values(cashflow, 'Capital Expenditure'),
-                'dividends_paid': self._get_series_values(cashflow, 'Dividends Paid'),
+                'periods': periods,
+                'free_cash_flow': self._get_series_values(cashflow, 'Free Cash Flow', num_periods),
+                'operating_cash_flow': self._get_series_values(cashflow, 'Operating Cash Flow', num_periods),
+                'capital_expenditure': self._get_series_values(cashflow, 'Capital Expenditure', num_periods),
+                'dividends_paid': self._get_series_values(cashflow, 'Dividends Paid', num_periods),
             }
             
             return result
@@ -369,13 +375,29 @@ class InternationalDataStrategy:
             logger.error(f"Error fetching analyst estimates: {e}")
             return {}
     
-    def _get_series_values(self, df, field_name: str) -> List[Optional[float]]:
-        """Extract values from a DataFrame row, handling missing fields."""
+    def _get_series_values(self, df, field_name: str, num_periods: int = 0) -> List[Optional[float]]:
+        """Extract values from a DataFrame row, handling missing fields.
+        
+        Args:
+            df: The DataFrame to extract values from
+            field_name: The field name to look up in the DataFrame index
+            num_periods: If provided, ensures the returned list has this length by padding with None
+            
+        Returns:
+            List of values, padded with None if num_periods is specified and list is shorter
+        """
         try:
             if field_name in df.index:
                 series = df.loc[field_name]
-                return [None if (isinstance(v, float) and v != v) else v for v in series.values]
-            return []
+                values = [None if (isinstance(v, float) and v != v) else v for v in series.values]
+            else:
+                values = []
+            
+            # Pad with None if num_periods is specified and values list is shorter
+            if num_periods > 0 and len(values) < num_periods:
+                values.extend([None] * (num_periods - len(values)))
+            
+            return values
         except Exception:
             return []
 
