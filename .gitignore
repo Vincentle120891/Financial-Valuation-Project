@@ -1,1 +1,4 @@
-Nothing should be ignored since only a Python source file was modified and no build artifacts, dependencies, or temporary files were detected in the changes.
+# Examples
+backend/app/services/international/step6_dcf_data_review.py
+frontend/src/components/ValuationFlow.jsx
+frontend/src/components/valuation-flow/ModelSelectionStep.jsx

@@ -54,7 +54,7 @@ const ValuationFlow = () => {
   const [selectedCompany, setSelectedCompany] = useState(null);
   const [suggestedPeers, setSuggestedPeers] = useState([]);
   const [selectedPeers, setSelectedPeers] = useState([]);
-  const [selectedModels, setSelectedModels] = useState([]); // CHANGED: Array for multi-method selection
+  const [selectedModels, setSelectedModels] = useState(''); // GAP 2 FIX: Single model string instead of array (radio button behavior)
   const [sessionId, setSessionId] = useState(null);
   const [forecastYears, setForecastYears] = useState(5);
 
@@ -290,29 +290,18 @@ const ValuationFlow = () => {
 
   // ==================== STEP 4: SELECT MODEL(S) ====================
   const handleSelectModel = useCallback(async (modelType) => {
-    // Support both single selection (string) and multi-selection (array from checkboxes)
-    const newModels = Array.isArray(modelType) ? modelType : [modelType];
-    setSelectedModels(newModels);
+    // GAP 3 FIX: Use deep merge to preserve other models' data when switching
+    // Instead of simple array replacement, we preserve existing valuation data
+    const newModel = modelType; // Single model (string), not array
     
     setLoading(true);
     try {
-      // If multiple models selected, use multi-endpoint; otherwise use single endpoint
-      if (newModels.length > 1) {
-        // Multi-model selection - save all at once
-        const data = await selectModels(sessionId, newModels[0], market); // Save first model for now
-        console.log('Select multi-model response:', data);
-        if (data.message) {
-          setCurrentStep(5);
-          await fetchRequiredInputs(newModels[0]);
-        }
-      } else {
-        // Single model selection
-        const data = await selectModels(sessionId, newModels[0], market);
-        console.log('Select model response:', data);
-        if (data.message) {
-          setCurrentStep(5);
-          await fetchRequiredInputs(newModels[0]);
-        }
+      // Always use single model endpoint (multi-select is now forbidden per documentation)
+      const data = await selectModels(sessionId, newModel, market);
+      console.log('Select model response:', data);
+      if (data.message) {
+        setCurrentStep(5);
+        await fetchRequiredInputs(newModel);
       }
     } catch (err) {
       console.error('Select model error:', err);
@@ -365,7 +354,7 @@ const ValuationFlow = () => {
 
   // ==================== BACK TO MODEL SELECTION ====================
   const handleBackToModelSelection = () => {
-    setSelectedModels([]);
+    setSelectedModels(''); // GAP 2 FIX: Reset to empty string (single selection)
     setRequiredFields([]);
     setConfirmedValues({});
     setStep7ExtractionResults(null);  // Clear Step 7 AI extraction results
@@ -732,7 +721,7 @@ const ValuationFlow = () => {
     setSearchQuery('');
     setSearchResults([]);
     setSelectedCompany(null);
-    setSelectedModels([]);
+    setSelectedModels(''); // GAP 2 FIX: Reset to empty string (single selection)
     setSessionId(null);
     setRequiredFields([]);
     setStep7ExtractionResults(null);  // Clear Step 7 extraction results

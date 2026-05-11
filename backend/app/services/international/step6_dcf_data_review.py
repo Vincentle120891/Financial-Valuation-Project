@@ -148,7 +148,8 @@ class DCFStep6Processor:
         market_data: Optional[Dict] = None,
         forecast_data: Optional[Dict] = None,
         retrieved_assumptions: Optional[Dict] = None,
-        user_overrides: Optional[Dict[str, Any]] = None
+        user_overrides: Optional[Dict[str, Any]] = None,
+        session_cache: Optional[Dict] = None  # NEW: Session cache for "Fetch Once, Use Many"
     ) -> DCFDataReviewResponse:
         """
         Main entry point for DCF Step 6 data review.
@@ -164,11 +165,27 @@ class DCFStep6Processor:
             forecast_data: Forecast/analyst estimates (optional)
             retrieved_assumptions: Retrieved assumptions including peer data
             user_overrides: Manual overrides applied by user
+            session_cache: Session cache dict to check before fetching (implements "Fetch Once, Use Many")
             
         Returns:
             DCFDataReviewResponse with aggregated DCF data
         """
-        # If data is not provided, fetch it
+        # GAP 1 FIX: Check session cache before fetching - implements "Fetch Once, Use Many"
+        if session_cache and 'international_market_data' in session_cache:
+            cached_data = session_cache['international_market_data']
+            # Check if cache is valid (not older than 5 minutes)
+            cache_timestamp = cached_data.get('timestamp')
+            if cache_timestamp:
+                from datetime import datetime, timedelta
+                cache_age = datetime.now() - cache_timestamp
+                if cache_age < timedelta(minutes=5):
+                    logger.info(f"Using cached market data for {ticker} (age: {cache_age.seconds}s)")
+                    historical_data = historical_data or cached_data.get('historical_data')
+                    market_data = market_data or cached_data.get('market_data')
+                    forecast_data = forecast_data or cached_data.get('forecast_data')
+                    retrieved_assumptions = retrieved_assumptions or cached_data.get('retrieved_assumptions')
+        
+        # If data is not provided (and not in cache), fetch it
         if historical_data is None or market_data is None or forecast_data is None or retrieved_assumptions is None:
             logger.info(f"Fetching data for DCF analysis of {ticker}")
             all_data = self.yfinance_service.fetch_all_data(ticker, market)

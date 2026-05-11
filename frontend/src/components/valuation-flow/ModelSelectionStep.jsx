@@ -4,11 +4,9 @@ import React from 'react';
  * ModelSelectionStep Component
  * Step 4: Select Valuation Model(s)
  * 
- * Features:
- * - Three model options (DCF, DuPont, Trading Comps)
- * - Detailed descriptions for each model
- * - Multi-select support via checkboxes (P1 enhancement)
- * - Click-to-select interaction
+ * FIXED: Now uses Radio Buttons instead of checkboxes.
+ * Per documentation: "MUST use Radio Buttons. Multi-select is forbidden."
+ * This prevents AI context hallucination from multiple simultaneous model selections.
  */
 const ModelSelectionStep = ({ onSelectModel, selectedModels }) => {
   const models = [
@@ -29,35 +27,33 @@ const ModelSelectionStep = ({ onSelectModel, selectedModels }) => {
     }
   ];
 
-  const handleToggleModel = (modelId) => {
-    if (selectedModels && selectedModels.includes(modelId)) {
-      // Deselect - remove from array
-      const updated = selectedModels.filter(id => id !== modelId);
-      onSelectModel(updated);
-    } else {
-      // Select - add to array
-      const updated = selectedModels ? [...selectedModels, modelId] : [modelId];
-      onSelectModel(updated);
-    }
+  // GAP 2 FIX: Use single selection (radio button behavior) instead of array-based multi-select
+  const handleSelectModel = (modelId) => {
+    // Single selection - just pass the model ID directly (not an array)
+    onSelectModel(modelId);
   };
 
   const isSelected = (modelId) => {
-    return selectedModels && selectedModels.includes(modelId);
+    // Handle both string (single) and array (legacy) formats
+    if (Array.isArray(selectedModels)) {
+      return selectedModels.includes(modelId);
+    }
+    return selectedModels === modelId;
   };
 
   return (
     <div className="step-container">
-      <h2>Step 4: Select Valuation Model(s)</h2>
+      <h2>Step 4: Select Valuation Model</h2>
       <p style={{ marginBottom: '20px', color: '#666' }}>
-        Choose one or more valuation methodologies to apply. 
-        <strong style={{ color: '#667eea' }}> Multi-select enables parallel valuation across all chosen methods.</strong>
+        Choose one valuation methodology to apply.
+        <strong style={{ color: '#667eea' }}> Single selection ensures accurate AI context for the chosen method.</strong>
       </p>
       <div className="model-options">
         {models.map((model) => (
           <div 
             key={model.id} 
             className={`model-card ${isSelected(model.id) ? 'selected' : ''}`}
-            onClick={() => handleToggleModel(model.id)}
+            onClick={() => handleSelectModel(model.id)}
             style={{
               cursor: 'pointer',
               border: isSelected(model.id) ? '2px solid #667eea' : '2px solid #e0e0e0',
@@ -65,13 +61,14 @@ const ModelSelectionStep = ({ onSelectModel, selectedModels }) => {
               position: 'relative'
             }}
           >
+            {/* GAP 2 FIX: Radio button instead of checkbox */}
             <div style={{ 
               position: 'absolute', 
               top: '10px', 
               right: '10px',
               width: '20px',
               height: '20px',
-              borderRadius: '4px',
+              borderRadius: '50%',  // Circle for radio button
               border: '2px solid #667eea',
               background: isSelected(model.id) ? '#667eea' : 'white',
               display: 'flex',
@@ -80,7 +77,7 @@ const ModelSelectionStep = ({ onSelectModel, selectedModels }) => {
               color: 'white',
               fontSize: '14px'
             }}>
-              {isSelected(model.id) && '✓'}
+              {isSelected(model.id) && '●'}  // Filled circle for selected radio
             </div>
             <h3>{model.name}</h3>
             <p>{model.desc}</p>
@@ -89,9 +86,9 @@ const ModelSelectionStep = ({ onSelectModel, selectedModels }) => {
       </div>
       <div style={{ marginTop: '20px', textAlign: 'center' }}>
         <p style={{ color: '#666', fontSize: '14px' }}>
-          {selectedModels?.length === 0 
-            ? 'Select at least one model to continue'
-            : `${selectedModels.length} model(s) selected`}
+          {!selectedModels || (Array.isArray(selectedModels) && selectedModels.length === 0)
+            ? 'Select one model to continue'
+            : `${Array.isArray(selectedModels) ? selectedModels.length : 1} model(s) selected`}
         </p>
       </div>
     </div>
