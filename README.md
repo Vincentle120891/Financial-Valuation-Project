@@ -25,13 +25,22 @@ We are utilizing **AI tools** for valuation logic generation (Steps 7-9). This a
 
 ### ✅ CORRECT WORKFLOW: "Fetch Once, Use Many"
 1. **Unified Data Fetching (Step 6):** When a market is selected, fetch **ALL market data** needed for ANY model in one API call.
-2. **Shared Cache:** Store data in `session['international_market_data']`.
+2. **Shared Cache:** Store data in `session['market_data']`.
 3. **Model-Specific Slicing:** 
    - User selects DCF → System slices DCF-relevant data from cache
    - User switches to DuPont → System reuses SAME cached data (NO re-fetch)
+   - User switches to Comps → System reuses SAME cached data (NO re-fetch)
 4. **Benefit:** Eliminates redundant API calls, prevents rate limiting, ensures data consistency.
 
-**See [WORKFLOW_ARCHITECTURE.md](./WORKFLOW_ARCHITECTURE.md) for complete architectural guidelines.**
+### 🔄 3 Valuation Methods × 2 Market Versions
+
+| | **International** | **Vietnam** |
+|---|---|---|
+| **DCF** | `services/international/dcf_engine.py` + 10 step processors | `services/vietnamese/vietnamese_dcf_engine.py` + 10 step processors |
+| **DuPont** | `services/international/dupont_engine.py` + 10 step processors | `services/vietnamese/vietnamese_dupont_engine.py` + 10 step processors |
+| **Comps** | `services/international/comps_engine.py` + 10 step processors | `services/vietnamese/vietnamese_comps_engine.py` (sector_valuation_models.py) |
+
+**See [BACKEND_WORKFLOW_DOCUMENTATION.md](./backend/docs/ARCHITECTURE.md) for complete architectural guidelines.**
 
 ---
 
@@ -45,13 +54,17 @@ This platform enables financial analysts, investors, and students to perform ins
 
 See [MODEL_INTEGRITY_CONFIG.md](./backend/MODEL_INTEGRITY_CONFIG.md) for our complete guidelines.
 
-### Core Valuation Models
+### Core Valuation Models: 3×2 Matrix
 
-| Model | Description | Key Output |
-|-------|-------------|------------|
-| **DCF** | Discounted Cash Flow - Intrinsic value based on projected free cash flows | Implied Share Price, Enterprise Value |
-| **DuPont Analysis** | ROE decomposition into profit margin, asset turnover, and leverage | ROE Drivers, Financial Efficiency Metrics |
-| **Trading Comps** | Relative valuation using peer company multiples | Comparable Valuation Multiples |
+| Model | International Market | Vietnamese Market | Key Output |
+|-------|---------------------|-------------------|------------|
+| **DCF** | ✅ `services/international/dcf_engine.py` | ✅ `services/vietnamese/vietnamese_dcf_engine.py` | Implied Share Price, Enterprise Value |
+| **DuPont Analysis** | ✅ `services/international/dupont_engine.py` | ✅ `services/vietnamese/vietnamese_dupont_engine.py` | ROE Drivers, Financial Efficiency Metrics |
+| **Trading Comps** | ✅ `services/international/comps_engine.py` | ✅ `services/vietnamese/vietnamese_comps_engine.py` | Comparable Valuation Multiples |
+
+**Market-Specific Parameters:**
+- **International**: Variable tax rates by country, local risk-free rates (10Y Treasury), IFRS/US GAAP standards
+- **Vietnamese**: 20% corporate tax, 6.8% risk-free rate (10Y VN bond), TT99 accounting standards, VND currency
 
 ---
 
@@ -90,11 +103,15 @@ See [MODEL_INTEGRITY_CONFIG.md](./backend/MODEL_INTEGRITY_CONFIG.md) for our com
 - **FastAPI** ≥0.116.0 - Modern async web framework with auto-generated OpenAPI docs
 - **uvicorn** ≥0.35.0 - High-performance ASGI server
 - **pydantic** ≥2.0.0 - Data validation and settings management
-- **yfinance** ≥1.0.0 - Yahoo Finance data retrieval
+- **yfinance** ≥1.0.0 - Yahoo Finance data retrieval (International markets)
 - **aiohttp** ≥3.9.0 - Async HTTP client for Alpha Vantage API
 - **groq** ≥0.11.0 - Groq LLM client (Llama 3) for AI assumptions
 - **python-dotenv** ≥1.0.0 - Environment variable management
 - **gunicorn** ≥21.0.0 - Production WSGI server
+
+**Dual-Market Services:**
+- `services/international/` - 40+ processors for DCF, DuPont, Comps (IFRS/US GAAP)
+- `services/vietnamese/` - 30+ processors for VN-specific valuations (TT99 standards)
 
 **Frontend (React)**
 - **React 18** - Component-based UI with hooks
@@ -110,37 +127,37 @@ See [MODEL_INTEGRITY_CONFIG.md](./backend/MODEL_INTEGRITY_CONFIG.md) for our com
 
 | Step | Action | User Interface | Backend Process |
 |------|--------|----------------|-----------------|
-| **1** | Search Company | Text input + market toggle (VN/International) | Query yfinance for ticker matches |
-| **2** | Company Overview | Display selected company details | Create session with UUID, fetch basic info |
-| **3** | Peer Selection | AI-suggested peers with auto-select top 5 | Peer discovery service with scoring |
+| **1** | Search Company | Text input + market toggle (VN/International) | Query yfinance (Int'l) or VNStockDatabase (VN) for ticker matches |
+| **2** | Company Overview | Display selected company details | Create session with UUID, fetch basic info from market-specific service |
+| **3** | Peer Selection | AI-suggested peers with auto-select top 5 | Peer discovery service with scoring (market-specific logic) |
 
 ### Phase 2: Model Configuration (Steps 4-5)
 
 | Step | Action | User Interface | Backend Process |
 |------|--------|----------------|-----------------|
-| **4** | Select Model | Single select (DCF, DuPont, Comps) | Validate model compatibility, store in session |
-| **5** | Review Requirements | Table showing required fields per model | Load schema definitions from step5 processor |
+| **4** | Select Model | **Single select** (DCF, DuPont, Comps) - Radio buttons | Validate model compatibility, store in session |
+| **5** | Review Requirements | Table showing required fields per model | Load schema definitions from step5 processor (market-specific) |
 
 ### Phase 3: Data Retrieval & Review (Steps 6-7)
 
 | Step | Action | User Interface | Backend Process |
 |------|--------|----------------|-----------------|
-| **6** | View Retrieved Inputs | Display all API-fetched financial data | Step6DataReviewProcessor fetches from yfinance/Alpha Vantage |
-| **7** | Historical Data Retrieval | Display missing historical data fetched from alternative sources | Step7HistoricalDataProcessor fetches data gaps not available via standard APIs |
+| **6** | View Retrieved Inputs | Display all API-fetched financial data | **Fetch Once, Use Many**: Step6DataReviewProcessor fetches ALL data for ANY model into shared cache |
+| **7** | Historical Data Retrieval | Display missing historical data fetched from alternative sources | Step7HistoricalDataProcessor fetches data gaps not available via standard APIs (AI extraction from PDFs for VN market) |
 
 ### Phase 4: Assumption & AI Suggestion (Steps 8-9)
 
 | Step | Action | User Interface | Backend Process |
 |------|--------|----------------|-----------------|
-| **8** | Assumption & AI Suggestion | Review AI-suggested assumptions with confidence scores, edit forecast drivers | Step8AssumptionProcessor calculates values programmatically and utilizes AI for suggestions on forward-looking inputs |
-| **9** | Confirm Assumptions | Final review before calculation | Store confirmed assumptions with source tags |
+| **8** | Assumption & AI Suggestion | Review AI-suggested assumptions with confidence scores, edit forecast drivers | Step8AssumptionProcessor calculates values programmatically and utilizes AI for suggestions on forward-looking inputs (model-specific: DCF/DuPont/Comps) |
+| **9** | Confirm Assumptions | Final review before calculation | Store confirmed assumptions with source tags (API/AI/Benchmark/Manual) |
 
 ### Phase 5: Valuation & Results (Steps 10-11)
 
 | Step | Action | User Interface | Backend Process |
 |------|--------|----------------|-----------------|
-| **10** | Run Valuation | Execute selected model | Step10ValuationProcessor runs DCF/DuPont/Comps engines |
-| **11** | View Results | Implied price, upside/downside, sensitivity matrix, charts | Return comprehensive valuation output |
+| **10** | Run Valuation | Execute selected model | Step10ValuationProcessor runs DCF/DuPont/Comps engines (market-specific: international/vietnamese) |
+| **11** | View Results | Implied price, upside/downside, sensitivity matrix, charts | Return comprehensive valuation output with currency formatting (USD/VND) |
 
 ---
 
@@ -276,60 +293,95 @@ AI_CONFIDENCE_THRESHOLD=0.7
 │   ├── app/
 │   │   ├── api/
 │   │   │   ├── routes/               # API route handlers
-│   │   │   │   ├── valuation_routes.py       # Steps 4-10 valuation endpoints
+│   │   │   │   ├── international_market_data_routes.py  # /international/* endpoints
+│   │   │   │   ├── vietnamese_market_data_routes.py   # /vietnamese/* endpoints
 │   │   │   │   ├── search_routes.py          # Step 1 search endpoints
-│   │   │   │   ├── international_market_data_routes.py  # Market data
-│   │   │   │   └── vietnamese_market_data_routes.py   # Vietnam market
+│   │   │   │   ├── valuation_routes.py       # Steps 4-10 valuation endpoints
+│   │   │   │   ├── pdf_extraction_routes.py  # VN PDF extraction
+│   │   │   │   └── vietnamese_reports_routes.py
 │   │   │   └── schemas.py            # Pydantic request/response models
 │   │   ├── services/                 # Business logic layer
-│   │   │   ├── international/        # International market services
+│   │   │   ├── international/        # International market services (40+ files)
+│   │   │   │   ├── dcf_engine.py             # DCF calculations (IFRS/GAAP)
+│   │   │   │   ├── dupont_engine.py          # DuPont analysis
+│   │   │   │   ├── comps_engine.py           # Trading comparables
 │   │   │   │   ├── step1_ticker_processor.py
 │   │   │   │   ├── step2_market_data_processor.py
 │   │   │   │   ├── step3_historical_processor.py
 │   │   │   │   ├── step4_forecast_processor.py
 │   │   │   │   ├── step5_assumptions_processor.py
-│   │   │   │   ├── step6_data_review.py
-│   │   │   │   ├── step7_ai_suggestions.py
-│   │   │   │   ├── step8_manual_overrides.py
+│   │   │   │   ├── step6_data_review.py      # Fetch Once, Use Many
+│   │   │   │   ├── step7_historical_data_processor.py
+│   │   │   │   ├── step8_dcf_assumptions.py  # Model-specific AI
+│   │   │   │   ├── step8_dupont_assumptions.py
+│   │   │   │   ├── step8_comps_assumptions.py
 │   │   │   │   ├── step9_final_calculation.py
 │   │   │   │   └── step10_valuation_processor.py
-│   │   │   └── vietnamese/           # Vietnamese market services
-│   │   ├── engines/                  # Valuation calculation engines
-│   │   │   ├── dcf_engine.py         # DCF calculations
-│   │   │   ├── dupont_engine.py      # DuPont analysis
-│   │   │   └── comps_engine.py       # Trading comparables
-│   │   └── core/                     # Core utilities
-│   │       ├── session_service.py    # Session management
-│   │       └── logging_config.py     # Logging configuration
-│   ├── requirements.txt              # Python dependencies
-│   ├── .env                          # Environment variables (gitignored)
-│   └── .env.example                  # Template for environment setup
+│   │   │   └── vietnamese/           # Vietnamese market services (30+ files)
+│   │   │       ├── vietnamese_dcf_engine.py    # DCF (TT99, 20% tax, VND)
+│   │   │       ├── vietnamese_dupont_engine.py # DuPont (TT99 standards)
+│   │   │       ├── vietnamese_comps_engine.py  # Comps (VNINDEX/VN30)
+│   │   │       ├── sector_valuation_models.py  # VN sector models
+│   │   │       ├── step1_ticker_processor.py
+│   │   │       ├── step2_market_data_processor.py
+│   │   │       ├── step3_historical_processor.py
+│   │   │       ├── step4_model_processor.py
+│   │   │       ├── step5_requirements_processor.py
+│   │   │       ├── step6_data_fetch_processor.py
+│   │   │       ├── step7_historical_processor.py
+│   │   │       ├── step8_dcf_assumptions.py
+│   │   │       ├── step8_dupont_assumptions.py
+│   │   │       ├── step8_comps_assumptions.py
+│   │   │       ├── step9_confirmation_processor.py
+│   │   │       └── step10_valuation_processor.py
+│   │   ├── models/                 # Pydantic schemas
+│   │   │   ├── international/      # International market models
+│   │   │   └── vietnamese/         # TT99-compliant VN models
+│   │   └── core/                   # Core utilities
+│   │       ├── session_service.py  # Session management
+│   │       └── logging_config.py   # Logging configuration
+│   ├── requirements.txt            # Python dependencies
+│   ├── .env                        # Environment variables (gitignored)
+│   ├── docs/
+│   │   ├── ARCHITECTURE.md         # Backend architecture
+│   │   ├── VIETNAMESE_VS_INTERNATIONAL_MODELS.md  # TT99 vs IFRS/GAAP
+│   │   └── vietnamese_report_auto_fetch.md  # Auto-fetch VN reports
+│   └── test/                       # Test suites
 │
 ├── frontend/                         # React 18 Frontend
 │   ├── package.json                  # Dependencies (React, Axios, Recharts)
 │   ├── public/
 │   │   └── index.html                # HTML entry point
-│   └── src/
-│       ├── components/
-│       │   ├── ValuationFlow.jsx     # Main 11-step wizard component
-│       │   └── valuation-flow/       # Individual step components
-│       │       ├── SearchStep.jsx
-│       │       ├── CompanySelectionStep.jsx
-│       │       ├── PeerSelectionStep.jsx
-│       │       ├── ModelSelectionStep.jsx
-│       │       ├── RequirementsStep.jsx
-│       │       ├── ApiDataStep.jsx
-│       │       ├── AiAssumptionsStep.jsx
-│       │       ├── ForecastDriversStep.jsx
-│       │       ├── AssumptionsStep.jsx
-│       │       ├── RunValuationStep.jsx
-│       │       └── ResultsStep.jsx
-│       └── services/
-│           └── api.js                # API service layer
+│   ├── src/
+│   │   ├── components/
+│   │   │   ├── ValuationFlow.jsx     # Main 11-step wizard component
+│   │   │   └── valuation-flow/       # Individual step components
+│   │   │       ├── SearchStep.jsx
+│   │   │       ├── CompanySelectionStep.jsx
+│   │   │       ├── PeerSelectionStep.jsx
+│   │   │       ├── ModelSelectionStep.jsx    # Radio buttons (single-select)
+│   │   │       ├── RequirementsStep.jsx
+│   │   │       ├── ApiDataStep.jsx           # Step 6: Fetch Once
+│   │   │       ├── AiAssumptionsStep.jsx
+│   │   │       ├── ForecastDriversStep.jsx
+│   │   │       ├── AssumptionsStep.jsx
+│   │   │       ├── RunValuationStep.jsx
+│   │   │       └── ResultsStep.jsx
+│   │   └── services/
+│   │       └── api.js                # API service layer
+│   └── ARCHITECTURE.md               # Frontend documentation
+│
+├── excel models/                     # Reference Excel models
+│   ├── DCF_Model_Specification.xlsx
+│   ├── DuPont_Analysis_Spec.xlsx
+│   └── Comps_Valuation_Spec.xlsx
 │
 ├── README.md                         # This file - Main project documentation
-├── BACKEND_WORKFLOW_DOCUMENTATION.md # Detailed backend workflow guide
-└── DCF_WORKFLOW_INTERNATIONAL.md     # DCF-specific workflow documentation
+└── backend/
+    ├── MODEL_INTEGRITY_CONFIG.md     # Model integrity guidelines
+    ├── FLOW_IMPLEMENTATION.md        # Dual-market API implementation
+    ├── INPUT_SOURCE_DOCUMENTATION.md # Input source tracking
+    └── VIETNAMESE_PDF_EXTRACTION_GUIDE.md  # PDF extraction for VN
 ```
 
 ---
@@ -337,9 +389,9 @@ AI_CONFIDENCE_THRESHOLD=0.7
 ## ✨ Key Features
 
 - ✅ **11-Step Guided Workflow**: Structured user journey from company search to valuation results
-- ✅ **Multiple Valuation Models**: DCF, Trading Comps, DuPont Analysis
-- ✅ **Market Toggle**: Support for Vietnamese (.VN) and international markets
-- ✅ **Live Data Integration**: Real-time financial data via yfinance + Alpha Vantage API
+- ✅ **3×2 Valuation Matrix**: DCF, Trading Comps, DuPont Analysis × International & Vietnamese markets
+- ✅ **Market Toggle**: Support for Vietnamese (.VN) and international markets with strict separation
+- ✅ **Live Data Integration**: Real-time financial data via yfinance (Int'l) + VNDirect/CafeF/VNStockDB (VN)
 - ✅ **AI-Powered Assumptions**: Intelligent WACC, growth rates, and benchmark suggestions via Gemini/Groq
 - ✅ **Benchmark Comparisons**: Industry-standard reference ranges from Damodaran data
 - ✅ **Scenario Analysis**: Bull/Base/Bear case modeling with confidence scores
@@ -348,6 +400,9 @@ AI_CONFIDENCE_THRESHOLD=0.7
 - ✅ **Responsive Design**: Optimized for desktop and mobile devices
 - ✅ **Modern UI/UX**: Clean, professional interface with smooth animations
 - ✅ **Interactive API Docs**: Auto-generated Swagger/ReDoc documentation
+- ✅ **Fetch Once, Use Many**: Unified data caching prevents redundant API calls across models
+- ✅ **TT99 Compliance**: Vietnamese market follows Thông Tư 99/2025/TT-BTC accounting standards
+- ✅ **PDF Extraction**: AI-powered extraction from Vietnamese annual reports and filings
 
 ---
 
