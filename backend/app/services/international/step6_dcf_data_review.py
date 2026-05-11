@@ -128,7 +128,7 @@ class DCFDataReviewResponse(BaseModel):
 class DCFStep6Processor:
     """
     Dedicated Step 6 processor for DCF valuation method.
-    
+
     This processor handles ONLY DCF-specific data aggregation:
     - Historical Financials (Revenue, EBITDA, EBIT, Net Income, etc.)
     - Market Data (Price, Market Cap, Beta, Debt, Cash)
@@ -156,7 +156,7 @@ class DCFStep6Processor:
         Aggregates all retrieved DCF data without performing final calculations.
 
         Args can be passed directly or will be fetched if not provided.
-        
+
         Args:
             ticker: Stock ticker symbol
             market: Market identifier
@@ -166,7 +166,7 @@ class DCFStep6Processor:
             retrieved_assumptions: Retrieved assumptions including peer data
             user_overrides: Manual overrides applied by user
             session_cache: Session cache dict to check before fetching (implements "Fetch Once, Use Many")
-            
+
         Returns:
             DCFDataReviewResponse with aggregated DCF data
         """
@@ -184,7 +184,7 @@ class DCFStep6Processor:
                     market_data = market_data or cached_data.get('market_data')
                     forecast_data = forecast_data or cached_data.get('forecast_data')
                     retrieved_assumptions = retrieved_assumptions or cached_data.get('retrieved_assumptions')
-        
+
         # If data is not provided (and not in cache), fetch it
         if historical_data is None or market_data is None or forecast_data is None or retrieved_assumptions is None:
             logger.info(f"Fetching data for DCF analysis of {ticker}")
@@ -245,7 +245,7 @@ class DCFStep6Processor:
         missing_summary = self._aggregate_missing_data(all_displays)
 
         ready = len(missing_summary.critical_missing) == 0
-        
+
         # GAP 1 FIX: Store fetched data in session cache for "Fetch Once, Use Many"
         if session_cache is not None:
             from datetime import datetime
@@ -363,7 +363,7 @@ class DCFStep6Processor:
         # Get most recent year's data
         if financials_df is not None and not financials_df.empty:
             latest_col = financials_df.columns[-1]
-            
+
             for key in mapping.get(field_name, [field_name]):
                 if key in financials_df.index:
                     value = financials_df.loc[key, latest_col]
@@ -576,29 +576,262 @@ class DCFStep6Processor:
         """Calculate DCF intermediate metrics (growth rates, margins - NOT final valuations)"""
         data_fields = []
 
-        # Calculate historical growth rates, margins from historical data
+        # Calculate historical growth rates from historical data
         # These are intermediate calculations, NOT WACC/TV/Fair Value
-        
-        # Example: Revenue CAGR
+
+        # 1. Revenue CAGR (3-year and 5-year if available)
         revenue_fields = [f for f in historical_display.data_fields if f.field_name == "revenue"]
         if revenue_fields and revenue_fields[0].value:
-            # Would calculate CAGR here
-            pass
+            revenue_data = revenue_fields[0].value
+            # Check if revenue_data is a list/array with multiple years
+            if isinstance(revenue_data, list) and len(revenue_data) >= 2:
+                # Calculate CAGR
+                n_years = len(revenue_data) - 1
+                if revenue_data[-1] and revenue_data[0] and revenue_data[-1] > 0 and revenue_data[0] > 0:
+                    cagr = ((revenue_data[-1] / revenue_data[0]) ** (1 / n_years)) - 1
+                    data_fields.append(DataField(
+                        field_name="revenue_cagr",
+                        display_name=f"Revenue CAGR ({n_years}-year)",
+                        value=cagr * 100,
+                        unit="%",
+                        status=DataStatus.CALCULATED,
+                        source="calculated_from_historical",
+                        formula=f"((Ending Revenue / Beginning Revenue) ^ (1/{n_years})) - 1",
+                        is_critical=False,
+                        allow_override=True
+                    ))
 
-        # Example: Historical margins
+        # 2. EBITDA CAGR
+        ebitda_fields = [f for f in historical_display.data_fields if f.field_name == "ebitda"]
+        if ebitda_fields and ebitda_fields[0].value:
+            ebitda_data = ebitda_fields[0].value
+            if isinstance(ebitda_data, list) and len(ebitda_data) >= 2:
+                n_years = len(ebitda_data) - 1
+                if ebitda_data[-1] and ebitda_data[0] and ebitda_data[-1] > 0 and ebitda_data[0] > 0:
+                    ebitda_cagr = ((ebitda_data[-1] / ebitda_data[0]) ** (1 / n_years)) - 1
+                    data_fields.append(DataField(
+                        field_name="ebitda_cagr",
+                        display_name=f"EBITDA CAGR ({n_years}-year)",
+                        value=ebitda_cagr * 100,
+                        unit="%",
+                        status=DataStatus.CALCULATED,
+                        source="calculated_from_historical",
+                        formula=f"((Ending EBITDA / Beginning EBITDA) ^ (1/{n_years})) - 1",
+                        is_critical=False,
+                        allow_override=True
+                    ))
+
+        # 3. Net Income CAGR
+        ni_fields = [f for f in historical_display.data_fields if f.field_name == "net_income"]
+        if ni_fields and ni_fields[0].value:
+            ni_data = ni_fields[0].value
+            if isinstance(ni_data, list) and len(ni_data) >= 2:
+                n_years = len(ni_data) - 1
+                if ni_data[-1] and ni_data[0]:
+                    # Handle negative net income
+                    if ni_data[-1] > 0 and ni_data[0] > 0:
+                        ni_cagr = ((ni_data[-1] / ni_data[0]) ** (1 / n_years)) - 1
+                        data_fields.append(DataField(
+                            field_name="net_income_cagr",
+                            display_name=f"Net Income CAGR ({n_years}-year)",
+                            value=ni_cagr * 100,
+                            unit="%",
+                            status=DataStatus.CALCULATED,
+                            source="calculated_from_historical",
+                            formula=f"((Ending NI / Beginning NI) ^ (1/{n_years})) - 1",
+                            is_critical=False,
+                            allow_override=True
+                        ))
+
+        # 4. Historical margins trends (show latest year)
         margin_fields = ["gross_margin", "operating_margin", "net_margin"]
         for margin in margin_fields:
             field = next((f for f in historical_display.data_fields if f.field_name == margin), None)
-            if field and field.value:
+            if field and field.value is not None:
+                margin_value = field.value
+                # If margin is a list, use the most recent
+                if isinstance(margin_value, list) and len(margin_value) > 0:
+                    margin_value = margin_value[-1]
+
                 data_fields.append(DataField(
                     field_name=f"historical_{margin}",
-                    display_name=f"Historical {field.display_name}",
-                    value=field.value,
+                    display_name=f"Latest {field.display_name}",
+                    value=margin_value,
                     unit="%",
                     status=DataStatus.CALCULATED,
                     source="calculated_from_historical",
                     is_critical=False,
-                    allow_override=False
+                    allow_override=True
+                ))
+
+        # 5. FCF Conversion Rate (FCF / EBITDA)
+        fcf_fields = [f for f in historical_display.data_fields if f.field_name == "free_cash_flow"]
+        if fcf_fields and fcf_fields[0].value and ebitda_fields and ebitda_fields[0].value:
+            fcf_data = fcf_fields[0].value
+            ebitda_data = ebitda_fields[0].value
+
+            if isinstance(fcf_data, list):
+                fcf_data = fcf_data[-1]
+            if isinstance(ebitda_data, list):
+                ebitda_data = ebitda_data[-1]
+
+            if fcf_data and ebitda_data and ebitda_data > 0:
+                fcf_conversion = fcf_data / ebitda_data
+                data_fields.append(DataField(
+                    field_name="fcf_conversion_rate",
+                    display_name="FCF Conversion Rate (FCF/EBITDA)",
+                    value=fcf_conversion * 100,
+                    unit="%",
+                    status=DataStatus.CALCULATED,
+                    source="calculated_from_historical",
+                    formula="Free Cash Flow / EBITDA",
+                    is_critical=False,
+                    allow_override=True
+                ))
+
+        # 6. Peer Comparables - Median & Mean Metrics for WACC
+        if peer_display and peer_display.companies:
+            companies = peer_display.companies
+
+            # Calculate median and mean for Beta
+            betas = [c.beta for c in companies if c.beta is not None]
+            if betas:
+                median_beta = self._calculate_median(betas)
+                mean_beta = sum(betas) / len(betas)
+
+                data_fields.append(DataField(
+                    field_name="peer_median_beta",
+                    display_name="Peer Median Beta",
+                    value=median_beta,
+                    unit="",
+                    status=DataStatus.CALCULATED,
+                    source="calculated_from_peers",
+                    formula="Median of peer betas",
+                    is_critical=True,
+                    allow_override=True
+                ))
+
+                data_fields.append(DataField(
+                    field_name="peer_mean_beta",
+                    display_name="Peer Mean Beta",
+                    value=mean_beta,
+                    unit="",
+                    status=DataStatus.CALCULATED,
+                    source="calculated_from_peers",
+                    formula="Average of peer betas",
+                    is_critical=False,
+                    allow_override=True
+                ))
+
+            # Calculate median EV/EBITDA for terminal value reference
+            ev_ebitdas = [c.ev_ebitda for c in companies if c.ev_ebitda is not None]
+            if ev_ebitdas:
+                median_ev_ebitda = self._calculate_median(ev_ebitdas)
+                mean_ev_ebitda = sum(ev_ebitdas) / len(ev_ebitdas)
+
+                data_fields.append(DataField(
+                    field_name="peer_median_ev_ebitda",
+                    display_name="Peer Median EV/EBITDA",
+                    value=median_ev_ebitda,
+                    unit="x",
+                    status=DataStatus.CALCULATED,
+                    source="calculated_from_peers",
+                    formula="Median of peer EV/EBITDA multiples",
+                    is_critical=False,
+                    allow_override=True
+                ))
+
+                data_fields.append(DataField(
+                    field_name="peer_mean_ev_ebitda",
+                    display_name="Peer Mean EV/EBITDA",
+                    value=mean_ev_ebitda,
+                    unit="x",
+                    status=DataStatus.CALCULATED,
+                    source="calculated_from_peers",
+                    formula="Average of peer EV/EBITDA multiples",
+                    is_critical=False,
+                    allow_override=True
+                ))
+
+            # Calculate median P/E
+            pe_ratios = [c.pe_ratio for c in companies if c.pe_ratio is not None]
+            if pe_ratios:
+                median_pe = self._calculate_median(pe_ratios)
+                data_fields.append(DataField(
+                    field_name="peer_median_pe",
+                    display_name="Peer Median P/E",
+                    value=median_pe,
+                    unit="x",
+                    status=DataStatus.CALCULATED,
+                    source="calculated_from_peers",
+                    formula="Median of peer P/E ratios",
+                    is_critical=False,
+                    allow_override=True
+                ))
+
+            # Calculate median EV/Revenue
+            ev_revenues = [c.ev_revenue for c in companies if c.ev_revenue is not None]
+            if ev_revenues:
+                median_ev_revenue = self._calculate_median(ev_revenues)
+                data_fields.append(DataField(
+                    field_name="peer_median_ev_revenue",
+                    display_name="Peer Median EV/Revenue",
+                    value=median_ev_revenue,
+                    unit="x",
+                    status=DataStatus.CALCULATED,
+                    source="calculated_from_peers",
+                    formula="Median of peer EV/Revenue multiples",
+                    is_critical=False,
+                    allow_override=True
+                ))
+
+            # Calculate average tax rate from peers
+            tax_rates = [c.tax_rate for c in companies if c.tax_rate is not None]
+            if tax_rates:
+                avg_tax_rate = sum(tax_rates) / len(tax_rates)
+                data_fields.append(DataField(
+                    field_name="peer_avg_tax_rate",
+                    display_name="Peer Average Tax Rate",
+                    value=avg_tax_rate * 100 if avg_tax_rate <= 1 else avg_tax_rate,
+                    unit="%",
+                    status=DataStatus.CALCULATED,
+                    source="calculated_from_peers",
+                    formula="Average of peer effective tax rates",
+                    is_critical=True,
+                    allow_override=True
+                ))
+
+            # Calculate average cost of debt from peers
+            cost_of_debts = [c.cost_of_debt for c in companies if c.cost_of_debt is not None]
+            if cost_of_debts:
+                avg_cost_of_debt = sum(cost_of_debts) / len(cost_of_debts)
+                data_fields.append(DataField(
+                    field_name="peer_avg_cost_of_debt",
+                    display_name="Peer Average Cost of Debt",
+                    value=avg_cost_of_debt * 100 if avg_cost_of_debt <= 1 else avg_cost_of_debt,
+                    unit="%",
+                    status=DataStatus.CALCULATED,
+                    source="calculated_from_peers",
+                    formula="Average of peer cost of debt",
+                    is_critical=True,
+                    allow_override=True
+                ))
+
+            # Calculate median Debt/Equity or Net Debt/EBITDA if available
+            # For now, calculate average market cap and enterprise value for sizing context
+            market_caps = [c.market_cap for c in companies if c.market_cap is not None]
+            if market_caps:
+                median_market_cap = self._calculate_median(market_caps)
+                data_fields.append(DataField(
+                    field_name="peer_median_market_cap",
+                    display_name="Peer Median Market Cap",
+                    value=median_market_cap,
+                    unit="USD",
+                    status=DataStatus.CALCULATED,
+                    source="calculated_from_peers",
+                    formula="Median of peer market capitalizations",
+                    is_critical=False,
+                    allow_override=True
                 ))
 
         return CalculatedMetricsDisplay(data_fields=data_fields)
