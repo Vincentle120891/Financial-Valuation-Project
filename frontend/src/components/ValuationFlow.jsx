@@ -118,10 +118,12 @@ const ValuationFlow = () => {
   };
   
   // Legacy state aliases for backward compatibility (to be removed in future refactor)
+  // These are now read-only computed values from the matrix structure
   const step6ApiData = getValuationData(selectedModels);  // Deprecated: use getValuationData() instead
   const step7ExtractionResults = getValuationData(selectedModels);  // Deprecated: use getValuationData() instead
   const historicalData = step6ApiData;  // Deprecated: use getValuationData() instead
   const aiData = step7ExtractionResults;  // Deprecated: use getValuationData() instead
+  // Note: aiAssumptions was never a separate state - it's part of the matrix structure via getValuationData()
 
   // Assumption Management
   const [confirmedValues, setConfirmedValues] = useState({});
@@ -227,6 +229,9 @@ const ValuationFlow = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [market, setMarket] = useState('international');
+  
+  // AI-related state for error/warning messages (non-blocking)
+  const [aiError, setAiError] = useState(null);
 
   // ==================== STEP 1: SEARCH COMPANY ====================
   const handleSearch = useCallback(async () => {
@@ -406,13 +411,33 @@ const ValuationFlow = () => {
     setSelectedModels(''); // GAP 2 FIX: Reset to empty string (single selection)
     setRequiredFields([]);
     setConfirmedValues({});
-    setStep7ExtractionResults(null);  // Clear Step 7 AI extraction results
-    setAiAssumptions(null);  // Clear Step 8 AI assumptions
+    // Clear all data for current market using matrix structure
+    setValuationsData(prev => ({
+      ...prev,
+      [market]: {
+        dcf: null,
+        dupont: null,
+        comps: null
+      }
+    }));
+    setForecastDriversData(prev => ({
+      ...prev,
+      [market]: {
+        dcf: null,
+        dupont: null,
+        comps: null
+      }
+    }));
+    setDcfInputsData(prev => ({
+      ...prev,
+      [market]: {
+        dcf: null,
+        dupont: null,
+        comps: null
+      }
+    }));
     setAiError(null); // Clear AI errors
-    setStep6ApiData(null);  // Clear Step 6 API data
-    setForecastDrivers(selectedModels, null);
     setPeerData(null);
-    setDcfInputs(selectedModels, null);
     // Reset results matrix for current market only
     setValuationResults(prev => ({
       ...prev,
@@ -596,7 +621,8 @@ const ValuationFlow = () => {
         
         // Also store in individual state variables for backward compatibility
         if (fetchDataResponse.data.historical_financials) {
-          setStep6ApiData(fetchDataResponse.data.historical_financials);  // Step 6 API data
+          // Step 6 API data is now stored in valuationsData matrix via setValuationData above
+          // No need for separate step6ApiData state
         }
         if (fetchDataResponse.data.forecast_drivers) {
           setForecastDrivers(method, fetchDataResponse.data.forecast_drivers);
@@ -808,15 +834,37 @@ const ValuationFlow = () => {
     setSelectedModels(''); // GAP 2 FIX: Reset to empty string (single selection)
     setSessionId(null);
     setRequiredFields([]);
-    setStep7ExtractionResults(null);  // Clear Step 7 extraction results
-    setAiError(null); // Clear AI errors on reset
     setConfirmedValues({});
     setSelectedScenario('base_case');
     setError(null);
+    setAiError(null); // Clear AI errors on reset
     setMarket('international');
-    setStep6ApiData(null);  // Clear Step 6 API data
     // Reset all matrix structures
     setValuationsData({
+      international: {
+        dcf: null,
+        dupont: null,
+        comps: null
+      },
+      vietnam: {
+        dcf: null,
+        dupont: null,
+        comps: null
+      }
+    });
+    setForecastDriversData({
+      international: {
+        dcf: null,
+        dupont: null,
+        comps: null
+      },
+      vietnam: {
+        dcf: null,
+        dupont: null,
+        comps: null
+      }
+    });
+    setDcfInputsData({
       international: {
         dcf: null,
         dupont: null,
@@ -840,9 +888,7 @@ const ValuationFlow = () => {
         comps: null
       }
     });
-    setForecastDrivers(selectedModels, null);
     setPeerData(null);
-    setDcfInputs(selectedModels, null);
     setCalculatedMetrics(null);
   };
 
