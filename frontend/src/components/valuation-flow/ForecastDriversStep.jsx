@@ -19,6 +19,7 @@ const ForecastDriversStep = ({
   step6Data,
   step7Data,
   onManualInput,
+  onAutoSave, // New prop for debounced auto-save
   onConfirmDrivers,
   onBackToRequirements,
   onContinueToAssumptions,
@@ -205,7 +206,7 @@ const ForecastDriversStep = ({
     }
   };
 
-  // Handle forecast driver input change
+  // Handle forecast driver input change with auto-save
   const handleForecastDriverChange = (scenario, field, yearIndex, value) => {
     const numValue = parseFloat(value) || 0;
     
@@ -217,13 +218,18 @@ const ForecastDriversStep = ({
       }
     }));
 
-    // Notify parent component
+    // Notify parent component for confirmed values (immediate)
     if (onManualInput) {
       onManualInput(`forecast_${scenario}_${field}_${yearIndex}`, numValue);
     }
+    
+    // Trigger debounced auto-save for persistence
+    if (onAutoSave) {
+      onAutoSave(`forecast_${scenario}_${field}_${yearIndex}`, numValue);
+    }
   };
 
-  // Handle DCF input change
+  // Handle DCF input change with auto-save
   const handleDcfInputChange = (field, value) => {
     const numValue = parseFloat(value) || 0;
     
@@ -232,9 +238,14 @@ const ForecastDriversStep = ({
       [field]: numValue
     }));
 
-    // Notify parent component
+    // Notify parent component for confirmed values (immediate)
     if (onManualInput) {
       onManualInput(`dcf_${field}`, numValue);
+    }
+    
+    // Trigger debounced auto-save for persistence
+    if (onAutoSave) {
+      onAutoSave(`dcf_${field}`, numValue);
     }
   };
 
