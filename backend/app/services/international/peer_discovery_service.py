@@ -248,7 +248,7 @@ class PeerDiscoveryService:
         """
         results = []
         
-        # Use yfinance search
+        # Use yfinance search (now filtered in yfinance_service.search_tickers)
         search_results = self.yfinance_service.search_tickers(keyword)
         
         for result in search_results[:20]:  # Limit search results
@@ -260,13 +260,19 @@ class PeerDiscoveryService:
             # Get detailed info
             ticker_info = self.yfinance_service.get_ticker_info(ticker)
             if not ticker_info or not ticker_info.get('currentPrice'):
+                logger.debug(f"Skipping {ticker}: no current price or info")
                 continue
             
+            # Additional validation: check if it's a valid equity
             market_cap = ticker_info.get('marketCap')
+            if not market_cap or market_cap <= 0:
+                logger.debug(f"Skipping {ticker}: invalid market cap")
+                continue
             
             # Filter by market cap if range specified
             if market_cap_min and market_cap_max:
-                if not market_cap or not (market_cap_min <= market_cap <= market_cap_max):
+                if not (market_cap_min <= market_cap <= market_cap_max):
+                    logger.debug(f"Skipping {ticker}: market cap ${market_cap/1e9:.2f}B outside range ${market_cap_min/1e9:.2f}B-${market_cap_max/1e9:.2f}B")
                     continue
             
             results.append({

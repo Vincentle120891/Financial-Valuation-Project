@@ -46,12 +46,12 @@ class AlphaVantageService:
             api_key: AlphaVantage API key. If not provided, will try to load from 
                     environment variable ALPHAVANTAGE_API_KEY
         """
-        self.api_key = api_key or os.getenv('ALPHAVANTAGE_API_KEY')
+        self.api_key = api_key or os.getenv('ALPHAVANTAGE_API_KEY') or os.getenv('ALPHA_VANTAGE_API_KEY')
         self.base_url = "https://www.alphavantage.co/query"
         self._session = None
         
         if not self.api_key:
-            logger.warning("AlphaVantage API key not provided. Set ALPHAVANTAGE_API_KEY environment variable.")
+            logger.warning("AlphaVantage API key not provided. Set ALPHAVANTAGE_API_KEY or ALPHA_VANTAGE_API_KEY environment variable.")
     
     @property
     def session(self):
