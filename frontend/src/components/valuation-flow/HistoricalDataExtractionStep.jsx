@@ -308,6 +308,81 @@ const HistoricalDataExtractionStep = ({
         </p>
       </div>
 
+      {/* Options Banner - Clear guidance for users */}
+      <div style={{
+        marginBottom: '20px',
+        padding: '20px',
+        borderRadius: '8px',
+        background: 'linear-gradient(135deg, #f0f4ff 0%, #e8eaf6 100%)',
+        border: '2px solid #7986cb'
+      }}>
+        <h3 style={{ color: '#3949ab', margin: '0 0 16px 0', fontSize: '18px' }}>
+          🎯 How to Retrieve Historical Data
+        </h3>
+        <p style={{ margin: '0 0 16px 0', color: '#5c6bc0', fontSize: '14px', lineHeight: '1.6' }}>
+          To ensure accurate valuation, you need precise historical financial data. 
+          Since automatic API data can be incomplete, please choose one of these options:
+        </p>
+        
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '16px' }}>
+          {/* Option 1 */}
+          <div style={{
+            background: 'white',
+            padding: '16px',
+            borderRadius: '6px',
+            border: '2px solid #9c27b0'
+          }}>
+            <h4 style={{ color: '#7b1fa2', margin: '0 0 8px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '20px' }}>📤</span> Option 1: Upload PDF Reports
+            </h4>
+            <p style={{ margin: '0 0 12px 0', fontSize: '13px', color: '#666', lineHeight: '1.5' }}>
+              Upload the company's annual reports (10-K, Annual Report, or Financial Statements). 
+              Our AI will automatically extract and normalize the data.
+            </p>
+            <ul style={{ margin: '0', paddingLeft: '20px', fontSize: '12px', color: '#757575', lineHeight: '1.8' }}>
+              <li><strong>Best for:</strong> Precise line items (NWC, CapEx, D&A)</li>
+              <li><strong>Formats:</strong> PDF only</li>
+              <li><strong>Standards:</strong> US GAAP, IFRS, Vietnamese</li>
+            </ul>
+          </div>
+
+          {/* Option 2 */}
+          <div style={{
+            background: 'white',
+            padding: '16px',
+            borderRadius: '6px',
+            border: '2px solid #2196f3'
+          }}>
+            <h4 style={{ color: '#1976d2', margin: '0 0 8px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '20px' }}>🤖</span> Option 2: Use External AI Tools
+            </h4>
+            <p style={{ margin: '0 0 12px 0', fontSize: '13px', color: '#666', lineHeight: '1.5' }}>
+              Use AI tools like ChatGPT, Claude, or Perplexity to search and extract historical data online.
+              Then manually input the metrics in Step 8.
+            </p>
+            <ul style={{ margin: '0', paddingLeft: '20px', fontSize: '12px', color: '#757575', lineHeight: '1.8' }}>
+              <li><strong>Prompt:</strong> "Extract 5-year revenue, net income, EBITDA for [TICKER]"</li>
+              <li><strong>Best for:</strong> Quick estimates when PDFs unavailable</li>
+              <li><strong>Tip:</strong> Cross-verify with multiple sources</li>
+            </ul>
+          </div>
+        </div>
+
+        {/* Important Note */}
+        <div style={{
+          marginTop: '16px',
+          padding: '12px',
+          background: '#fff8e1',
+          border: '1px solid #ffc107',
+          borderRadius: '6px',
+          fontSize: '13px',
+          color: '#f57f17'
+        }}>
+          <strong>⚠️ Note:</strong> Automatic document fetching is currently disabled. For the most accurate results, 
+          we strongly recommend uploading official PDF reports using Option 1 above.
+        </div>
+      </div>
+
       {renderAiError()}
 
       {/* PDF Upload Section */}
