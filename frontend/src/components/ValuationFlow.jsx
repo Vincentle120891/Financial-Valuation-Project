@@ -990,6 +990,7 @@ const ValuationFlow = () => {
             onBack={() => setCurrentStep(1)}
             loading={loading}
             hasPeers={suggestedPeers.length > 0}
+            market={market}
           />
         );
       case 3:
