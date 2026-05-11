@@ -162,7 +162,7 @@ async def select_models(request: ModelSelectRequest):
 
         # Normalize market and method from request ONLY (no session fallback)
         market = request.market.lower()  # 'international' or 'vietnam'
-        method = request.model.upper()  # 'DCF', 'DUPONT', 'COMPS'
+        method = request.method.upper()  # 'DCF', 'DUPONT', 'COMPS'
         
         # Update the specific valuation track (matrix structure)
         session_service.update_valuation_status(
