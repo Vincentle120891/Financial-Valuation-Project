@@ -396,7 +396,7 @@ const ValuationFlow = () => {
     // Multi-select is now forbidden per documentation - this function is deprecated
     // Fall back to single method valuation
     return handleRunValuation();
-  }, [handleRunValuation]);
+  }, []);
 
   // ==================== BACK TO MODEL SELECTION ====================
   const handleBackToModelSelection = () => {
