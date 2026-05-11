@@ -39,6 +39,14 @@ from app.services.vietnamese.vietnamese_dupont_engine import (
     VNDuPontAnalyzer,
     VNFinancialStatements,
 )
+from app.services.vietnamese.step5_requirements_processor import (
+    VNStep5RequirementsProcessor,
+    VNRequirementsInput,
+)
+from app.services.vietnamese.step6_data_fetch_processor import (
+    VNStep6DataFetchProcessor,
+    VNDataFetchInput,
+)
 from app.services.vietnamese.step7_historical_processor import (
     VNStep7HistoricalProcessor,
     VNHistoricalDataInput,
@@ -46,10 +54,6 @@ from app.services.vietnamese.step7_historical_processor import (
 from app.services.vietnamese.step8_assumptions_processor import (
     VNStep8AssumptionsProcessor,
     VNAIAssumptionsInput,
-)
-from app.services.vietnamese.step5_requirements_processor import (
-    VNStep5RequirementsProcessor,
-    VNRequirementsInput,
 )
 from app.core.session_service import session_service
 
@@ -717,6 +721,210 @@ async def collect_vn_requirements(request: VNStep5Request):
         raise
     except Exception as e:
         logger.error(f"VN Step 5 requirements collection error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Step 6: Data Fetch (Vietnamese Market) - "Fetch Once, Use Many"
+# ──────────────────────────────────────────────────────────────────────────────
+
+class VNStep6FetchRequest(BaseModel):
+    """Request model for Vietnamese Step 6 data fetch."""
+    session_id: str = Field(..., description="Session identifier")
+    method: str = Field(..., description="Valuation method: DCF, DuPont, or Comps")
+    history_years: int = Field(default=5, ge=3, le=10, description="Number of historical years to fetch")
+    include_quarterly: bool = Field(default=True, description="Include quarterly data for TTM")
+    fetch_peer_data: bool = Field(default=False, description="Fetch peer data if Comps model selected")
+    peer_tickers: List[str] = Field(default_factory=list, description="List of peer tickers to fetch")
+    fallback_to_ai_extraction: bool = Field(default=True, description="Allow AI PDF extraction if API fails")
+
+    @field_validator('method')
+    @classmethod
+    def validate_method(cls, v: str) -> str:
+        """Validate valuation method."""
+        allowed_methods = ["DCF", "DuPont", "COMPS", "dcf", "dupont", "comps"]
+        if v.upper() not in [m.upper() for m in allowed_methods]:
+            raise ValueError(f"Method must be one of: DCF, DuPont, COMPS")
+        return v.upper()
+
+
+class VNStep6FetchResponse(BaseModel):
+    """Response model for Vietnamese Step 6 data fetch."""
+    session_id: str
+    status: str
+    ticker: str
+    success: bool
+    source_provider: str
+    fetch_timestamp: str
+    currency_unit: str
+    periods_fetched: List[str]
+    missing_periods: List[str]
+    data_quality_flags: List[str]
+    pdf_sources_used: List[str]
+    message: str
+    next_step: str = "step7_historical_processing"
+
+
+@router.post("/vn-step-6-fetch-data", response_model=VNStep6FetchResponse)
+async def fetch_vn_data(request: VNStep6FetchRequest):
+    """
+    Step 6: Fetch Raw Financial Data (Vietnamese Market)
+    
+    Implements "Fetch Once, Use Many" architecture for Vietnamese market:
+    - Fetches ALL market data in ONE API call
+    - Stores in shared cache session['vietnam_market_data']
+    - Reuses cached data when switching between DCF/DuPont/Comps models
+    
+    Vietnam-Specific Features:
+    - Uses Vietnamese data sources (Vietstock, FireAnt, company reports)
+    - Handles VND currency and TT99 accounting standards
+    - Falls back to AI PDF extraction for missing data
+    - Fetches peer data for Comps/WACC calculations
+    
+    Args:
+        request: VNStep6FetchRequest with session_id, method, and fetch parameters
+        
+    Returns:
+        VNStep6FetchResponse with:
+        - Fetched data summary
+        - Source provider information
+        - Data quality flags
+        - Periods covered
+        
+    Example:
+        POST /vietnamese/vn-step-6-fetch-data
+        {
+            "session_id": "vn-session-123",
+            "method": "DCF",
+            "history_years": 5,
+            "include_quarterly": true,
+            "fetch_peer_data": false
+        }
+    """
+    try:
+        # Get session data
+        session = session_service.get_session_data(request.session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+        
+        ticker = session.get("ticker")
+        company_name = session.get("company_name", ticker)
+        exchange = session.get("exchange", "HOSE")
+        
+        if not ticker:
+            raise HTTPException(status_code=400, detail="No ticker found in session")
+        
+        # GAP 1 FIX: Check session cache for "Fetch Once, Use Many"
+        market = "vietnam"
+        method = request.method.upper()
+        
+        # Check if vietnam_market_data already exists in session cache
+        cached_market_data = session_service.get_session_value(
+            request.request_id,
+            "vietnam_market_data"
+        )
+        
+        if cached_market_data:
+            # Check cache age (valid for 5 minutes)
+            from datetime import datetime, timedelta
+            cache_timestamp = cached_market_data.get('timestamp')
+            if cache_timestamp:
+                cache_age = datetime.now() - cache_timestamp
+                if cache_age < timedelta(minutes=5):
+                    logger.info(f"Using cached Vietnam market data for {ticker} (age: {cache_age.seconds}s)")
+                    # Return cached data without re-fetching
+                    return VNStep6FetchResponse(
+                        session_id=request.session_id,
+                        status="cached_data_used",
+                        ticker=ticker,
+                        success=True,
+                        source_provider=cached_market_data.get('source_provider', 'cache'),
+                        fetch_timestamp=cached_market_data.get('fetch_timestamp', '').isoformat() if hasattr(cached_market_data.get('fetch_timestamp'), 'isoformat') else str(cached_market_data.get('fetch_timestamp', '')),
+                        currency_unit=cached_market_data.get('currency_unit', 'millions_VND'),
+                        periods_fetched=cached_market_data.get('periods_fetched', []),
+                        missing_periods=cached_market_data.get('missing_periods', []),
+                        data_quality_flags=cached_market_data.get('data_quality_flags', []),
+                        pdf_sources_used=cached_market_data.get('pdf_sources_used', []),
+                        message=f"Using cached data for {ticker} - no API call needed"
+                    )
+        
+        # Build input for Vietnamese Step 6 processor
+        vn_input = VNDataFetchInput(
+            ticker=ticker,
+            company_name=company_name,
+            exchange=exchange,
+            currency="VND",
+            history_years=request.history_years,
+            include_quarterly=request.include_quarterly,
+            fetch_income_statement=True,
+            fetch_balance_sheet=True,
+            fetch_cash_flow=True,
+            fetch_peer_data=request.fetch_peer_data,
+            peer_tickers=request.peer_tickers,
+            preferred_source="vietstock",
+            fallback_to_ai_extraction=request.fallback_to_ai_extraction
+        )
+        
+        # Execute Vietnamese Step 6 processor
+        processor = VNStep6DataFetchProcessor()
+        result = await processor.execute(vn_input)
+        
+        # GAP 1 FIX: Store fetched data in session cache for "Fetch Once, Use Many"
+        if result.success:
+            from datetime import datetime
+            cache_data = {
+                'timestamp': datetime.now(),
+                'source_provider': result.data_bundle.source_provider,
+                'fetch_timestamp': result.data_bundle.fetch_timestamp,
+                'currency_unit': result.data_bundle.currency_unit,
+                'income_statement_raw': result.data_bundle.income_statement_raw,
+                'balance_sheet_raw': result.data_bundle.balance_sheet_raw,
+                'cash_flow_raw': result.data_bundle.cash_flow_raw,
+                'peer_data_raw': result.data_bundle.peer_data_raw,
+                'missing_periods': result.data_bundle.missing_periods,
+                'data_quality_flags': result.data_bundle.data_quality_flags,
+                'pdf_sources_used': result.data_bundle.pdf_sources_used,
+                'periods_fetched': list(result.data_bundle.income_statement_raw.keys()) if result.data_bundle.income_statement_raw else []
+            }
+            
+            # Store in session under shared cache key
+            session_service.update_session_value(
+                request.session_id,
+                "vietnam_market_data",
+                cache_data
+            )
+            
+            # Also store in method-specific track for backward compatibility
+            session_service.update_session_data(
+                request.session_id,
+                "financial_data",
+                cache_data,
+                market=market,
+                method=method.lower()
+            )
+            
+            logger.info(f"Cached Vietnam market data for {ticker} in session")
+        
+        return VNStep6FetchResponse(
+            session_id=request.session_id,
+            status="data_fetched" if result.success else "partial_success",
+            ticker=ticker,
+            success=result.success,
+            source_provider=result.data_bundle.source_provider,
+            fetch_timestamp=result.data_bundle.fetch_timestamp.isoformat() if hasattr(result.data_bundle.fetch_timestamp, 'isoformat') else str(result.data_bundle.fetch_timestamp),
+            currency_unit=result.data_bundle.currency_unit,
+            periods_fetched=list(result.data_bundle.income_statement_raw.keys()) if result.data_bundle.income_statement_raw else [],
+            missing_periods=result.data_bundle.missing_periods,
+            data_quality_flags=result.data_bundle.data_quality_flags,
+            pdf_sources_used=result.data_bundle.pdf_sources_used,
+            message=result.message,
+            next_step=result.next_step
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"VN Step 6 data fetch error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
