@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useRef } from 'react';
 
 /**
  * HistoricalDataExtractionStep Component
@@ -9,6 +9,7 @@ import React from 'react';
  * - Displays extracted historical data gaps, sources, and completeness score
  * - NO forward-looking assumptions are generated here (that's Step 8)
  * - Works for ALL 3 valuation models (DCF, DuPont, Comps) and BOTH markets
+ * - NEW: Supports PDF upload for manual document submission
  *
  * Workflow:
  * 1. Compare model requirements vs. apiData from Step 6
@@ -16,6 +17,7 @@ import React from 'react';
  * 3. Display gaps to user with "Generate AI Suggestions" button
  * 4. AI searches public reports/filings to fill gaps
  * 5. Show extraction results with confidence scores and sources
+ * 6. NEW: Users can upload PDF reports directly for extraction
  */
 const HistoricalDataExtractionStep = ({
   historicalGapsData,
@@ -25,6 +27,7 @@ const HistoricalDataExtractionStep = ({
   market = 'international',
   historicalData,
   apiData,
+  sessionId,
   onManualInput,
   onUseAI,
   onBackToApiData,
@@ -34,6 +37,13 @@ const HistoricalDataExtractionStep = ({
 }) => {
   // FIX Issue #5: Backward compatibility layer for legacy aiData prop name
   const data = historicalGapsData || aiData;
+  
+  // PDF Upload state
+  const [uploadingPdf, setUploadingPdf] = useState(false);
+  const [uploadResult, setUploadResult] = useState(null);
+  const [uploadError, setUploadError] = useState(null);
+  const fileInputRef = useRef(null);
+
   // Handle using AI suggestion for historical data
   const handleUseAiSuggestion = (field, value) => {
     if (onUseAI) {
@@ -45,6 +55,54 @@ const HistoricalDataExtractionStep = ({
   const handleManualInputChange = (field, value) => {
     if (onManualInput) {
       onManualInput(field, value);
+    }
+  };
+
+  // PDF Upload handler
+  const handlePdfUpload = async (event) => {
+    const file = event.target.files[0];
+    if (!file || !sessionId) return;
+
+    setUploadingPdf(true);
+    setUploadError(null);
+    setUploadResult(null);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('session_id', sessionId);
+      formData.append('method', selectedModel || 'DCF');
+      formData.append('market', market);
+
+      const response = await fetch('/api/step-7-upload-pdf', {
+        method: 'POST',
+        body: formData
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Upload failed');
+      }
+
+      const result = await response.json();
+      setUploadResult(result);
+      
+      // Notify parent component of successful upload
+      if (onRetryAiExtraction) {
+        // Trigger a refresh of the historical data
+        onRetryAiExtraction();
+      }
+    } catch (error) {
+      setUploadError(error.message);
+    } finally {
+      setUploadingPdf(false);
+    }
+  };
+
+  // Trigger file input click
+  const triggerFileUpload = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
     }
   };
 
@@ -251,6 +309,102 @@ const HistoricalDataExtractionStep = ({
       </div>
 
       {renderAiError()}
+
+      {/* PDF Upload Section */}
+      <div style={{ 
+        background: 'linear-gradient(135deg, #f3e5f5 0%, #e1bee7 100%)', 
+        border: '2px solid #9c27b0', 
+        padding: '20px', 
+        borderRadius: '8px', 
+        marginBottom: '20px' 
+      }}>
+        <h3 style={{ color: '#7b1fa2', margin: '0 0 12px 0' }}>📄 Upload Financial Report (PDF)</h3>
+        <p style={{ margin: '0 0 16px 0', color: '#4a148c', fontSize: '14px' }}>
+          Upload annual reports, 10-K filings, or financial statements to extract missing historical data.
+          AI will automatically extract key metrics and fill gaps in your valuation model.
+        </p>
+        
+        {/* Hidden file input */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".pdf"
+          onChange={handlePdfUpload}
+          style={{ display: 'none' }}
+        />
+        
+        {/* Upload button and status */}
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+          <button
+            onClick={triggerFileUpload}
+            disabled={uploadingPdf || loading}
+            className="btn-secondary"
+            style={{ 
+              background: uploadingPdf ? '#e0e0e0' : '#9c27b0', 
+              color: 'white',
+              border: 'none'
+            }}
+          >
+            {uploadingPdf ? '⏳ Uploading & Extracting...' : '📎 Upload PDF Report'}
+          </button>
+          
+          {uploadResult && (
+            <span style={{ color: '#2e7d32', fontWeight: 600 }}>
+              ✓ Extracted {Object.keys(uploadResult.extracted_metrics || {}).length} metrics from {uploadResult.fiscal_year}
+            </span>
+          )}
+        </div>
+        
+        {/* Upload error */}
+        {uploadError && (
+          <div style={{ 
+            marginTop: '12px', 
+            padding: '12px', 
+            background: '#ffebee', 
+            border: '1px solid #ef5350', 
+            borderRadius: '6px',
+            color: '#c62828'
+          }}>
+            ❌ Upload failed: {uploadError}
+          </div>
+        )}
+        
+        {/* Upload success details */}
+        {uploadResult && uploadResult.extracted_metrics && (
+          <div style={{ 
+            marginTop: '16px', 
+            padding: '12px', 
+            background: 'white', 
+            borderRadius: '6px',
+            border: '1px solid #a5d6a7'
+          }}>
+            <strong style={{ color: '#1b5e20' }}>Extracted Metrics:</strong>
+            <div style={{ 
+              display: 'grid', 
+              gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', 
+              gap: '8px', 
+              marginTop: '8px' 
+            }}>
+              {Object.entries(uploadResult.extracted_metrics).map(([key, value]) => (
+                <div key={key} style={{ 
+                  padding: '8px', 
+                  background: '#e8f5e9', 
+                  borderRadius: '4px',
+                  fontSize: '13px'
+                }}>
+                  <strong>{key}:</strong> {typeof value === 'number' ? value.toLocaleString() : value}
+                </div>
+              ))}
+            </div>
+            {uploadResult.confidence_score && (
+              <p style={{ marginTop: '8px', fontSize: '13px', color: '#666' }}>
+                <strong>Confidence:</strong> {(uploadResult.confidence_score * 100).toFixed(0)}% | 
+                <strong> Method:</strong> {uploadResult.extraction_method}
+              </p>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* PRIMARY DISPLAY: Historical Data Gaps (works for all 3×2 matrix) */}
       {renderHistoricalDataGaps()}

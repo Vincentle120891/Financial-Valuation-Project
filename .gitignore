@@ -1,36 +1,68 @@
-backend/app/api/routes/__pycache__/
+```
+# Compiled and build artifacts
 *.pyc
-*.pyo
-*.pyd
 __pycache__/
-.Python
-env/
-venv/
+*.o
+*.obj
+*.so
+*.dll
+*.exe
+*.class
+*.out
+
+# Dependencies
 .venv/
+venv/
 .env
 .env.local
-.env.*
+*.env.*
+
+# Build directories
+dist/
+build/
+target/
+
+# Python specific
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.log
+*.tmp
+*.swp
+*~
+.DS_Store
+Thumbs.db
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# IDE
 .vscode/
 .idea/
 *.swp
 *.swo
-*.tmp
-*.log
-coverage/
-htmlcov/
+
+# Testing
 .coverage
+htmlcov/
 .pytest_cache/
 .mypy_cache/
-dist/
-build/
-*.egg-info/
-.tox/
-.nox/
-node_modules/
-target/
-.gradle/
-.DS_Store
-Thumbs.db
+
+# Compressed files
 *.zip
 *.gz
 *.tar
@@ -53,3 +85,4 @@ Thumbs.db
 *.tar.bz2
 *.tar.xz
 *.tar.zst
+```
