@@ -12,7 +12,8 @@ const CompanySelectionStep = ({
   onContinue,
   onBack,
   loading,
-  hasPeers = false
+  hasPeers = false,
+  market = 'international' // Market type from parent component
 }) => {
   const [peerSearchLoading, setPeerSearchLoading] = useState(false);
   const [priceHistory, setPriceHistory] = useState(null);
@@ -34,10 +35,16 @@ const CompanySelectionStep = ({
 
       setChartLoading(true);
       try {
-        const response = await fetch(`/api/market-data/${selectedCompany.symbol}/price-history`);
+        // Pass market_code parameter to ensure correct ticker format
+        const marketCode = market === 'vietnamese' ? 'VN' : 'US';
+        const response = await fetch(`/api/market-data/${selectedCompany.symbol}/price-history?market_code=${marketCode}`);
         if (response.ok) {
           const data = await response.json();
           setPriceHistory(data);
+        } else if (response.status === 404) {
+          console.warn(`Ticker ${selectedCompany.symbol} not found or delisted`);
+        } else if (response.status === 422) {
+          console.warn(`Insufficient price data for ${selectedCompany.symbol}`);
         }
       } catch (error) {
         console.error('Failed to fetch price history:', error);
@@ -47,7 +54,7 @@ const CompanySelectionStep = ({
     };
 
     fetchPriceHistory();
-  }, [selectedCompany?.symbol]);
+  }, [selectedCompany?.symbol, market]);
 
   if (!selectedCompany) {
     return (
