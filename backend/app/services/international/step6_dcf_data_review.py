@@ -785,8 +785,8 @@ class DCFStep6Processor:
                     allow_override=True
                 ))
 
-            # Calculate average tax rate from peers
-            tax_rates = [c.tax_rate for c in companies if c.tax_rate is not None]
+            # Calculate average tax rate from peers with outlier detection
+            tax_rates = [c.tax_rate for c in companies if c.tax_rate is not None and 0 <= c.tax_rate <= 0.50]
             if tax_rates:
                 avg_tax_rate = sum(tax_rates) / len(tax_rates)
                 data_fields.append(DataField(
@@ -796,13 +796,13 @@ class DCFStep6Processor:
                     unit="%",
                     status=DataStatus.CALCULATED,
                     source="calculated_from_peers",
-                    formula="Average of peer effective tax rates",
+                    formula="Average of peer effective tax rates (capped 0-50%)",
                     is_critical=True,
                     allow_override=True
                 ))
 
-            # Calculate average cost of debt from peers
-            cost_of_debts = [c.cost_of_debt for c in companies if c.cost_of_debt is not None]
+            # Calculate average cost of debt from peers with outlier detection
+            cost_of_debts = [c.cost_of_debt for c in companies if c.cost_of_debt is not None and 0 <= c.cost_of_debt <= 0.20]
             if cost_of_debts:
                 avg_cost_of_debt = sum(cost_of_debts) / len(cost_of_debts)
                 data_fields.append(DataField(
@@ -812,7 +812,7 @@ class DCFStep6Processor:
                     unit="%",
                     status=DataStatus.CALCULATED,
                     source="calculated_from_peers",
-                    formula="Average of peer cost of debt",
+                    formula="Average of peer cost of debt (capped 0-20%)",
                     is_critical=True,
                     allow_override=True
                 ))
