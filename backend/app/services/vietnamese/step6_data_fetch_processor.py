@@ -112,12 +112,37 @@ class VNStep6DataFetchProcessor:
                 logger.warning("VietnameseReportScraper not available")
                 self.report_scraper = None
 
-    async def execute(self, input_data: VNDataFetchInput) -> VNDataFetchOutput:
-        """Execute Step 6: Fetch raw data."""
+    async def execute(self, input_data: VNDataFetchInput, session_cache: Optional[Dict] = None) -> VNDataFetchOutput:
+        """Execute Step 6: Fetch raw data.
+        
+        FIX Issue #2 (Vietnam): Added session_cache parameter for "Fetch Once, Use Many" caching
+        - Checks cache before fetching (5-minute TTL)
+        - Caches data in session_cache['vietnamese_market_data'] after successful fetch
+        - Prevents redundant API calls when switching between DCF/DuPont/Comps models
+        """
         import time
         start_time = time.time()
 
         await self._initialize_services()
+
+        # FIX Issue #2 (Vietnam): Check cache before fetching
+        if session_cache and 'vietnamese_market_data' in session_cache:
+            cached_data = session_cache['vietnamese_market_data']
+            cache_timestamp = cached_data.get('fetch_timestamp')
+            if cache_timestamp:
+                from datetime import datetime, timedelta
+                cache_age = datetime.now() - cache_timestamp
+                if cache_age < timedelta(minutes=5):
+                    logger.info(f"Using cached Vietnamese market data (age: {cache_age.seconds}s)")
+                    # Return cached data bundle
+                    return VNDataFetchOutput(
+                        success=True,
+                        ticker=input_data.ticker,
+                        data_bundle=RawDataBundle(**cached_data['data_bundle']),
+                        message=f"Using cached data for {input_data.ticker}",
+                        fetch_duration_ms=0,
+                        sources_accessed=cached_data.get('sources_accessed', ['cache'])
+                    )
 
         sources_accessed = []
         data_quality_flags = []
@@ -244,6 +269,15 @@ class VNStep6DataFetchProcessor:
                 data_quality_flags=data_quality_flags,
                 pdf_sources_used=pdf_sources
             )
+
+            # FIX Issue #2 (Vietnam): Cache data after successful fetch
+            if session_cache:
+                session_cache['vietnamese_market_data'] = {
+                    'data_bundle': data_bundle.dict(),
+                    'sources_accessed': sources_accessed,
+                    'fetch_timestamp': datetime.now()
+                }
+                logger.info("Cached Vietnamese market data for 5-minute TTL")
 
             return VNDataFetchOutput(
                 success=True,

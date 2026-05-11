@@ -25,7 +25,7 @@ import {
 const AssumptionsStep = ({
   historicalData,
   peerData,
-  aiData,
+  aiData: historicalGapsData,
   aiError,
   confirmedValues,
   selectedModel,
@@ -37,6 +37,8 @@ const AssumptionsStep = ({
   onContinueToForecastDrivers,
   onBackToRequirements
 }) => {
+  // FIX Issue #5: Backward compatibility layer for legacy aiData prop name
+  const aiData = historicalGapsData;
   // ==================== HEALTH CHECK & ERROR VALIDATION ====================
   
   // Validate data integrity

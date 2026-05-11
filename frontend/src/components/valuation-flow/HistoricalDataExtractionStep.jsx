@@ -18,7 +18,7 @@ import React from 'react';
  * 5. Show extraction results with confidence scores and sources
  */
 const HistoricalDataExtractionStep = ({
-  aiData,
+  historicalGapsData,
   aiError,
   confirmedValues,
   selectedModel,
@@ -32,6 +32,8 @@ const HistoricalDataExtractionStep = ({
   onRetryAiExtraction,
   loading
 }) => {
+  // FIX Issue #5: Backward compatibility layer for legacy aiData prop name
+  const data = historicalGapsData || aiData;
   // Handle using AI suggestion for historical data
   const handleUseAiSuggestion = (field, value) => {
     if (onUseAI) {
@@ -98,12 +100,12 @@ const HistoricalDataExtractionStep = ({
 
   // Render historical data gaps table - PRIMARY DISPLAY for Step 7
   const renderHistoricalDataGaps = () => {
-    // Check if we have historical gaps filled data
-    const hasGaps = aiData && aiData.historical_gaps_filled && aiData.historical_gaps_filled.length > 0;
-    const completeness = aiData?.data_completeness_score || 1.0;
-    const sourcesUsed = aiData?.sources_used || [];
-    const totalGapsFound = aiData?.total_gaps_found || 0;
-    const totalGapsFilled = aiData?.total_gaps_filled || 0;
+    // Check if we have historical gaps filled data (using renamed 'data' variable)
+    const hasGaps = data && data.historical_gaps_filled && data.historical_gaps_filled.length > 0;
+    const completeness = data?.data_completeness_score || 1.0;
+    const sourcesUsed = data?.sources_used || [];
+    const totalGapsFound = data?.total_gaps_found || 0;
+    const totalGapsFilled = data?.total_gaps_filled || 0;
 
     // No gaps case - all data retrieved successfully
     if (!hasGaps && completeness === 1.0) {
@@ -111,7 +113,7 @@ const HistoricalDataExtractionStep = ({
     }
 
     // Gaps exist - show extraction results
-    const gaps = aiData?.historical_gaps_filled || [];
+    const gaps = data?.historical_gaps_filled || [];
 
     return (
       <>
@@ -187,10 +189,10 @@ const HistoricalDataExtractionStep = ({
         )}
 
         {/* Extraction Methodology */}
-        {aiData?.extraction_methodology && (
+        {data?.extraction_methodology && (
           <div style={{ background: '#f5f5f5', padding: '16px', borderRadius: '8px', marginBottom: '20px', border: '1px solid #ddd' }}>
             <h4 style={{ margin: '0 0 8px 0', color: '#333' }}>🔍 Extraction Methodology</h4>
-            <p style={{ margin: 0, fontSize: '14px', lineHeight: '1.6', color: '#555' }}>{aiData.extraction_methodology}</p>
+            <p style={{ margin: 0, fontSize: '14px', lineHeight: '1.6', color: '#555' }}>{data.extraction_methodology}</p>
           </div>
         )}
 
@@ -254,7 +256,7 @@ const HistoricalDataExtractionStep = ({
       {renderHistoricalDataGaps()}
 
       {/* No data extracted warning */}
-      {(!aiData || Object.keys(aiData).length === 0) && !aiError && (
+      {(!data || Object.keys(data).length === 0) && !aiError && (
         <div className="summary-box" style={{ background: 'linear-gradient(135deg, #f5f5f5 0%, #e0e0e0 100%)', marginBottom: '20px' }}>
           <h3>⚠️ No AI Extraction Performed</h3>
           <p>AI extraction has not been triggered yet. Click the button below to search for missing historical data.</p>
