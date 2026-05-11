@@ -22,11 +22,13 @@ const RequirementsStep = ({
   dcfInputs,
   dupontResults,
   compsResults,
-  aiData,
+  aiData: historicalGapsData,
   aiError,
   onShowInputs,
   requiredFields = []
 }) => {
+  // FIX Issue #5: Backward compatibility layer for legacy aiData prop name
+  const aiData = historicalGapsData;
   // Group required fields by category
   const getGroupedRequiredFields = () => {
     if (!requiredFields || requiredFields.length === 0) return {};

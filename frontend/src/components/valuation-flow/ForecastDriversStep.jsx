@@ -208,7 +208,17 @@ const ForecastDriversStep = ({
 
   // Handle forecast driver input change with auto-save
   const handleForecastDriverChange = (scenario, field, yearIndex, value) => {
-    const numValue = parseFloat(value) || 0;
+    // FIX Issue #11: Explicit NaN checking instead of silent || 0
+    const parsedValue = parseFloat(value);
+    let numValue = isNaN(parsedValue) ? 0 : parsedValue;
+    
+    // Range validation for forecast drivers (-100% to 1000% for percentages)
+    if (isPercentageField(field)) {
+      if (numValue < -1.0 || numValue > 10.0) {
+        console.warn(`[Validation] ${field} value ${numValue} out of range [-1.0, 10.0], clamping to bounds`);
+        numValue = Math.max(-1.0, Math.min(10.0, numValue));
+      }
+    }
     
     setLocalForecastDrivers(prev => ({
       ...prev,
@@ -229,9 +239,41 @@ const ForecastDriversStep = ({
     }
   };
 
+  // Helper function to check if a field is percentage-based
+  const isPercentageField = (field) => {
+    const percentageFields = [
+      'sales_volume_growth', 'inflation_rate', 'opex_growth', 
+      'tax_rate', 'capital_expenditure'
+    ];
+    return percentageFields.includes(field);
+  };
+
   // Handle DCF input change with auto-save
   const handleDcfInputChange = (field, value) => {
-    const numValue = parseFloat(value) || 0;
+    // FIX Issue #11: Explicit NaN checking instead of silent || 0
+    const parsedValue = parseFloat(value);
+    let numValue = isNaN(parsedValue) ? 0 : parsedValue;
+    
+    // Market-specific DCF input validation with reasonable ranges
+    const dcfRanges = {
+      risk_free_rate: { min: 0.01, max: 0.20 }, // 1% - 20%
+      equity_risk_premium: { min: 0.03, max: 0.15 }, // 3% - 15%
+      beta: { min: 0.1, max: 3.0 },
+      cost_of_debt: { min: 0.01, max: 0.30 }, // 1% - 30%
+      wacc: { min: 0.05, max: 0.25 }, // 5% - 25%
+      terminal_growth_rate: { min: 0.0, max: 0.10 }, // 0% - 10%
+      terminal_ebitda_multiple: { min: 1.0, max: 50.0 },
+      useful_life_existing: { min: 1, max: 50 },
+      useful_life_new: { min: 1, max: 50 }
+    };
+    
+    if (dcfRanges[field]) {
+      const { min, max } = dcfRanges[field];
+      if (numValue < min || numValue > max) {
+        console.warn(`[Validation] DCF ${field} value ${numValue} out of range [${min}, ${max}], clamping to bounds`);
+        numValue = Math.max(min, Math.min(max, numValue));
+      }
+    }
     
     setLocalDcfInputs(prev => ({
       ...prev,
