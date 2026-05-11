@@ -44,6 +44,16 @@ export const savePeers = async (sessionId, peers) => {
   return response.data;
 };
 
+// Step 3: Validate Manual Peer Tickers
+export const validateManualPeers = async (sessionId, tickers, market = 'international') => {
+  const response = await api.post('/validate-manual-peers', { 
+    session_id: sessionId, 
+    tickers,
+    market 
+  });
+  return response.data;
+};
+
 // Step 4: Select Models - Updated to support matrix workflow
 // Accepts single model per request (for parallel frontend calls) or use /step-10-valuate-multi for batch
 export const selectModels = async (sessionId, model, market = 'international') => {

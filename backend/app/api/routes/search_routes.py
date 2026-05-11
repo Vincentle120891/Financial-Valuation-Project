@@ -249,3 +249,43 @@ async def suggest_peers_legacy(ticker: str, max_peers: int = 10, market: str = "
     except Exception as e:
         logger.error(f"Failed to suggest peers: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Peer suggestion failed: {str(e)}")
+
+
+@router.post("/validate-manual-peers")
+async def validate_manual_peers(request: dict):
+    """
+    Validate manually entered peer tickers.
+    
+    Args:
+        session_id: Session identifier (required)
+        tickers: List of ticker symbols to validate (required)
+        market: Market type (default: international)
+    
+    Returns:
+        Dictionary with validated peers and any errors
+    """
+    from app.api.schemas import ManualPeerRequest
+    
+    session_id = request.get("session_id")
+    tickers = request.get("tickers", [])
+    market = request.get("market", "international")
+    
+    # Validate required parameters
+    if not session_id:
+        raise HTTPException(status_code=400, detail="Missing required parameter: session_id")
+    if not tickers:
+        raise HTTPException(status_code=400, detail="Missing required parameter: tickers")
+    
+    logger.info(f"Validating {len(tickers)} manual peers for session='{session_id}', market={market}")
+    
+    try:
+        result = await step2_processor.validate_manual_peers(
+            tickers=tickers,
+            market=market
+        )
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Failed to validate manual peers: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Manual peer validation failed: {str(e)}")
