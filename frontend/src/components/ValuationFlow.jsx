@@ -364,7 +364,6 @@ const ValuationFlow = () => {
       console.log('Select model response:', data);
       if (data.message) {
         setCurrentStep(5);
-        await fetchRequiredInputs(modelType);
       }
     } catch (err) {
       console.error('Select model error:', err);
@@ -372,7 +371,7 @@ const ValuationFlow = () => {
     } finally {
       setLoading(false);
     }
-  }, [sessionId, market, fetchRequiredInputs]);
+  }, [sessionId, market]);
   
   // ==================== DEEP MERGE UTILITY FOR MATRIX STATE ====================
   // Prevents data loss when switching between models by preserving all models' data
