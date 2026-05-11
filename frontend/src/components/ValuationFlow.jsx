@@ -686,35 +686,75 @@ const ValuationFlow = () => {
       const fetchDataResponse = await fetchApiData(sessionId, method, market);
       console.log('Fetch API data response:', fetchDataResponse);
 
+      // Handle both International and Vietnamese response formats
+      // International format: { status, data: { historical_financials, ... }, message }
+      // Vietnamese format: { session_id, status, ticker, success, source_provider, ..., periods_fetched, ... }
+      
+      let financialData = null;
+      
+      if (market && (market.toLowerCase() === 'vietnamese' || market.toLowerCase() === 'vietnam')) {
+        // Vietnamese response format - wrap raw data in expected structure
+        if (fetchDataResponse.success) {
+          // Vietnamese returns flat structure with periods_fetched, source_provider, etc.
+          // Frontend needs to adapt this to the expected format
+          financialData = {
+            historical_financials: {
+              years: fetchDataResponse.periods_fetched || [],
+              data_fields: [], // Will be populated from cached session data on next step
+              source: fetchDataResponse.source_provider,
+              currency: fetchDataResponse.currency_unit
+            },
+            metadata: {
+              ticker: fetchDataResponse.ticker,
+              source_provider: fetchDataResponse.source_provider,
+              fetch_timestamp: fetchDataResponse.fetch_timestamp,
+              currency_unit: fetchDataResponse.currency_unit,
+              periods_fetched: fetchDataResponse.periods_fetched,
+              missing_periods: fetchDataResponse.missing_periods,
+              data_quality_flags: fetchDataResponse.data_quality_flags,
+              pdf_sources_used: fetchDataResponse.pdf_sources_used
+            },
+            calculated_metrics: {
+              dataRetrieved: true,
+              source: fetchDataResponse.source_provider,
+              periodsCovered: fetchDataResponse.periods_fetched
+            }
+          };
+        }
+      } else {
+        // International format - use data field directly
+        financialData = fetchDataResponse.data;
+      }
+
       // Set financial data first - handle both old and new backend formats
-      if (fetchDataResponse.data) {
+      if (financialData) {
         // Store in matrix structure
-        setValuationData(method, fetchDataResponse.data);
+        setValuationData(method, financialData);
 
         // Also store in individual state variables for backward compatibility
-        if (fetchDataResponse.data.historical_financials) {
+        if (financialData.historical_financials) {
           // Step 6 API data is now stored in valuationsData matrix via setValuationData above
           // No need for separate step6ApiData state
         }
-        if (fetchDataResponse.data.forecast_drivers) {
-          setForecastDrivers(method, fetchDataResponse.data.forecast_drivers);
+        if (financialData.forecast_drivers) {
+          setForecastDrivers(method, financialData.forecast_drivers);
         }
-        if (fetchDataResponse.data.peer_comparables) {
-          setPeerData(fetchDataResponse.data.peer_comparables);
+        if (financialData.peer_comparables) {
+          setPeerData(financialData.peer_comparables);
         }
-        if (fetchDataResponse.data.dcf_inputs) {
-          setDcfInputs(method, fetchDataResponse.data.dcf_inputs);
+        if (financialData.dcf_inputs) {
+          setDcfInputs(method, financialData.dcf_inputs);
         }
         // Store DuPont and Comps data in matrix (not separate state)
-        if (fetchDataResponse.data.dupont_ratios) {
-          setResult('DuPont', fetchDataResponse.data.dupont_ratios);
+        if (financialData.dupont_ratios) {
+          setResult('DuPont', financialData.dupont_ratios);
         }
-        if (fetchDataResponse.data.comps_results) {
-          setResult('COMPS', fetchDataResponse.data.comps_results);
+        if (financialData.comps_results) {
+          setResult('COMPS', financialData.comps_results);
         }
         // Set calculated metrics from Step 6 backend response
-        if (fetchDataResponse.data.calculated_metrics) {
-          setCalculatedMetrics(fetchDataResponse.data.calculated_metrics);
+        if (financialData.calculated_metrics) {
+          setCalculatedMetrics(financialData.calculated_metrics);
         }
 
         // Auto-navigate to Step 6 to show retrieved data
