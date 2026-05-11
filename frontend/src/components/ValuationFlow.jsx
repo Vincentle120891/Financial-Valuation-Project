@@ -26,6 +26,31 @@ import AssumptionsStep from './valuation-flow/AssumptionsStep';
 import RunValuationStep from './valuation-flow/RunValuationStep';
 import ResultsStep from './valuation-flow/ResultsStep';
 
+// Debounce utility function for auto-save
+const useDebounce = (callback, delay) => {
+  const timeoutRef = React.useRef(null);
+  
+  const debouncedCallback = useCallback((...args) => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
+    timeoutRef.current = setTimeout(() => {
+      callback(...args);
+    }, delay);
+  }, [callback, delay]);
+  
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, []);
+  
+  return debouncedCallback;
+};
+
 /**
  * ValuationFlow - Main Container Component
  *
@@ -606,7 +631,7 @@ const ValuationFlow = () => {
     }
   }, [sessionId, selectedModels, market]);
 
-  // ==================== MANUAL INPUT HANDLER ====================
+  // ==================== MANUAL INPUT HANDLER (with auto-save) ====================
   const handleManualInput = (field, value) => {
     let parsedValue = value;
 
@@ -620,7 +645,49 @@ const ValuationFlow = () => {
       ...prev,
       [field]: { value: parsedValue, source: 'manual' }
     }));
+    
+    // Also update forecastDrivers or dcfInputs state for Step 8 persistence
+    if (field.startsWith('forecast_')) {
+      // Parse field format: forecast_scenario_field_yearIndex
+      const parts = field.split('_');
+      if (parts.length >= 4) {
+        const scenario = parts[1];
+        const driverField = parts[2];
+        const yearIndex = parseInt(parts[3], 10);
+        
+        setForecastDrivers(prev => {
+          if (!prev || !prev[scenario]) return prev;
+          return {
+            ...prev,
+            [scenario]: {
+              ...prev[scenario],
+              [driverField]: prev[scenario][driverField].map((v, idx) => 
+                idx === yearIndex ? parsedValue : v
+              )
+            }
+          };
+        });
+      }
+    } else if (field.startsWith('dcf_')) {
+      const dcfField = field.replace('dcf_', '');
+      setDcfInputs(prev => ({
+        ...prev,
+        [dcfField]: parsedValue
+      }));
+    }
   };
+
+  // Debounced auto-save handler for forecast drivers (500ms delay)
+  const handleAutoSaveForecastDrivers = useDebounce((field, value) => {
+    console.log('[Auto-Save] Forecast driver saved:', field, value);
+    // The actual save happens in handleManualInput, this is for logging/debugging
+  }, 500);
+
+  // Debounced auto-save handler for DCF inputs (500ms delay)
+  const handleAutoSaveDcfInputs = useDebounce((field, value) => {
+    console.log('[Auto-Save] DCF input saved:', field, value);
+    // The actual save happens in handleManualInput, this is for logging/debugging
+  }, 500);
 
   // ==================== USE AI SUGGESTION ====================
   const handleUseAI = (field, aiValue) => {
@@ -883,6 +950,7 @@ const ValuationFlow = () => {
             market={market}
             selectedModel={selectedModels}
             onManualInput={handleManualInput}
+            onAutoSave={handleAutoSaveForecastDrivers}
             onConfirmDrivers={handleConfirmAssumptions}
             onBackToRequirements={handleBackToRequirements}
             onContinueToAssumptions={handleContinueToAssumptions}
