@@ -117,13 +117,8 @@ const ValuationFlow = () => {
     }));
   };
   
-  // Legacy state aliases for backward compatibility (to be removed in future refactor)
-  // These are now read-only computed values from the matrix structure
-  const step6ApiData = getValuationData(selectedModels);  // Deprecated: use getValuationData() instead
-  const step7ExtractionResults = getValuationData(selectedModels);  // Deprecated: use getValuationData() instead
-  const historicalData = step6ApiData;  // Deprecated: use getValuationData() instead
-  const aiData = step7ExtractionResults;  // Deprecated: use getValuationData() instead
   // Note: aiAssumptions was never a separate state - it's part of the matrix structure via getValuationData()
+  // All data access should use getValuationData(method) directly instead of legacy aliases
 
   // Assumption Management
   const [confirmedValues, setConfirmedValues] = useState({});
@@ -188,9 +183,7 @@ const ValuationFlow = () => {
     }));
   };
   
-  // Legacy state aliases for backward compatibility (to be removed in future refactor)
-  const forecastDrivers = getForecastDrivers(selectedModels);  // Deprecated: use getForecastDrivers() instead
-  const dcfInputs = getDcfInputs(selectedModels);  // Deprecated: use getDcfInputs() instead
+  // All data access should use getForecastDrivers(method) or getDcfInputs(method) directly
   
   // Step 6-7: Data Storage (using matrix structure primarily)
   const [peerData, setPeerData] = useState(null);
@@ -940,13 +933,13 @@ const ValuationFlow = () => {
             onBackToModelSelection={handleBackToModelSelection}
             onRetrieveData={handleRetrieveData}
             loading={loading}
-            historicalData={step6ApiData}
+            historicalData={getValuationData(selectedModels)}
             forecastDrivers={getForecastDrivers(selectedModels)}
             peerData={peerData}
             dcfInputs={getDcfInputs(selectedModels)}
             dupontResults={getResult('DuPont')}
             compsResults={getResult('COMPS')}
-            aiData={step7ExtractionResults}
+            aiData={getValuationData(selectedModels)}
             aiError={aiError}
             requiredFields={requiredFields}
             onShowInputs={handleShowApiData}
@@ -955,7 +948,7 @@ const ValuationFlow = () => {
       case 6:
         return (
           <ApiDataStep
-            historicalData={step6ApiData}
+            historicalData={getValuationData(selectedModels)}
             forecastDrivers={getForecastDrivers(selectedModels)}
             peerData={peerData}
             dcfInputs={getDcfInputs(selectedModels)}
@@ -970,12 +963,12 @@ const ValuationFlow = () => {
       case 7:
         return (
           <HistoricalDataExtractionStep
-            aiData={step7ExtractionResults}
+            aiData={getValuationData(selectedModels)}
             aiError={aiError}
             confirmedValues={confirmedValues}
             selectedModel={selectedModels}
             market={market}
-            historicalData={step6ApiData}
+            historicalData={getValuationData(selectedModels)}
             apiData={calculatedMetrics}
             onManualInput={handleManualInput}
             onUseAI={handleUseAI}
@@ -992,7 +985,7 @@ const ValuationFlow = () => {
             forecastDrivers={getForecastDrivers(selectedModels)}
             dcfInputs={getDcfInputs(selectedModels)}
             step6Data={calculatedMetrics}
-            step7Data={step7ExtractionResults}
+            step7Data={getValuationData(selectedModels)}
             market={market}
             selectedModel={selectedModels}
             onManualInput={handleManualInput}
@@ -1006,9 +999,9 @@ const ValuationFlow = () => {
       case 9:
         return (
           <AssumptionsStep
-            historicalData={step6ApiData}
+            historicalData={getValuationData(selectedModels)}
             peerData={peerData}
-            aiData={step7ExtractionResults}
+            aiData={getValuationData(selectedModels)}
             aiError={aiError}
             confirmedValues={confirmedValues}
             selectedModel={selectedModels}
