@@ -103,9 +103,67 @@ const ValuationFlow = () => {
   const [selectedScenario, setSelectedScenario] = useState('base_case');
   const [validationErrors, setValidationErrors] = useState([]);
 
-  // Step 8-9: Forecast Drivers & DCF Inputs
-  const [forecastDrivers, setForecastDrivers] = useState(null);
-  const [dcfInputs, setDcfInputs] = useState(null);
+  // Step 8-9: Forecast Drivers & DCF Inputs - Matrix structure: forecastDriversData[market][method]
+  // This enables "3 Valuation Methods × 2 Market Versions" architecture
+  const [forecastDriversData, setForecastDriversData] = useState({
+    international: {
+      dcf: null,
+      dupont: null,
+      comps: null
+    },
+    vietnam: {
+      dcf: null,
+      dupont: null,
+      comps: null
+    }
+  });
+  
+  const [dcfInputsData, setDcfInputsData] = useState({
+    international: {
+      dcf: null,
+      dupont: null,
+      comps: null
+    },
+    vietnam: {
+      dcf: null,
+      dupont: null,
+      comps: null
+    }
+  });
+  
+  // Helper to get/set forecast drivers for current market + method
+  const getForecastDrivers = (method) => {
+    return forecastDriversData[market]?.[method?.toLowerCase()] || null;
+  };
+  
+  const setForecastDrivers = (method, data) => {
+    setForecastDriversData(prev => ({
+      ...prev,
+      [market]: {
+        ...prev[market],
+        [method?.toLowerCase()]: data
+      }
+    }));
+  };
+  
+  // Helper to get/set DCF inputs for current market + method
+  const getDcfInputs = (method) => {
+    return dcfInputsData[market]?.[method?.toLowerCase()] || null;
+  };
+  
+  const setDcfInputs = (method, data) => {
+    setDcfInputsData(prev => ({
+      ...prev,
+      [market]: {
+        ...prev[market],
+        [method?.toLowerCase()]: data
+      }
+    }));
+  };
+  
+  // Legacy state aliases for backward compatibility (to be removed in future refactor)
+  const forecastDrivers = getForecastDrivers(selectedModels);  // Deprecated: use getForecastDrivers() instead
+  const dcfInputs = getDcfInputs(selectedModels);  // Deprecated: use getDcfInputs() instead
   
   // Step 6-7: Data Storage (using matrix structure primarily)
   const [peerData, setPeerData] = useState(null);
@@ -361,9 +419,9 @@ const ValuationFlow = () => {
     setAiAssumptions(null);  // Clear Step 8 AI assumptions
     setAiError(null); // Clear AI errors
     setStep6ApiData(null);  // Clear Step 6 API data
-    setForecastDrivers(null);
+    setForecastDrivers(selectedModels, null);
     setPeerData(null);
-    setDcfInputs(null);
+    setDcfInputs(selectedModels, null);
     // Reset results matrix for current market only
     setValuationResults(prev => ({
       ...prev,
@@ -476,10 +534,7 @@ const ValuationFlow = () => {
         setValuationData(method, step8Response);
         
         // Also store in component state for backward compatibility
-        setForecastDrivers(prev => ({
-          ...prev,
-          step8InitializedData: step8Response
-        }));
+        setForecastDrivers(method, step8Response);
       }
     } catch (err) {
       console.error('Failed to initialize Step 8:', err);
@@ -553,13 +608,13 @@ const ValuationFlow = () => {
           setStep6ApiData(fetchDataResponse.data.historical_financials);  // Step 6 API data
         }
         if (fetchDataResponse.data.forecast_drivers) {
-          setForecastDrivers(fetchDataResponse.data.forecast_drivers);
+          setForecastDrivers(method, fetchDataResponse.data.forecast_drivers);
         }
         if (fetchDataResponse.data.peer_comparables) {
           setPeerData(fetchDataResponse.data.peer_comparables);
         }
         if (fetchDataResponse.data.dcf_inputs) {
-          setDcfInputs(fetchDataResponse.data.dcf_inputs);
+          setDcfInputs(method, fetchDataResponse.data.dcf_inputs);
         }
         // Store DuPont and Comps data in matrix (not separate state)
         if (fetchDataResponse.data.dupont_ratios) {
@@ -756,9 +811,9 @@ const ValuationFlow = () => {
         comps: null
       }
     });
-    setForecastDrivers(null);
+    setForecastDrivers(selectedModels, null);
     setPeerData(null);
-    setDcfInputs(null);
+    setDcfInputs(selectedModels, null);
     setCalculatedMetrics(null);
   };
 
@@ -811,9 +866,9 @@ const ValuationFlow = () => {
             onRetrieveData={handleRetrieveData}
             loading={loading}
             historicalData={step6ApiData}
-            forecastDrivers={forecastDrivers}
+            forecastDrivers={getForecastDrivers(selectedModels)}
             peerData={peerData}
-            dcfInputs={dcfInputs}
+            dcfInputs={getDcfInputs(selectedModels)}
             dupontResults={getResult('DuPont')}
             compsResults={getResult('COMPS')}
             aiData={step7ExtractionResults}
@@ -826,9 +881,9 @@ const ValuationFlow = () => {
         return (
           <ApiDataStep
             historicalData={step6ApiData}
-            forecastDrivers={forecastDrivers}
+            forecastDrivers={getForecastDrivers(selectedModels)}
             peerData={peerData}
-            dcfInputs={dcfInputs}
+            dcfInputs={getDcfInputs(selectedModels)}
             dupontResults={getResult('DuPont')}
             compsResults={getResult('COMPS')}
             calculatedMetrics={calculatedMetrics}
@@ -859,8 +914,8 @@ const ValuationFlow = () => {
         return (
           <ForecastDriversStep
             sessionId={sessionId}
-            forecastDrivers={forecastDrivers}
-            dcfInputs={dcfInputs}
+            forecastDrivers={getForecastDrivers(selectedModels)}
+            dcfInputs={getDcfInputs(selectedModels)}
             step6Data={calculatedMetrics}
             step7Data={step7ExtractionResults}
             market={market}
