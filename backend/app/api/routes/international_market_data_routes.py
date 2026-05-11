@@ -317,14 +317,32 @@ async def get_price_history(
     - 2y: ~504 trading days
     - 5y: ~1260 trading days
     - max: All available data
+    
+    Error Handling:
+    - Returns 404 if ticker not found or delisted
+    - Returns 422 if insufficient data available
     """
     try:
         result = intl_service.fetch_international_data(ticker, market_code)
 
         if not result['success']:
-            raise HTTPException(status_code=404, detail=result.get('error', 'Failed to fetch'))
+            error_msg = result.get('error', 'Failed to fetch')
+            # Check for specific error conditions
+            if 'not found' in error_msg.lower() or 'delisted' in error_msg.lower():
+                raise HTTPException(
+                    status_code=404, 
+                    detail=f"Ticker {ticker} not found or may be delisted. Error: {error_msg}"
+                )
+            raise HTTPException(status_code=404, detail=error_msg)
 
         historical_prices = result.get('historical_prices')
+
+        # Validate we have price data
+        if historical_prices is None or historical_prices.empty:
+            raise HTTPException(
+                status_code=422,
+                detail=f"No price history available for {ticker}. Insufficient trading data."
+            )
 
         # Map period to number of trading days
         period_map = {
@@ -339,29 +357,43 @@ async def get_price_history(
         
         num_days = period_map.get(period, 63)  # Default to 3mo
         
+        # Filter by period if specified
+        if num_days is not None:
+            historical_prices = historical_prices.tail(num_days)
+            # Check if we got enough data
+            if len(historical_prices) < num_days // 2:
+                logger.warning(f"Only {len(historical_prices)} days of data available for {ticker}, expected {num_days}")
+        
         # Format data for chart
         chart_data = []
-        if historical_prices is not None and not historical_prices.empty:
-            # Filter by period if specified
-            if num_days is not None:
-                historical_prices = historical_prices.tail(num_days)
-            
-            for date, row in historical_prices.iterrows():
-                chart_data.append({
-                    "date": date.strftime('%Y-%m-%d'),
-                    "open": float(row['Open']) if pd.notna(row['Open']) else None,
-                    "high": float(row['High']) if pd.notna(row['High']) else None,
-                    "low": float(row['Low']) if pd.notna(row['Low']) else None,
-                    "close": float(row['Close']) if pd.notna(row['Close']) else None,
-                    "volume": int(row['Volume']) if pd.notna(row['Volume']) else None
-                })
+        for date, row in historical_prices.iterrows():
+            chart_data.append({
+                "date": date.strftime('%Y-%m-%d'),
+                "open": float(row['Open']) if pd.notna(row['Open']) else None,
+                "high": float(row['High']) if pd.notna(row['High']) else None,
+                "low": float(row['Low']) if pd.notna(row['Low']) else None,
+                "close": float(row['Close']) if pd.notna(row['Close']) else None,
+                "volume": int(row['Volume']) if pd.notna(row['Volume']) else None
+            })
 
-        return chart_data
+        if not chart_data:
+            raise HTTPException(
+                status_code=422,
+                detail=f"No valid price data points for {ticker} in the requested period."
+            )
+
+        return {
+            "ticker": ticker,
+            "market_code": market_code,
+            "period": period,
+            "data_points": len(chart_data),
+            "prices": chart_data
+        }
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error fetching price history: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error fetching price history for {ticker}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch price history: {str(e)}")
 
 
 

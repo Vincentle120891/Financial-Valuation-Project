@@ -109,19 +109,38 @@ const PeerSelectionStep = ({
       <div className="w-full grid grid-cols-5 gap-3 mb-8">
         {suggestedPeers.map((peer) => {
           const isSelected = selectedPeers.find(p => p.symbol === peer.symbol);
+          
+          // Detect invalid peers (indices, delisted, etc.)
+          const isInvalidPeer = 
+            peer.symbol.startsWith('^') ||
+            peer.symbol.includes('INDEX') ||
+            peer.symbol.includes('IDX') ||
+            !peer.marketCap ||
+            peer.marketCap <= 0;
 
           return (
             <div
               key={peer.symbol}
               className={`cursor-pointer rounded-lg p-3 border-2 transition-all min-w-0 relative ${
-                isSelected
+                isInvalidPeer
+                  ? 'border-red-300 bg-red-50 opacity-60'
+                  : isSelected
                   ? 'border-green-500 bg-green-50 shadow-md'
                   : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm'
               }`}
-              onClick={() => handleTogglePeer(peer)}
+              onClick={() => !isInvalidPeer && handleTogglePeer(peer)}
             >
+              {/* Invalid Peer Warning Badge */}
+              {isInvalidPeer && (
+                <div className="absolute top-2 left-2 z-10">
+                  <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-red-200 text-red-800">
+                    ⚠️ Invalid
+                  </span>
+                </div>
+              )}
+              
               {/* Selection Button Inside Icon Badge */}
-              <div className="absolute top-2 right-2 z-10">
+              <div className={`absolute top-2 right-2 z-10 ${isInvalidPeer ? 'pointer-events-none' : ''}`}>
                 <button
                   onClick={(e) => {
                     e.stopPropagation();

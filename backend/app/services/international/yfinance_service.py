@@ -352,25 +352,56 @@ class InternationalDataStrategy:
             return {}
     
     def _fetch_analyst_estimates(self, ticker) -> Dict[str, Any]:
-        """Fetch analyst estimates."""
+        """Fetch analyst estimates using compatible yfinance API."""
         try:
-            estimates = ticker.estimates
-            if estimates is None:
-                return {}
+            # Try the newer earnings_estimate approach first (yfinance >= 0.2.0)
+            estimates = {}
             
-            result = {}
+            # Method 1: Try earnings_estimate attribute
+            if hasattr(ticker, 'earnings_estimate') and ticker.earnings_estimate is not None:
+                try:
+                    est_df = ticker.earnings_estimate
+                    if est_df is not None and not est_df.empty:
+                        estimates['earnings_estimate'] = est_df.to_dict() if hasattr(est_df, 'to_dict') else str(est_df)
+                except Exception:
+                    pass
             
-            # Handle different estimate types
-            if hasattr(estimates, 'revenue_estimate'):
-                result['revenue_estimate'] = estimates.revenue_estimate
+            # Method 2: Try revenue_estimate attribute  
+            if hasattr(ticker, 'revenue_estimate') and ticker.revenue_estimate is not None:
+                try:
+                    rev_df = ticker.revenue_estimate
+                    if rev_df is not None and not rev_df.empty:
+                        estimates['revenue_estimate'] = rev_df.to_dict() if hasattr(rev_df, 'to_dict') else str(rev_df)
+                except Exception:
+                    pass
             
-            if hasattr(estimates, 'earnings_estimate'):
-                result['earnings_estimate'] = estimates.earnings_estimate
+            # Method 3: Try recommendations as fallback
+            if hasattr(ticker, 'recommendations') and ticker.recommendations is not None:
+                try:
+                    rec_df = ticker.recommendations
+                    if rec_df is not None and not rec_df.empty:
+                        estimates['recommendations'] = rec_df.head(5).to_dict() if hasattr(rec_df, 'to_dict') else str(rec_df)
+                except Exception:
+                    pass
             
-            if hasattr(estimates, 'eps_trend'):
-                result['eps_trend'] = estimates.eps_trend
+            # Method 4: Try analyst_price_targets if available
+            if hasattr(ticker, 'analyst_price_targets'):
+                try:
+                    targets = ticker.analyst_price_targets
+                    if targets:
+                        estimates['analyst_price_targets'] = targets
+                except Exception:
+                    pass
             
-            return result
+            if not estimates:
+                logger.debug(f"No analyst estimates available for {ticker}")
+            
+            return estimates
+            
+        except AttributeError as e:
+            # Handle deprecated 'estimates' attribute gracefully
+            logger.warning(f"Analyst estimates not available (deprecated API): {e}")
+            return {}
         except Exception as e:
             logger.error(f"Error fetching analyst estimates: {e}")
             return {}
@@ -1216,11 +1247,18 @@ class YFinanceService:
         """
         Search for tickers by company name or symbol.
         
+        Filters out:
+        - Market indices (symbols starting with ^)
+        - ETFs and mutual funds (typeDisp = 'ETF' or 'Mutual Fund')
+        - Currency pairs (symbols ending with =X)
+        - Cryptocurrencies (symbols ending with -USD, etc.)
+        - Symbols without valid exchange
+        
         Args:
             query: Search query string
             
         Returns:
-            List of matching ticker results
+            List of matching ticker results (only valid equities)
         """
         import yfinance as yf
         
@@ -1228,22 +1266,56 @@ class YFinanceService:
             logger.info(f"Searching tickers for query='{query}'")
             results = yf.Search(query=query, max_results=10)
             
-            # Convert to list of dicts
+            # Convert to list of dicts with validation
             ticker_list = []
             if hasattr(results, 'quotes'):
                 for quote in results.quotes:
+                    symbol = quote.get('symbol', '')
+                    type_disp = quote.get('typeDisp', '')
+                    exchange = quote.get('exchange', '')
+                    
+                    # FILTER 1: Exclude market indices (start with ^)
+                    if symbol.startswith('^'):
+                        logger.debug(f"Excluding index symbol: {symbol}")
+                        continue
+                    
+                    # FILTER 2: Exclude ETFs and Mutual Funds
+                    if type_disp in ['ETF', 'Mutual Fund']:
+                        logger.debug(f"Excluding {type_disp}: {symbol}")
+                        continue
+                    
+                    # FILTER 3: Exclude currency pairs (end with =X)
+                    if symbol.endswith('=X'):
+                        logger.debug(f"Excluding currency pair: {symbol}")
+                        continue
+                    
+                    # FILTER 4: Exclude cryptocurrencies
+                    if any(symbol.endswith(suffix) for suffix in ['-USD', '-EUR', '-BTC', '-ETH', '-USDT']):
+                        logger.debug(f"Excluding cryptocurrency: {symbol}")
+                        continue
+                    
+                    # FILTER 5: Require valid exchange
+                    if not exchange or exchange == '':
+                        logger.debug(f"Excluding symbol without exchange: {symbol}")
+                        continue
+                    
+                    # FILTER 6: Exclude symbols with known problematic patterns
+                    if any(pattern in symbol for pattern in ['INDEX', 'IDX', '^']):
+                        logger.debug(f"Excluding symbol with problematic pattern: {symbol}")
+                        continue
+                    
                     ticker_list.append({
-                        'symbol': quote.get('symbol', ''),
+                        'symbol': symbol,
                         'shortname': quote.get('shortname', ''),
                         'longname': quote.get('longname', ''),
                         'exchDisp': quote.get('exchDisp', ''),
-                        'typeDisp': quote.get('typeDisp', ''),
-                        'exchange': quote.get('exchange', ''),
+                        'typeDisp': type_disp,
+                        'exchange': exchange,
                         'sector': quote.get('sector'),
                         'industry': quote.get('industry'),
                     })
             
-            logger.info(f"Found {len(ticker_list)} tickers for query='{query}'")
+            logger.info(f"Found {len(ticker_list)} valid tickers for query='{query}' (filtered from raw results)")
             return ticker_list
             
         except Exception as e:
