@@ -40,7 +40,7 @@ from app.services.international.step10_valuation_processor import Step10Valuatio
 from app.services.international.yfinance_service import YFinanceService
 from app.services.international.valuation_orchestrator import orchestrator
 from app.services.pdf_extraction_service import VietnamesePDFExtractor
-from app.services.international.step7_ai_web_search import AIWebSearchExtractor
+from app.services.international.step7_ai_web_search import AIWebSearchExtractor, calculate_historical_trends
 
 logger = get_logger(__name__)
 
@@ -146,12 +146,12 @@ async def select_models(request: ModelSelectRequest):
     """
     Step 4: User selects valuation model.
     Uses SessionService for session management with matrix workflow support.
-    
+
     MATRIX WORKFLOW:
     - Stores model selection in valuations[market][method] track
     - Does NOT overwrite other models - each model runs independently
     - Market defaults to 'international' if not specified
-    
+
     METHOD-AGNOSTIC DESIGN:
     - This endpoint accepts a SINGLE method per request
     - For multiple methods, frontend should fire parallel requests OR use /step-10-valuate-multi
@@ -166,27 +166,27 @@ async def select_models(request: ModelSelectRequest):
         # Normalize market and method from request ONLY (no session fallback)
         market = request.market.lower()  # 'international' or 'vietnam'
         method = request.model.upper()  # 'DCF', 'DUPONT', 'COMPS'
-        
+
         # Update the specific valuation track (matrix structure)
         session_service.update_valuation_status(
-            request.session_id, 
-            market=market, 
-            method=method.lower(), 
+            request.session_id,
+            market=market,
+            method=method.lower(),
             status="selected"
         )
-        
+
         # Store selected_model in the specific valuation track (not root session)
         session_service.update_session_data(
-            request.session_id, 
-            "selected_model", 
+            request.session_id,
+            "selected_model",
             method,
             market=market,
             method=method.lower()
         )
-        
+
         session_service.update_session_data(
-            request.session_id, 
-            "status", 
+            request.session_id,
+            "status",
             "ready_for_data_fetch",
             market=market,
             method=method.lower()
@@ -207,11 +207,11 @@ async def prepare_inputs(request: PrepareInputsRequest):
     """
     Step 5: Prepare required inputs for selected model.
     Uses SessionService for session management and Step5AssumptionsProcessor for international markets.
-    
+
     MATRIX WORKFLOW:
     - Retrieves model/method from request (REQUIRED - no fallback to session)
     - Prepares inputs specific to the valuation track
-    
+
     METHOD-AGNOSTIC DESIGN:
     - Method MUST be provided in request.method - no session.selected_model fallback
     - Each method operates independently with its own data track
@@ -224,13 +224,13 @@ async def prepare_inputs(request: PrepareInputsRequest):
 
         # Use market/method from request ONLY (no fallback to session)
         market = request.market.lower() if request.market else "international"
-        
+
         # Validate method is provided
         if not request.method:
             raise HTTPException(status_code=400, detail="Method parameter is required")
-        
+
         method = request.method.upper()
-        
+
         ticker = session.get("ticker")
         peer_tickers = session.get("peer_tickers", [])
 
@@ -254,7 +254,7 @@ async def prepare_inputs(request: PrepareInputsRequest):
                 })
 
         session_service.update_session_step(
-            request.session_id, 
+            request.session_id,
             step_number=5,
             market=market,
             method=method.lower()
@@ -275,12 +275,12 @@ async def fetch_api_data(request: FetchDataRequest):
     """
     Step 6: Fetch financial data from APIs and calculate metrics.
     Uses SessionService for session management and Step6DataReviewProcessor for comprehensive data review.
-    
+
     MATRIX WORKFLOW:
     - Uses market/method from request parameters (REQUIRED - no fallback)
     - Stores financial data in the specific valuation track
     - Each model's data is stored independently
-    
+
     METHOD-AGNOSTIC DESIGN:
     - Method MUST be provided in request.method - no session.selected_model fallback
     - Each method operates independently with its own data track
@@ -294,20 +294,20 @@ async def fetch_api_data(request: FetchDataRequest):
         ticker = session.get("ticker")
         # Use market from request ONLY (no fallback to session)
         market = request.market.lower() if request.market else "international"
-        
+
         # Validate method is provided
         if not request.method:
             raise HTTPException(status_code=400, detail="Method parameter is required")
-        
+
         method = request.method.upper()
-        
+
         # Retrieve peer data and other assumptions from session (saved in Step 3)
         retrieved_assumptions = session_service.get_session_value(
-            request.session_id, 
-            "retrieved_assumptions", 
+            request.session_id,
+            "retrieved_assumptions",
             {}
         )
-        
+
         # GAP 1 FIX: Get session cache for "Fetch Once, Use Many" - pass entire session as cache
         session_cache = session_service.get_session_data(request.session_id)
 
@@ -324,13 +324,13 @@ async def fetch_api_data(request: FetchDataRequest):
         # Store in the specific valuation track
         result_dict = result.model_dump(mode='json') if hasattr(result, 'model_dump') else result
         session_service.update_session_data(
-            request.session_id, 
-            "financial_data", 
+            request.session_id,
+            "financial_data",
             result_dict,
             market=market,
             method=method.lower()
         )
-        
+
         session_service.update_session_step(
             request.session_id,
             step_number=6,
@@ -364,12 +364,12 @@ async def retrieve_historical_data(request: GenerateAIRequest):
 
     AI Usage: ZERO AI involvement in generating forward-looking inputs.
     AI is ONLY used as a data extraction tool for historical information.
-    
+
     MATRIX WORKFLOW:
     - Uses market/method from request parameters (REQUIRED - no fallback)
     - Stores historical data in the specific valuation track
     - Each model's historical data is stored independently
-    
+
     METHOD-AGNOSTIC DESIGN:
     - Method MUST be provided in request.method - no session.selected_model fallback
     - Each method operates independently with its own data track
@@ -383,21 +383,21 @@ async def retrieve_historical_data(request: GenerateAIRequest):
         ticker = session.get("ticker")
         # Use market/method from request ONLY (no fallback)
         market = request.market.lower() if request.market else "international"
-        
+
         # Validate method is provided
         if not request.method:
             raise HTTPException(status_code=400, detail="Method parameter is required")
-        
+
         method = request.method.upper()
-        
+
         # Get financial data from the specific valuation track
         financial_data = session_service.get_session_value(
-            request.session_id, 
+            request.session_id,
             "financial_data",
             market=market,
             method=method.lower()
         )
-        
+
         # Fallback to shared context if not found in track
         if not financial_data:
             financial_data = session_service.get_session_value(request.session_id, "financial_data")
@@ -416,13 +416,13 @@ async def retrieve_historical_data(request: GenerateAIRequest):
 
         # Store historical data in session using SessionService - in the specific valuation track
         session_service.update_session_data(
-            request.session_id, 
-            "historical_data_gaps_filled", 
+            request.session_id,
+            "historical_data_gaps_filled",
             result,
             market=market,
             method=method.lower()
         )
-        
+
         session_service.update_session_step(
             request.session_id,
             step_number=7,
@@ -460,29 +460,29 @@ async def upload_pdf_for_step7(
 ):
     """
     Step 7: Upload PDF Financial Report for AI Extraction
-    
+
     Allows users to upload PDF annual reports, financial statements, or filings
     for AI-powered historical data extraction. This fills gaps where API data
     from Step 6 is incomplete or missing.
-    
+
     Supported documents:
     - Annual Reports (10-K, Annual Reports)
     - Financial Statements (10-Q, Quarterly Reports)
     - Prospectuses
     - Vietnamese annual reports (Báo cáo thường niên)
-    
+
     Workflow:
     1. User uploads PDF in Step 7 frontend
     2. Backend extracts financial data using VietnamesePDFExtractor
     3. Extracted data is merged with Step 6 API data
     4. Updated historical data is stored in session for Step 8
-    
+
     Args:
         session_id: Session identifier
         method: Valuation method (DCF, DUPONT, COMPS)
         market: Market type (international, vietnamese)
         file: PDF file upload
-    
+
     Returns:
         Extraction results with extracted metrics and confidence scores
     """
@@ -491,46 +491,46 @@ async def upload_pdf_for_step7(
         session = session_service.get_session_data(session_id)
         if not session:
             raise HTTPException(status_code=404, detail="Session not found")
-        
+
         # Validate file type
         if not file.filename.lower().endswith('.pdf'):
             raise HTTPException(status_code=400, detail="Only PDF files are supported")
-        
+
         # Read and save file temporarily
         import tempfile
         import os
-        
+
         content = await file.read()
         with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp:
             tmp.write(content)
             tmp_path = tmp.name
-        
+
         try:
             # Extract data from PDF
             extractor = VietnamesePDFExtractor(extraction_method="auto")
             result = extractor.extract_from_file(tmp_path)
-            
+
             # Convert to dict
             extracted_data = extractor.to_dict(result)
-            
+
             # Get existing Step 6 data
             method_lower = method.lower()
             market_lower = market.lower()
-            
+
             step6_data = session_service.get_session_value(
                 session_id,
                 "financial_data",
                 market=market_lower,
                 method=method_lower
             )
-            
+
             if not step6_data:
                 step6_data = session_service.get_session_value(session_id, "financial_data")
-            
+
             # Merge extracted data with Step 6 data
             # Priority: PDF extraction > API data
             merged_historical = {}
-            
+
             # Map extracted fields to Step 6 format
             if result.revenue:
                 merged_historical['revenue'] = result.revenue
@@ -546,7 +546,7 @@ async def upload_pdf_for_step7(
                 merged_historical['operating_cash_flow'] = result.operating_cash_flow
             if result.capex:
                 merged_historical['capex'] = result.capex
-            
+
             # Store extracted data in session
             extraction_metadata = {
                 'source': f'PDF_{file.filename}',
@@ -557,7 +557,7 @@ async def upload_pdf_for_step7(
                 'upload_timestamp': datetime.now().isoformat(),
                 'extracted_metrics': list(merged_historical.keys())
             }
-            
+
             session_service.update_session_data(
                 session_id,
                 "pdf_extraction_results",
@@ -568,13 +568,16 @@ async def upload_pdf_for_step7(
                 market=market_lower,
                 method=method_lower
             )
-            
+
             # Update historical data with extracted values
             if step6_data and 'historical_financials' in step6_data:
                 # Merge into existing structure
                 for key, value in merged_historical.items():
                     step6_data['historical_financials'][key] = value
-            
+
+            # Calculate historical trends and averages
+            trend_analysis = calculate_historical_trends(step6_data.get('historical_financials', {}) if step6_data else merged_historical)
+
             session_service.update_session_data(
                 session_id,
                 "financial_data",
@@ -582,12 +585,21 @@ async def upload_pdf_for_step7(
                 market=market_lower,
                 method=method_lower
             )
-            
+
+            # Store trend analysis for Step 8
+            session_service.update_session_data(
+                session_id,
+                "historical_trend_analysis",
+                trend_analysis,
+                market=market_lower,
+                method=method_lower
+            )
+
             logger.info(
                 f"Successfully extracted {len(merged_historical)} metrics from {file.filename} "
                 f"for {session.get('ticker', 'UNKNOWN')} ({method})"
             )
-            
+
             return {
                 "success": True,
                 "message": f"Extracted {len(merged_historical)} financial metrics from PDF",
@@ -596,14 +608,15 @@ async def upload_pdf_for_step7(
                 "extraction_method": result.extraction_method,
                 "confidence_score": result.confidence_score,
                 "extracted_metrics": merged_historical,
+                "trend_analysis": trend_analysis,
                 "notes": result.notes
             }
-            
+
         finally:
             # Clean up temp file
             if os.path.exists(tmp_path):
                 os.unlink(tmp_path)
-                
+
     except HTTPException:
         raise
     except Exception as e:
@@ -621,25 +634,25 @@ async def ai_web_search_for_step7(
 ):
     """
     Step 7: AI Web Search for Historical Data
-    
+
     Uses Groq, Gemini, and Qwen AI providers to search the internet and extract
     historical financial data. This is an alternative to PDF upload when users
     don't have access to official financial reports.
-    
+
     Workflow:
     1. User clicks "Search with AI" in Step 7 frontend
     2. Backend uses AIFallbackEngine to query AI providers (Groq → Gemini → Qwen)
     3. AI searches web for financial data from reliable sources
     4. Extracted data is validated, formatted, and merged with Step 6 data
     5. Results stored in session for Step 8
-    
+
     Args:
         session_id: Session identifier
         ticker: Stock ticker symbol (e.g., AAPL, VNM)
         company_name: Full company name
         method: Valuation method (DCF, DUPONT, COMPS)
         market: Market type (international, vietnamese)
-    
+
     Returns:
         Extraction results with time series data, metadata, and source URLs
     """
@@ -648,24 +661,24 @@ async def ai_web_search_for_step7(
         session = session_service.get_session_data(session_id)
         if not session:
             raise HTTPException(status_code=404, detail="Session not found")
-        
+
         # Get existing Step 6 data for merging
         method_lower = method.lower()
         market_lower = market.lower()
-        
+
         step6_data = session_service.get_session_value(
             session_id,
             "financial_data",
             market=market_lower,
             method=method_lower
         )
-        
+
         if not step6_data:
             step6_data = session_service.get_session_value(session_id, "financial_data")
-        
+
         # Initialize AI Web Search Extractor
         extractor = AIWebSearchExtractor()
-        
+
         # Perform AI web search and extraction
         result = await extractor.extract_data(
             ticker=ticker,
@@ -673,13 +686,13 @@ async def ai_web_search_for_step7(
             market=market,
             context_data=step6_data
         )
-        
+
         if not result.get("success"):
             raise HTTPException(
                 status_code=500,
                 detail=result.get("error", "AI web search failed")
             )
-        
+
         # Store results in session
         extraction_metadata = {
             'source': 'AI Web Search',
@@ -690,7 +703,7 @@ async def ai_web_search_for_step7(
             'search_timestamp': datetime.now().isoformat(),
             'extracted_metrics': list(result['data'].keys()) if result['data'] else []
         }
-        
+
         session_service.update_session_data(
             session_id,
             "ai_web_search_results",
@@ -701,12 +714,12 @@ async def ai_web_search_for_step7(
             market=market_lower,
             method=method_lower
         )
-        
+
         # Update historical data with AI-extracted values
         if step6_data:
             if 'historical_financials' not in step6_data:
                 step6_data['historical_financials'] = {}
-            
+
             # Merge AI data into existing structure
             for date_key, metrics in result['data'].items():
                 if date_key not in step6_data['historical_financials']:
@@ -716,7 +729,10 @@ async def ai_web_search_for_step7(
                     for metric, value in metrics.items():
                         if step6_data['historical_financials'][date_key].get(metric) is None and value is not None:
                             step6_data['historical_financials'][date_key][metric] = value
-        
+
+        # Calculate historical trends and averages
+        trend_analysis = calculate_historical_trends(step6_data.get('historical_financials', {}) if step6_data else result['data'])
+
         session_service.update_session_data(
             session_id,
             "financial_data",
@@ -724,12 +740,21 @@ async def ai_web_search_for_step7(
             market=market_lower,
             method=method_lower
         )
-        
+
+        # Store trend analysis for Step 8
+        session_service.update_session_data(
+            session_id,
+            "historical_trend_analysis",
+            trend_analysis,
+            market=market_lower,
+            method=method_lower
+        )
+
         logger.info(
             f"Successfully extracted data via AI web search for {ticker} ({company_name}) "
             f"using {result['metadata']['provider_used']}"
         )
-        
+
         return {
             "success": True,
             "message": f"Successfully extracted data using {result['metadata']['provider_used']}",
@@ -737,9 +762,10 @@ async def ai_web_search_for_step7(
             "confidence_score": result['metadata']['confidence_score'],
             "sources": result['metadata'].get('sources', []),
             "time_series": result['data'],
+            "trend_analysis": trend_analysis,
             "notes": result['metadata'].get('notes', '')
         }
-                
+
     except HTTPException:
         raise
     except Exception as e:
@@ -755,11 +781,11 @@ async def initialize_step8_assumptions(request: GenerateAISuggestionRequest):
     This endpoint loads historical data and prepares the assumption categories
     with trendlines. No AI suggestions are generated yet - user must click
     buttons to generate them per category.
-    
+
     MATRIX WORKFLOW:
     - Uses market/method from request parameters (REQUIRED - no fallback)
     - Initializes assumptions for the specific valuation track
-    
+
     METHOD-AGNOSTIC DESIGN:
     - Method MUST be provided in request.method - no session.selected_model fallback
     - Each method operates independently with its own data track
@@ -773,24 +799,24 @@ async def initialize_step8_assumptions(request: GenerateAISuggestionRequest):
         ticker = session.get("ticker")
         # Use market/method from request ONLY (no fallback)
         market = request.market.lower() if hasattr(request, 'market') and request.market else "international"
-        
+
         # Validate method is provided
         if not hasattr(request, 'method') or not request.method:
             raise HTTPException(status_code=400, detail="Method parameter is required")
-        
+
         method = request.method.upper()
-        
+
         # Get data from the specific valuation track
         step6_data = session_service.get_session_value(
-            request.session_id, 
-            "financial_data", 
+            request.session_id,
+            "financial_data",
             {},
             market=market,
             method=method.lower()
         )
         step7_data = session_service.get_session_value(
-            request.session_id, 
-            "historical_data_gaps_filled", 
+            request.session_id,
+            "historical_data_gaps_filled",
             {},
             market=market,
             method=method.lower()
@@ -809,8 +835,8 @@ async def initialize_step8_assumptions(request: GenerateAISuggestionRequest):
 
         # Store initial assumptions in the specific valuation track
         session_service.update_session_data(
-            request.session_id, 
-            "step8_assumptions", 
+            request.session_id,
+            "step8_assumptions",
             result.model_dump() if hasattr(result, 'model_dump') else result.dict(),
             market=market,
             method=method.lower()
@@ -834,11 +860,11 @@ async def generate_ai_suggestion(request: GenerateAISuggestionRequest):
     - DCF: REVENUE_DRIVERS, COST_MARGINS, WORKING_CAPITAL, WACC_COMPONENTS, TERMINAL_VALUE
     - DuPont: DUPONT_TARGETS
     - Comps: COMPS_MULTIPLES
-    
+
     MATRIX WORKFLOW:
     - Uses market/method from request parameters (REQUIRED - no fallback)
     - Generates AI suggestions for the specific valuation track
-    
+
     METHOD-AGNOSTIC DESIGN:
     - Method MUST be provided in request.method - no session.selected_model fallback
     - Each method operates independently with its own data track
@@ -852,24 +878,24 @@ async def generate_ai_suggestion(request: GenerateAISuggestionRequest):
         ticker = session.get("ticker")
         # Use market/method from request ONLY (no fallback)
         market = request.market.lower() if hasattr(request, 'market') and request.market else "international"
-        
+
         # Validate method is provided
         if not hasattr(request, 'method') or not request.method:
             raise HTTPException(status_code=400, detail="Method parameter is required")
-        
+
         method = request.method.upper()
-        
+
         # Get data from the specific valuation track
         step6_data = session_service.get_session_value(
-            request.session_id, 
-            "financial_data", 
+            request.session_id,
+            "financial_data",
             {},
             market=market,
             method=method.lower()
         )
         step7_data = session_service.get_session_value(
-            request.session_id, 
-            "historical_data_gaps_filled", 
+            request.session_id,
+            "historical_data_gaps_filled",
             {},
             market=market,
             method=method.lower()
@@ -889,16 +915,16 @@ async def generate_ai_suggestion(request: GenerateAISuggestionRequest):
 
         # Store AI suggestions in the specific valuation track
         current_suggestions = session_service.get_session_value(
-            request.session_id, 
-            "ai_suggestions", 
+            request.session_id,
+            "ai_suggestions",
             {},
             market=market,
             method=method.lower()
         )
         current_suggestions[request.category] = result.model_dump() if hasattr(result, 'model_dump') else result
         session_service.update_session_data(
-            request.session_id, 
-            "ai_suggestions", 
+            request.session_id,
+            "ai_suggestions",
             current_suggestions,
             market=market,
             method=method.lower()
@@ -925,11 +951,11 @@ async def confirm_assumptions(request: ConfirmAssumptionsRequest):
     """
     Step 9: User confirms or overrides assumptions.
     Uses SessionService for session management and Step8ManualOverridesProcessor for assumption management.
-    
+
     MATRIX WORKFLOW:
     - Uses market/method from request parameters (REQUIRED - no fallback)
     - Confirms assumptions for the specific valuation track
-    
+
     METHOD-AGNOSTIC DESIGN:
     - Method MUST be provided in request.method - no session.selected_model fallback
     - Each method operates independently with its own data track
@@ -943,31 +969,31 @@ async def confirm_assumptions(request: ConfirmAssumptionsRequest):
         ticker = session.get("ticker")
         # Use market/method from request ONLY (no fallback)
         market = request.market.lower() if request.market else "international"
-        
+
         # Validate method is provided
         if not request.method:
             raise HTTPException(status_code=400, detail="Method parameter is required")
-        
+
         method = request.method.upper()
-        
+
         # Get data from the specific valuation track
         step6_data = session_service.get_session_value(
-            request.session_id, 
-            "financial_data", 
+            request.session_id,
+            "financial_data",
             {},
             market=market,
             method=method.lower()
         )
         step7_data = session_service.get_session_value(
-            request.session_id, 
-            "historical_data_gaps_filled", 
+            request.session_id,
+            "historical_data_gaps_filled",
             {},
             market=market,
             method=method.lower()
         )
         ai_suggestions = session_service.get_session_value(
-            request.session_id, 
-            "ai_suggestions", 
+            request.session_id,
+            "ai_suggestions",
             {},
             market=market,
             method=method.lower()
@@ -1007,13 +1033,13 @@ async def confirm_assumptions(request: ConfirmAssumptionsRequest):
 
         # Store confirmed assumptions in the specific valuation track
         session_service.update_session_data(
-            request.session_id, 
-            "confirmed_assumptions", 
+            request.session_id,
+            "confirmed_assumptions",
             final_result.model_dump() if hasattr(final_result, 'model_dump') else final_result.dict(),
             market=market,
             method=method.lower()
         )
-        
+
         session_service.update_session_step(
             request.session_id,
             step_number=9,
@@ -1035,13 +1061,13 @@ async def valuate(request: ValuateRequest):
     """
     Step 10: Run valuation engine.
     Uses SessionService for session management and Step10ValuationProcessor for comprehensive multi-model valuation.
-    
+
     MATRIX WORKFLOW:
     - Uses market/method from request parameters (REQUIRED - no fallback)
     - Runs valuation for the specific track
     - Stores results in the specific valuation track
     - Does NOT overwrite other models' results
-    
+
     METHOD-AGNOSTIC DESIGN:
     - Method MUST be provided in request.method - no session.selected_model fallback
     - Each method operates independently with its own data track
@@ -1055,16 +1081,16 @@ async def valuate(request: ValuateRequest):
         ticker = session.get("ticker")
         # Use market/method from request ONLY (no fallback)
         market = request.market.lower() if request.market else "international"
-        
+
         # Validate method is provided
         if not request.method:
             raise HTTPException(status_code=400, detail="Method parameter is required")
-        
+
         method = request.method.upper()
-        
+
         # Get confirmed assumptions from the specific valuation track
         confirmed_assumptions = session_service.get_session_value(
-            request.session_id, 
+            request.session_id,
             "confirmed_assumptions",
             market=market,
             method=method.lower()
@@ -1102,16 +1128,16 @@ async def valuate(request: ValuateRequest):
 async def valuate_multi_method(request: MultiMethodValuateRequest):
     """
     Step 10 (Multi-Method): Run valuation for multiple methods simultaneously.
-    
+
     This endpoint uses the ValuationOrchestrator to execute DCF, DuPont, and/or COMPS
     valuations in parallel using asyncio.gather, then returns a unified response.
-    
+
     SUPPORTS:
     - Multiple methods: ["dcf", "dupont", "comps"]
     - Both markets: "international" or "vietnam"
     - Parallel execution with comprehensive error handling
     - Unified response with cross-method comparison
-    
+
     USAGE EXAMPLE:
     ```json
     {
@@ -1126,30 +1152,30 @@ async def valuate_multi_method(request: MultiMethodValuateRequest):
         session = session_service.get_session_data(request.session_id)
         if not session:
             raise HTTPException(status_code=404, detail="Session not found")
-        
+
         # Validate at least one method provided
         if not request.methods or len(request.methods) == 0:
             raise HTTPException(status_code=400, detail="At least one valuation method must be specified")
-        
+
         # Normalize market
         market = request.market.lower() if request.market else "international"
         if market not in ["international", "vietnam"]:
             raise HTTPException(status_code=400, detail="Market must be 'international' or 'vietnam'")
-        
+
         # Use orchestrator to run all methods in parallel
         logger.info(f"Starting multi-method valuation: methods={request.methods}, market={market}")
-        
+
         result = await orchestrator.execute_multi_method_valuation(
             session_id=request.session_id,
             methods=request.methods,
             market=market,
             start_step=4  # Start from model selection
         )
-        
+
         # Check for errors
         if result.get("status") == "error":
             raise HTTPException(status_code=500, detail=result.get("message", "Multi-method valuation failed"))
-        
+
         return MultiMethodValuateResponse(
             status=result.get("status", "success"),
             market=result.get("market", market),
@@ -1160,7 +1186,7 @@ async def valuate_multi_method(request: MultiMethodValuateRequest):
             results=result.get("results", []),
             message=f"Multi-method valuation completed: {len(result.get('methods_completed', []))}/{len(request.methods)} methods successful"
         )
-        
+
     except HTTPException:
         raise
     except Exception as e:
