@@ -248,45 +248,128 @@ class PeerDiscoveryService:
         """
         results = []
         
-        # Use yfinance search (now filtered in yfinance_service.search_tickers)
-        search_results = self.yfinance_service.search_tickers(keyword)
+        # Generate multiple search queries from the keyword
+        # yfinance search works better with shorter, simpler queries
+        search_queries = self._generate_search_queries(keyword)
         
-        for result in search_results[:20]:  # Limit search results
-            ticker = result.get('symbol', '')
+        seen_symbols = set()
+        
+        for query in search_queries:
+            # Use yfinance search (now filtered in yfinance_service.search_tickers)
+            search_results = self.yfinance_service.search_tickers(query)
             
-            if ticker in exclude_tickers:
-                continue
-            
-            # Get detailed info
-            ticker_info = self.yfinance_service.get_ticker_info(ticker)
-            if not ticker_info or not ticker_info.get('currentPrice'):
-                logger.debug(f"Skipping {ticker}: no current price or info")
-                continue
-            
-            # Additional validation: check if it's a valid equity
-            market_cap = ticker_info.get('marketCap')
-            if not market_cap or market_cap <= 0:
-                logger.debug(f"Skipping {ticker}: invalid market cap")
-                continue
-            
-            # Filter by market cap if range specified
-            if market_cap_min and market_cap_max:
-                if not (market_cap_min <= market_cap <= market_cap_max):
-                    logger.debug(f"Skipping {ticker}: market cap ${market_cap/1e9:.2f}B outside range ${market_cap_min/1e9:.2f}B-${market_cap_max/1e9:.2f}B")
+            for result in search_results[:20]:  # Limit search results per query
+                ticker = result.get('symbol', '')
+                
+                if ticker in exclude_tickers or ticker in seen_symbols:
                     continue
+                
+                seen_symbols.add(ticker)
+                
+                # Get detailed info
+                ticker_info = self.yfinance_service.get_ticker_info(ticker)
+                if not ticker_info or not ticker_info.get('currentPrice'):
+                    logger.debug(f"Skipping {ticker}: no current price or info")
+                    continue
+                
+                # Additional validation: check if it's a valid equity
+                market_cap = ticker_info.get('marketCap')
+                if not market_cap or market_cap <= 0:
+                    logger.debug(f"Skipping {ticker}: invalid market cap")
+                    continue
+                
+                # Filter by market cap if range specified
+                if market_cap_min and market_cap_max:
+                    if not (market_cap_min <= market_cap <= market_cap_max):
+                        logger.debug(f"Skipping {ticker}: market cap ${market_cap/1e9:.2f}B outside range ${market_cap_min/1e9:.2f}B-${market_cap_max/1e9:.2f}B")
+                        continue
+                
+                results.append({
+                    'symbol': ticker,
+                    'name': ticker_info.get('longName', ticker),
+                    'exchange': ticker_info.get('exchange', 'UNKNOWN'),
+                    'sector': ticker_info.get('sector'),
+                    'industry': ticker_info.get('industry'),
+                    'market_cap': market_cap,
+                    'current_price': ticker_info.get('currentPrice'),
+                    'beta': ticker_info.get('beta')
+                })
+                
+                # Stop if we have enough results
+                if len(results) >= 20:
+                    break
             
-            results.append({
-                'symbol': ticker,
-                'name': ticker_info.get('longName', ticker),
-                'exchange': ticker_info.get('exchange', 'UNKNOWN'),
-                'sector': ticker_info.get('sector'),
-                'industry': ticker_info.get('industry'),
-                'market_cap': market_cap,
-                'current_price': ticker_info.get('currentPrice'),
-                'beta': ticker_info.get('beta')
-            })
+            if len(results) >= 20:
+                break
         
         return results
+    
+    def _generate_search_queries(self, keyword: str) -> List[str]:
+        """
+        Generate optimized search queries from an industry/sector keyword.
+        
+        yfinance search works best with short, simple queries. This method
+        breaks down complex industry names into searchable terms.
+        
+        Args:
+            keyword: Original industry or sector name
+            
+        Returns:
+            List of search queries to try
+        """
+        if not keyword:
+            return []
+        
+        queries = []
+        
+        # Map common industry terms to better search keywords
+        industry_mappings = {
+            'auto manufacturers': ['Auto', 'Automotive', 'Cars', 'Trucks'],
+            'automotive': ['Auto', 'Automotive', 'Cars'],
+            'drug manufacturers': ['Pharma', 'Drugs', 'Pharmaceuticals'],
+            'software': ['Software', 'Technology'],
+            'semiconductors': ['Semiconductor', 'Chips', 'Semis'],
+            'biotechnology': ['Biotech', 'Biotechnology'],
+            'oil & gas': ['Oil', 'Gas', 'Energy'],
+            'banks': ['Bank', 'Banking'],
+            'insurance': ['Insurance'],
+            'retail': ['Retail', 'Stores'],
+            'restaurants': ['Restaurant', 'Food'],
+            'aerospace & defense': ['Aerospace', 'Defense', 'Aviation'],
+            'telecom services': ['Telecom', 'Communication'],
+            'utilities': ['Utilities', 'Electric', 'Power'],
+            'real estate': ['Real Estate', 'REIT', 'Property'],
+            'consumer electronics': ['Electronics', 'Consumer'],
+            'apparel manufacturing': ['Apparel', 'Clothing', 'Fashion'],
+            'footwear & accessories': ['Footwear', 'Shoes', 'Apparel'],
+        }
+        
+        keyword_lower = keyword.lower().strip()
+        
+        # Check for mapped terms
+        for industry_term, search_terms in industry_mappings.items():
+            if industry_term in keyword_lower:
+                queries.extend(search_terms)
+                break
+        
+        # Always add the first word of the keyword (often the most important)
+        first_word = keyword.split()[0] if keyword.split() else keyword
+        if first_word not in queries:
+            queries.insert(0, first_word)
+        
+        # Add original keyword as fallback (in case it works)
+        if keyword not in queries:
+            queries.append(keyword)
+        
+        # Remove duplicates while preserving order
+        seen = set()
+        unique_queries = []
+        for q in queries:
+            if q not in seen:
+                seen.add(q)
+                unique_queries.append(q)
+        
+        return unique_queries[:5]  # Limit to 5 queries max
     
     async def _get_fallback_peers(
         self,
