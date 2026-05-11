@@ -290,18 +290,18 @@ const ValuationFlow = () => {
 
   // ==================== STEP 4: SELECT MODEL(S) ====================
   const handleSelectModel = useCallback(async (modelType) => {
-    // GAP 3 FIX: Use deep merge to preserve other models' data when switching
-    // Instead of simple array replacement, we preserve existing valuation data
-    const newModel = modelType; // Single model (string), not array
+    // GAP 2 & GAP 3 FIX: Update selected model first, then deep merge to preserve other models' data
+    // Single selection (radio button behavior) - modelType is a string, not array
+    setSelectedModels(modelType);
     
     setLoading(true);
     try {
       // Always use single model endpoint (multi-select is now forbidden per documentation)
-      const data = await selectModels(sessionId, newModel, market);
+      const data = await selectModels(sessionId, modelType, market);
       console.log('Select model response:', data);
       if (data.message) {
         setCurrentStep(5);
-        await fetchRequiredInputs(newModel);
+        await fetchRequiredInputs(modelType);
       }
     } catch (err) {
       console.error('Select model error:', err);
@@ -309,7 +309,7 @@ const ValuationFlow = () => {
     } finally {
       setLoading(false);
     }
-  }, [sessionId, market]);
+  }, [sessionId, market, fetchRequiredInputs]);
   
   // ==================== HANDLE MULTI-METHOD VALUATION ====================
   const handleRunMultiMethodValuation = useCallback(async () => {
