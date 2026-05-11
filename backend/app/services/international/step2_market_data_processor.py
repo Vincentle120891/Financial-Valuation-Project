@@ -342,3 +342,89 @@ class Step2MarketDataProcessor:
                 "status": "failed",
                 "message": f"Failed to suggest peers: {str(e)}"
             }
+    
+    async def validate_manual_peers(
+        self,
+        tickers: List[str],
+        market: str = "international"
+    ) -> Dict:
+        """
+        Validate manually entered peer tickers and return their details.
+        
+        Args:
+            tickers: List of ticker symbols to validate
+            market: Market type
+            
+        Returns:
+            Dictionary with validated peers and any errors
+        """
+        logger.info(f"Validating {len(tickers)} manual peer tickers for market='{market}'")
+        
+        validated_peers = []
+        errors = []
+        
+        for ticker in tickers:
+            try:
+                # Get ticker info
+                ticker_info = self.yfinance_service.get_ticker_info(ticker)
+                
+                if not ticker_info:
+                    errors.append({
+                        "ticker": ticker,
+                        "error": "Could not fetch data for this ticker"
+                    })
+                    continue
+                
+                # Check if ticker has required data
+                if not ticker_info.get('currentPrice') or ticker_info.get('currentPrice') <= 0:
+                    errors.append({
+                        "ticker": ticker,
+                        "error": "Invalid or missing current price"
+                    })
+                    continue
+                
+                if not ticker_info.get('marketCap') or ticker_info.get('marketCap') <= 0:
+                    errors.append({
+                        "ticker": ticker,
+                        "error": "Invalid or missing market cap"
+                    })
+                    continue
+                
+                # Check exchange filtering for international market
+                exchange = ticker_info.get('exchange', '')
+                if market == "international":
+                    # Block OTC and problematic exchanges
+                    if exchange in ["PNK", "GRE", "BTS", "NCY", "NGM"]:
+                        errors.append({
+                            "ticker": ticker,
+                            "error": f"Exchange {exchange} not allowed for international market (OTC/foreign)"
+                        })
+                        continue
+                
+                # Add to validated peers
+                validated_peers.append({
+                    "symbol": ticker,
+                    "name": ticker_info.get('longName', ticker_info.get('shortName', ticker)),
+                    "sector": ticker_info.get('sector'),
+                    "industry": ticker_info.get('industry'),
+                    "market_cap": ticker_info.get('marketCap'),
+                    "current_price": ticker_info.get('currentPrice'),
+                    "exchange": exchange,
+                    "score": 50,  # Default score for manual entries
+                    "match_reasons": ["Manually selected"]
+                })
+                
+            except Exception as e:
+                errors.append({
+                    "ticker": ticker,
+                    "error": str(e)
+                })
+                logger.error(f"Error validating ticker {ticker}: {str(e)}")
+        
+        return {
+            "status": "success" if validated_peers else "partial",
+            "validated_peers": validated_peers,
+            "errors": errors,
+            "total_validated": len(validated_peers),
+            "total_errors": len(errors)
+        }

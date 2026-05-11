@@ -4,6 +4,7 @@ import {
   suggestPeers,
   selectCompany,
   savePeers,
+  validateManualPeers,
   selectModels,
   prepareInputs,
   fetchApiData,
@@ -82,6 +83,9 @@ const ValuationFlow = () => {
   const [sessionId, setSessionId] = useState(null);
   const [selectedModels, setSelectedModels] = useState(''); // Single model string (radio button behavior)
   const [forecastYears, setForecastYears] = useState(5);
+  const [manualPeerInput, setManualPeerInput] = useState('');
+  const [manualPeerError, setManualPeerError] = useState(null);
+  const [manualPeerLoading, setManualPeerLoading] = useState(false);
   
   // Market validation state - ensures market selection is consistent throughout workflow
   const [marketValidation, setMarketValidation] = useState({

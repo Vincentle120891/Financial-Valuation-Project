@@ -34,6 +34,7 @@ class PeerDiscoveryRequest(BaseModel):
     target_market_cap: Optional[float] = None
     max_peers: int = 10
     market: str = "international"
+    allowed_exchanges: Optional[List[str]] = None  # Explicitly allowed exchanges
 
 
 class PeerDiscoveryResponse(BaseModel):
@@ -64,6 +65,20 @@ class PeerDiscoveryService:
     
     MARKET_CAP_RANGE_MIN = 0.5  # 50% of target
     MARKET_CAP_RANGE_MAX = 2.0  # 200% of target
+    
+    # Exchange filters by market type
+    MARKET_EXCHANGE_FILTERS = {
+        "international": ["NMS", "NYQ", "NGM", "NCM"],  # NASDAQ, NYSE
+        "vietnamese": ["HOSE", "HNX", "UPCOM"],  # Vietnam exchanges
+        "us": ["NMS", "NYQ", "NGM", "NCM"],
+        "uk": ["LSE"],
+        "eu": ["GER", "FRA", "BER", "MUN", "STU", "DUS"],  # German exchanges
+        "jp": ["JPX"],
+        "au": ["ASX"],
+    }
+    
+    # Exchanges to always exclude (OTC, foreign, problematic)
+    EXCLUDED_EXCHANGES = {"PNK", "GRE", "OTC", "BTS", "NCY"}
     
     def __init__(self, yfinance_service: Optional[YFinanceService] = None):
         self.yfinance_service = yfinance_service or YFinanceService()
@@ -123,8 +138,12 @@ class PeerDiscoveryService:
         search_criteria = {
             'sector': target_sector,
             'industry': target_industry,
-            'market_cap_range': f"${market_cap_min/1e9:.1f}B - ${market_cap_max/1e9:.1f}B" if market_cap_min else "Any"
+            'market_cap_range': f"${market_cap_min/1e9:.1f}B - ${market_cap_max/1e9:.1f}B" if market_cap_min else "Any",
+            'allowed_exchanges': request.allowed_exchanges
         }
+        
+        # Determine allowed exchanges for this market
+        allowed_exchanges = self._get_allowed_exchanges(request.market, request.allowed_exchanges)
         
         # Search for peers
         peer_candidates = await self._search_peer_candidates(
@@ -133,7 +152,8 @@ class PeerDiscoveryService:
             market_cap_min=market_cap_min,
             market_cap_max=market_cap_max,
             exclude_ticker=request.target_ticker,
-            max_results=request.max_peers * 3  # Get more to filter and rank
+            max_results=request.max_peers * 3,  # Get more to filter and rank
+            allowed_exchanges=allowed_exchanges
         )
         
         # Score and rank candidates
@@ -165,7 +185,8 @@ class PeerDiscoveryService:
         market_cap_min: Optional[float],
         market_cap_max: Optional[float],
         exclude_ticker: str,
-        max_results: int = 30
+        max_results: int = 30,
+        allowed_exchanges: Optional[List[str]] = None
     ) -> List[Dict]:
         """
         Search for peer candidates using multiple strategies.
@@ -177,6 +198,7 @@ class PeerDiscoveryService:
             market_cap_max: Maximum market cap
             exclude_ticker: Ticker to exclude from results
             max_results: Maximum number of results to return
+            allowed_exchanges: List of allowed exchange codes
             
         Returns:
             List of candidate company dictionaries
@@ -190,7 +212,8 @@ class PeerDiscoveryService:
                 keyword=industry,
                 market_cap_min=market_cap_min,
                 market_cap_max=market_cap_max,
-                exclude_tickers=seen_tickers
+                exclude_tickers=seen_tickers,
+                allowed_exchanges=allowed_exchanges
             )
             for candidate in industry_candidates:
                 if candidate['symbol'] not in seen_tickers:
@@ -204,7 +227,8 @@ class PeerDiscoveryService:
                 keyword=sector,
                 market_cap_min=market_cap_min,
                 market_cap_max=market_cap_max,
-                exclude_tickers=seen_tickers
+                exclude_tickers=seen_tickers,
+                allowed_exchanges=allowed_exchanges
             )
             for candidate in sector_candidates:
                 if candidate['symbol'] not in seen_tickers:
@@ -217,7 +241,8 @@ class PeerDiscoveryService:
             fallback_candidates = await self._get_fallback_peers(
                 sector=sector,
                 industry=industry,
-                exclude_tickers=seen_tickers
+                exclude_tickers=seen_tickers,
+                allowed_exchanges=allowed_exchanges
             )
             for candidate in fallback_candidates:
                 if candidate['symbol'] not in seen_tickers:
@@ -232,7 +257,8 @@ class PeerDiscoveryService:
         keyword: str,
         market_cap_min: Optional[float],
         market_cap_max: Optional[float],
-        exclude_tickers: set
+        exclude_tickers: set,
+        allowed_exchanges: Optional[List[str]] = None
     ) -> List[Dict]:
         """
         Search for companies by keyword using yfinance.
@@ -242,6 +268,7 @@ class PeerDiscoveryService:
             market_cap_min: Minimum market cap
             market_cap_max: Maximum market cap
             exclude_tickers: Set of tickers to exclude
+            allowed_exchanges: List of allowed exchange codes
             
         Returns:
             List of matching company dictionaries
@@ -260,8 +287,14 @@ class PeerDiscoveryService:
             
             for result in search_results[:20]:  # Limit search results per query
                 ticker = result.get('symbol', '')
+                exchange = result.get('exchange', '')
                 
                 if ticker in exclude_tickers or ticker in seen_symbols:
+                    continue
+                
+                # EXCHANGE FILTERING: Check if exchange is allowed
+                if not self._is_exchange_allowed(exchange, allowed_exchanges):
+                    logger.debug(f"Excluding {ticker}: exchange '{exchange}' not in allowed list")
                     continue
                 
                 seen_symbols.add(ticker)
@@ -287,7 +320,7 @@ class PeerDiscoveryService:
                 results.append({
                     'symbol': ticker,
                     'name': ticker_info.get('longName', ticker),
-                    'exchange': ticker_info.get('exchange', 'UNKNOWN'),
+                    'exchange': exchange,
                     'sector': ticker_info.get('sector'),
                     'industry': ticker_info.get('industry'),
                     'market_cap': market_cap,
@@ -375,7 +408,8 @@ class PeerDiscoveryService:
         self,
         sector: Optional[str],
         industry: Optional[str],
-        exclude_tickers: set
+        exclude_tickers: set,
+        allowed_exchanges: Optional[List[str]] = None
     ) -> List[Dict]:
         """
         Get fallback peers from known company lists by sector.
@@ -384,6 +418,7 @@ class PeerDiscoveryService:
             sector: Target sector
             industry: Target industry
             exclude_tickers: Set of tickers to exclude
+            allowed_exchanges: List of allowed exchange codes
             
         Returns:
             List of fallback peer candidates
@@ -423,10 +458,16 @@ class PeerDiscoveryService:
                 if not ticker_info or not ticker_info.get('currentPrice'):
                     continue
                 
+                # Check exchange filtering
+                exchange = ticker_info.get('exchange', '')
+                if not self._is_exchange_allowed(exchange, allowed_exchanges):
+                    logger.debug(f"Excluding fallback peer {ticker}: exchange '{exchange}' not allowed")
+                    continue
+                
                 results.append({
                     'symbol': ticker,
                     'name': ticker_info.get('longName', ticker),
-                    'exchange': ticker_info.get('exchange', 'UNKNOWN'),
+                    'exchange': exchange,
                     'sector': ticker_info.get('sector'),
                     'industry': ticker_info.get('industry'),
                     'market_cap': ticker_info.get('marketCap'),
@@ -446,11 +487,13 @@ class PeerDiscoveryService:
         """
         Score and rank peer candidates.
         
-        Scoring methodology:
-        - Industry match: +40 points
-        - Sector match: +20 points  
-        - Market cap within range: +30 points
+        Scoring methodology (enhanced with sub-industry weighting):
+        - Sub-industry match (exact): +50 points
+        - Industry match (general): +30 points
+        - Sector match: +15 points
+        - Market cap within range: +25 points
         - Market cap proximity: +10 points (closer = higher)
+        - Same country/region: +5 points
         
         Args:
             candidates: List of candidate companies
@@ -467,25 +510,38 @@ class PeerDiscoveryService:
             score = 0.0
             match_reasons = []
             
-            # Industry match (+40 points)
+            # INDUSTRY MATCHING WITH SUB-INDUSTRY WEIGHTING
             if target_industry and candidate.get('industry'):
-                if candidate['industry'].lower() == target_industry.lower():
-                    score += 40
-                    match_reasons.append("Same industry")
+                cand_industry = candidate['industry'].lower()
+                target_industry_lower = target_industry.lower()
+                
+                # Check for exact sub-industry match (+50 points)
+                if cand_industry == target_industry_lower:
+                    score += 50
+                    match_reasons.append("Exact sub-industry match")
+                # Check for partial industry match (contains key terms) (+30 points)
+                elif self._industries_are_similar(target_industry_lower, cand_industry):
+                    score += 30
+                    match_reasons.append("Similar industry")
+                else:
+                    # Check for keyword overlap as fallback (+15 points)
+                    if self._has_industry_keyword_overlap(target_industry_lower, cand_industry):
+                        score += 15
+                        match_reasons.append("Related industry")
             
-            # Sector match (+20 points)
+            # Sector match (+15 points)
             if target_sector and candidate.get('sector'):
                 if candidate['sector'].lower() == target_sector.lower():
-                    score += 20
-                    if "Same industry" not in match_reasons:
+                    score += 15
+                    if not any("industry" in reason.lower() for reason in match_reasons):
                         match_reasons.append("Same sector")
             
-            # Market cap range match (+30 points)
+            # Market cap range match (+25 points)
             candidate_market_cap = candidate.get('market_cap')
             if target_market_cap and candidate_market_cap:
                 ratio = candidate_market_cap / target_market_cap
                 if self.MARKET_CAP_RANGE_MIN <= ratio <= self.MARKET_CAP_RANGE_MAX:
-                    score += 30
+                    score += 25
                     match_reasons.append("Similar market cap")
                     
                     # Proximity scoring (+10 points max)
@@ -496,6 +552,11 @@ class PeerDiscoveryService:
                     
                     if proximity_score > 7:
                         match_reasons.append("Very close market cap")
+            
+            # Country/region match bonus (+5 points)
+            if candidate.get('exchange') and self._is_same_region(candidate.get('exchange'), target_market_cap):
+                score += 5
+                match_reasons.append("Same region")
             
             # Create peer candidate
             peer = PeerCandidate(
@@ -517,3 +578,136 @@ class PeerDiscoveryService:
         scored_peers.sort(key=lambda x: x.similarity_score, reverse=True)
         
         return scored_peers
+    
+    def _industries_are_similar(self, industry1: str, industry2: str) -> bool:
+        """
+        Check if two industries are similar based on key terms.
+        
+        Args:
+            industry1: First industry string
+            industry2: Second industry string
+            
+        Returns:
+            True if industries are similar, False otherwise
+        """
+        # Define industry term mappings
+        industry_groups = {
+            'auto': ['auto', 'automotive', 'car', 'truck', 'vehicle', 'motor'],
+            'retail': ['retail', 'store', 'e-commerce', 'merchant'],
+            'restaurant': ['restaurant', 'food service', 'dining', 'quick service'],
+            'software': ['software', 'application', 'saas', 'cloud software'],
+            'semiconductor': ['semiconductor', 'chip', 'integrated circuit'],
+            'pharma': ['pharmaceutical', 'drug', 'biopharma'],
+            'biotech': ['biotechnology', 'biotech', 'life sciences'],
+            'bank': ['bank', 'banking', 'commercial bank'],
+            'insurance': ['insurance', 'reinsurance', 'assurance'],
+            'oil_gas': ['oil', 'gas', 'petroleum', 'energy exploration'],
+            'telecom': ['telecom', 'telecommunication', 'wireless', 'carrier'],
+            'utility': ['utility', 'electric', 'power', 'water utility'],
+            'real_estate': ['real estate', 'reit', 'property', 'development'],
+            'aerospace': ['aerospace', 'defense', 'aviation', 'aircraft'],
+            'consumer_electronics': ['consumer electronics', 'electronics', 'gadgets'],
+            'apparel': ['apparel', 'clothing', 'garment', 'fashion', 'footwear'],
+            'home_improvement': ['home improvement', 'building materials', 'hardware retail'],
+        }
+        
+        # Check if both industries fall into the same group
+        for group_terms in industry_groups.values():
+            match1 = any(term in industry1 for term in group_terms)
+            match2 = any(term in industry2 for term in group_terms)
+            if match1 and match2:
+                return True
+        
+        return False
+    
+    def _has_industry_keyword_overlap(self, industry1: str, industry2: str) -> bool:
+        """
+        Check if two industries share common keywords.
+        
+        Args:
+            industry1: First industry string
+            industry2: Second industry string
+            
+        Returns:
+            True if there's keyword overlap, False otherwise
+        """
+        # Extract significant words (4+ characters)
+        def extract_keywords(industry: str) -> set:
+            words = industry.replace('&', ' ').replace('-', ' ').split()
+            return {w.lower() for w in words if len(w) >= 4}
+        
+        keywords1 = extract_keywords(industry1)
+        keywords2 = extract_keywords(industry2)
+        
+        # Check for overlap
+        overlap = keywords1.intersection(keywords2)
+        return len(overlap) >= 1
+    
+    def _is_same_region(self, exchange: str, target_market_cap: Optional[float]) -> bool:
+        """
+        Check if exchange is in the same region as typical US stocks.
+        Simplified implementation - can be enhanced with country data.
+        
+        Args:
+            exchange: Exchange code
+            target_market_cap: Target market cap (unused but available for future use)
+            
+        Returns:
+            True if in same region (North America), False otherwise
+        """
+        north_american_exchanges = {'NMS', 'NYQ', 'NGM', 'NCM', 'TOR', 'VAN', 'CNQ'}
+        return exchange in north_american_exchanges
+    
+    def _get_allowed_exchanges(
+        self,
+        market: str,
+        custom_exchanges: Optional[List[str]] = None
+    ) -> List[str]:
+        """
+        Get list of allowed exchanges for a given market.
+        
+        Args:
+            market: Market type (international, vietnamese, us, etc.)
+            custom_exchanges: Optional custom list of allowed exchanges
+            
+        Returns:
+            List of allowed exchange codes
+        """
+        # If custom exchanges provided, use them
+        if custom_exchanges:
+            return custom_exchanges
+        
+        # Get default exchanges for this market
+        allowed = self.MARKET_EXCHANGE_FILTERS.get(market.lower(), [])
+        
+        # If no specific filter found, default to international (US exchanges)
+        if not allowed:
+            allowed = self.MARKET_EXCHANGE_FILTERS.get("international", [])
+        
+        return allowed
+    
+    def _is_exchange_allowed(
+        self,
+        exchange: str,
+        allowed_exchanges: Optional[List[str]] = None
+    ) -> bool:
+        """
+        Check if an exchange is allowed based on market filters.
+        
+        Args:
+            exchange: Exchange code to check
+            allowed_exchanges: List of allowed exchange codes
+            
+        Returns:
+            True if exchange is allowed, False otherwise
+        """
+        # Always exclude problematic exchanges
+        if exchange in self.EXCLUDED_EXCHANGES:
+            return False
+        
+        # If no allowed exchanges specified, allow all (except excluded)
+        if not allowed_exchanges:
+            return True
+        
+        # Check if exchange is in allowed list
+        return exchange in allowed_exchanges

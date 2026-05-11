@@ -179,9 +179,10 @@ async def suggest_peers_endpoint(request: dict):
     Uses Step2MarketDataProcessor with PeerDiscoveryService.
     
     Args:
-        ticker: Target ticker symbol
+        ticker: Target ticker symbol (required)
         max_peers: Maximum number of peers to suggest (default: 10)
         market: Market type (default: international)
+        session_id: Optional session ID for session tracking
     
     Returns:
         List of peer candidates with similarity scores
@@ -189,8 +190,17 @@ async def suggest_peers_endpoint(request: dict):
     ticker = request.get("ticker")
     max_peers = request.get("max_peers", 10)
     market = request.get("market", "international")
+    session_id = request.get("session_id")
     
-    logger.info(f"Suggesting peers for ticker='{ticker}', max_peers={max_peers}, market={market}")
+    # Validate required parameters
+    if not ticker:
+        raise HTTPException(status_code=400, detail="Missing required parameter: ticker")
+    
+    # Log session info if provided
+    if session_id:
+        logger.info(f"Suggesting peers for ticker='{ticker}', session_id='{session_id}', market={market}")
+    else:
+        logger.warning(f"Suggesting peers for ticker='{ticker}' without session_id. Consider adding session tracking.")
     
     try:
         result = await step2_processor.suggest_peers(
@@ -198,6 +208,11 @@ async def suggest_peers_endpoint(request: dict):
             max_peers=max_peers,
             market=market
         )
+        
+        # Add session validation warning if no session_id provided
+        if not session_id and result.get("status") == "success":
+            result["warnings"] = result.get("warnings", [])
+            result["warnings"].append("No session_id provided. For better tracking, include session_id in requests.")
         
         return result
         
@@ -209,9 +224,18 @@ async def suggest_peers_endpoint(request: dict):
 @router.post("/suggest-peers")
 async def suggest_peers_legacy(ticker: str, max_peers: int = 10, market: str = "international"):
     """
+    DEPRECATED: Use /step-2-suggest-peers instead.
+    
     Legacy endpoint for suggesting peers (kept for backward compatibility).
+    This endpoint will be removed in a future version.
     """
-    logger.info(f"Suggesting peers for ticker='{ticker}', max_peers={max_peers}")
+    import warnings
+    warnings.warn(
+        "The /suggest-peers endpoint is deprecated. Use /step-2-suggest-peers instead.",
+        DeprecationWarning,
+        stacklevel=2
+    )
+    logger.warning("DEPRECATED: Using legacy /suggest-peers endpoint. Migrate to /step-2-suggest-peers.")
     
     try:
         result = await step2_processor.suggest_peers(
@@ -225,3 +249,43 @@ async def suggest_peers_legacy(ticker: str, max_peers: int = 10, market: str = "
     except Exception as e:
         logger.error(f"Failed to suggest peers: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Peer suggestion failed: {str(e)}")
+
+
+@router.post("/validate-manual-peers")
+async def validate_manual_peers(request: dict):
+    """
+    Validate manually entered peer tickers.
+    
+    Args:
+        session_id: Session identifier (required)
+        tickers: List of ticker symbols to validate (required)
+        market: Market type (default: international)
+    
+    Returns:
+        Dictionary with validated peers and any errors
+    """
+    from app.api.schemas import ManualPeerRequest
+    
+    session_id = request.get("session_id")
+    tickers = request.get("tickers", [])
+    market = request.get("market", "international")
+    
+    # Validate required parameters
+    if not session_id:
+        raise HTTPException(status_code=400, detail="Missing required parameter: session_id")
+    if not tickers:
+        raise HTTPException(status_code=400, detail="Missing required parameter: tickers")
+    
+    logger.info(f"Validating {len(tickers)} manual peers for session='{session_id}', market={market}")
+    
+    try:
+        result = await step2_processor.validate_manual_peers(
+            tickers=tickers,
+            market=market
+        )
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Failed to validate manual peers: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Manual peer validation failed: {str(e)}")
