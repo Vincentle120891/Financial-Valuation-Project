@@ -21,7 +21,8 @@ const SearchStep = ({
   market, 
   setMarket, 
   onSearch, 
-  onSelectCompany 
+  onSelectCompany,
+  marketValidation
 }) => {
   const [vietnameseSearchLoading, setVietnameseSearchLoading] = useState(false);
   
@@ -64,8 +65,31 @@ const SearchStep = ({
       <h2>Step 1: Search Company</h2>
       <p style={{ marginBottom: '20px', color: '#666' }}>Enter a company name or ticker symbol to begin your valuation analysis.</p>
       
+      {/* Market Validation Feedback */}
+      {marketValidation && marketValidation.message && (
+        <div 
+          className={`validation-message ${marketValidation.isValid ? 'success' : 'error'}`}
+          style={{
+            marginTop: '15px',
+            padding: '12px 16px',
+            borderRadius: '6px',
+            backgroundColor: marketValidation.isValid ? '#d4edda' : '#f8d7da',
+            border: `1px solid ${marketValidation.isValid ? '#c3e6cb' : '#f5c6cb'}`,
+            color: marketValidation.isValid ? '#155724' : '#721c24',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px'
+          }}
+        >
+          <span style={{ fontSize: '1.2em' }}>
+            {marketValidation.isValid ? '✓' : '⚠️'}
+          </span>
+          <span>{marketValidation.message}</span>
+        </div>
+      )}
+
       {/* Market Toggle */}
-      <div className="market-toggle" style={{ marginBottom: '20px' }}>
+      <div className="market-toggle" style={{ marginBottom: '20px', marginTop: '20px' }}>
         <label style={{ marginRight: '20px' }}>
           <input
             type="radio"

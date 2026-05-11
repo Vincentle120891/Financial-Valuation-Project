@@ -978,6 +978,7 @@ const ValuationFlow = () => {
             setMarket={setMarket}
             onSearch={handleSearch}
             onSelectCompany={handleSelectCompany}
+            marketValidation={marketValidation}
           />
         );
       case 2:
