@@ -914,10 +914,9 @@ const ValuationFlow = () => {
       case 11:
         return (
           <ResultsStep
-            valuationResults={valuationResults[market]}
-            selectedModel={selectedModels[0]}
-            dupontResults={getResult('DuPont')}
-            compsResults={getResult('COMPS')}
+            valuationMatrix={valuationsData}
+            selectedMarket={market}
+            selectedModels={selectedModels}
             onBackToModelSelection={handleBackToModelSelection}
             onReset={handleReset}
           />
