@@ -4,7 +4,7 @@ Orchestrates raw data retrieval from Vietnamese providers (Vietstock, FireAnt, e
 Adheres to Model Integrity: No data dropping, explicit nulls for missing values.
 """
 from typing import Dict, List, Optional, Any
-from datetime import datetime
+from datetime import datetime, timedelta
 from pydantic import BaseModel, Field
 import logging
 
@@ -78,6 +78,11 @@ class VNStep6DataFetchProcessor:
     4. Fetch peer data if required.
     5. Compile raw bundle with metadata.
     6. Return unprocessed data for Step 7 normalization.
+    
+    Implements "Fetch Once, Use Many" architecture:
+    - Checks session_cache['vietnam_market_data'] before fetching
+    - Reuses cached data within 5-minute TTL
+    - Stores fetched data in shared cache for reuse across DCF/DuPont/Comps
     """
 
     def __init__(self):
@@ -112,10 +117,58 @@ class VNStep6DataFetchProcessor:
                 logger.warning("VietnameseReportScraper not available")
                 self.report_scraper = None
 
-    async def execute(self, input_data: VNDataFetchInput) -> VNDataFetchOutput:
-        """Execute Step 6: Fetch raw data."""
+    async def execute(self, input_data: VNDataFetchInput, session_cache: Optional[Dict] = None) -> VNDataFetchOutput:
+        """
+        Execute Step 6: Fetch raw data.
+        
+        Args:
+            input_data: Input parameters for data fetching
+            session_cache: Session cache dict to check before fetching (implements "Fetch Once, Use Many")
+                        If cache exists and is < 5 minutes old, returns cached data without re-fetching
+        
+        Returns:
+            VNDataFetchOutput with fetched data bundle
+        """
         import time
         start_time = time.time()
+
+        # GAP 1 FIX: Check session cache for "Fetch Once, Use Many" architecture
+        if session_cache and 'vietnam_market_data' in session_cache:
+            cached_data = session_cache['vietnam_market_data']
+            cache_timestamp = cached_data.get('timestamp')
+            
+            if cache_timestamp:
+                # Convert timestamp if it's a string
+                if isinstance(cache_timestamp, str):
+                    try:
+                        cache_timestamp = datetime.fromisoformat(cache_timestamp)
+                    except ValueError:
+                        cache_timestamp = None
+                
+                if cache_timestamp:
+                    cache_age = datetime.now() - cache_timestamp
+                    if cache_age < timedelta(minutes=5):
+                        logger.info(f"Using cached Vietnam market data for {input_data.ticker} (age: {cache_age.seconds}s)")
+                        # Return cached data without re-fetching
+                        return VNDataFetchOutput(
+                            success=True,
+                            ticker=input_data.ticker,
+                            data_bundle=RawDataBundle(
+                                source_provider=cached_data.get('source_provider', 'cache'),
+                                fetch_timestamp=cached_data.get('fetch_timestamp', datetime.now()),
+                                currency_unit=cached_data.get('currency_unit', 'millions_VND'),
+                                income_statement_raw=cached_data.get('income_statement_raw', {}),
+                                balance_sheet_raw=cached_data.get('balance_sheet_raw', {}),
+                                cash_flow_raw=cached_data.get('cash_flow_raw', {}),
+                                peer_data_raw=cached_data.get('peer_data_raw', {}),
+                                missing_periods=cached_data.get('missing_periods', []),
+                                data_quality_flags=cached_data.get('data_quality_flags', []),
+                                pdf_sources_used=cached_data.get('pdf_sources_used', [])
+                            ),
+                            message=f"Using cached data for {input_data.ticker} - no API call needed",
+                            fetch_duration_ms=0,
+                            sources_accessed=['cache']
+                        )
 
         await self._initialize_services()
 
@@ -244,6 +297,28 @@ class VNStep6DataFetchProcessor:
                 data_quality_flags=data_quality_flags,
                 pdf_sources_used=pdf_sources
             )
+
+            # GAP 1 FIX: Store fetched data in session cache for "Fetch Once, Use Many"
+            if session_cache is not None:
+                from datetime import datetime
+                cache_data = {
+                    'timestamp': datetime.now(),
+                    'source_provider': data_bundle.source_provider,
+                    'fetch_timestamp': data_bundle.fetch_timestamp,
+                    'currency_unit': data_bundle.currency_unit,
+                    'income_statement_raw': data_bundle.income_statement_raw,
+                    'balance_sheet_raw': data_bundle.balance_sheet_raw,
+                    'cash_flow_raw': data_bundle.cash_flow_raw,
+                    'peer_data_raw': data_bundle.peer_data_raw,
+                    'missing_periods': data_bundle.missing_periods,
+                    'data_quality_flags': data_bundle.data_quality_flags,
+                    'pdf_sources_used': data_bundle.pdf_sources_used,
+                    'periods_fetched': list(data_bundle.income_statement_raw.keys()) if data_bundle.income_statement_raw else []
+                }
+                
+                # Store in session under shared cache key
+                session_cache['vietnam_market_data'] = cache_data
+                logger.info(f"Stored Vietnam market data in cache for {input_data.ticker}")
 
             return VNDataFetchOutput(
                 success=True,
