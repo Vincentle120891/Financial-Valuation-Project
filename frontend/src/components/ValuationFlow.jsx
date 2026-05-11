@@ -103,8 +103,42 @@ const ValuationFlow = () => {
   const [selectedScenario, setSelectedScenario] = useState('base_case');
   const [validationErrors, setValidationErrors] = useState([]);
 
-  // Step 9-10: Results
-  const [valuationResults, setValuationResults] = useState(null);
+  // Step 8-9: Forecast Drivers & DCF Inputs
+  const [forecastDrivers, setForecastDrivers] = useState(null);
+  const [dcfInputs, setDcfInputs] = useState(null);
+  
+  // Step 6-7: Data Storage (using matrix structure primarily)
+  const [peerData, setPeerData] = useState(null);
+  const [calculatedMetrics, setCalculatedMetrics] = useState(null);
+
+  // Step 9-10: Results - Using matrix structure: valuationResults[market][method]
+  const [valuationResults, setValuationResults] = useState({
+    international: {
+      dcf: null,
+      dupont: null,
+      comps: null
+    },
+    vietnam: {
+      dcf: null,
+      dupont: null,
+      comps: null
+    }
+  });
+
+  // Helper to get/set results for current market + method
+  const getResult = (method) => {
+    return valuationResults[market]?.[method?.toLowerCase()] || null;
+  };
+  
+  const setResult = (method, data) => {
+    setValuationResults(prev => ({
+      ...prev,
+      [market]: {
+        ...prev[market],
+        [method?.toLowerCase()]: data
+      }
+    }));
+  };
 
   // UI State
   const [loading, setLoading] = useState(false);
@@ -340,9 +374,16 @@ const ValuationFlow = () => {
     setStep6ApiData(null);  // Clear Step 6 API data
     setForecastDrivers(null);
     setPeerData(null);
-    setDupontResults(null);
-    setCompsResults(null);
     setDcfInputs(null);
+    // Reset results matrix for current market only
+    setValuationResults(prev => ({
+      ...prev,
+      [market]: {
+        dcf: null,
+        dupont: null,
+        comps: null
+      }
+    }));
     setCurrentStep(4);
     setError(null);
   };
@@ -531,11 +572,12 @@ const ValuationFlow = () => {
         if (fetchDataResponse.data.dcf_inputs) {
           setDcfInputs(fetchDataResponse.data.dcf_inputs);
         }
+        // Store DuPont and Comps data in matrix (not separate state)
         if (fetchDataResponse.data.dupont_ratios) {
-          setDupontResults(fetchDataResponse.data.dupont_ratios);
+          setResult('DuPont', fetchDataResponse.data.dupont_ratios);
         }
         if (fetchDataResponse.data.comps_results) {
-          setCompsResults(fetchDataResponse.data.comps_results);
+          setResult('COMPS', fetchDataResponse.data.comps_results);
         }
         // Set calculated metrics from Step 6 backend response
         if (fetchDataResponse.data.calculated_metrics) {
@@ -650,24 +692,27 @@ const ValuationFlow = () => {
       console.log('Valuation response:', data);
 
       if (data.result) {
-        setValuationResults(data.result);
-
+        // Store results in matrix structure
         if (data.result.dcf_outputs) {
-          // DCF results - already included in data.result
-          setValuationData('DCF', data.result.dcf_outputs);
+          setResult('DCF', data.result.dcf_outputs);
         }
         if (data.result.dupont_outputs) {
-          setDupontResults(data.result.dupont_outputs);
-          // Also update valuationResults to include dupont_outputs for ResultsStep
-          setValuationResults(prev => ({ ...prev, dupont_outputs: data.result.dupont_outputs }));
-          setValuationData('DuPont', data.result.dupont_outputs);
+          setResult('DuPont', data.result.dupont_outputs);
         }
         if (data.result.comps_outputs) {
-          setCompsResults(data.result.comps_outputs);
-          // Also update valuationResults to include comps_outputs for ResultsStep
-          setValuationResults(prev => ({ ...prev, comps_outputs: data.result.comps_outputs }));
-          setValuationData('COMPS', data.result.comps_outputs);
+          setResult('COMPS', data.result.comps_outputs);
         }
+        
+        // Also store full result object for backward compatibility
+        setValuationResults(prev => ({
+          ...prev,
+          [market]: {
+            ...prev[market],
+            dcf: data.result.dcf_outputs || prev[market].dcf,
+            dupont: data.result.dupont_outputs || prev[market].dupont,
+            comps: data.result.comps_outputs || prev[market].comps
+          }
+        }));
 
         setCurrentStep(10);
       } else {
@@ -694,11 +739,23 @@ const ValuationFlow = () => {
     setAiError(null); // Clear AI errors on reset
     setConfirmedValues({});
     setSelectedScenario('base_case');
-    setValuationResults(null);
     setError(null);
     setMarket('international');
     setStep6ApiData(null);  // Clear Step 6 API data
+    // Reset all matrix structures
     setValuationsData({
+      international: {
+        dcf: null,
+        dupont: null,
+        comps: null
+      },
+      vietnam: {
+        dcf: null,
+        dupont: null,
+        comps: null
+      }
+    });
+    setValuationResults({
       international: {
         dcf: null,
         dupont: null,
@@ -712,9 +769,8 @@ const ValuationFlow = () => {
     });
     setForecastDrivers(null);
     setPeerData(null);
-    setDupontResults(null);
-    setCompsResults(null);
     setDcfInputs(null);
+    setCalculatedMetrics(null);
   };
 
   // ==================== RENDER STEP ====================
@@ -769,8 +825,8 @@ const ValuationFlow = () => {
             forecastDrivers={forecastDrivers}
             peerData={peerData}
             dcfInputs={dcfInputs}
-            dupontResults={dupontResults}
-            compsResults={compsResults}
+            dupontResults={getResult('DuPont')}
+            compsResults={getResult('COMPS')}
             aiData={step7ExtractionResults}
             aiError={aiError}
             requiredFields={requiredFields}
@@ -784,8 +840,8 @@ const ValuationFlow = () => {
             forecastDrivers={forecastDrivers}
             peerData={peerData}
             dcfInputs={dcfInputs}
-            dupontResults={dupontResults}
-            compsResults={compsResults}
+            dupontResults={getResult('DuPont')}
+            compsResults={getResult('COMPS')}
             calculatedMetrics={calculatedMetrics}
             onBackToRequirements={handleBackToRequirements}
             onContinueToAiAssumptions={handleContinueToHistoricalDataRetrieval}
@@ -858,10 +914,10 @@ const ValuationFlow = () => {
       case 11:
         return (
           <ResultsStep
-            valuationResults={valuationResults}
+            valuationResults={valuationResults[market]}
             selectedModel={selectedModels[0]}
-            dupontResults={dupontResults}
-            compsResults={compsResults}
+            dupontResults={getResult('DuPont')}
+            compsResults={getResult('COMPS')}
             onBackToModelSelection={handleBackToModelSelection}
             onReset={handleReset}
           />
