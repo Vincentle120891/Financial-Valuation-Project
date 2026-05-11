@@ -1,5 +1,29 @@
 # Backend Valuation Workflow Documentation
 
+## ⚠️ CRITICAL DEVELOPER WARNING: AI TOOL LIMITATIONS
+
+**READ BEFORE MODIFYING CODE:**
+
+We are utilizing **AI tools** for valuation logic generation (Steps 7-9). This architecture has strict constraints to prevent failures:
+
+### 🚫 DO NOT RUN MULTIPLE MODELS IN PARALLEL
+- **Reason:** Parallel execution causes **context hallucination**, **state race conditions**, and **data corruption** in AI processing.
+- **Rule:** Users must select **ONE model at a time** to complete the full valuation flow.
+- **Implementation:** Step 4 uses **Radio Buttons** (single-select), NOT checkboxes.
+- **Enforcement:** Steps 7-9 (AI Generation) run **sequentially** for the active model only.
+
+### ✅ CORRECT WORKFLOW: "Fetch Once, Use Many"
+1. **Unified Data Fetching (Step 6):** When a market is selected, fetch **ALL market data** needed for ANY model in one API call.
+2. **Shared Cache:** Store data in `session['international_market_data']`.
+3. **Model-Specific Slicing:** 
+   - User selects DCF → System slices DCF-relevant data from cache
+   - User switches to DuPont → System reuses SAME cached data (NO re-fetch)
+4. **Benefit:** Eliminates redundant API calls, prevents rate limiting, ensures data consistency.
+
+**See [WORKFLOW_ARCHITECTURE.md](./WORKFLOW_ARCHITECTURE.md) for complete architectural guidelines.**
+
+---
+
 ## Overview
 
 This document describes the complete workflow of the backend valuation system, showing how different valuation models work across international and Vietnamese markets using an 11-step guided process.

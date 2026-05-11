@@ -15,6 +15,24 @@ This document serves as a permanent reminder and binding agreement for all curre
 
 ---
 
+## ⚠️ CRITICAL DIRECTIVE: AI TOOL CONSTRAINTS (SEQUENTIAL ONLY)
+
+**We use AI tools for valuation logic generation (Steps 7-9). This creates strict architectural constraints:**
+
+### 🚫 DO NOT RUN MULTIPLE MODELS IN PARALLEL
+- **Reason:** Parallel execution causes **context hallucination**, **state race conditions**, and **data corruption**.
+- **Rule:** Users must select **ONE model at a time** (Radio Buttons in Step 4).
+- **Enforcement:** Steps 7-9 run **sequentially** for the active model only.
+
+### ✅ CORRECT WORKFLOW: "Fetch Once, Use Many"
+1. **Unified Data Fetching (Step 6):** Fetch ALL market data needed for ANY model in one API call.
+2. **Shared Cache:** Store in `session['international_market_data']`.
+3. **Model-Specific Slicing:** Reuse cached data when switching models (NO re-fetch).
+
+**DO NOT attempt to "optimize" by parallelizing AI steps. This architecture is intentionally sequential to prevent hallucination.**
+
+---
+
 ## 1. PHILOSOPHY: ACCURACY OVER CONVENIENCE
 
 ### 1.1 Why Completeness Matters
