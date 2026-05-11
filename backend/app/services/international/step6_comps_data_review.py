@@ -56,6 +56,11 @@ class PeerCompany(BaseModel):
     pe_ratio: Optional[float] = None
     ev_revenue: Optional[float] = None
     pb_ratio: Optional[float] = None
+    beta: Optional[float] = None
+    total_debt: Optional[float] = None
+    cash: Optional[float] = None
+    tax_rate: Optional[float] = None
+    cost_of_debt: Optional[float] = None
 
 
 class PeerComparablesDisplay(BaseModel):
@@ -389,7 +394,7 @@ class CompsStep6Processor:
 
                 # Get additional peer metrics
                 beta = peer_market_data.get('beta')
-                total_debt = peer_market_data.get('total_debt')
+                total_debt = peer_market_data.get('totalDebt')
                 cash = peer_market_data.get('cash')
 
                 companies.append(PeerCompany(
@@ -404,8 +409,8 @@ class CompsStep6Processor:
                     beta=beta,
                     total_debt=total_debt,
                     cash=cash,
-                    tax_rate=peer_market_data.get('tax_rate'),
-                    cost_of_debt=peer_market_data.get('cost_of_debt')
+                    tax_rate=peer_market_data.get('effectiveTaxRate'),
+                    cost_of_debt=peer_market_data.get('costOfDebt')
                 ))
 
             except Exception as e:
