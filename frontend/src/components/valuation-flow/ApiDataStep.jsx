@@ -28,6 +28,13 @@ const ApiDataStep = ({
   // Check if data has been retrieved
   const hasRetrievedData = historicalData || peerData || dcfInputs || dupontResults || compsResults || calculatedMetrics;
 
+  // Extract nested data structures from the unified response format
+  // Backend returns: { historical_financials: {...}, forecast_drivers: {...}, peer_comparables: {...}, ... }
+  const extractedHistoricalData = historicalData?.historical_financials || historicalData;
+  const extractedForecastDrivers = historicalData?.forecast_drivers || forecastDrivers;
+  const extractedPeerData = historicalData?.peer_comparables || peerData;
+  const extractedCalculatedMetrics = historicalData?.calculated_metrics || calculatedMetrics;
+  
   // Comprehensive list of ALL expected inputs to display (even if missing/errors)
   const allExpectedInputs = [
     // Historical Financials - Income Statement
@@ -148,11 +155,19 @@ const ApiDataStep = ({
 
   // Render ALL expected inputs with clear status indicators (shows missing/errors explicitly)
   const renderAllInputs = () => {
-    if (!historicalData || !historicalData.data_fields) {
+    if (!extractedHistoricalData || !extractedHistoricalData.data_fields) {
       return (
         <div className="summary-box" style={{ background: '#ffebee', marginBottom: '20px' }}>
           <h3>⚠️ No Data Retrieved</h3>
           <p style={{ color: '#c62828' }}>Unable to display inputs. Please check if data was successfully fetched from APIs.</p>
+          {historicalData && (
+            <details style={{ marginTop: '10px', fontSize: '12px' }}>
+              <summary style={{ cursor: 'pointer', color: '#1976d2' }}>Debug: Show received data structure</summary>
+              <pre style={{ background: '#f5f5f5', padding: '10px', borderRadius: '4px', overflow: 'auto', maxHeight: '300px' }}>
+                {JSON.stringify(historicalData, null, 2)}
+              </pre>
+            </details>
+          )}
         </div>
       );
     }
@@ -185,7 +200,7 @@ const ApiDataStep = ({
               <div style={{ display: 'grid', gap: '12px' }}>
                 {categoryInputs.map(input => {
                   // Get full field objects with status and source info
-                  const matchingFields = historicalData.data_fields?.filter(field => {
+                  const matchingFields = extractedHistoricalData.data_fields?.filter(field => {
                     return input.patterns.some(pattern => {
                       if (typeof pattern === 'string') {
                         return field.field_name === pattern ||
@@ -200,7 +215,7 @@ const ApiDataStep = ({
                   }) || [];
 
                   const hasData = matchingFields.length > 0 && matchingFields.some(f => f.value !== null && f.value !== undefined);
-                  const years = historicalData.years || [];
+                  const years = extractedHistoricalData.years || [];
 
                   // Determine overall status for this input
                   const getStatusInfo = () => {
