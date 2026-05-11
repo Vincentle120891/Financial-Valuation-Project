@@ -6,6 +6,21 @@ This backend provides dual-market stock valuation capabilities with **strict sep
 - **International Markets** (IFRS/US GAAP) - US, EU, Asia ex-Vietnam
 - **Vietnamese Market** (TT99 accounting standards) - HOSE, HNX, UPCOM exchanges
 
+## 3×2 Workflow Matrix
+
+| | **International** | **Vietnam** |
+|---|---|---|
+| **DCF** | `services/international/dcf_engine.py` + 10 step processors | `services/vietnamese/vietnamese_dcf_engine.py` + 10 step processors |
+| **DuPont** | `services/international/dupont_engine.py` + 10 step processors | `services/vietnamese/vietnamese_dupont_engine.py` + 10 step processors |
+| **Comps** | `services/international/comps_engine.py` + 10 step processors | `services/vietnamese/vietnamese_comps_engine.py` (sector_valuation_models.py) |
+
+### Critical Workflow Principles
+
+1. **Fetch Once, Use Many**: Step 6 fetches ALL data for ANY model into shared cache
+2. **Single Model Execution**: Steps 7-9 run sequentially for ONE selected model only
+3. **Market Isolation**: No cross-contamination between international and Vietnamese workflows
+4. **Model Integrity**: No input/calculation simplification - all fields preserved
+
 ## Directory Structure
 
 ```
@@ -13,64 +28,99 @@ backend/
 ├── app/
 │   ├── api/
 │   │   └── routes/
-│   │       ├── international_routes.py    # /international/* endpoints
-│   │       ├── vietnamese_routes.py       # /vietnamese/* endpoints
-│   │       ├── pdf_extraction_routes.py   # PDF financial extraction
-│   │       ├── search_routes.py           # Ticker/company search
-│   │       └── vietnamese_reports_routes.py
+│   │       ├── international_market_data_routes.py    # /international/* endpoints (DCF/DuPont/Comps)
+│   │       ├── vietnamese_market_data_routes.py       # /vietnamese/* endpoints (VN-specific)
+│   │       ├── pdf_extraction_routes.py               # PDF financial extraction (VN)
+│   │       ├── search_routes.py                       # Ticker/company search
+│   │       ├── valuation_routes.py                    # Steps 4-10 unified workflow
+│   │       └── vietnamese_reports_routes.py           # VN report auto-fetch
 │   │
 │   ├── models/
-│   │   ├── __init__.py                    # Unified exports
-│   │   ├── international/                 # International market models
-│   │   │   └── __init__.py                # DuPont, Comps, DCF requests
-│   │   ├── vietnamese/                    # Vietnamese market models (TT99)
-│   │   │   └── __init__.py                # VN-specific schemas
-│   │   ├── international_inputs.py        # Legacy: DuPont, Comps models
-│   │   ├── international_cashflow_model.py
-│   │   ├── vietnamese_inputs.py           # Legacy: VN request models
-│   │   ├── vietnamese_inputs_tt99.py      # Legacy: TT99 financial forms
-│   │   └── vietnamese_cashflow_model.py
+│   │   ├── __init__.py                                # Unified exports
+│   │   ├── international/                             # International market models
+│   │   │   └── __init__.py                            # DuPont, Comps, DCF requests
+│   │   └── vietnamese/                                # Vietnamese market models (TT99)
+│   │       └── __init__.py                            # VN-specific schemas
 │   │
-│   ├── services/
-│   │   ├── __init__.py                    # Unified exports
-│   │   ├── international/                 # International services
-│   │   │   └── __init__.py                # yfinance, ticker validation
-│   │   ├── vietnam/                       # Vietnamese services
-│   │   │   ├── __init__.py                # VNDirect, CafeF, VNStockDB
-│   │   │   ├── vn_stock_database.py
-│   │   │   └── vnd_financial_parser.py
-│   │   ├── dcf_input_manager.py           # Legacy: ValuationInputManager
-│   │   ├── vietnamese_input_manager.py    # Legacy: VietnameseInputManager
-│   │   ├── yfinance_service.py
-│   │   ├── international_ticker_service.py
-│   │   ├── vietnamese_ticker_service.py
-│   │   └── metrics_calculator.py
+│   ├── services/                                      # Business logic - 70+ files total
+│   │   ├── __init__.py                                # Unified exports
+│   │   ├── international/                             # International services (40+ files)
+│   │   │   ├── dcf_engine.py                          # DCF calculations (IFRS/GAAP)
+│   │   │   ├── dupont_engine.py                       # DuPont analysis
+│   │   │   ├── comps_engine.py                        # Trading comparables
+│   │   │   ├── step1_ticker_processor.py
+│   │   │   ├── step2_market_data_processor.py
+│   │   │   ├── step3_historical_processor.py
+│   │   │   ├── step4_forecast_processor.py
+│   │   │   ├── step5_assumptions_processor.py
+│   │   │   ├── step6_data_review.py                   # Fetch Once, Use Many
+│   │   │   ├── step6_dcf_data_review.py               # Model-specific data review
+│   │   │   ├── step6_dupont_data_review.py
+│   │   │   ├── step6_comps_data_review.py
+│   │   │   ├── step7_historical_data_processor.py
+│   │   │   ├── step7_dcf_historical_data.py           # Model-specific historical fetch
+│   │   │   ├── step7_dupont_historical_data.py
+│   │   │   ├── step7_comps_historical_data.py
+│   │   │   ├── step8_dcf_assumptions.py               # AI suggestions (model-specific)
+│   │   │   ├── step8_dupont_assumptions.py
+│   │   │   ├── step8_comps_assumptions.py
+│   │   │   ├── step8_manual_overrides.py              # User manual adjustments
+│   │   │   ├── step9_final_calculation.py             # Pre-valuation calculations
+│   │   │   ├── step9_dcf_calculation.py               # Model-specific final calc
+│   │   │   ├── step9_dupont_calculation.py
+│   │   │   ├── step9_comps_calculation.py
+│   │   │   ├── step10_valuation_processor.py          # Unified valuation execution
+│   │   │   ├── step10_dcf_report.py                   # Model-specific reports
+│   │   │   ├── step10_dupont_report.py
+│   │   │   ├── step10_comps_report.py
+│   │   │   ├── ai_engine.py                           # AI suggestion engine
+│   │   │   ├── yfinance_service.py                    # Yahoo Finance integration
+│   │   │   ├── alphavantage_service.py                # Alpha Vantage API
+│   │   │   ├── peer_discovery_service.py              # Peer company discovery
+│   │   │   ├── metrics_calculator.py                  # Financial metrics calculation
+│   │   │   ├── dcf_input_manager.py                   # DCF input management
+│   │   │   ├── shared_context_service.py              # Cross-step context sharing
+│   │   │   └── valuation_orchestrator.py              # Multi-model orchestration
+│   │   │
+│   │   └── vietnamese/                                # Vietnamese services (30+ files)
+│   │       ├── vietnamese_dcf_engine.py               # DCF (TT99, 20% tax, VND)
+│   │       ├── vietnamese_dupont_engine.py            # DuPont (TT99 standards)
+│   │       ├── vietnamese_comps_engine.py             # Comps (VNINDEX/VN30 filtering)
+│   │       ├── sector_valuation_models.py             # VN sector-specific models
+│   │       ├── step1_ticker_processor.py
+│   │       ├── step2_market_data_processor.py
+│   │       ├── step3_historical_processor.py
+│   │       ├── step4_model_processor.py               # VN model selection
+│   │       ├── step4_forecast_processor.py
+│   │       ├── step5_requirements_processor.py        # VN input requirements
+│   │       ├── step6_data_fetch_processor.py          # VN data fetching
+│   │       ├── step7_historical_processor.py
+│   │       ├── step8_assumptions_processor.py
+│   │       ├── step8_dcf_assumptions.py               # VN DCF assumptions
+│   │       ├── step8_dupont_assumptions.py            # VN DuPont assumptions
+│   │       ├── step8_comps_assumptions.py             # VN Comps assumptions
+│   │       ├── step9_confirmation_processor.py        # VN assumption confirmation
+│   │       ├── step10_valuation_processor.py          # VN valuation execution
+│   │       ├── vietnamese_input_manager.py            # VN input management
+│   │       ├── vietnamese_ticker_service.py           # VN ticker validation
+│   │       ├── vn_stock_database.py                   # VNStockDB integration
+│   │       ├── vnd_financial_parser.py                # VNDirect parser
+│   │       ├── vn_document_extractor.py               # PDF/document extraction
+│   │       ├── vietnamese_report_scraper.py           # Report scraping (CafeF, etc.)
+│   │       └── vietnam_data_aggregator.py             # VN data aggregation
 │   │
-│   ├── engines/
-│   │   ├── __init__.py                    # Unified exports
-│   │   ├── international/                 # International engines
-│   │   │   └── __init__.py                # DCF, Comps, DuPont
-│   │   ├── vietnam/                       # Vietnamese engines
-│   │   │   ├── __init__.py                # VN DCF, sector models
-│   │   │   └── sector_valuation_models.py
-│   │   ├── dcf_engine.py                  # Legacy: International DCF
-│   │   ├── comps_engine.py                # Legacy: Comps analysis
-│   │   ├── dupont_engine.py               # Legacy: DuPont analysis
-│   │   ├── vietnamese_dcf_engine.py       # Legacy: VN DCF
-│   │   └── ai_engine.py                   # AI suggestions & fallbacks
-│   │
-│   ├── core/
-│   │   ├── config.py                      # Application settings
-│   │   ├── logging_config.py              # Logging setup
-│   │   ├── exceptions.py                  # Custom exceptions
-│   │   └── model_integrity.py             # Model validation
-│   │
-│   └── main.py                            # FastAPI application entry
+│   └── core/
+│       ├── config.py                                  # Application settings
+│       ├── logging_config.py                          # Logging setup
+│       ├── exceptions.py                              # Custom exceptions
+│       └── model_integrity.py                         # Model validation
+│
+├── main.py                                            # FastAPI application entry
 │
 └── docs/
-    ├── ARCHITECTURE.md                    # This file
-    ├── VIETNAMESE_VS_INTERNATIONAL_MODELS.md
-    └── vietnamese_report_auto_fetch.md
+    ├── ARCHITECTURE.md                                # This file
+    ├── VIETNAMESE_VS_INTERNATIONAL_MODELS.md          # TT99 vs IFRS/GAAP comparison
+    └── vietnamese_report_auto_fetch.md                # Auto-fetch VN reports guide
 ```
 
 ## Market Isolation Principles
@@ -84,10 +134,22 @@ backend/
 
 | Market | Data Source | Currency | Tax Rate | Risk-Free Rate |
 |--------|-------------|----------|----------|----------------|
-| International | yfinance | USD/local | Local corporate tax | 10Y Treasury |
+| International | yfinance, Alpha Vantage | USD/local | Local corporate tax | 10Y Treasury |
 | Vietnamese | VNDirect, CafeF, VNStockDatabase | VND | 20% | 6.8% (10Y VN bond) |
 
 ### 3. **Accounting Standards**
+
+### 4. **Model-Specific Processors**
+
+Each valuation method (DCF/DuPont/Comps) has dedicated processors for steps 6-10:
+
+| Step | International | Vietnamese |
+|------|---------------|------------|
+| **Step 6** (Data Review) | `step6_dcf_data_review.py`, `step6_dupont_data_review.py`, `step6_comps_data_review.py` | Unified `step6_data_fetch_processor.py` |
+| **Step 7** (Historical) | `step7_dcf_historical_data.py`, `step7_dupont_historical_data.py`, `step7_comps_historical_data.py` | Unified `step7_historical_processor.py` |
+| **Step 8** (Assumptions) | `step8_dcf_assumptions.py`, `step8_dupont_assumptions.py`, `step8_comps_assumptions.py` | `step8_dcf_assumptions.py`, `step8_dupont_assumptions.py`, `step8_comps_assumptions.py` |
+| **Step 9** (Calculation) | `step9_dcf_calculation.py`, `step9_dupont_calculation.py`, `step9_comps_calculation.py` | Unified `step9_confirmation_processor.py` |
+| **Step 10** (Valuation) | `step10_dcf_report.py`, `step10_dupont_report.py`, `step10_comps_report.py` | Unified `step10_valuation_processor.py` |
 
 | Market | Standard | Key Features |
 |--------|----------|--------------|
