@@ -43,6 +43,11 @@ const HistoricalDataExtractionStep = ({
   const [uploadResult, setUploadResult] = useState(null);
   const [uploadError, setUploadError] = useState(null);
   const fileInputRef = useRef(null);
+  
+  // AI Web Search state
+  const [searchingWithAi, setSearchingWithAi] = useState(false);
+  const [aiSearchResult, setAiSearchResult] = useState(null);
+  const [aiSearchError, setAiSearchError] = useState(null);
 
   // Handle using AI suggestion for historical data
   const handleUseAiSuggestion = (field, value) => {
@@ -105,6 +110,52 @@ const HistoricalDataExtractionStep = ({
       fileInputRef.current.click();
     }
   };
+
+  // AI Web Search handler
+  const handleAiWebSearch = async () => {
+    if (!sessionId || !ticker) return;
+
+    setSearchingWithAi(true);
+    setAiSearchError(null);
+    setAiSearchResult(null);
+
+    try {
+      const response = await fetch('/api/step-7-ai-web-search', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          session_id: sessionId,
+          ticker: ticker,
+          company_name: companyName || ticker,
+          method: selectedModel || 'DCF',
+          market: market
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'AI web search failed');
+      }
+
+      const result = await response.json();
+      setAiSearchResult(result);
+      
+      // Notify parent component of successful search
+      if (onRetryAiExtraction) {
+        onRetryAiExtraction();
+      }
+    } catch (error) {
+      setAiSearchError(error.message);
+    } finally {
+      setSearchingWithAi(false);
+    }
+  };
+
+  // Get ticker and company name from props or session
+  const ticker = historicalData?.ticker || apiData?.ticker || '';
+  const companyName = historicalData?.company_name || apiData?.company_name || '';
 
   // Render AI error/warning message for historical data extraction
   const renderAiError = () => {
@@ -308,6 +359,121 @@ const HistoricalDataExtractionStep = ({
         </p>
       </div>
 
+      {/* Options Banner - Clear guidance for users */}
+      <div style={{
+        marginBottom: '20px',
+        padding: '20px',
+        borderRadius: '8px',
+        background: 'linear-gradient(135deg, #f0f4ff 0%, #e8eaf6 100%)',
+        border: '2px solid #7986cb'
+      }}>
+        <h3 style={{ color: '#3949ab', margin: '0 0 16px 0', fontSize: '18px' }}>
+          🎯 How to Retrieve Historical Data
+        </h3>
+        <p style={{ margin: '0 0 16px 0', color: '#5c6bc0', fontSize: '14px', lineHeight: '1.6' }}>
+          To ensure accurate valuation, you need precise historical financial data. 
+          Since automatic API data can be incomplete, please choose one of these options:
+        </p>
+        
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '16px' }}>
+          {/* Option 1 */}
+          <div style={{
+            background: 'white',
+            padding: '16px',
+            borderRadius: '6px',
+            border: '2px solid #9c27b0'
+          }}>
+            <h4 style={{ color: '#7b1fa2', margin: '0 0 8px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '20px' }}>📤</span> Option 1: Upload PDF Reports
+            </h4>
+            <p style={{ margin: '0 0 12px 0', fontSize: '13px', color: '#666', lineHeight: '1.5' }}>
+              Upload the company's annual reports (10-K, Annual Report, or Financial Statements). 
+              Our AI will automatically extract and normalize the data.
+            </p>
+            <ul style={{ margin: '0', paddingLeft: '20px', fontSize: '12px', color: '#757575', lineHeight: '1.8' }}>
+              <li><strong>Best for:</strong> Precise line items (NWC, CapEx, D&A)</li>
+              <li><strong>Formats:</strong> PDF only</li>
+              <li><strong>Standards:</strong> US GAAP, IFRS, Vietnamese</li>
+            </ul>
+          </div>
+
+          {/* Option 2 */}
+          <div style={{
+            background: 'white',
+            padding: '16px',
+            borderRadius: '6px',
+            border: '2px solid #2196f3'
+          }}>
+            <h4 style={{ color: '#1976d2', margin: '0 0 8px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '20px' }}>🤖</span> Option 2: Use External AI Tools
+            </h4>
+            <p style={{ margin: '0 0 12px 0', fontSize: '13px', color: '#666', lineHeight: '1.5' }}>
+              Use AI tools like ChatGPT, Claude, or Perplexity to search and extract historical data online.
+              Then manually input the metrics in Step 8.
+            </p>
+            <ul style={{ margin: '0', paddingLeft: '20px', fontSize: '12px', color: '#757575', lineHeight: '1.8' }}>
+              <li><strong>Prompt:</strong> "Extract 5-year revenue, net income, EBITDA for [TICKER]"</li>
+              <li><strong>Best for:</strong> Quick estimates when PDFs unavailable</li>
+              <li><strong>Tip:</strong> Cross-verify with multiple sources</li>
+            </ul>
+          </div>
+
+          {/* Option 3 - NEW */}
+          <div style={{
+            background: 'white',
+            padding: '16px',
+            borderRadius: '6px',
+            border: '2px solid #4caf50'
+          }}>
+            <h4 style={{ color: '#388e3c', margin: '0 0 8px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '20px' }}>⚡</span> Option 3: AI Web Search (Powered by Groq/Gemini/Qwen)
+            </h4>
+            <p style={{ margin: '0 0 12px 0', fontSize: '13px', color: '#666', lineHeight: '1.5' }}>
+              Let our AI automatically search the web using Groq, Gemini, and Qwen to extract historical financial data.
+              The system will try multiple providers and merge results with existing API data.
+            </p>
+            <ul style={{ margin: '0', paddingLeft: '20px', fontSize: '12px', color: '#757575', lineHeight: '1.8' }}>
+              <li><strong>Providers:</strong> Groq → Gemini → Qwen (auto-fallback)</li>
+              <li><strong>Sources:</strong> Yahoo Finance, Bloomberg, Reuters, IR sites</li>
+              <li><strong>Output:</strong> Structured JSON with confidence scores</li>
+            </ul>
+            <button
+              onClick={handleAiWebSearch}
+              disabled={searchingWithAi || loading || !ticker}
+              className="btn-primary"
+              style={{ 
+                marginTop: '12px',
+                width: '100%',
+                background: searchingWithAi ? '#a5d6a7' : '#4caf50',
+                color: 'white',
+                border: 'none'
+              }}
+            >
+              {searchingWithAi ? '🔍 Searching with AI...' : '🚀 Start AI Web Search'}
+            </button>
+            {!ticker && (
+              <p style={{ marginTop: '8px', fontSize: '12px', color: '#f44336' }}>
+                ⚠️ Ticker symbol required for AI search
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* Important Note */}
+        <div style={{
+          marginTop: '16px',
+          padding: '12px',
+          background: '#fff8e1',
+          border: '1px solid #ffc107',
+          borderRadius: '6px',
+          fontSize: '13px',
+          color: '#f57f17'
+        }}>
+          <strong>⚠️ Note:</strong> Automatic document fetching is currently disabled. For the most accurate results, 
+          we strongly recommend uploading official PDF reports using Option 1 above.
+        </div>
+      </div>
+
       {renderAiError()}
 
       {/* PDF Upload Section */}
@@ -405,6 +571,117 @@ const HistoricalDataExtractionStep = ({
           </div>
         )}
       </div>
+
+      {/* AI Web Search Results Display */}
+      {aiSearchResult && (
+        <div style={{ 
+          background: 'linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%)', 
+          border: '2px solid #4caf50', 
+          padding: '20px', 
+          borderRadius: '8px', 
+          marginBottom: '20px' 
+        }}>
+          <h3 style={{ color: '#2e7d32', margin: '0 0 12px 0' }}>✅ AI Web Search Results</h3>
+          <p style={{ margin: '0 0 16px 0', color: '#1b5e20', fontSize: '14px' }}>
+            Successfully extracted data using <strong>{aiSearchResult.provider_used}</strong>.
+            Confidence: {(aiSearchResult.confidence_score * 100).toFixed(0)}%
+          </p>
+          
+          {aiSearchResult.sources && aiSearchResult.sources.length > 0 && (
+            <div style={{ 
+              marginTop: '12px', 
+              padding: '12px', 
+              background: 'white', 
+              borderRadius: '6px',
+              border: '1px solid #a5d6a7'
+            }}>
+              <strong style={{ color: '#1b5e20' }}>📚 Sources:</strong>
+              <ul style={{ margin: '8px 0', paddingLeft: '20px', fontSize: '13px', color: '#333' }}>
+                {aiSearchResult.sources.map((source, idx) => (
+                  <li key={idx}>{source}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          
+          {aiSearchResult.time_series && Object.keys(aiSearchResult.time_series).length > 0 && (
+            <div style={{ 
+              marginTop: '16px', 
+              padding: '12px', 
+              background: 'white', 
+              borderRadius: '6px',
+              border: '1px solid #a5d6a7'
+            }}>
+              <strong style={{ color: '#1b5e20' }}>📊 Extracted Time Series:</strong>
+              <div style={{ 
+                display: 'grid', 
+                gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', 
+                gap: '12px', 
+                marginTop: '12px' 
+              }}>
+                {Object.entries(aiSearchResult.time_series).map(([year, metrics]) => (
+                  <div key={year} style={{ 
+                    padding: '12px', 
+                    background: '#f1f8e9', 
+                    borderRadius: '6px',
+                    border: '1px solid #c5e1a5'
+                  }}>
+                    <strong style={{ color: '#33691e', display: 'block', marginBottom: '8px' }}>{year}</strong>
+                    {Object.entries(metrics).map(([metric, value]) => (
+                      <div key={metric} style={{ 
+                        fontSize: '13px', 
+                        marginBottom: '4px',
+                        display: 'flex',
+                        justifyContent: 'space-between'
+                      }}>
+                        <span style={{ color: '#666' }}>{metric}:</span>
+                        <span style={{ fontWeight: 600, color: '#1976d2' }}>
+                          {typeof value === 'number' ? value.toLocaleString() : value}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          
+          {aiSearchResult.notes && (
+            <div style={{ 
+              marginTop: '12px', 
+              padding: '12px', 
+              background: '#fff8e1', 
+              borderRadius: '6px',
+              border: '1px solid #ffe082',
+              fontSize: '13px',
+              color: '#f57f17'
+            }}>
+              <strong>📝 Notes:</strong> {aiSearchResult.notes}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* AI Web Search Error */}
+      {aiSearchError && (
+        <div style={{ 
+          background: 'linear-gradient(135deg, #ffebee 0%, #ffcdd2 100%)', 
+          border: '2px solid #ef5350', 
+          padding: '20px', 
+          borderRadius: '8px', 
+          marginBottom: '20px' 
+        }}>
+          <h3 style={{ color: '#c62828', margin: '0 0 12px 0' }}>❌ AI Web Search Failed</h3>
+          <p style={{ margin: '0', color: '#b71c1c' }}>{aiSearchError}</p>
+          <button
+            onClick={handleAiWebSearch}
+            className="btn-secondary"
+            style={{ marginTop: '12px' }}
+          >
+            🔄 Retry AI Search
+          </button>
+        </div>
+      )}
 
       {/* PRIMARY DISPLAY: Historical Data Gaps (works for all 3×2 matrix) */}
       {renderHistoricalDataGaps()}

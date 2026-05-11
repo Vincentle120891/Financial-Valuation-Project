@@ -40,6 +40,7 @@ from app.services.international.step10_valuation_processor import Step10Valuatio
 from app.services.international.yfinance_service import YFinanceService
 from app.services.international.valuation_orchestrator import orchestrator
 from app.services.pdf_extraction_service import VietnamesePDFExtractor
+from app.services.international.step7_ai_web_search import AIWebSearchExtractor
 
 logger = get_logger(__name__)
 
@@ -608,6 +609,142 @@ async def upload_pdf_for_step7(
     except Exception as e:
         logger.error(f"PDF upload and extraction error: {e}")
         raise HTTPException(status_code=500, detail=f"Extraction failed: {str(e)}")
+
+
+@router.post("/step-7-ai-web-search")
+async def ai_web_search_for_step7(
+    session_id: str,
+    ticker: str,
+    company_name: str,
+    method: str,
+    market: str = "international"
+):
+    """
+    Step 7: AI Web Search for Historical Data
+    
+    Uses Groq, Gemini, and Qwen AI providers to search the internet and extract
+    historical financial data. This is an alternative to PDF upload when users
+    don't have access to official financial reports.
+    
+    Workflow:
+    1. User clicks "Search with AI" in Step 7 frontend
+    2. Backend uses AIFallbackEngine to query AI providers (Groq → Gemini → Qwen)
+    3. AI searches web for financial data from reliable sources
+    4. Extracted data is validated, formatted, and merged with Step 6 data
+    5. Results stored in session for Step 8
+    
+    Args:
+        session_id: Session identifier
+        ticker: Stock ticker symbol (e.g., AAPL, VNM)
+        company_name: Full company name
+        method: Valuation method (DCF, DUPONT, COMPS)
+        market: Market type (international, vietnamese)
+    
+    Returns:
+        Extraction results with time series data, metadata, and source URLs
+    """
+    try:
+        # Validate session
+        session = session_service.get_session_data(session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+        
+        # Get existing Step 6 data for merging
+        method_lower = method.lower()
+        market_lower = market.lower()
+        
+        step6_data = session_service.get_session_value(
+            session_id,
+            "financial_data",
+            market=market_lower,
+            method=method_lower
+        )
+        
+        if not step6_data:
+            step6_data = session_service.get_session_value(session_id, "financial_data")
+        
+        # Initialize AI Web Search Extractor
+        extractor = AIWebSearchExtractor()
+        
+        # Perform AI web search and extraction
+        result = await extractor.extract_data(
+            ticker=ticker,
+            company_name=company_name,
+            market=market,
+            context_data=step6_data
+        )
+        
+        if not result.get("success"):
+            raise HTTPException(
+                status_code=500,
+                detail=result.get("error", "AI web search failed")
+            )
+        
+        # Store results in session
+        extraction_metadata = {
+            'source': 'AI Web Search',
+            'provider_used': result['metadata']['provider_used'],
+            'confidence_score': result['metadata']['confidence_score'],
+            'sources': result['metadata'].get('sources', []),
+            'notes': result['metadata'].get('notes', ''),
+            'search_timestamp': datetime.now().isoformat(),
+            'extracted_metrics': list(result['data'].keys()) if result['data'] else []
+        }
+        
+        session_service.update_session_data(
+            session_id,
+            "ai_web_search_results",
+            {
+                'time_series': result['data'],
+                'metadata': extraction_metadata
+            },
+            market=market_lower,
+            method=method_lower
+        )
+        
+        # Update historical data with AI-extracted values
+        if step6_data:
+            if 'historical_financials' not in step6_data:
+                step6_data['historical_financials'] = {}
+            
+            # Merge AI data into existing structure
+            for date_key, metrics in result['data'].items():
+                if date_key not in step6_data['historical_financials']:
+                    step6_data['historical_financials'][date_key] = metrics
+                else:
+                    # Fill gaps in existing data with AI data
+                    for metric, value in metrics.items():
+                        if step6_data['historical_financials'][date_key].get(metric) is None and value is not None:
+                            step6_data['historical_financials'][date_key][metric] = value
+        
+        session_service.update_session_data(
+            session_id,
+            "financial_data",
+            step6_data,
+            market=market_lower,
+            method=method_lower
+        )
+        
+        logger.info(
+            f"Successfully extracted data via AI web search for {ticker} ({company_name}) "
+            f"using {result['metadata']['provider_used']}"
+        )
+        
+        return {
+            "success": True,
+            "message": f"Successfully extracted data using {result['metadata']['provider_used']}",
+            "provider_used": result['metadata']['provider_used'],
+            "confidence_score": result['metadata']['confidence_score'],
+            "sources": result['metadata'].get('sources', []),
+            "time_series": result['data'],
+            "notes": result['metadata'].get('notes', '')
+        }
+                
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"AI web search error for {ticker}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"AI web search failed: {str(e)}")
 
 
 @router.post("/step-8-initialize", response_model=FullAssumptionsResponse)
