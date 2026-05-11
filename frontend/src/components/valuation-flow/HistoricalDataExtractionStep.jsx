@@ -37,13 +37,13 @@ const HistoricalDataExtractionStep = ({
 }) => {
   // FIX Issue #5: Backward compatibility layer for legacy aiData prop name
   const data = historicalGapsData || aiData;
-  
+
   // PDF Upload state
   const [uploadingPdf, setUploadingPdf] = useState(false);
   const [uploadResult, setUploadResult] = useState(null);
   const [uploadError, setUploadError] = useState(null);
   const fileInputRef = useRef(null);
-  
+
   // AI Web Search state
   const [searchingWithAi, setSearchingWithAi] = useState(false);
   const [aiSearchResult, setAiSearchResult] = useState(null);
@@ -91,7 +91,7 @@ const HistoricalDataExtractionStep = ({
 
       const result = await response.json();
       setUploadResult(result);
-      
+
       // Notify parent component of successful upload
       if (onRetryAiExtraction) {
         // Trigger a refresh of the historical data
@@ -141,7 +141,7 @@ const HistoricalDataExtractionStep = ({
 
       const result = await response.json();
       setAiSearchResult(result);
-      
+
       // Notify parent component of successful search
       if (onRetryAiExtraction) {
         onRetryAiExtraction();
@@ -371,10 +371,10 @@ const HistoricalDataExtractionStep = ({
           🎯 How to Retrieve Historical Data
         </h3>
         <p style={{ margin: '0 0 16px 0', color: '#5c6bc0', fontSize: '14px', lineHeight: '1.6' }}>
-          To ensure accurate valuation, you need precise historical financial data. 
+          To ensure accurate valuation, you need precise historical financial data.
           Since automatic API data can be incomplete, please choose one of these options:
         </p>
-        
+
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '16px' }}>
           {/* Option 1 */}
           <div style={{
@@ -387,7 +387,7 @@ const HistoricalDataExtractionStep = ({
               <span style={{ fontSize: '20px' }}>📤</span> Option 1: Upload PDF Reports
             </h4>
             <p style={{ margin: '0 0 12px 0', fontSize: '13px', color: '#666', lineHeight: '1.5' }}>
-              Upload the company's annual reports (10-K, Annual Report, or Financial Statements). 
+              Upload the company's annual reports (10-K, Annual Report, or Financial Statements).
               Our AI will automatically extract and normalize the data.
             </p>
             <ul style={{ margin: '0', paddingLeft: '20px', fontSize: '12px', color: '#757575', lineHeight: '1.8' }}>
@@ -441,7 +441,7 @@ const HistoricalDataExtractionStep = ({
               onClick={handleAiWebSearch}
               disabled={searchingWithAi || loading || !ticker}
               className="btn-primary"
-              style={{ 
+              style={{
                 marginTop: '12px',
                 width: '100%',
                 background: searchingWithAi ? '#a5d6a7' : '#4caf50',
@@ -469,7 +469,7 @@ const HistoricalDataExtractionStep = ({
           fontSize: '13px',
           color: '#f57f17'
         }}>
-          <strong>⚠️ Note:</strong> Automatic document fetching is currently disabled. For the most accurate results, 
+          <strong>⚠️ Note:</strong> Automatic document fetching is currently disabled. For the most accurate results,
           we strongly recommend uploading official PDF reports using Option 1 above.
         </div>
       </div>
@@ -477,19 +477,19 @@ const HistoricalDataExtractionStep = ({
       {renderAiError()}
 
       {/* PDF Upload Section */}
-      <div style={{ 
-        background: 'linear-gradient(135deg, #f3e5f5 0%, #e1bee7 100%)', 
-        border: '2px solid #9c27b0', 
-        padding: '20px', 
-        borderRadius: '8px', 
-        marginBottom: '20px' 
+      <div style={{
+        background: 'linear-gradient(135deg, #f3e5f5 0%, #e1bee7 100%)',
+        border: '2px solid #9c27b0',
+        padding: '20px',
+        borderRadius: '8px',
+        marginBottom: '20px'
       }}>
         <h3 style={{ color: '#7b1fa2', margin: '0 0 12px 0' }}>📄 Upload Financial Report (PDF)</h3>
         <p style={{ margin: '0 0 16px 0', color: '#4a148c', fontSize: '14px' }}>
           Upload annual reports, 10-K filings, or financial statements to extract missing historical data.
           AI will automatically extract key metrics and fill gaps in your valuation model.
         </p>
-        
+
         {/* Hidden file input */}
         <input
           ref={fileInputRef}
@@ -498,63 +498,63 @@ const HistoricalDataExtractionStep = ({
           onChange={handlePdfUpload}
           style={{ display: 'none' }}
         />
-        
+
         {/* Upload button and status */}
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
           <button
             onClick={triggerFileUpload}
             disabled={uploadingPdf || loading}
             className="btn-secondary"
-            style={{ 
-              background: uploadingPdf ? '#e0e0e0' : '#9c27b0', 
+            style={{
+              background: uploadingPdf ? '#e0e0e0' : '#9c27b0',
               color: 'white',
               border: 'none'
             }}
           >
             {uploadingPdf ? '⏳ Uploading & Extracting...' : '📎 Upload PDF Report'}
           </button>
-          
+
           {uploadResult && (
             <span style={{ color: '#2e7d32', fontWeight: 600 }}>
               ✓ Extracted {Object.keys(uploadResult.extracted_metrics || {}).length} metrics from {uploadResult.fiscal_year}
             </span>
           )}
         </div>
-        
+
         {/* Upload error */}
         {uploadError && (
-          <div style={{ 
-            marginTop: '12px', 
-            padding: '12px', 
-            background: '#ffebee', 
-            border: '1px solid #ef5350', 
+          <div style={{
+            marginTop: '12px',
+            padding: '12px',
+            background: '#ffebee',
+            border: '1px solid #ef5350',
             borderRadius: '6px',
             color: '#c62828'
           }}>
             ❌ Upload failed: {uploadError}
           </div>
         )}
-        
+
         {/* Upload success details */}
         {uploadResult && uploadResult.extracted_metrics && (
-          <div style={{ 
-            marginTop: '16px', 
-            padding: '12px', 
-            background: 'white', 
+          <div style={{
+            marginTop: '16px',
+            padding: '12px',
+            background: 'white',
             borderRadius: '6px',
             border: '1px solid #a5d6a7'
           }}>
             <strong style={{ color: '#1b5e20' }}>Extracted Metrics:</strong>
-            <div style={{ 
-              display: 'grid', 
-              gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', 
-              gap: '8px', 
-              marginTop: '8px' 
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+              gap: '8px',
+              marginTop: '8px'
             }}>
               {Object.entries(uploadResult.extracted_metrics).map(([key, value]) => (
-                <div key={key} style={{ 
-                  padding: '8px', 
-                  background: '#e8f5e9', 
+                <div key={key} style={{
+                  padding: '8px',
+                  background: '#e8f5e9',
                   borderRadius: '4px',
                   fontSize: '13px'
                 }}>
@@ -564,9 +564,46 @@ const HistoricalDataExtractionStep = ({
             </div>
             {uploadResult.confidence_score && (
               <p style={{ marginTop: '8px', fontSize: '13px', color: '#666' }}>
-                <strong>Confidence:</strong> {(uploadResult.confidence_score * 100).toFixed(0)}% | 
+                <strong>Confidence:</strong> {(uploadResult.confidence_score * 100).toFixed(0)}% |
                 <strong> Method:</strong> {uploadResult.extraction_method}
               </p>
+            )}
+            {uploadResult.trend_analysis && (
+              <div style={{
+                marginTop: '12px',
+                padding: '12px',
+                background: '#e3f2fd',
+                borderRadius: '6px',
+                border: '1px solid #90caf9'
+              }}>
+                <strong style={{ color: '#1565c0', display: 'block', marginBottom: '8px' }}>📈 Historical Trend Analysis (Passed to Step 8)</strong>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '8px' }}>
+                  {uploadResult.trend_analysis.growth_rates && (
+                    <div>
+                      <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>Revenue CAGR</div>
+                      <div style={{ fontWeight: 600, color: '#1976d2' }}>
+                        {uploadResult.trend_analysis.growth_rates.revenue_cagr !== null ? `${(uploadResult.trend_analysis.growth_rates.revenue_cagr * 100).toFixed(2)}%` : 'N/A'}
+                      </div>
+                    </div>
+                  )}
+                  {uploadResult.trend_analysis.averages && (
+                    <div>
+                      <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>Avg Net Margin</div>
+                      <div style={{ fontWeight: 600, color: '#1976d2' }}>
+                        {uploadResult.trend_analysis.averages.net_margin_avg !== null ? `${(uploadResult.trend_analysis.averages.net_margin_avg * 100).toFixed(2)}%` : 'N/A'}
+                      </div>
+                    </div>
+                  )}
+                  {uploadResult.trend_analysis.trend_direction && (
+                    <div>
+                      <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>Trend</div>
+                      <div style={{ fontWeight: 600, color: '#1976d2' }}>
+                        Revenue: {uploadResult.trend_analysis.trend_direction.revenue === 'up' ? '↑' : uploadResult.trend_analysis.trend_direction.revenue === 'down' ? '↓' : '→'}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
             )}
           </div>
         )}
@@ -574,24 +611,24 @@ const HistoricalDataExtractionStep = ({
 
       {/* AI Web Search Results Display */}
       {aiSearchResult && (
-        <div style={{ 
-          background: 'linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%)', 
-          border: '2px solid #4caf50', 
-          padding: '20px', 
-          borderRadius: '8px', 
-          marginBottom: '20px' 
+        <div style={{
+          background: 'linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%)',
+          border: '2px solid #4caf50',
+          padding: '20px',
+          borderRadius: '8px',
+          marginBottom: '20px'
         }}>
           <h3 style={{ color: '#2e7d32', margin: '0 0 12px 0' }}>✅ AI Web Search Results</h3>
           <p style={{ margin: '0 0 16px 0', color: '#1b5e20', fontSize: '14px' }}>
             Successfully extracted data using <strong>{aiSearchResult.provider_used}</strong>.
             Confidence: {(aiSearchResult.confidence_score * 100).toFixed(0)}%
           </p>
-          
+
           {aiSearchResult.sources && aiSearchResult.sources.length > 0 && (
-            <div style={{ 
-              marginTop: '12px', 
-              padding: '12px', 
-              background: 'white', 
+            <div style={{
+              marginTop: '12px',
+              padding: '12px',
+              background: 'white',
               borderRadius: '6px',
               border: '1px solid #a5d6a7'
             }}>
@@ -603,33 +640,33 @@ const HistoricalDataExtractionStep = ({
               </ul>
             </div>
           )}
-          
+
           {aiSearchResult.time_series && Object.keys(aiSearchResult.time_series).length > 0 && (
-            <div style={{ 
-              marginTop: '16px', 
-              padding: '12px', 
-              background: 'white', 
+            <div style={{
+              marginTop: '16px',
+              padding: '12px',
+              background: 'white',
               borderRadius: '6px',
               border: '1px solid #a5d6a7'
             }}>
               <strong style={{ color: '#1b5e20' }}>📊 Extracted Time Series:</strong>
-              <div style={{ 
-                display: 'grid', 
-                gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', 
-                gap: '12px', 
-                marginTop: '12px' 
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))',
+                gap: '12px',
+                marginTop: '12px'
               }}>
                 {Object.entries(aiSearchResult.time_series).map(([year, metrics]) => (
-                  <div key={year} style={{ 
-                    padding: '12px', 
-                    background: '#f1f8e9', 
+                  <div key={year} style={{
+                    padding: '12px',
+                    background: '#f1f8e9',
                     borderRadius: '6px',
                     border: '1px solid #c5e1a5'
                   }}>
                     <strong style={{ color: '#33691e', display: 'block', marginBottom: '8px' }}>{year}</strong>
                     {Object.entries(metrics).map(([metric, value]) => (
-                      <div key={metric} style={{ 
-                        fontSize: '13px', 
+                      <div key={metric} style={{
+                        fontSize: '13px',
                         marginBottom: '4px',
                         display: 'flex',
                         justifyContent: 'space-between'
@@ -645,12 +682,12 @@ const HistoricalDataExtractionStep = ({
               </div>
             </div>
           )}
-          
+
           {aiSearchResult.notes && (
-            <div style={{ 
-              marginTop: '12px', 
-              padding: '12px', 
-              background: '#fff8e1', 
+            <div style={{
+              marginTop: '12px',
+              padding: '12px',
+              background: '#fff8e1',
               borderRadius: '6px',
               border: '1px solid #ffe082',
               fontSize: '13px',
@@ -659,17 +696,77 @@ const HistoricalDataExtractionStep = ({
               <strong>📝 Notes:</strong> {aiSearchResult.notes}
             </div>
           )}
+
+          {aiSearchResult.trend_analysis && (
+            <div style={{
+              marginTop: '16px',
+              padding: '12px',
+              background: 'white',
+              borderRadius: '6px',
+              border: '1px solid #a5d6a7'
+            }}>
+              <strong style={{ color: '#1b5e20' }}>📈 Historical Trend Analysis (Passed to Step 8):</strong>
+              <div style={{ marginTop: '12px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
+                {aiSearchResult.trend_analysis.growth_rates && (
+                  <div style={{ padding: '12px', background: '#e3f2fd', borderRadius: '6px' }}>
+                    <strong style={{ color: '#1565c0', display: 'block', marginBottom: '8px' }}>Growth Rates (CAGR)</strong>
+                    {aiSearchResult.trend_analysis.growth_rates.revenue_cagr !== null && (
+                      <div style={{ fontSize: '13px', marginBottom: '4px' }}>
+                        Revenue: {(aiSearchResult.trend_analysis.growth_rates.revenue_cagr * 100).toFixed(2)}%
+                      </div>
+                    )}
+                    {aiSearchResult.trend_analysis.growth_rates.net_income_cagr !== null && (
+                      <div style={{ fontSize: '13px', marginBottom: '4px' }}>
+                        Net Income: {(aiSearchResult.trend_analysis.growth_rates.net_income_cagr * 100).toFixed(2)}%
+                      </div>
+                    )}
+                    {aiSearchResult.trend_analysis.growth_rates.ebitda_cagr !== null && (
+                      <div style={{ fontSize: '13px' }}>
+                        EBITDA: {(aiSearchResult.trend_analysis.growth_rates.ebitda_cagr * 100).toFixed(2)}%
+                      </div>
+                    )}
+                  </div>
+                )}
+                {aiSearchResult.trend_analysis.averages && (
+                  <div style={{ padding: '12px', background: '#f3e5f5', borderRadius: '6px' }}>
+                    <strong style={{ color: '#7b1fa2', display: 'block', marginBottom: '8px' }}>Historical Averages</strong>
+                    {aiSearchResult.trend_analysis.averages.revenue_avg !== null && (
+                      <div style={{ fontSize: '13px', marginBottom: '4px' }}>
+                        Revenue: {aiSearchResult.trend_analysis.averages.revenue_avg.toLocaleString(undefined, { notation: 'compact' })}
+                      </div>
+                    )}
+                    {aiSearchResult.trend_analysis.averages.net_margin_avg !== null && (
+                      <div style={{ fontSize: '13px' }}>
+                        Net Margin: {(aiSearchResult.trend_analysis.averages.net_margin_avg * 100).toFixed(2)}%
+                      </div>
+                    )}
+                  </div>
+                )}
+                {aiSearchResult.trend_analysis.trend_direction && (
+                  <div style={{ padding: '12px', background: '#e8f5e9', borderRadius: '6px' }}>
+                    <strong style={{ color: '#2e7d32', display: 'block', marginBottom: '8px' }}>Trend Direction</strong>
+                    <div style={{ fontSize: '13px', marginBottom: '4px' }}>
+                      Revenue: {aiSearchResult.trend_analysis.trend_direction.revenue === 'up' ? '↑' : aiSearchResult.trend_analysis.trend_direction.revenue === 'down' ? '↓' : '→'}
+                    </div>
+                    <div style={{ fontSize: '13px' }}>
+                      Net Income: {aiSearchResult.trend_analysis.trend_direction.net_income === 'up' ? '↑' : aiSearchResult.trend_analysis.trend_direction.net_income === 'down' ? '↓' : '→'}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
       {/* AI Web Search Error */}
       {aiSearchError && (
-        <div style={{ 
-          background: 'linear-gradient(135deg, #ffebee 0%, #ffcdd2 100%)', 
-          border: '2px solid #ef5350', 
-          padding: '20px', 
-          borderRadius: '8px', 
-          marginBottom: '20px' 
+        <div style={{
+          background: 'linear-gradient(135deg, #ffebee 0%, #ffcdd2 100%)',
+          border: '2px solid #ef5350',
+          padding: '20px',
+          borderRadius: '8px',
+          marginBottom: '20px'
         }}>
           <h3 style={{ color: '#c62828', margin: '0 0 12px 0' }}>❌ AI Web Search Failed</h3>
           <p style={{ margin: '0', color: '#b71c1c' }}>{aiSearchError}</p>
