@@ -56,6 +56,11 @@ class PeerCompany(BaseModel):
     pe_ratio: Optional[float] = None
     ev_revenue: Optional[float] = None
     pb_ratio: Optional[float] = None
+    beta: Optional[float] = None
+    total_debt: Optional[float] = None
+    cash: Optional[float] = None
+    tax_rate: Optional[float] = None
+    cost_of_debt: Optional[float] = None
 
 
 class PeerComparablesDisplay(BaseModel):
