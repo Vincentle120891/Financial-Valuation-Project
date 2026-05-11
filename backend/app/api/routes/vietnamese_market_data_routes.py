@@ -688,7 +688,7 @@ async def collect_vn_requirements(request: VNStep5Request):
         market = "vietnam"
         method = request.method.upper()
         session_service.update_session_step(
-            request.request_id,
+            request.session_id,
             step_number=5,
             market=market,
             method=method.lower()
@@ -820,7 +820,7 @@ async def fetch_vn_data(request: VNStep6FetchRequest):
         
         # Check if vietnam_market_data already exists in session cache
         cached_market_data = session_service.get_session_value(
-            request.request_id,
+            request.session_id,
             "vietnam_market_data"
         )
         
