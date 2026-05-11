@@ -865,9 +865,9 @@ async def fetch_vn_data(request: VNStep6FetchRequest):
             fallback_to_ai_extraction=request.fallback_to_ai_extraction
         )
         
-        # Execute Vietnamese Step 6 processor
+        # Execute Vietnamese Step 6 processor with session cache for "Fetch Once, Use Many"
         processor = VNStep6DataFetchProcessor()
-        result = await processor.execute(vn_input)
+        result = await processor.execute(vn_input, session_cache=session)
         
         # GAP 1 FIX: Store fetched data in session cache for "Fetch Once, Use Many"
         if result.success:
