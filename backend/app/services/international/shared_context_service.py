@@ -290,17 +290,29 @@ class SharedContextService:
             try:
                 if market.lower() in ["international", "us", "in"]:
                     key_stats = self.yfinance_service.fetch_key_stats(peer_ticker)
+                    
+                    # Calculate valuation multiples from fetched data
+                    market_cap = key_stats.get("marketCap")
+                    enterprise_value = key_stats.get("enterpriseValue")
+                    
+                    # Fetch financials to calculate multiples if not directly available
+                    ev_ebitda = key_stats.get("ev_to_ebitda")
+                    pe_ratio = key_stats.get("forwardPE") or key_stats.get("trailingPE")
+                    ev_revenue = key_stats.get("ev_to_revenue")
+                    pb_ratio = key_stats.get("priceToBook")
+                    
                     peer_info = {
                         "ticker": peer_ticker,
-                        "marketCap": key_stats.get("marketCap"),
+                        "marketCap": market_cap,
                         "beta": key_stats.get("beta"),
                         "totalDebt": key_stats.get("totalDebt"),
                         "cash": key_stats.get("cash"),
                         "effectiveTaxRate": key_stats.get("effectiveTaxRate"),
                         "costOfDebt": key_stats.get("costOfDebt"),
-                        "peRatio": key_stats.get("forwardPE") or key_stats.get("trailingPE"),
-                        "evEbitda": key_stats.get("enterpriseValue"),
-                        "pbRatio": key_stats.get("priceToBook")
+                        "peRatio": pe_ratio,
+                        "evEbitda": ev_ebitda,
+                        "evRevenue": ev_revenue,
+                        "pbRatio": pb_ratio
                     }
                     peer_data[f"peer_{peer_ticker}_info"] = peer_info
                     logger.debug(f"Fetched peer data for {peer_ticker}")

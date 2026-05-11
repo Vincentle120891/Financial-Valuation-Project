@@ -25,8 +25,13 @@ const ApiDataStep = ({
   onContinueToAiAssumptions,
   loading
 }) => {
-  // Check if data has been retrieved
-  const hasRetrievedData = historicalData || peerData || dcfInputs || dupontResults || compsResults || calculatedMetrics;
+  // Check if data has been retrieved - improved check to include peerData with companies
+  const hasRetrievedData = historicalData || 
+                           (peerData && peerData.companies && peerData.companies.length > 0) || 
+                           dcfInputs || 
+                           dupontResults || 
+                           compsResults || 
+                           calculatedMetrics;
 
   // Comprehensive list of ALL expected inputs to display (even if missing/errors)
   const allExpectedInputs = [
@@ -148,7 +153,10 @@ const ApiDataStep = ({
 
   // Render ALL expected inputs with clear status indicators (shows missing/errors explicitly)
   const renderAllInputs = () => {
-    if (!historicalData || !historicalData.data_fields) {
+    // Check if we have ANY data to display (historical, peer, dcf inputs, etc.)
+    const hasAnyData = hasRetrievedData;
+    
+    if (!hasAnyData) {
       return (
         <div className="summary-box" style={{ background: '#ffebee', marginBottom: '20px' }}>
           <h3>⚠️ No Data Retrieved</h3>
