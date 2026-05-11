@@ -57,7 +57,8 @@ class Step6DataReviewProcessor:
         forecast_data: Optional[Dict] = None,
         retrieved_assumptions: Optional[Dict] = None,
         user_overrides: Optional[Dict[str, Any]] = None,
-        valuation_model: Optional[str] = None
+        valuation_model: Optional[str] = None,
+        session_cache: Optional[Dict] = None  # NEW: Session cache for "Fetch Once, Use Many"
     ) -> Step6DataReviewResponse:
         """
         Main entry point for Step 6 data review.
@@ -72,6 +73,7 @@ class Step6DataReviewProcessor:
             retrieved_assumptions: Peer and assumption data from previous steps
             user_overrides: Manual overrides applied by user
             valuation_model: Type of valuation (DCF/DUPONT/COMPS)
+            session_cache: Session cache dict to check before fetching (implements "Fetch Once, Use Many")
             
         Returns:
             Step6DataReviewResponse with aggregated data
@@ -94,7 +96,8 @@ class Step6DataReviewProcessor:
                 market_data=market_data,
                 forecast_data=forecast_data,
                 retrieved_assumptions=retrieved_assumptions,
-                user_overrides=user_overrides
+                user_overrides=user_overrides,
+                session_cache=session_cache  # PASS cache to DCF processor
             )
         elif model_upper == "DUPONT":
             return await self.dupont_processor.process_dupont_data_review(
@@ -103,7 +106,8 @@ class Step6DataReviewProcessor:
                 historical_data=historical_data,
                 market_data=market_data,
                 retrieved_assumptions=retrieved_assumptions,
-                user_overrides=user_overrides
+                user_overrides=user_overrides,
+                session_cache=session_cache  # PASS cache to DuPont processor
             )
         elif model_upper == "COMPS":
             return await self.comps_processor.process_comps_data_review(
@@ -112,7 +116,8 @@ class Step6DataReviewProcessor:
                 historical_data=historical_data,
                 market_data=market_data,
                 retrieved_assumptions=retrieved_assumptions,
-                user_overrides=user_overrides
+                user_overrides=user_overrides,
+                session_cache=session_cache  # PASS cache to Comps processor
             )
         else:
             raise ValueError(f"Unknown valuation model: {valuation_model}. "
