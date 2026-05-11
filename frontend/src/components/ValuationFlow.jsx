@@ -108,13 +108,7 @@ const ValuationFlow = () => {
   };
   
   const setValuationData = (method, data) => {
-    setValuationsData(prev => ({
-      ...prev,
-      [market]: {
-        ...prev[market],
-        [method?.toLowerCase()]: data
-      }
-    }));
+    setValuationsData(prev => deepMergeValuations(prev, market, method, data));
   };
   
   // Note: aiAssumptions was never a separate state - it's part of the matrix structure via getValuationData()
@@ -159,13 +153,7 @@ const ValuationFlow = () => {
   };
   
   const setForecastDrivers = (method, data) => {
-    setForecastDriversData(prev => ({
-      ...prev,
-      [market]: {
-        ...prev[market],
-        [method?.toLowerCase()]: data
-      }
-    }));
+    setForecastDriversData(prev => deepMergeForecastDrivers(prev, market, method, data));
   };
   
   // Helper to get/set DCF inputs for current market + method
@@ -174,13 +162,7 @@ const ValuationFlow = () => {
   };
   
   const setDcfInputs = (method, data) => {
-    setDcfInputsData(prev => ({
-      ...prev,
-      [market]: {
-        ...prev[market],
-        [method?.toLowerCase()]: data
-      }
-    }));
+    setDcfInputsData(prev => deepMergeDcfInputs(prev, market, method, data));
   };
   
   // All data access should use getForecastDrivers(method) or getDcfInputs(method) directly
@@ -369,7 +351,7 @@ const ValuationFlow = () => {
     }
   }, []);
 
-  // ==================== STEP 4: SELECT MODEL(S) ====================
+  // ==================== HANDLE MODEL SWITCH (Preserve all models' data) ====================
   const handleSelectModel = useCallback(async (modelType) => {
     // GAP 2 & GAP 3 FIX: Update selected model first, then deep merge to preserve other models' data
     // Single selection (radio button behavior) - modelType is a string, not array
@@ -390,6 +372,38 @@ const ValuationFlow = () => {
       setLoading(false);
     }
   }, [sessionId, market]);
+  
+  // ==================== DEEP MERGE UTILITY FOR MATRIX STATE ====================
+  // Prevents data loss when switching between models by preserving all models' data
+  const deepMergeValuations = (prev, market, method, newData) => {
+    return {
+      ...prev,
+      [market]: {
+        ...prev[market],
+        [method?.toLowerCase()]: newData
+      }
+    };
+  };
+  
+  const deepMergeForecastDrivers = (prev, market, method, newData) => {
+    return {
+      ...prev,
+      [market]: {
+        ...prev[market],
+        [method?.toLowerCase()]: newData
+      }
+    };
+  };
+  
+  const deepMergeDcfInputs = (prev, market, method, newData) => {
+    return {
+      ...prev,
+      [market]: {
+        ...prev[market],
+        [method?.toLowerCase()]: newData
+      }
+    };
+  };
   
   // ==================== HANDLE MULTI-METHOD VALUATION ====================
   const handleRunMultiMethodValuation = useCallback(async () => {
