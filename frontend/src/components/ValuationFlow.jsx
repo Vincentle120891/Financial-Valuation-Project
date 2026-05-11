@@ -117,14 +117,9 @@ const ValuationFlow = () => {
     }));
   };
   
-  // Legacy state aliases for backward compatibility (to be removed in future refactor)
-  // These are now read-only computed values from the matrix structure
-  const step6ApiData = getValuationData(selectedModels);  // Deprecated: use getValuationData() instead
-  const step7ExtractionResults = getValuationData(selectedModels);  // Deprecated: use getValuationData() instead
-  const historicalData = step6ApiData;  // Deprecated: use getValuationData() instead
-  const aiData = step7ExtractionResults;  // Deprecated: use getValuationData() instead
-  // Note: aiAssumptions was never a separate state - it's part of the matrix structure via getValuationData()
-
+  // Matrix structure helpers are now the primary way to access valuation data
+  // Legacy aliases have been removed to prevent confusion and enforce proper architecture
+  
   // Assumption Management
   const [confirmedValues, setConfirmedValues] = useState({});
   const [selectedScenario, setSelectedScenario] = useState('base_case');
@@ -188,9 +183,8 @@ const ValuationFlow = () => {
     }));
   };
   
-  // Legacy state aliases for backward compatibility (to be removed in future refactor)
-  const forecastDrivers = getForecastDrivers(selectedModels);  // Deprecated: use getForecastDrivers() instead
-  const dcfInputs = getDcfInputs(selectedModels);  // Deprecated: use getDcfInputs() instead
+  // Matrix structure helpers are now the primary way to access forecast drivers and DCF inputs
+  // Legacy aliases have been removed to prevent confusion and enforce proper architecture
   
   // Step 6-7: Data Storage (using matrix structure primarily)
   const [peerData, setPeerData] = useState(null);
