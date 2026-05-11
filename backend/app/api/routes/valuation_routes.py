@@ -6,7 +6,8 @@ Handles valuation workflow steps 4-10 using advanced service processors.
 
 import logging
 from typing import Dict, Any
-from fastapi import APIRouter, HTTPException
+from datetime import datetime
+from fastapi import APIRouter, HTTPException, UploadFile, File
 from pydantic import BaseModel
 
 from typing import List, Dict, Any
@@ -38,6 +39,7 @@ from app.services.international.step8_manual_overrides import Step8ManualOverrid
 from app.services.international.step10_valuation_processor import Step10ValuationProcessor
 from app.services.international.yfinance_service import YFinanceService
 from app.services.international.valuation_orchestrator import orchestrator
+from app.services.pdf_extraction_service import VietnamesePDFExtractor
 
 logger = get_logger(__name__)
 
@@ -446,6 +448,166 @@ async def retrieve_historical_data(request: GenerateAIRequest):
     except Exception as e:
         logger.error(f"Step 7 historical data retrieval error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/step-7-upload-pdf")
+async def upload_pdf_for_step7(
+    session_id: str,
+    method: str,
+    market: str = "international",
+    file: UploadFile = File(..., description="PDF financial report to extract data from")
+):
+    """
+    Step 7: Upload PDF Financial Report for AI Extraction
+    
+    Allows users to upload PDF annual reports, financial statements, or filings
+    for AI-powered historical data extraction. This fills gaps where API data
+    from Step 6 is incomplete or missing.
+    
+    Supported documents:
+    - Annual Reports (10-K, Annual Reports)
+    - Financial Statements (10-Q, Quarterly Reports)
+    - Prospectuses
+    - Vietnamese annual reports (Báo cáo thường niên)
+    
+    Workflow:
+    1. User uploads PDF in Step 7 frontend
+    2. Backend extracts financial data using VietnamesePDFExtractor
+    3. Extracted data is merged with Step 6 API data
+    4. Updated historical data is stored in session for Step 8
+    
+    Args:
+        session_id: Session identifier
+        method: Valuation method (DCF, DUPONT, COMPS)
+        market: Market type (international, vietnamese)
+        file: PDF file upload
+    
+    Returns:
+        Extraction results with extracted metrics and confidence scores
+    """
+    try:
+        # Validate session
+        session = session_service.get_session_data(session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+        
+        # Validate file type
+        if not file.filename.lower().endswith('.pdf'):
+            raise HTTPException(status_code=400, detail="Only PDF files are supported")
+        
+        # Read and save file temporarily
+        import tempfile
+        import os
+        
+        content = await file.read()
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp:
+            tmp.write(content)
+            tmp_path = tmp.name
+        
+        try:
+            # Extract data from PDF
+            extractor = VietnamesePDFExtractor(extraction_method="auto")
+            result = extractor.extract_from_file(tmp_path)
+            
+            # Convert to dict
+            extracted_data = extractor.to_dict(result)
+            
+            # Get existing Step 6 data
+            method_lower = method.lower()
+            market_lower = market.lower()
+            
+            step6_data = session_service.get_session_value(
+                session_id,
+                "financial_data",
+                market=market_lower,
+                method=method_lower
+            )
+            
+            if not step6_data:
+                step6_data = session_service.get_session_value(session_id, "financial_data")
+            
+            # Merge extracted data with Step 6 data
+            # Priority: PDF extraction > API data
+            merged_historical = {}
+            
+            # Map extracted fields to Step 6 format
+            if result.revenue:
+                merged_historical['revenue'] = result.revenue
+            if result.net_income:
+                merged_historical['net_income'] = result.net_income
+            if result.ebitda:
+                merged_historical['ebitda'] = result.ebitda
+            if result.total_assets:
+                merged_historical['total_assets'] = result.total_assets
+            if result.total_equity:
+                merged_historical['total_equity'] = result.total_equity
+            if result.operating_cash_flow:
+                merged_historical['operating_cash_flow'] = result.operating_cash_flow
+            if result.capex:
+                merged_historical['capex'] = result.capex
+            
+            # Store extracted data in session
+            extraction_metadata = {
+                'source': f'PDF_{file.filename}',
+                'fiscal_year': result.fiscal_year,
+                'company_name': result.company_name,
+                'extraction_method': result.extraction_method,
+                'confidence_score': result.confidence_score,
+                'upload_timestamp': datetime.now().isoformat(),
+                'extracted_metrics': list(merged_historical.keys())
+            }
+            
+            session_service.update_session_data(
+                session_id,
+                "pdf_extraction_results",
+                {
+                    **extracted_data,
+                    'metadata': extraction_metadata
+                },
+                market=market_lower,
+                method=method_lower
+            )
+            
+            # Update historical data with extracted values
+            if step6_data and 'historical_financials' in step6_data:
+                # Merge into existing structure
+                for key, value in merged_historical.items():
+                    step6_data['historical_financials'][key] = value
+            
+            session_service.update_session_data(
+                session_id,
+                "financial_data",
+                step6_data,
+                market=market_lower,
+                method=method_lower
+            )
+            
+            logger.info(
+                f"Successfully extracted {len(merged_historical)} metrics from {file.filename} "
+                f"for {session.get('ticker', 'UNKNOWN')} ({method})"
+            )
+            
+            return {
+                "success": True,
+                "message": f"Extracted {len(merged_historical)} financial metrics from PDF",
+                "fiscal_year": result.fiscal_year,
+                "company_name": result.company_name,
+                "extraction_method": result.extraction_method,
+                "confidence_score": result.confidence_score,
+                "extracted_metrics": merged_historical,
+                "notes": result.notes
+            }
+            
+        finally:
+            # Clean up temp file
+            if os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+                
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"PDF upload and extraction error: {e}")
+        raise HTTPException(status_code=500, detail=f"Extraction failed: {str(e)}")
 
 
 @router.post("/step-8-initialize", response_model=FullAssumptionsResponse)

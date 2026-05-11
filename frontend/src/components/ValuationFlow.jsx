@@ -980,6 +980,7 @@ const ValuationFlow = () => {
       case 7:
         return (
           <HistoricalDataExtractionStep
+            sessionId={sessionId}
             historicalGapsData={getValuationData(selectedModels)}
             aiError={aiError}
             confirmedValues={confirmedValues}
