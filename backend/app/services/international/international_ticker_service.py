@@ -98,24 +98,32 @@ class InternationalTickerService:
         Append appropriate suffix to ticker based on market
         
         Args:
-            ticker: Base ticker symbol (e.g., "VNM", "VIC")
-            market_code: Market code (e.g., "VN", "HA", "US")
+            ticker: Base ticker symbol (e.g., "VNM", "VIC", "VFS")
+            market_code: Market code from user selection (e.g., "VN", "HA", "US", "international")
             
         Returns:
-            Full ticker with suffix (e.g., "VNM.VN", "AAPL")
+            Full ticker with suffix (e.g., "VNM.VN", "AAPL", "VFS")
+            
+        Note:
+            - For US/international markets: No suffix added (ticker returned as-is)
+            - For Vietnam and other specific markets: Appropriate suffix added
+            - Does NOT auto-assume market; relies on explicit user selection in Step 1
         """
-        if market_code.upper() in ['US', 'USA', 'NASDAQ', 'NYSE']:
+        # US and major international exchanges - no suffix needed
+        if market_code.upper() in ['US', 'USA', 'NASDAQ', 'NYSE', 'INTERNATIONAL']:
             return ticker.upper()
         
+        # Specific market suffixes
         suffix = self.MARKET_SUFFIXES.get(market_code.upper())
         if suffix:
             return f"{ticker.upper()}{suffix}"
         
-        # Default to .VN for Vietnam if not specified
+        # Handle 'VIETNAM' as alias for 'VN' (HOSE)
         if market_code.upper() == 'VIETNAM':
             return f"{ticker.upper()}.VN"
         
-        logger.warning(f"Unknown market code: {market_code}, using no suffix")
+        # Unknown market - log warning and return without suffix
+        logger.warning(f"Unknown market code: '{market_code}', returning ticker without suffix")
         return ticker.upper()
     
     def fetch_international_data(self, ticker: str, market_code: str = "VN") -> Dict[str, Any]:

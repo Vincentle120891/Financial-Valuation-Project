@@ -79,9 +79,16 @@ const ValuationFlow = () => {
   const [selectedCompany, setSelectedCompany] = useState(null);
   const [suggestedPeers, setSuggestedPeers] = useState([]);
   const [selectedPeers, setSelectedPeers] = useState([]);
-  const [selectedModels, setSelectedModels] = useState(''); // GAP 2 FIX: Single model string instead of array (radio button behavior)
   const [sessionId, setSessionId] = useState(null);
+  const [selectedModels, setSelectedModels] = useState(''); // Single model string (radio button behavior)
   const [forecastYears, setForecastYears] = useState(5);
+  
+  // Market validation state - ensures market selection is consistent throughout workflow
+  const [marketValidation, setMarketValidation] = useState({
+    isValid: true,
+    message: '',
+    selectedMarket: 'international'
+  });
 
   // Step 5: Required inputs
   const [requiredInputs, setRequiredInputs] = useState(null);
@@ -211,6 +218,25 @@ const ValuationFlow = () => {
   // ==================== STEP 1: SEARCH COMPANY ====================
   const handleSearch = useCallback(async () => {
     if (!searchQuery.trim()) return;
+    
+    // Validate market selection before search
+    if (!['international', 'vietnamese'].includes(market)) {
+      setMarketValidation({
+        isValid: false,
+        message: 'Invalid market selection. Please select either International or Vietnamese market.',
+        selectedMarket: market
+      });
+      setError('Invalid market selection');
+      return;
+    }
+    
+    // Update validation state
+    setMarketValidation({
+      isValid: true,
+      message: `Searching in ${market === 'international' ? 'International' : 'Vietnamese'} market`,
+      selectedMarket: market
+    });
+    
     setLoading(true);
     setError(null);
     try {
@@ -236,6 +262,19 @@ const ValuationFlow = () => {
   const handleFindPeers = useCallback(async (company) => {
     setLoading(true);
     setError(null);
+    
+    // Validate market selection before finding peers
+    if (!['international', 'vietnamese'].includes(market)) {
+      setMarketValidation({
+        isValid: false,
+        message: 'Invalid market selection. Please select either International or Vietnamese market.',
+        selectedMarket: market
+      });
+      setError('Invalid market selection');
+      setLoading(false);
+      return;
+    }
+    
     try {
       const data = await suggestPeers(company.symbol, company.market || market, 10);
       console.log('Suggest peers response:', data);
@@ -304,9 +343,23 @@ const ValuationFlow = () => {
   // ==================== STEP 1: SELECT COMPANY ====================
   const handleSelectCompany = useCallback(async (company) => {
     setLoading(true);
+    
+    // Validate market selection before selecting company
+    if (!['international', 'vietnamese'].includes(market)) {
+      setMarketValidation({
+        isValid: false,
+        message: 'Invalid market selection. Please select either International or Vietnamese market.',
+        selectedMarket: market
+      });
+      setError('Invalid market selection');
+      setLoading(false);
+      return;
+    }
+    
     try {
       // Call backend to create session and get session_id
-      const data = await selectCompany('', company.symbol, company.market || 'international');
+      // Use the explicitly selected market from Step 1 radio button
+      const data = await selectCompany('', company.symbol, company.market || market);
       console.log('Select company response:', data);
       if (data.session_id) {
         setSessionId(data.session_id);
@@ -341,6 +394,14 @@ const ValuationFlow = () => {
         }
 
         setSelectedCompany(enrichedCompany);
+        
+        // Update market validation to confirm successful market routing
+        setMarketValidation({
+          isValid: true,
+          message: `Company ${company.symbol} selected in ${market === 'international' ? 'International' : 'Vietnamese'} market`,
+          selectedMarket: market
+        });
+        
         setCurrentStep(2); // Move to Step 2: Company Overview
       }
     } catch (err) {
@@ -349,7 +410,7 @@ const ValuationFlow = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [market]);
 
   // ==================== HANDLE MODEL SWITCH (Preserve all models' data) ====================
   const handleSelectModel = useCallback(async (modelType) => {
