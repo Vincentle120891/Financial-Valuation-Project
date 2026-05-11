@@ -245,6 +245,18 @@ class DCFStep6Processor:
         missing_summary = self._aggregate_missing_data(all_displays)
 
         ready = len(missing_summary.critical_missing) == 0
+        
+        # GAP 1 FIX: Store fetched data in session cache for "Fetch Once, Use Many"
+        if session_cache is not None:
+            from datetime import datetime
+            session_cache['international_market_data'] = {
+                'timestamp': datetime.now(),
+                'historical_data': historical_data,
+                'market_data': market_data,
+                'forecast_data': forecast_data,
+                'retrieved_assumptions': retrieved_assumptions
+            }
+            logger.info(f"Cached market data for {ticker} in session")
 
         return DCFDataReviewResponse(
             session_id=f"step6_dcf_{ticker}_{datetime.now().strftime('%Y%m%d%H%M%S')}",

@@ -103,8 +103,40 @@ class CompsStep6Processor:
         historical_data: Optional[Dict] = None,
         market_data: Optional[Dict] = None,
         retrieved_assumptions: Optional[Dict] = None,
-        user_overrides: Optional[Dict[str, Any]] = None
+        user_overrides: Optional[Dict[str, Any]] = None,
+        session_cache: Optional[Dict] = None  # NEW: Session cache for "Fetch Once, Use Many"
     ) -> CompsDataReviewResponse:
+        """
+        Main entry point for Comps Step 6 data review.
+        Aggregates all retrieved Comps data without performing final calculations.
+        
+        Args:
+            ticker: Stock ticker symbol
+            market: Market identifier
+            historical_data: Historical financial data (optional, will fetch if not provided)
+            market_data: Market data (optional, will fetch if not provided)
+            retrieved_assumptions: Retrieved assumptions including peer data
+            user_overrides: Manual overrides applied by user
+            session_cache: Session cache dict to check before fetching (implements "Fetch Once, Use Many")
+            
+        Returns:
+            CompsDataReviewResponse with aggregated Comps data
+        """
+        # GAP 1 FIX: Check session cache before fetching - implements "Fetch Once, Use Many"
+        if session_cache and 'international_market_data' in session_cache:
+            cached_data = session_cache['international_market_data']
+            # Check if cache is valid (not older than 5 minutes)
+            cache_timestamp = cached_data.get('timestamp')
+            if cache_timestamp:
+                from datetime import datetime, timedelta
+                cache_age = datetime.now() - cache_timestamp
+                if cache_age < timedelta(minutes=5):
+                    logger.info(f"Using cached market data for {ticker} (age: {cache_age.seconds}s)")
+                    historical_data = historical_data or cached_data.get('historical_data')
+                    market_data = market_data or cached_data.get('market_data')
+                    retrieved_assumptions = retrieved_assumptions or cached_data.get('retrieved_assumptions')
+        
+        # If data is not provided (and not in cache), fetch it
         if historical_data is None or market_data is None or retrieved_assumptions is None:
             logger.info(f"Fetching data for Comps analysis of {ticker}")
             all_data = self.yfinance_service.fetch_all_data(ticker, market)
@@ -121,6 +153,17 @@ class CompsStep6Processor:
         all_displays = [historical_display, market_display]
         missing_summary = self._aggregate_missing_data(all_displays)
         ready = len(missing_summary.critical_missing) == 0
+        
+        # GAP 1 FIX: Store fetched data in session cache for "Fetch Once, Use Many"
+        if session_cache is not None:
+            from datetime import datetime
+            session_cache['international_market_data'] = {
+                'timestamp': datetime.now(),
+                'historical_data': historical_data,
+                'market_data': market_data,
+                'retrieved_assumptions': retrieved_assumptions
+            }
+            logger.info(f"Cached market data for {ticker} in session")
 
         return CompsDataReviewResponse(
             session_id=f"step6_comps_{ticker}_{datetime.now().strftime('%Y%m%d%H%M%S')}",

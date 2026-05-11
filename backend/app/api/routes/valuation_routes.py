@@ -304,13 +304,17 @@ async def fetch_api_data(request: FetchDataRequest):
             "retrieved_assumptions", 
             {}
         )
+        
+        # GAP 1 FIX: Get session cache for "Fetch Once, Use Many" - pass entire session as cache
+        session_cache = session_service.get_session_data(request.session_id)
 
         # Use Step6DataReviewProcessor for comprehensive data fetching and calculation
         result = await step6_processor.process_data_review(
             ticker=ticker,
             market=market,
             valuation_model=method,
-            retrieved_assumptions=retrieved_assumptions
+            retrieved_assumptions=retrieved_assumptions,
+            session_cache=session_cache  # PASS session cache to enable caching
         )
 
         # Store results in session using SessionService (with JSON serialization)
