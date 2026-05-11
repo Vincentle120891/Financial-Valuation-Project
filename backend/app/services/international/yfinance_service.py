@@ -352,25 +352,56 @@ class InternationalDataStrategy:
             return {}
     
     def _fetch_analyst_estimates(self, ticker) -> Dict[str, Any]:
-        """Fetch analyst estimates."""
+        """Fetch analyst estimates using compatible yfinance API."""
         try:
-            estimates = ticker.estimates
-            if estimates is None:
-                return {}
+            # Try the newer earnings_estimate approach first (yfinance >= 0.2.0)
+            estimates = {}
             
-            result = {}
+            # Method 1: Try earnings_estimate attribute
+            if hasattr(ticker, 'earnings_estimate') and ticker.earnings_estimate is not None:
+                try:
+                    est_df = ticker.earnings_estimate
+                    if est_df is not None and not est_df.empty:
+                        estimates['earnings_estimate'] = est_df.to_dict() if hasattr(est_df, 'to_dict') else str(est_df)
+                except Exception:
+                    pass
             
-            # Handle different estimate types
-            if hasattr(estimates, 'revenue_estimate'):
-                result['revenue_estimate'] = estimates.revenue_estimate
+            # Method 2: Try revenue_estimate attribute  
+            if hasattr(ticker, 'revenue_estimate') and ticker.revenue_estimate is not None:
+                try:
+                    rev_df = ticker.revenue_estimate
+                    if rev_df is not None and not rev_df.empty:
+                        estimates['revenue_estimate'] = rev_df.to_dict() if hasattr(rev_df, 'to_dict') else str(rev_df)
+                except Exception:
+                    pass
             
-            if hasattr(estimates, 'earnings_estimate'):
-                result['earnings_estimate'] = estimates.earnings_estimate
+            # Method 3: Try recommendations as fallback
+            if hasattr(ticker, 'recommendations') and ticker.recommendations is not None:
+                try:
+                    rec_df = ticker.recommendations
+                    if rec_df is not None and not rec_df.empty:
+                        estimates['recommendations'] = rec_df.head(5).to_dict() if hasattr(rec_df, 'to_dict') else str(rec_df)
+                except Exception:
+                    pass
             
-            if hasattr(estimates, 'eps_trend'):
-                result['eps_trend'] = estimates.eps_trend
+            # Method 4: Try analyst_price_targets if available
+            if hasattr(ticker, 'analyst_price_targets'):
+                try:
+                    targets = ticker.analyst_price_targets
+                    if targets:
+                        estimates['analyst_price_targets'] = targets
+                except Exception:
+                    pass
             
-            return result
+            if not estimates:
+                logger.debug(f"No analyst estimates available for {ticker}")
+            
+            return estimates
+            
+        except AttributeError as e:
+            # Handle deprecated 'estimates' attribute gracefully
+            logger.warning(f"Analyst estimates not available (deprecated API): {e}")
+            return {}
         except Exception as e:
             logger.error(f"Error fetching analyst estimates: {e}")
             return {}

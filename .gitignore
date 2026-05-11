@@ -1,1 +1,1 @@
-Nothing should be ignored in this case, as the modified files are all source code files (.py and .jsx) without any build artifacts, dependencies, or temporary files in the changes.
+Nothing should be ignored in this case, as the changes only include Python source files (.py) which are not build artifacts, dependencies, or temporary files.
