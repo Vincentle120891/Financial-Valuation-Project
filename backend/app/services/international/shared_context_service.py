@@ -289,22 +289,32 @@ class SharedContextService:
         for peer_ticker in peer_tickers:
             try:
                 if market.lower() in ["international", "us", "in"]:
+                    # Use get_ticker_info which provides direct access to valuation multiples
+                    peer_info_dict = self.yfinance_service.get_ticker_info(peer_ticker)
+                    
+                    if not peer_info_dict:
+                        logger.warning(f"No info available for peer {peer_ticker}")
+                        peer_data[f"peer_{peer_ticker}_info"] = {}
+                        continue
+                    
+                    # Extract valuation multiples directly from yfinance info
+                    # These are more reliable than calculating from financials
+                    market_cap = peer_info_dict.get('marketCap')
+                    enterprise_value = peer_info_dict.get('enterpriseValue')
+                    
+                    # Get multiples directly from yfinance - these are the actual field names
+                    ev_ebitda = peer_info_dict.get('enterpriseToEbitda')
+                    pe_ratio = peer_info_dict.get('trailingPE') or peer_info_dict.get('forwardPE')
+                    ev_revenue = peer_info_dict.get('enterpriseToRevenue')
+                    pb_ratio = peer_info_dict.get('priceToBook')
+                    
+                    # Also get key stats for WACC calculation
                     key_stats = self.yfinance_service.fetch_key_stats(peer_ticker)
-                    
-                    # Calculate valuation multiples from fetched data
-                    market_cap = key_stats.get("marketCap")
-                    enterprise_value = key_stats.get("enterpriseValue")
-                    
-                    # Fetch financials to calculate multiples if not directly available
-                    ev_ebitda = key_stats.get("ev_to_ebitda")
-                    pe_ratio = key_stats.get("forwardPE") or key_stats.get("trailingPE")
-                    ev_revenue = key_stats.get("ev_to_revenue")
-                    pb_ratio = key_stats.get("priceToBook")
                     
                     peer_info = {
                         "ticker": peer_ticker,
                         "marketCap": market_cap,
-                        "beta": key_stats.get("beta"),
+                        "beta": peer_info_dict.get('beta') or key_stats.get("beta"),
                         "totalDebt": key_stats.get("totalDebt"),
                         "cash": key_stats.get("cash"),
                         "effectiveTaxRate": key_stats.get("effectiveTaxRate"),
@@ -315,7 +325,7 @@ class SharedContextService:
                         "pbRatio": pb_ratio
                     }
                     peer_data[f"peer_{peer_ticker}_info"] = peer_info
-                    logger.debug(f"Fetched peer data for {peer_ticker}")
+                    logger.debug(f"Fetched peer data for {peer_ticker}: EV/EBITDA={ev_ebitda}, P/E={pe_ratio}")
                 else:
                     # Vietnam or other markets
                     peer_data[f"peer_{peer_ticker}_info"] = {}

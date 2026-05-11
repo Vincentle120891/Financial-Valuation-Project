@@ -1380,6 +1380,7 @@ class YFinanceService:
                 'dayHigh': info.get('dayHigh'),
                 'regularMarketVolume': info.get('regularMarketVolume'),
                 'marketCap': info.get('marketCap'),
+                'enterpriseValue': info.get('enterpriseValue'),
                 'beta': info.get('beta'),
                 'trailingPE': info.get('trailingPE'),
                 'forwardPE': info.get('forwardPE'),
@@ -1388,6 +1389,10 @@ class YFinanceService:
                 'industry': info.get('industry'),
                 'exchange': info.get('exchange'),
                 'currency': info.get('currency'),
+                'priceToBook': info.get('priceToBook'),
+                'enterpriseToEbitda': info.get('enterpriseToEbitda'),
+                'enterpriseToRevenue': info.get('enterpriseToRevenue'),
+                'priceToSalesTrailing12Months': info.get('priceToSalesTrailing12Months'),
             }
             
         except Exception as e:
