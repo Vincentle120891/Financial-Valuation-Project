@@ -31,13 +31,450 @@ ENHANCED WITH ALPHAVANTAGE FALLBACK:
 VIETNAM MARKET ENHANCEMENT:
     For Vietnamese stocks, this service now integrates with VietnamDataAggregator
     which provides cascading fallback: vnstock (primary) -> yfinance (fallback).
+
+STRATEGY PATTERN IMPLEMENTATION:
+    Implements Strategy pattern for market-specific data fetching:
+    - DataStrategy Interface: Defines standard contract for fetching market data
+    - InternationalDataStrategy: Standard yfinance + AlphaVantage for international markets
+    - VietnamDataStrategy: Specialized for Vietnam using VietnamDataAggregator
 """
 
 import logging
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Protocol
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
+
+
+# === Strategy Pattern Interface ===
+
+class DataStrategy(Protocol):
+    """Interface for market-specific data fetching strategies."""
+    
+    def fetch_data(self, ticker_symbol: str, yf) -> Dict[str, Any]:
+        """Fetch data for a specific ticker using market-specific logic."""
+        ...
+    
+    def get_market_type(self) -> str:
+        """Return the market type this strategy handles."""
+        ...
+
+
+# === Concrete Strategies ===
+
+class InternationalDataStrategy:
+    """
+    International Data Strategy - Standard yfinance + AlphaVantage fallback
+    
+    Handles all non-Vietnamese markets:
+    - US, UK, EU, Japan, Australia, etc.
+    - Primary: yfinance API
+    - Fallback: AlphaVantage API
+    - Quality validation before returning
+    """
+    
+    def __init__(self, enable_alphavantage_fallback: bool = True):
+        self.enable_alphavantage_fallback = enable_alphavantage_fallback
+        self.alphavantage_service = None
+    
+    def fetch_data(self, ticker_symbol: str, yf) -> Dict[str, Any]:
+        """
+        Fetch data using yfinance primary + AlphaVantage fallback.
+        
+        Args:
+            ticker_symbol: Stock ticker symbol
+            yf: yfinance module
+            
+        Returns:
+            Comprehensive dictionary containing all fetched data
+        """
+        logger.info(f"[InternationalStrategy] Fetching data for ticker='{ticker_symbol}'")
+        
+        # Try yfinance first (primary source)
+        data_package = self._fetch_yfinance_primary(ticker_symbol, yf)
+        
+        if data_package and self._validate_data_quality(data_package):
+            # Optionally enhance with AlphaVantage data
+            if self.enable_alphavantage_fallback:
+                data_package = self._enhance_with_alphavantage(data_package, ticker_symbol)
+            
+            logger.info(f"[InternationalStrategy] Successfully fetched data for ticker='{ticker_symbol}'")
+            return data_package
+        else:
+            # yfinance returned poor quality data, try AlphaVantage
+            if self.enable_alphavantage_fallback:
+                logger.warning(f"[InternationalStrategy] yfinance data quality low for {ticker_symbol}, trying AlphaVantage fallback")
+                av_data = self._fetch_alphavantage_fallback(ticker_symbol)
+                if av_data:
+                    logger.info(f"[InternationalStrategy] Successfully fetched fallback data from AlphaVantage for {ticker_symbol}")
+                    return av_data
+            
+            # Return whatever we have, even if incomplete
+            return data_package
+    
+    def get_market_type(self) -> str:
+        """Return market type identifier."""
+        return "international"
+    
+    def _fetch_yfinance_primary(self, ticker_symbol: str, yf) -> Dict[str, Any]:
+        """Fetch data from yfinance as primary source."""
+        ticker = yf.Ticker(ticker_symbol)
+        
+        # Fetch all data categories
+        info = self._fetch_key_stats(ticker)
+        financials = self._fetch_income_statement(ticker)
+        balance_sheet = self._fetch_balance_sheet(ticker)
+        cashflow = self._fetch_cash_flow(ticker)
+        estimates = self._fetch_analyst_estimates(ticker)
+        
+        # Compile comprehensive data package
+        data_package = {
+            "symbol": ticker_symbol,
+            "fetch_timestamp": datetime.now().isoformat(),
+            "market": "international",
+            "data_sources": ["yfinance"],
+            "key_stats": info,
+            "income_statement": financials,
+            "balance_sheet": balance_sheet,
+            "cash_flow": cashflow,
+            "analyst_estimates": estimates,
+        }
+        
+        return data_package
+    
+    def _validate_data_quality(self, data_package: Dict[str, Any]) -> bool:
+        """Validate minimum data quality requirements."""
+        key_stats = data_package.get('key_stats', {})
+        income_stmt = data_package.get('income_statement', {})
+        
+        # Must have at least revenue data
+        has_revenue = bool(income_stmt.get('total_revenue'))
+        
+        # Must have some key stats
+        has_price = key_stats.get('current_price') is not None
+        
+        return has_revenue or has_price
+    
+    def _enhance_with_alphavantage(self, data_package: Dict[str, Any], ticker_symbol: str) -> Dict[str, Any]:
+        """Enhance yfinance data with supplementary AlphaVantage data."""
+        try:
+            av_service = self._get_alphavantage_service()
+            av_data = av_service.fetch_all_data(ticker_symbol, "international")
+            
+            if not av_data:
+                return data_package
+            
+            # Use merge function from AlphaVantageService
+            merged = av_service.merge_with_yfinance(data_package, av_data)
+            logger.info(f"[InternationalStrategy] Enhanced yfinance data with AlphaVantage for {ticker_symbol}")
+            return merged
+            
+        except Exception as e:
+            logger.warning(f"[InternationalStrategy] Failed to enhance with AlphaVantage: {e}")
+            return data_package
+    
+    def _fetch_alphavantage_fallback(self, ticker_symbol: str) -> Optional[Dict[str, Any]]:
+        """Fetch data from AlphaVantage as fallback when yfinance fails."""
+        try:
+            av_service = self._get_alphavantage_service()
+            av_data = av_service.fetch_all_data(ticker_symbol, "international")
+            
+            if av_data:
+                av_data['data_sources'] = ['alphavantage']
+                av_data['fallback_used'] = True
+            
+            return av_data
+            
+        except Exception as e:
+            logger.error(f"[InternationalStrategy] AlphaVantage fallback failed: {e}")
+            return None
+    
+    def _get_alphavantage_service(self):
+        """Lazy initialization of AlphaVantage service."""
+        if self.alphavantage_service is None:
+            from .alphavantage_service import AlphaVantageService
+            self.alphavantage_service = AlphaVantageService()
+        return self.alphavantage_service
+    
+    def _fetch_key_stats(self, ticker) -> Dict[str, Any]:
+        """Fetch key statistics from yfinance ticker."""
+        info = ticker.info
+        
+        if not info:
+            return {
+                'marketCap': None,
+                'beta': None,
+                'totalDebt': None,
+                'cash': None,
+                'effectiveTaxRate': None,
+                'costOfDebt': None,
+            }
+        
+        # Helper to sanitize values
+        def sanitize_value(val):
+            if val is None:
+                return None
+            if isinstance(val, float) and (val != val):  # NaN check
+                return None
+            return val
+        
+        # Try to get financials for tax rate and cost of debt calculation
+        effective_tax_rate = None
+        cost_of_debt = None
+        try:
+            income_stmt = ticker.financials
+            balance_sheet = ticker.balance_sheet
+            if income_stmt is not None and not income_stmt.empty:
+                latest_col = income_stmt.columns[0]
+                
+                # Calculate effective tax rate
+                tax_provision = income_stmt.loc['Tax Provision', latest_col] if 'Tax Provision' in income_stmt.index else None
+                pretax_income = income_stmt.loc['Pretax Income', latest_col] if 'Pretax Income' in income_stmt.index else None
+                
+                if tax_provision and pretax_income and pretax_income != 0:
+                    effective_tax_rate = abs(tax_provision / pretax_income)
+                
+                # Calculate cost of debt
+                interest_expense = None
+                total_debt = None
+                
+                for interest_key in ['Interest Expense', 'Interest Expense Non Operating', 'Net Interest Income']:
+                    if interest_key in income_stmt.index:
+                        interest_expense = abs(income_stmt.loc[interest_key, latest_col])
+                        break
+                
+                if balance_sheet is not None and not balance_sheet.empty:
+                    bs_latest_col = balance_sheet.columns[0]
+                    for debt_key in ['Total Debt', 'Long Term Debt', 'Short Long Term Debt', 'Long-Term Debt', 'Short/Current Long Term Debt']:
+                        if debt_key in balance_sheet.index:
+                            total_debt = balance_sheet.loc[debt_key, bs_latest_col]
+                            break
+                    
+                    if total_debt is None:
+                        long_term = balance_sheet.loc['Long Term Debt', bs_latest_col] if 'Long Term Debt' in balance_sheet.index else 0
+                        short_term = balance_sheet.loc['Short/Current Long Term Debt', bs_latest_col] if 'Short/Current Long Term Debt' in balance_sheet.index else 0
+                        total_debt = long_term + short_term
+                
+                if interest_expense and total_debt and total_debt != 0:
+                    cost_of_debt = interest_expense / total_debt
+                    
+        except Exception as e:
+            logger.debug(f"Could not calculate tax rate or cost of debt: {e}")
+        
+        return {
+            'marketCap': sanitize_value(info.get('marketCap')),
+            'beta': sanitize_value(info.get('beta', 1.0)),
+            'totalDebt': sanitize_value(info.get('totalDebt') or info.get('TotalDebt')),
+            'cash': sanitize_value(info.get('cash') or info.get('CashAndCashEquivalents') or info.get('TotalCash')),
+            'effectiveTaxRate': effective_tax_rate,
+            'costOfDebt': cost_of_debt,
+        }
+    
+    def _fetch_income_statement(self, ticker) -> Dict[str, Any]:
+        """Fetch income statement data."""
+        try:
+            financials = ticker.financials
+            if financials is None or financials.empty:
+                return {}
+            
+            # Get column names (dates)
+            columns = financials.columns.tolist()
+            
+            # Map yfinance fields to standard format
+            result = {
+                'periods': [col.strftime('%Y-%m-%d') if hasattr(col, 'strftime') else str(col) for col in columns],
+                'total_revenue': self._get_series_values(financials, 'Total Revenue'),
+                'cost_of_revenue': self._get_series_values(financials, 'Cost Of Revenue'),
+                'gross_profit': self._get_series_values(financials, 'Gross Profit'),
+                'ebitda': self._get_series_values(financials, 'EBITDA'),
+                'ebit': self._get_series_values(financials, 'Operating Income'),
+                'net_income': self._get_series_values(financials, 'Net Income'),
+                'depreciation_amortization': self._get_series_values(financials, 'Depreciation And Amortization'),
+            }
+            
+            return result
+        except Exception as e:
+            logger.error(f"Error fetching income statement: {e}")
+            return {}
+    
+    def _fetch_balance_sheet(self, ticker) -> Dict[str, Any]:
+        """Fetch balance sheet data."""
+        try:
+            balance_sheet = ticker.balance_sheet
+            if balance_sheet is None or balance_sheet.empty:
+                return {}
+            
+            columns = balance_sheet.columns.tolist()
+            
+            result = {
+                'periods': [col.strftime('%Y-%m-%d') if hasattr(col, 'strftime') else str(col) for col in columns],
+                'total_debt': self._get_series_values(balance_sheet, 'Total Debt'),
+                'cash_and_equivalents': self._get_series_values(balance_sheet, 'Cash And Cash Equivalents'),
+                'total_equity': self._get_series_values(balance_sheet, 'Total Equity Gross Minority Interest'),
+                'working_capital': self._get_series_values(balance_sheet, 'Working Capital'),
+                'shares_outstanding': self._get_series_values(balance_sheet, 'Ordinary Shares Number'),
+                'accounts_receivable': self._get_series_values(balance_sheet, 'Accounts Receivable'),
+                'inventory': self._get_series_values(balance_sheet, 'Inventory'),
+                'accounts_payable': self._get_series_values(balance_sheet, 'Accounts Payable'),
+            }
+            
+            return result
+        except Exception as e:
+            logger.error(f"Error fetching balance sheet: {e}")
+            return {}
+    
+    def _fetch_cash_flow(self, ticker) -> Dict[str, Any]:
+        """Fetch cash flow data."""
+        try:
+            cashflow = ticker.cashflow
+            if cashflow is None or cashflow.empty:
+                return {}
+            
+            columns = cashflow.columns.tolist()
+            
+            result = {
+                'periods': [col.strftime('%Y-%m-%d') if hasattr(col, 'strftime') else str(col) for col in columns],
+                'free_cash_flow': self._get_series_values(cashflow, 'Free Cash Flow'),
+                'operating_cash_flow': self._get_series_values(cashflow, 'Operating Cash Flow'),
+                'capital_expenditure': self._get_series_values(cashflow, 'Capital Expenditure'),
+                'dividends_paid': self._get_series_values(cashflow, 'Dividends Paid'),
+            }
+            
+            return result
+        except Exception as e:
+            logger.error(f"Error fetching cash flow: {e}")
+            return {}
+    
+    def _fetch_analyst_estimates(self, ticker) -> Dict[str, Any]:
+        """Fetch analyst estimates."""
+        try:
+            estimates = ticker.estimates
+            if estimates is None:
+                return {}
+            
+            result = {}
+            
+            # Handle different estimate types
+            if hasattr(estimates, 'revenue_estimate'):
+                result['revenue_estimate'] = estimates.revenue_estimate
+            
+            if hasattr(estimates, 'earnings_estimate'):
+                result['earnings_estimate'] = estimates.earnings_estimate
+            
+            if hasattr(estimates, 'eps_trend'):
+                result['eps_trend'] = estimates.eps_trend
+            
+            return result
+        except Exception as e:
+            logger.error(f"Error fetching analyst estimates: {e}")
+            return {}
+    
+    def _get_series_values(self, df, field_name: str) -> List[Optional[float]]:
+        """Extract values from a DataFrame row, handling missing fields."""
+        try:
+            if field_name in df.index:
+                series = df.loc[field_name]
+                return [None if (isinstance(v, float) and v != v) else v for v in series.values]
+            return []
+        except Exception:
+            return []
+
+
+class VietnamDataStrategy:
+    """
+    Vietnam Data Strategy - Specialized for Vietnamese market
+    
+    Uses VietnamDataAggregator with cascading fallback:
+    - Primary: vnstock (local VAS-compliant data)
+    - Fallback: yfinance (international format)
+    
+    Handles VND currency, VAS accounting standards, and HOSE/HNX listings.
+    """
+    
+    def __init__(self):
+        self.aggregator = None
+    
+    def fetch_data(self, ticker_symbol: str, yf) -> Dict[str, Any]:
+        """
+        Fetch data using VietnamDataAggregator.
+        
+        Args:
+            ticker_symbol: Vietnamese ticker symbol (without suffix)
+            yf: yfinance module (not used directly, passed for compatibility)
+            
+        Returns:
+            Comprehensive dictionary containing all fetched data
+        """
+        logger.info(f"[VietnamStrategy] Fetching data for ticker='{ticker_symbol}'")
+        
+        try:
+            from .vietnam_data_aggregator import VietnamDataAggregator
+            
+            aggregator = VietnamDataAggregator()
+            result = aggregator.fetch_comprehensive_data(ticker_symbol, market="VN")
+            
+            if result['success']:
+                # Extract merged data for compatibility with existing code
+                merged = result.get('merged_data', {})
+                
+                # Map to standard structure
+                data_package = {
+                    "symbol": f"{ticker_symbol}.VN",
+                    "fetch_timestamp": result['fetch_timestamp'],
+                    "market": "vietnamese",
+                    "data_sources_used": result['data_sources_used'],
+                    "data_quality_score": result['data_quality_score'],
+                    "warnings": result.get('warnings', []),
+                    "key_stats": {
+                        "company_name": merged.get('company_info', {}).get('company_name'),
+                        "sector": merged.get('company_info', {}).get('sector'),
+                        "industry": merged.get('company_info', {}).get('industry'),
+                        "currency": merged.get('company_info', {}).get('currency', 'VND'),
+                        "market_cap": merged.get('market_data', {}).get('market_cap'),
+                        "current_price": merged.get('market_data', {}).get('current_price'),
+                        "beta": merged.get('market_data', {}).get('beta'),
+                        "pe_ratio": merged.get('market_data', {}).get('pe_ratio'),
+                        "pb_ratio": merged.get('market_data', {}).get('pb_ratio'),
+                        "dividend_yield": merged.get('market_data', {}).get('dividend_yield'),
+                    },
+                    "income_statement": merged.get('financials', {}).get('income_statement', {}),
+                    "balance_sheet": merged.get('financials', {}).get('balance_sheet', {}),
+                    "cash_flow": merged.get('financials', {}).get('cash_flow', {}),
+                    "analyst_estimates": merged.get('analyst_estimates', {}),
+                }
+                
+                logger.info(f"[VietnamStrategy] Successfully fetched data for {ticker_symbol} from vnstock")
+                return data_package
+            else:
+                logger.error(f"[VietnamStrategy] Failed to fetch data for {ticker_symbol}: {result.get('error')}")
+                raise Exception(result.get('error', 'Unknown error from VietnamDataAggregator'))
+                
+        except ImportError:
+            logger.error("[VietnamStrategy] VietnamDataAggregator not found. Please install vnstock package.")
+            raise Exception("vnstock package not installed. Cannot fetch Vietnamese market data.")
+        except Exception as e:
+            logger.error(f"[VietnamStrategy] Error fetching data for {ticker_symbol}: {str(e)}")
+            raise
+    
+    def get_market_type(self) -> str:
+        """Return market type identifier."""
+        return "vietnamese"
+
+
+# === Strategy Factory ===
+
+def get_data_strategy(market: str, enable_alphavantage_fallback: bool = True) -> DataStrategy:
+    """
+    Factory function to select the appropriate data fetching strategy based on market.
+    
+    Routing Logic:
+    - vietnamese → VietnamDataStrategy (vnstock primary)
+    - international/other → InternationalDataStrategy (yfinance + AlphaVantage)
+    """
+    if market.lower() in ["vietnamese", "vietnam", "vn"]:
+        return VietnamDataStrategy()
+    else:
+        return InternationalDataStrategy(enable_alphavantage_fallback=enable_alphavantage_fallback)
 
 
 class YFinanceService:
@@ -52,6 +489,7 @@ class YFinanceService:
         self.estimates = None
         self.enable_alphavantage_fallback = enable_alphavantage_fallback
         self.alphavantage_service = None
+        self._strategy_cache = {}
     
     def fetch_key_stats(self, ticker_symbol: str) -> Dict[str, Any]:
         """
@@ -161,15 +599,11 @@ class YFinanceService:
     
     def fetch_all_data(self, ticker_symbol: str, market: str = "international") -> Dict[str, Any]:
         """
-        Fetch all available financial data from yfinance with AlphaVantage fallback.
+        Fetch all available financial data using Strategy pattern.
         
-        Data source cascade:
-        1. yfinance (primary) - Most comprehensive free data
-        2. AlphaVantage (fallback) - Better for some international stocks
-        3. Vietnamese market: vnstock -> yfinance -> AlphaVantage
-        
-        For Vietnamese markets, uses VietnamDataAggregator with cascading fallback:
-        vnstock (primary) -> yfinance (fallback).
+        Data source cascade via Strategy pattern:
+        - International markets: InternationalDataStrategy (yfinance -> AlphaVantage)
+        - Vietnamese market: VietnamDataStrategy (vnstock -> yfinance)
         
         Args:
             ticker_symbol: Stock ticker symbol
@@ -181,46 +615,30 @@ class YFinanceService:
         import yfinance as yf
         
         try:
-            logger.info(f"Fetching all yfinance data for ticker='{ticker_symbol}', market='{market}'")
+            logger.info(f"Fetching all data for ticker='{ticker_symbol}', market='{market}' using Strategy pattern")
             
-            # For Vietnamese market, use enhanced aggregator with vnstock integration
-            if market == "vietnamese":
-                return self._fetch_vietnamese_enhanced(ticker_symbol)
+            # Get the appropriate strategy for this market
+            strategy = get_data_strategy(market, self.enable_alphavantage_fallback)
             
-            # Try yfinance first (primary source)
-            data_package = self._fetch_yfinance_primary(ticker_symbol, market, yf)
+            # Execute strategy
+            data_package = strategy.fetch_data(ticker_symbol, yf)
             
-            if data_package and self._validate_data_quality(data_package):
-                # Optionally enhance with AlphaVantage data
-                if self.enable_alphavantage_fallback:
-                    data_package = self._enhance_with_alphavantage(data_package, ticker_symbol, market)
-                
-                logger.info(f"Successfully fetched all data for ticker='{ticker_symbol}'")
-                return data_package
-            else:
-                # yfinance returned poor quality data, try AlphaVantage
-                if self.enable_alphavantage_fallback:
-                    logger.warning(f"yfinance data quality low for {ticker_symbol}, trying AlphaVantage fallback")
-                    av_data = self._fetch_alphavantage_fallback(ticker_symbol, market)
-                    if av_data:
-                        logger.info(f"Successfully fetched fallback data from AlphaVantage for {ticker_symbol}")
-                        return av_data
-                
-                # Return whatever we have, even if incomplete
-                return data_package
+            logger.info(f"Successfully fetched data for ticker='{ticker_symbol}' using {strategy.__class__.__name__}")
+            return data_package
             
         except Exception as e:
-            logger.error(f"Failed to fetch yfinance data for ticker='{ticker_symbol}': {str(e)}")
-            # On complete failure, try AlphaVantage as emergency fallback
-            if self.enable_alphavantage_fallback:
-                logger.info(f"Attempting AlphaVantage emergency fallback for {ticker_symbol}")
-                av_data = self._fetch_alphavantage_fallback(ticker_symbol, market)
-                if av_data:
-                    return av_data
+            logger.error(f"Failed to fetch data for ticker='{ticker_symbol}': {str(e)}")
             raise
     
+    # Legacy methods kept for backward compatibility
+    # These are now deprecated in favor of Strategy pattern
+    
     def _fetch_yfinance_primary(self, ticker_symbol: str, market: str, yf) -> Dict[str, Any]:
-        """Fetch data from yfinance as primary source."""
+        """
+        DEPRECATED: Use InternationalDataStrategy instead.
+        Kept for backward compatibility only.
+        """
+        logger.warning("DEPRECATED: _fetch_yfinance_primary is deprecated. Use InternationalDataStrategy.")
         self.ticker = yf.Ticker(ticker_symbol)
         
         # Fetch all data categories
@@ -247,10 +665,10 @@ class YFinanceService:
     
     def _validate_data_quality(self, data_package: Dict[str, Any]) -> bool:
         """
-        Validate minimum data quality requirements.
-        
-        Returns True if data meets minimum thresholds, False otherwise.
+        DEPRECATED: Use InternationalDataStrategy._validate_data_quality instead.
+        Kept for backward compatibility only.
         """
+        logger.warning("DEPRECATED: _validate_data_quality is deprecated. Use InternationalDataStrategy.")
         # Check for critical fields
         key_stats = data_package.get('key_stats', {})
         income_stmt = data_package.get('income_statement', {})
@@ -264,7 +682,11 @@ class YFinanceService:
         return has_revenue or has_price
     
     def _enhance_with_alphavantage(self, data_package: Dict[str, Any], ticker_symbol: str, market: str) -> Dict[str, Any]:
-        """Enhance yfinance data with supplementary AlphaVantage data."""
+        """
+        DEPRECATED: Use InternationalDataStrategy._enhance_with_alphavantage instead.
+        Kept for backward compatibility only.
+        """
+        logger.warning("DEPRECATED: _enhance_with_alphavantage is deprecated. Use InternationalDataStrategy.")
         try:
             av_data = self._get_alphavantage_service().fetch_all_data(ticker_symbol, market)
             
@@ -281,7 +703,11 @@ class YFinanceService:
             return data_package
     
     def _fetch_alphavantage_fallback(self, ticker_symbol: str, market: str) -> Optional[Dict[str, Any]]:
-        """Fetch data from AlphaVantage as fallback when yfinance fails."""
+        """
+        DEPRECATED: Use InternationalDataStrategy._fetch_alphavantage_fallback instead.
+        Kept for backward compatibility only.
+        """
+        logger.warning("DEPRECATED: _fetch_alphavantage_fallback is deprecated. Use InternationalDataStrategy.")
         try:
             av_service = self._get_alphavantage_service()
             av_data = av_service.fetch_all_data(ticker_symbol, market)
@@ -305,18 +731,10 @@ class YFinanceService:
     
     def _fetch_vietnamese_enhanced(self, ticker_symbol: str) -> Dict[str, Any]:
         """
-        Enhanced fetch for Vietnamese stocks using VietnamDataAggregator.
-        
-        Implements cascading fallback:
-        1. vnstock (primary - local VAS-compliant data)
-        2. yfinance (fallback - international format)
-        
-        Args:
-            ticker_symbol: Vietnamese ticker (without suffix)
-            
-        Returns:
-            Merged data package with quality scoring
+        DEPRECATED: Use VietnamDataStrategy instead.
+        Kept for backward compatibility only.
         """
+        logger.warning("DEPRECATED: _fetch_vietnamese_enhanced is deprecated. Use VietnamDataStrategy.")
         try:
             from .vietnam_data_aggregator import VietnamDataAggregator
             
