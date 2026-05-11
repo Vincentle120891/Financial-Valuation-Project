@@ -147,14 +147,14 @@ const CompanySelectionStep = ({
           {selectedCompany.riskFreeRate !== undefined && (
             <div className="bg-green-50 p-4 rounded-lg border-l-4 border-green-500">
               <p className="text-sm text-gray-500 mb-1">Risk-Free Rate</p>
-              <p className="font-bold text-green-900 text-lg">{(selectedCompany.riskFreeRate * 100).toFixed(2)}%</p>
+              <p className="font-bold text-green-900 text-lg">{selectedCompany.riskFreeRate.toFixed(2)}%</p>
             </div>
           )}
           
           {selectedCompany.marketRiskPremium !== undefined && (
             <div className="bg-orange-50 p-4 rounded-lg border-l-4 border-orange-500">
               <p className="text-sm text-gray-500 mb-1">Market Risk Premium</p>
-              <p className="font-bold text-orange-900 text-lg">{(selectedCompany.marketRiskPremium * 100).toFixed(2)}%</p>
+              <p className="font-bold text-orange-900 text-lg">{selectedCompany.marketRiskPremium.toFixed(2)}%</p>
             </div>
           )}
         </div>
