@@ -1026,10 +1026,11 @@ const ValuationFlow = () => {
           />
         );
       case 6:
+        const valuationData = getValuationData(selectedModels);
         return (
           <ApiDataStep
-            historicalData={getValuationData(selectedModels)}
-            forecastDrivers={getForecastDrivers(selectedModels)}
+            historicalData={valuationData?.historical_financials}
+            forecastDrivers={valuationData?.forecast_drivers}
             peerData={peerData}
             dcfInputs={getDcfInputs(selectedModels)}
             dupontResults={getResult('DuPont')}
