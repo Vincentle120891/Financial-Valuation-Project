@@ -8,6 +8,15 @@ import logging
 from typing import Dict, List, Optional, Any
 from pydantic import BaseModel
 
+
+class DataValidationError(Exception):
+    """Custom exception for data validation errors in valuation calculations."""
+    def __init__(self, message: str, missing_fields: List[str] = None):
+        self.message = message
+        self.missing_fields = missing_fields or []
+        super().__init__(self.message)
+
+
 from app.services.international.dcf_engine import (
     DCFEngine,
     DCFInputs,
@@ -85,6 +94,9 @@ class Step10ValuationProcessor:
         # Extract DCF-specific inputs from assumptions
         dcf_inputs = self._extract_dcf_inputs(assumptions)
 
+        # Validate critical inputs before calculation
+        self._validate_dcf_inputs(dcf_inputs)
+
         # Use the existing process_final_valuation method
         result = self.process_final_valuation(
             ticker=ticker,
@@ -103,7 +115,7 @@ class Step10ValuationProcessor:
         # Placeholder - will be implemented with DuPont engine
         return {
             "ticker": ticker,
-            "model": "DUPONT",
+            "method": "DUPONT",
             "roe": assumptions.get("dupont_targets", {}).get("target_roe", 0.15),
             "status": "completed"
         }
@@ -116,7 +128,7 @@ class Step10ValuationProcessor:
         # Placeholder - will be implemented with Comps engine
         return {
             "ticker": ticker,
-            "model": "COMPS",
+            "method": "COMPS",
             "implied_value": assumptions.get("comps_multiples", {}).get("implied_share_price", 0),
             "status": "completed"
         }
@@ -159,6 +171,70 @@ class Step10ValuationProcessor:
         # These will be populated from Step 6 data
 
         return dcf_inputs
+
+    def _validate_dcf_inputs(self, dcf_inputs: Dict[str, Any]) -> None:
+        """
+        Validate critical DCF inputs before calculation.
+
+        Raises DataValidationError if critical fields are null or invalid.
+
+        Critical fields required for DCF calculation:
+        - risk_free_rate
+        - market_risk_premium (or wacc directly)
+        - terminal_growth
+        - revenue_growth (for FCF projection)
+        - ebitda_margin (for FCF projection)
+        """
+        missing_fields = []
+        invalid_fields = []
+
+        # Check WACC components (either individual components or pre-calculated WACC)
+        has_wacc_components = (
+            dcf_inputs.get('risk_free_rate') is not None and
+            dcf_inputs.get('market_risk_premium') is not None
+        )
+        has_precomputed_wacc = dcf_inputs.get('wacc') is not None
+
+        if not has_wacc_components and not has_precomputed_wacc:
+            missing_fields.extend(['risk_free_rate', 'market_risk_premium'])
+
+        # Check terminal growth rate
+        if dcf_inputs.get('terminal_growth') is None:
+            missing_fields.append('terminal_growth')
+
+        # Check revenue growth for FCF projection
+        if dcf_inputs.get('revenue_growth') is None:
+            missing_fields.append('revenue_growth')
+
+        # Check EBITDA margin for FCF projection
+        if dcf_inputs.get('ebitda_margin') is None:
+            missing_fields.append('ebitda_margin')
+
+        # Validate numeric ranges for fields that exist
+        if dcf_inputs.get('terminal_growth') is not None:
+            term_growth = dcf_inputs['terminal_growth']
+            if not isinstance(term_growth, (int, float)) or term_growth < -0.1 or term_growth > 0.1:
+                invalid_fields.append(f"terminal_growth={term_growth} (must be between -10% and 10%)")
+
+        if dcf_inputs.get('risk_free_rate') is not None:
+            rfr = dcf_inputs['risk_free_rate']
+            if not isinstance(rfr, (int, float)) or rfr < 0 or rfr > 0.2:
+                invalid_fields.append(f"risk_free_rate={rfr} (must be between 0% and 20%)")
+
+        if missing_fields:
+            raise DataValidationError(
+                f"Critical DCF inputs missing: {', '.join(missing_fields)}. "
+                f"Cannot perform valuation without these values.",
+                missing_fields=missing_fields
+            )
+
+        if invalid_fields:
+            raise DataValidationError(
+                f"Invalid DCF input values: {'; '.join(invalid_fields)}",
+                missing_fields=[]
+            )
+
+        logger.debug(f"DCF inputs validation passed for ticker")
 
     def process_final_valuation(
         self,
