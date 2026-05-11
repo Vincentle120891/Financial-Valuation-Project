@@ -1,45 +1,36 @@
-# Dependencies
-node_modules/
+backend/app/api/routes/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+__pycache__/
+.Python
+env/
 venv/
 .venv/
-__pycache__/
-*.pyc
-.pytest_cache/
-.mypy_cache/
-
-# Build artifacts
-dist/
-build/
-target/
-
-# Environment
 .env
 .env.local
-*.env.*
-
-# Editors
+.env.*
 .vscode/
 .idea/
 *.swp
 *.swo
 *.tmp
-
-# Logs
 *.log
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Coverage
 coverage/
 htmlcov/
 .coverage
-
-# Gradle
+.pytest_cache/
+.mypy_cache/
+dist/
+build/
+*.egg-info/
+.tox/
+.nox/
+node_modules/
+target/
 .gradle/
-
-# Compressed files
+.DS_Store
+Thumbs.db
 *.zip
 *.gz
 *.tar
