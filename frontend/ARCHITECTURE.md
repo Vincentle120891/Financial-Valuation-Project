@@ -35,8 +35,9 @@ frontend/
 ### ValuationFlow.jsx - Main Component
 
 **State Management** (30+ state variables):
-- `currentStep`: Tracks user progress through 10-step workflow
-- `selectedModel`: 'DCF', 'DuPont', or 'COMPS'
+- `currentStep`: Tracks user progress through 11-step workflow
+- `selectedModel`: 'DCF', 'DuPont', or 'Comps' (single-select via radio buttons)
+- `market`: 'international' or 'vietnamese' (determines data sources & calculation engines)
 - `searchResults`: Company search results from Step 1
 - `historicalData`: 3-8 years of financial history
 - `forecastDrivers`: Best/Base/Worst case scenarios
@@ -45,8 +46,9 @@ frontend/
 - `compsResults`: Trading comps multiples
 - `missingData`: Retrieved historical data gaps from alternative sources
 - `confirmedValues`: User-confirmed assumptions
+- `valuationsData`: Matrix storing results for all 6 combinations [market][method]
 
-**10-Step Workflow**:
+**11-Step Workflow**:
 
 1. **Step 1 - Search Company** (`renderStep1`)
    - Market toggle: International vs Vietnamese
@@ -55,12 +57,12 @@ frontend/
 
 2. **Step 2-3 - Company Selection** (handled in `handleSelectCompany`)
    - API call to `/step-3-select-ticker`
-   - Session initialization
+   - Session initialization with market-specific data
 
 3. **Step 4 - Model Selection** (`renderStep4`)
-   - Three model cards: DCF, DuPont, COMPS
+   - Three model cards: DCF, DuPont, Comps
+   - **Radio buttons** (single-select only - prevents AI context corruption)
    - Detailed descriptions for each model
-   - Click-to-select interaction
 
 4. **Step 5 - Required Inputs** (`renderStep5`)
    - Dynamic requirements based on selected model
@@ -68,7 +70,8 @@ frontend/
    - "Change Model" back button
 
 5. **Step 6 - Fetch API Data** (`handleFetchApiData`)
-   - API call to `/step-6-fetch-api-data` (financial data from yfinance/AlphaVantage)
+   - **Fetch Once, Use Many**: Single API call fetches ALL data for ANY model
+   - Data stored in shared cache `session['market_data']`
    - Populates historicalData with standard API data
 
 6. **Step 7 - Historical Data Retrieval** (`handleFetchHistoricalData`)
@@ -84,16 +87,23 @@ frontend/
      - Rationale & sources display
      - Manual input fields
      - Confirm/Use AI buttons
+   - Model-specific: DCF/DuPont/Comps each have unique assumption processors
 
 8. **Step 9 - Assumptions Confirmation** (`renderStep9`)
    - Scenario selection (Best/Base/Worst)
    - Summary of all confirmed inputs
    - "Run Valuation" trigger
 
-9. **Step 10 - Results Display** (`renderStep10`)
-   - Model-specific result rendering
-   - Charts and visualizations
-   - Export options
+9. **Step 10 - Run Valuation** (`runValuation`)
+   - Executes selected model with confirmed assumptions
+   - Market-specific engine (international/vietnamese)
+   - Returns comprehensive valuation output
+
+10. **Step 11 - Results Display** (`renderStep10`)
+    - Model-specific result rendering
+    - Charts and visualizations
+    - Export options
+    - Currency formatting (USD/VND)
 
 ## API Integration (api.js)
 
@@ -104,22 +114,33 @@ searchCompanies(query, market)           // POST /step-1-search
 selectCompany(sessionId, ticker, market) // POST /step-3-select-ticker
 selectModels(sessionId, models)          // POST /step-4-select-models
 
-// Data Preparation
+// Data Preparation - Fetch Once, Use Many
 prepareInputs(sessionId)                 // POST /step-5-6-prepare-inputs
-fetchApiData(sessionId)                  // POST /step-6-fetch-api-data
+fetchApiData(sessionId)                  // POST /step-6-fetch-api-data (ALL data for ANY model)
 fetchHistoricalData(sessionId)           // POST /step-7-fetch-historical-data
-generateAI(sessionId)                    // POST /step-8-generate-ai-assumptions
+
+// Assumption Generation (Model-Specific)
+generateAI(sessionId, model)             // POST /step-8-generate-ai-assumptions (DCF/DuPont/Comps specific)
 
 // Valuation Execution
 confirmAssumptions(sessionId, assumptions, scenario) // POST /step-9-confirm-assumptions
-runValuation(sessionId, model, scenario)             // POST /step-10-valuate
+runValuation(sessionId, model, market, scenario)     // POST /step-10-valuate
 
 // Specialized Endpoints
 getDcfInputs(sessionId)                  // POST /dcf/inputs
 getPeerData(sessionId, minPeers)         // POST /comps/peers
 getDupontAnalysis(sessionId, years)      // POST /dupont/analyze
 getForecastBenchmarks(sessionId)         // POST /forecast/benchmarks
+
+// Market-Specific Routes
+getInternationalMarketData(ticker)       // GET /international/*
+getVietnameseMarketData(ticker)          // GET /vietnamese/*
 ```
+
+**Dual-Market Support:**
+- International routes: `/international/valuate`, `/international/comps`, `/international/dupont`
+- Vietnamese routes: `/vietnamese/vn-valuate`, `/vietnamese/vn-comps`, `/vietnamese/vn-dupont`
+- Market parameter determines which engine and data sources are used
 
 ## DuPont-Specific Features
 
@@ -233,12 +254,16 @@ build/assets/index-CLP28rLk.js   167.45 kB │ gzip: 51.02 kB
 ## Integration Points
 
 ### Backend Requirements
-1. **Session Management**: Maintain state across 10-step workflow
-2. **Multi-Model Support**: Handle DCF, DuPont, and COMPS in single session
-3. **AI Integration**: Generate suggestions with rationale and confidence scores
-4. **Historical Data**: Provide 3-8 years of financial statements
-5. **Peer Analysis**: Automatic comparable company identification
-6. **Scenario Planning**: Best/Base/Worst case support
+1. **Session Management**: Maintain state across 11-step workflow
+2. **Multi-Model Support**: Handle DCF, DuPont, and Comps in single session (one at a time)
+3. **Dual-Market Architecture**: Separate engines for International (IFRS/GAAP) and Vietnamese (TT99) markets
+4. **AI Integration**: Generate suggestions with rationale and confidence scores (model-specific processors)
+5. **Historical Data**: Provide 3-8 years of financial statements
+6. **Peer Analysis**: Automatic comparable company identification (market-specific logic)
+7. **Scenario Planning**: Best/Base/Worst case support
+8. **Fetch Once, Use Many**: Unified data caching to prevent redundant API calls
+9. **Currency Formatting**: USD for international, VND for Vietnamese valuations
+10. **PDF Extraction**: AI-powered extraction for Vietnamese annual reports
 
 ### Data Validation
 - Array parsing for multi-period inputs (e.g., "0.05, 0.04, 0.03")
@@ -249,13 +274,19 @@ build/assets/index-CLP28rLk.js   167.45 kB │ gzip: 51.02 kB
 ## Testing Checklist
 
 ✅ **Build Verification**: Production build completes successfully
-✅ **Component Structure**: All render functions defined
-✅ **State Management**: All required state variables initialized
-✅ **API Integration**: All endpoint functions implemented
+✅ **Component Structure**: All render functions defined (11 steps)
+✅ **State Management**: All required state variables initialized (including valuationsData matrix)
+✅ **API Integration**: All endpoint functions implemented with dual-market support
 ✅ **DuPont Support**: Specific handlers for DuPont data
+✅ **Comps Support**: Trading comparables with market-specific peer filtering
+✅ **DCF Support**: Full DCF workflow with WACC calculation
+✅ **Market Separation**: International and Vietnamese routes properly isolated
+✅ **Single-Select Enforcement**: Radio buttons prevent multiple model selection
+✅ **Fetch Once, Use Many**: Data caching prevents redundant API calls
 ✅ **Error Handling**: Try-catch blocks around async operations
 ✅ **Loading States**: Loading indicators for all async actions
 ✅ **Responsive Design**: CSS grid and flexbox layouts
+✅ **Currency Formatting**: USD/VND display based on market selection
 
 ## Future Enhancements
 
@@ -268,6 +299,12 @@ build/assets/index-CLP28rLk.js   167.45 kB │ gzip: 51.02 kB
 
 ---
 
-**Last Updated**: 2024
-**Version**: 1.0.0
+**Last Updated**: 2025
+**Version**: 2.0 - Dual-Market Architecture
 **Status**: Production Ready
+**Workflow**: 3 Valuation Methods × 2 Market Versions (6 combinations)
+**Critical Requirements**: 
+- Single model selection (radio buttons) to prevent AI context corruption
+- Fetch Once, Use Many caching strategy
+- No input/calculation simplification (model integrity commitment)
+- Strict market separation (International vs Vietnamese)
