@@ -1,5 +1,18 @@
 # Vietnamese Market Support - Implementation Summary
 
+## ⚠️ CRITICAL: AI TOOL CONSTRAINTS & SINGLE-MODEL FLOW
+
+**This implementation follows the same AI-compatible architecture as International markets:**
+
+- **ONE MODEL AT A TIME:** Users select DCF OR DuPont OR Trading Comps (Radio Buttons in Step 4). Multi-select is disabled.
+- **SEQUENTIAL PROCESSING:** Steps 7-9 (AI generation) run sequentially for the active model only. Parallel execution causes hallucination.
+- **FETCH ONCE, USE MANY:** Step 6 fetches ALL market data needed for ANY model. When switching models, cached data is reused (no re-fetch).
+- **STATE MATRIX:** Data is stored in `valuationMatrix[market][method]` to prevent collision between models.
+
+**DO NOT modify this workflow to support parallel model execution. The architecture intentionally prevents this to avoid AI context errors.**
+
+---
+
 ## Overview
 Complete implementation of Vietnamese stock market support with scalable architecture for 700+ HOSE stocks, VND financial statement parsing, sector-specific valuation models, and Vietnamese language UI support.
 
