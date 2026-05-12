@@ -4,6 +4,8 @@ import React, { useState } from 'react';
  * PeerSelectionStep - Step 3
  * Displays auto-discovered peer companies with similarity scores in table format
  * Allows users to select/deselect peers for DCF comparison
+ * 
+ * STYLED TO MATCH: ResultsStep.jsx (Step 8)
  */
 const PeerSelectionStep = ({
   suggestedPeers,
@@ -22,16 +24,14 @@ const PeerSelectionStep = ({
 
   const handleSelectAll = () => {
     if (selectedPeers.length === suggestedPeers.length) {
-      // Deselect all
       suggestedPeers.forEach(peer => {
-        if (selectedPeers.find(p => p.symbol === peer.symbol)) {
+        if (selectedPeers.find(p => p.symbol === peer.symbol || p.ticker === peer.ticker)) {
           onTogglePeer(peer);
         }
       });
     } else {
-      // Select all
       suggestedPeers.forEach(peer => {
-        if (!selectedPeers.find(p => p.symbol === peer.symbol)) {
+        if (!selectedPeers.find(p => p.symbol === peer.symbol || p.ticker === peer.ticker)) {
           onTogglePeer(peer);
         }
       });
@@ -40,15 +40,11 @@ const PeerSelectionStep = ({
 
   if (!suggestedPeers || suggestedPeers.length === 0) {
     return (
-      <div className="max-w-4xl mx-auto p-6">
-        <div className="mb-8">
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">
-            Step 3: Peer Selection
-          </h2>
-          <p className="text-gray-600">
-            No peers discovered yet. Please go back to Step 2 and click "Auto-Find Peers".
-          </p>
-        </div>
+      <div className="step-container">
+        <h2>Step 3: Peer Selection</h2>
+        <p className="text-gray-600" style={{ marginBottom: '24px' }}>
+          No peers discovered yet. Please go back to Step 2 and click "Auto-Find Peers".
+        </p>
 
         <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded">
           <p className="text-yellow-700">
@@ -57,10 +53,7 @@ const PeerSelectionStep = ({
         </div>
 
         <div className="mt-8">
-          <button
-            onClick={onBack}
-            className="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
-          >
+          <button onClick={onBack} className="btn-secondary">
             ← Back to Company Overview
           </button>
         </div>
@@ -69,24 +62,14 @@ const PeerSelectionStep = ({
   }
 
   return (
-    <div className="max-w-6xl mx-auto p-6">
-      <div className="mb-8">
-        <div className="flex items-center gap-3 mb-2">
-          <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center flex-shrink-0" style={{ minWidth: '40px', minHeight: '40px', maxWidth: '40px', maxHeight: '40px' }}>
-            <svg className="text-green-600 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '24px', height: '24px', minWidth: '24px', minHeight: '24px', maxWidth: '24px', maxHeight: '24px' }}>
-              <path d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />            </svg>
-          </div>
-          <h2 className="text-2xl font-bold text-gray-900">
-            Step 3: Select Peer Companies
-          </h2>
-        </div>
-        <p className="text-gray-600 ml-13">
-          Review and select peer companies for comparable analysis. These peers will be used in DCF valuation for WACC calculation and trading multiples.
-        </p>
-      </div>
+    <div className="step-container">
+      <h2>Step 3: Select Peer Companies</h2>
+      <p style={{ marginBottom: '24px', color: '#666' }}>
+        Review and select peer companies for comparable analysis. These peers will be used in DCF valuation for WACC calculation and trading multiples.
+      </p>
 
       {/* Summary Bar */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+      <div className="summary-box" style={{ marginBottom: '24px', background: '#eff6ff', border: '1px solid #bfdbfe' }}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -106,7 +89,7 @@ const PeerSelectionStep = ({
       </div>
 
       {/* Peer Table */}
-      <div className="border rounded-lg overflow-hidden mb-8 shadow-sm">
+      <div className="summary-box" style={{ marginBottom: '24px', padding: '0', overflow: 'hidden' }}>
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
@@ -123,19 +106,24 @@ const PeerSelectionStep = ({
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {suggestedPeers.map((peer) => {
-                const isSelected = selectedPeers.find(p => p.symbol === peer.symbol);
+                const isSelected = selectedPeers.find(p => p.symbol === peer.symbol || p.ticker === peer.ticker);
                 
-                // Detect invalid peers (indices, delisted, etc.)
                 const isInvalidPeer = 
-                  peer.symbol.startsWith('^') ||
-                  peer.symbol.includes('INDEX') ||
-                  peer.symbol.includes('IDX') ||
+                  peer.symbol?.startsWith('^') ||
+                  peer.ticker?.startsWith('^') ||
+                  peer.symbol?.includes('INDEX') ||
+                  peer.ticker?.includes('INDEX') ||
+                  peer.symbol?.includes('IDX') ||
+                  peer.ticker?.includes('IDX') ||
                   !peer.marketCap ||
                   peer.marketCap <= 0;
 
+                const ticker = peer.ticker || peer.symbol;
+                const name = peer.company_name || peer.name;
+
                 return (
                   <tr 
-                    key={peer.symbol}
+                    key={ticker}
                     className={`transition-all ${
                       isInvalidPeer
                         ? 'bg-red-50 opacity-60'
@@ -144,7 +132,6 @@ const PeerSelectionStep = ({
                         : 'hover:bg-gray-50'
                     }`}
                   >
-                    {/* Select Checkbox */}
                     <td className="px-4 py-3">
                       <button
                         onClick={() => !isInvalidPeer && handleTogglePeer(peer)}
@@ -170,22 +157,18 @@ const PeerSelectionStep = ({
                       </button>
                     </td>
 
-                    {/* Ticker */}
                     <td className="px-4 py-3">
-                      <span className="text-sm font-semibold text-indigo-600">{peer.symbol}</span>
+                      <span className="text-sm font-semibold text-indigo-600">{ticker}</span>
                     </td>
 
-                    {/* Company Name */}
                     <td className="px-4 py-3">
-                      <span className="text-sm text-gray-900">{peer.name}</span>
+                      <span className="text-sm text-gray-900">{name}</span>
                     </td>
 
-                    {/* Industry */}
                     <td className="px-4 py-3">
                       <span className="text-sm text-gray-700">{peer.industry || 'N/A'}</span>
                     </td>
 
-                    {/* Market Cap */}
                     <td className="px-4 py-3 text-right">
                       <span className="text-sm text-gray-900">
                         {peer.marketCap ? `$${(() => {
@@ -198,7 +181,6 @@ const PeerSelectionStep = ({
                       </span>
                     </td>
 
-                    {/* Similarity Score with Progress Bar */}
                     <td className="px-4 py-3">
                       <div className="flex flex-col">
                         <div className="flex items-center justify-between text-xs mb-1">
@@ -221,7 +203,6 @@ const PeerSelectionStep = ({
                       </div>
                     </td>
 
-                    {/* Match Reasons */}
                     <td className="px-4 py-3">
                       {peer.match_reasons && peer.match_reasons.length > 0 ? (
                         <ul className="text-xs text-gray-600 space-y-1">
@@ -242,7 +223,6 @@ const PeerSelectionStep = ({
                       )}
                     </td>
 
-                    {/* Status Badge */}
                     <td className="px-4 py-3 text-center">
                       {isInvalidPeer ? (
                         <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-red-200 text-red-800">
@@ -264,35 +244,27 @@ const PeerSelectionStep = ({
         </div>
       </div>
 
-      {/* Error Message */}
       {localError && (
-        <div className="mb-6 bg-red-50 border-l-4 border-red-400 p-4 rounded">
+        <div className="bg-red-50 border-l-4 border-red-400 p-4 rounded" style={{ marginBottom: '24px' }}>
           <p className="text-red-700">{localError}</p>
         </div>
       )}
 
-      {/* Action Buttons */}
       <div className="flex justify-between items-center mt-8 gap-4">
         <button
           onClick={onBack}
-          className="px-6 py-3 border border-gray-300 text-gray-700 bg-white rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-sm"
+          className="btn-secondary"
           disabled={loading}
         >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-          </svg>
-          Back to Company Overview
+          ← Back to Company Overview
         </button>
 
         <button
           onClick={onContinue}
           disabled={selectedPeers.length === 0 || loading}
-          className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-md"
+          className="btn-success"
         >
-          Continue to Model Selection
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-          </svg>
+          Continue to Model Selection →
         </button>
       </div>
     </div>
