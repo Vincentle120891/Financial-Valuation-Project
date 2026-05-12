@@ -64,6 +64,14 @@ from app.services.vietnamese.vn_step8_assumptions_processor import (
     vn_Step8AssumptionsProcessor,
     vn_AIAssumptionsInput,
 )
+from app.services.vietnamese.vn_step9_confirmation_processor import (
+    vn_Step9ConfirmationProcessor,
+    vn_ConfirmationInput,
+)
+from app.services.vietnamese.vn_step10_valuation_processor import (
+    vn_Step10ValuationProcessor,
+    vn_ValuationInput,
+)
 from app.services.vietnamese.vn_step6_unified_transformer import VNStep6UnifiedTransformer
 from app.services.vietnamese.vn_step7_unified_transformer import VNStep7UnifiedTransformer
 from app.services.vietnamese.vn_step8_unified_transformer import VNStep8UnifiedTransformer
@@ -1324,4 +1332,368 @@ async def initialize_vn_step8_assumptions(request: vn_Step8InitializeRequest):
         raise
     except Exception as e:
         logger.error(f"VN Step 8 initialization error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Step 9: Confirm Assumptions (Vietnamese Market)
+# ──────────────────────────────────────────────────────────────────────────────
+
+class vn_Step9ConfirmRequest(BaseModel):
+    """Request model for Vietnamese Step 9 confirmation."""
+    session_id: str = Field(..., description="Session identifier")
+    method: str = Field(..., description="Valuation method: DCF, DuPont, or Comps")
+    manual_overrides: Optional[Dict[str, Any]] = Field(default=None, description="User overrides for AI assumptions")
+
+    @field_validator('method')
+    @classmethod
+    def validate_method(cls, v: str) -> str:
+        """Validate valuation method."""
+        allowed_methods = ["DCF", "DuPont", "COMPS", "dcf", "dupont", "comps"]
+        if v.upper() not in [m.upper() for m in allowed_methods]:
+            raise ValueError(f"Method must be one of: DCF, DuPont, COMPS")
+        return v.upper()
+
+
+@router.post("/vn-step-9-confirm-assumptions", response_model=UnifiedStep9Response)
+async def confirm_vn_assumptions(request: vn_Step9ConfirmRequest):
+    """
+    Step 9: Confirm Assumptions (Vietnamese Market)
+
+    Final validation and consolidation before running valuation:
+    - Consolidates historical data from Step 7
+    - Integrates AI assumptions from Step 8
+    - Applies user overrides
+    - Validates completeness for selected model
+    - Prepares inputs for valuation engine
+
+    Vietnam-Specific Features:
+    - Vietnam market defaults (risk-free rate, country risk premium, tax rate)
+    - Sector-specific validation for Vietnamese industries
+    - TT99 accounting standard compliance checks
+    - Exchange-specific considerations (HOSE, HNX, UPCOM)
+
+    Args:
+        request: vn_Step9ConfirmRequest with session_id, method, and optional overrides
+
+    Returns:
+        UnifiedStep9Response with:
+        - Confirmed parameters with source tracking
+        - Validation status
+        - Warnings for missing or questionable inputs
+        - Readiness flag for valuation
+
+    Example:
+        POST /vietnamese/vn-step-9-confirm-assumptions
+        {
+            "session_id": "vn-session-123",
+            "method": "DCF",
+            "manual_overrides": {
+                "revenue_growth_year_1": 0.15,
+                "terminal_growth_rate": 0.05
+            }
+        }
+    """
+    try:
+        # Get session data
+        session = session_service.get_session_data(request.session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        ticker = session.get("ticker")
+        company_name = session.get("company_name", ticker)
+        exchange = session.get("exchange", "HOSE")
+        sector = session.get("sector", "General")
+        industry = session.get("industry", sector)
+
+        if not ticker:
+            raise HTTPException(status_code=400, detail="No ticker found in session")
+
+        # Get data from the specific valuation track
+        market = "vietnam"
+        method = request.method.upper()
+
+        # Retrieve historical data from Step 7
+        step7_data = session_service.get_session_value(
+            request.session_id,
+            "historical_data_gaps_filled",
+            {},
+            market=market,
+            method=method.lower()
+        )
+
+        # Retrieve AI assumptions from Step 8
+        step8_assumptions = session_service.get_session_value(
+            request.session_id,
+            "step8_assumptions",
+            {},
+            market=market,
+            method=method.lower()
+        )
+
+        # Extract assumptions list
+        ai_assumptions_list = step8_assumptions.get("assumptions", [])
+
+        # Build confirmed parameters from session (user may have confirmed via frontend)
+        confirmed_parameters = session_service.get_session_value(
+            request.session_id,
+            "confirmed_parameters",
+            {},
+            market=market,
+            method=method.lower()
+        )
+
+        # Build input for Vietnamese Step 9 processor
+        vn_input = vn_ConfirmationInput(
+            session_id=request.session_id,
+            company_name=company_name,
+            ticker=ticker,
+            exchange=exchange,  # type: ignore
+            selected_model=method.lower(),  # type: ignore
+            historical_financials=step7_data.get("normalized_financials", {}) if step7_data else {},
+            ai_assumptions=ai_assumptions_list,
+            confirmed_parameters=confirmed_parameters,
+            manual_overrides=request.manual_overrides,
+            sector=sector,
+            industry=industry
+        )
+
+        # Execute Vietnamese Step 9 processor
+        processor = vn_Step9ConfirmationProcessor()
+        result = await processor.process(vn_input)
+
+        # Store confirmed parameters in session
+        session_service.update_session_data(
+            request.session_id,
+            "step9_confirmed_parameters",
+            result.model_dump() if hasattr(result, 'model_dump') else result.dict(),
+            market=market,
+            method=method.lower()
+        )
+
+        session_service.update_session_step(
+            request.session_id,
+            step_number=9,
+            market=market,
+            method=method.lower()
+        )
+
+        logger.info(
+            f"VN Step 9 confirmed for {ticker}: "
+            f"{len(result.confirmed_parameters)} parameters validated, "
+            f"ready_for_valuation={result.ready_for_valuation}"
+        )
+
+        # UNIFIED SCHEMA FIX: Transform to unified response format
+        transformer = VNStep9UnifiedTransformer()
+        
+        # Build confirmed assumptions dictionary from result
+        confirmed_assumptions_dict = {}
+        for param in result.confirmed_parameters:
+            param_dict = param.model_dump() if hasattr(param, 'model_dump') else param.dict()
+            confirmed_assumptions_dict[param.parameter_name] = param_dict
+        
+        confirmed_assumptions = {
+            "confirmed_parameters": confirmed_assumptions_dict,
+            "model_specific_inputs": result.model_specific_inputs,
+            "market_context": result.market_context,
+            "validation_status": result.validation_status
+        }
+        
+        unified_response = transformer.transform(
+            vn_output=result,
+            session_id=request.session_id,
+            method=method,
+            market=market,
+            confirmed_assumptions=confirmed_assumptions
+        )
+        
+        # Store unified response in session for frontend access
+        session_service.update_session_value(
+            request.session_id,
+            "unified_step9_response",
+            unified_response.model_dump() if hasattr(unified_response, 'model_dump') else unified_response.dict()
+        )
+
+        return unified_response
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"VN Step 9 confirmation error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Step 10: Run Valuation (Vietnamese Market)
+# ──────────────────────────────────────────────────────────────────────────────
+
+class vn_Step10ValuationRequest(BaseModel):
+    """Request model for Vietnamese Step 10 valuation."""
+    session_id: str = Field(..., description="Session identifier")
+    method: str = Field(..., description="Valuation method: DCF, DuPont, or Comps")
+    run_sensitivity: bool = Field(default=True, description="Run sensitivity analysis")
+    sensitivity_variable_1: str = Field(default="WACC", description="First sensitivity variable")
+    sensitivity_variable_2: str = Field(default="Terminal Growth", description="Second sensitivity variable")
+
+    @field_validator('method')
+    @classmethod
+    def validate_method(cls, v: str) -> str:
+        """Validate valuation method."""
+        allowed_methods = ["DCF", "DuPont", "COMPS", "dcf", "dupont", "comps"]
+        if v.upper() not in [m.upper() for m in allowed_methods]:
+            raise ValueError(f"Method must be one of: DCF, DuPont, COMPS")
+        return v.upper()
+
+
+@router.post("/vn-step-10-run-valuation", response_model=UnifiedStep10Response)
+async def run_vn_valuation(request: vn_Step10ValuationRequest):
+    """
+    Step 10: Run Valuation (Vietnamese Market)
+
+    Executes the final valuation using confirmed assumptions from Step 9:
+    - DCF: Discounted Cash Flow valuation with Vietnam-specific WACC
+    - DuPont: ROE decomposition analysis
+    - Comps: Comparable company analysis with Vietnamese peers
+
+    Vietnam-Specific Features:
+    - VND currency throughout all calculations
+    - Vietnam risk-free rate and country risk premium
+    - 20% corporate income tax rate
+    - TT99 accounting standard compliance
+    - Sector-specific terminal growth rates for Vietnamese market
+
+    Args:
+        request: vn_Step10ValuationRequest with session_id, method, and sensitivity options
+
+    Returns:
+        UnifiedStep10Response with:
+        - Valuation summary (enterprise value, equity value, fair value per share)
+        - Detailed outputs by valuation method
+        - Sensitivity analysis matrix (if requested)
+        - Scenario analysis (base, bull, bear cases)
+        - Confidence level assessment
+        - Key assumptions summary
+        - Warnings and risk factors
+
+    Example:
+        POST /vietnamese/vn-step-10-run-valuation
+        {
+            "session_id": "vn-session-123",
+            "method": "DCF",
+            "run_sensitivity": true,
+            "sensitivity_variable_1": "WACC",
+            "sensitivity_variable_2": "Terminal Growth"
+        }
+    """
+    try:
+        # Get session data
+        session = session_service.get_session_data(request.session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        ticker = session.get("ticker")
+        company_name = session.get("company_name", ticker)
+        exchange = session.get("exchange", "HOSE")
+        sector = session.get("sector", "General")
+        current_price = session.get("current_price_vnd", session.get("current_price", 0))
+
+        if not ticker:
+            raise HTTPException(status_code=400, detail="No ticker found in session")
+
+        # Get data from the specific valuation track
+        market = "vietnam"
+        method = request.method.upper()
+
+        # Retrieve confirmed parameters from Step 9
+        step9_data = session_service.get_session_value(
+            request.session_id,
+            "step9_confirmed_parameters",
+            {},
+            market=market,
+            method=method.lower()
+        )
+
+        if not step9_data:
+            raise HTTPException(
+                status_code=400,
+                detail=f"No confirmed parameters found for {ticker}. Please complete Step 9 first."
+            )
+
+        # Retrieve historical data for context
+        step7_data = session_service.get_session_value(
+            request.session_id,
+            "historical_data_gaps_filled",
+            {},
+            market=market,
+            method=method.lower()
+        )
+
+        # Build input for Vietnamese Step 10 processor
+        vn_input = vn_ValuationInput(
+            session_id=request.session_id,
+            company_name=company_name,
+            ticker=ticker,
+            exchange=exchange,  # type: ignore
+            selected_model=method.lower(),  # type: ignore
+            confirmed_parameters=step9_data.get("confirmed_parameters", {}),
+            model_specific_inputs=step9_data.get("model_specific_inputs", {}),
+            market_context=step9_data.get("market_context", {}),
+            historical_financials=step7_data.get("normalized_financials", {}) if step7_data else {},
+            current_price=current_price,
+            run_sensitivity=request.run_sensitivity,
+            sensitivity_variable_1=request.sensitivity_variable_1,
+            sensitivity_variable_2=request.sensitivity_variable_2
+        )
+
+        # Execute Vietnamese Step 10 processor
+        processor = vn_Step10ValuationProcessor()
+        result = await processor.process(vn_input)
+
+        # Store valuation results in session
+        session_service.update_session_data(
+            request.session_id,
+            "step10_valuation_results",
+            result.model_dump() if hasattr(result, 'model_dump') else result.dict(),
+            market=market,
+            method=method.lower()
+        )
+
+        session_service.update_session_step(
+            request.session_id,
+            step_number=10,
+            market=market,
+            method=method.lower()
+        )
+
+        logger.info(
+            f"VN Step 10 valuation completed for {ticker}: "
+            f"Fair Value={getattr(result, 'fair_value_per_share', 'N/A')} VND, "
+            f"Success={getattr(result, 'success', False)}"
+        )
+
+        # UNIFIED SCHEMA FIX: Transform to unified response format
+        transformer = VNStep10UnifiedTransformer()
+        unified_response = transformer.transform(
+            vn_output=result,
+            session_id=request.session_id,
+            method=method,
+            market=market,
+            ticker=ticker,
+            company_name=company_name
+        )
+        
+        # Store unified response in session for frontend access
+        session_service.update_session_value(
+            request.session_id,
+            "unified_step10_response",
+            unified_response.model_dump() if hasattr(unified_response, 'model_dump') else unified_response.dict()
+        )
+
+        return unified_response
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"VN Step 10 valuation error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
