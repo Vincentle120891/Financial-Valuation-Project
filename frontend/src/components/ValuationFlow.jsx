@@ -311,9 +311,11 @@ const ValuationFlow = () => {
   // ==================== STEP 3: TOGGLE PEER SELECTION ====================
   const handleTogglePeer = useCallback((peer) => {
     setSelectedPeers(prev => {
-      const exists = prev.find(p => p.symbol === peer.symbol);
+      // Check using both symbol and ticker for robust matching
+      const peerId = peer.symbol || peer.ticker;
+      const exists = prev.find(p => (p.symbol || p.ticker) === peerId);
       if (exists) {
-        return prev.filter(p => p.symbol !== peer.symbol);
+        return prev.filter(p => (p.symbol || p.ticker) !== peerId);
       } else {
         return [...prev, peer];
       }
