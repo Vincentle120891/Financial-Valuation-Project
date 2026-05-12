@@ -239,6 +239,7 @@ class vn_Step1TickerProcessor:
 
         Returns:
             List of matching ticker dictionaries with Vietnam-specific fields
+            FIX Issue #2: Returns 'ticker' and 'company_name' fields to match CompanySearchResult schema
         """
         logger.info(f"Searching Vietnamese tickers for query='{query}'")
 
@@ -256,8 +257,8 @@ class vn_Step1TickerProcessor:
                 market_code = 'VC'
 
             results.append({
-                'symbol': symbol.replace('.VN', '').replace('.HA', '').replace('.VC', ''),
-                'name': result.get('shortname', result.get('symbol', '')),
+                'ticker': symbol.replace('.VN', '').replace('.HA', '').replace('.VC', ''),  # FIX Issue #2: Use 'ticker' instead of 'symbol'
+                'company_name': result.get('shortname', result.get('symbol', '')),  # FIX Issue #2: Use 'company_name' instead of 'name'
                 'exchange': self._get_exchange_name(market_code),
                 'sector': result.get('sector'),
                 'industry': result.get('industry'),

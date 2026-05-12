@@ -170,6 +170,7 @@ class Step1TickerProcessor:
             
         Returns:
             List of matching ticker dictionaries with sector, industry, and market cap
+            FIX Issue #2: Returns 'ticker' and 'company_name' fields to match CompanySearchResult schema
         """
         logger.info(f"Searching tickers for query='{query}', market='{market}'")
         
@@ -179,8 +180,8 @@ class Step1TickerProcessor:
         results = []
         for result in search_results:
             results.append({
-                'symbol': result.get('symbol', ''),
-                'name': result.get('shortname', result.get('symbol', '')),
+                'ticker': result.get('symbol', ''),  # FIX Issue #2: Use 'ticker' instead of 'symbol'
+                'company_name': result.get('shortname', result.get('symbol', '')),  # FIX Issue #2: Use 'company_name' instead of 'name'
                 'exchange': result.get('exchDisp', 'UNKNOWN'),
                 'sector': result.get('sector'),
                 'industry': result.get('industry'),
