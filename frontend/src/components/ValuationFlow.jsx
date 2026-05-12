@@ -437,7 +437,8 @@ const ValuationFlow = () => {
     setLoading(true);
     try {
       // Always use single model endpoint (multi-select is now forbidden per documentation)
-      const data = await selectModels(sessionId, modelType, market);
+      // Pass selectedPeers as suggested_peers to the backend
+      const data = await selectModels(sessionId, modelType, market, selectedPeers);
       console.log('Select model response:', data);
       if (data.message) {
         setCurrentStep(5);
