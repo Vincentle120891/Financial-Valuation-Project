@@ -17,7 +17,7 @@ from typing import Dict, List, Any, Optional
 from datetime import datetime
 
 from app.core.session_service import session_service
-from app.services.international.step5_assumptions_processor import Step5AssumptionsProcessor
+from app.services.international.step5_required_inputs_processor import Step5AssumptionsProcessor
 from app.services.international.step6_data_review import Step6DataReviewProcessor
 from app.services.international.step7_historical_data_processor import Step7HistoricalDataProcessor
 from app.services.international.step8_manual_overrides import Step8ManualOverridesProcessor

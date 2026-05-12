@@ -22,7 +22,7 @@ import logging
 from app.services.international import InternationalTickerService
 from app.services.vietnamese import VietnameseTickerService
 from app.services.international import MetricsCalculator
-from app.services.international.step5_assumptions_processor import Step5AssumptionsProcessor, ValuationModel
+from app.services.international.step5_required_inputs_processor import Step5AssumptionsProcessor, ValuationModel
 from app.services.international.step6_data_review import Step6DataReviewProcessor
 from app.services.international.yfinance_service import YFinanceService
 from app.services.international.ai_engine import suggest_peer_companies
