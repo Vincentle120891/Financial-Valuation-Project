@@ -17,9 +17,7 @@ export { default as DynamicFormGenerator } from './DynamicFormGenerator';
 // Step components (to be refactored in subsequent phases)
 export { default as ApiDataStep } from './ApiDataStep';
 export { default as AssumptionsStep } from './AssumptionsStep';
-export { default as BaselineStep } from './BaselineStep';
 export { default as CompanySelectionStep } from './CompanySelectionStep';
-export { default as DataReviewStep } from './DataReviewStep';
 export { default as ForecastDriversStep } from './ForecastDriversStep';
 export { default as HistoricalDataExtractionStep } from './HistoricalDataExtractionStep';
 export { default as ModelSelectionStep } from './ModelSelectionStep';
