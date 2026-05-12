@@ -7,12 +7,20 @@ It enforces complete separation from international workflows by:
 1. Using only Vietnamese modules (vietnamese_inputs, vietnamese_input_manager, vietnamese_dcf_engine)
 2. Routing exclusively through VND-currency endpoints
 3. No imports from yfinance or international services
-4. Dedicated endpoints: /vn-valuate, /vn-comps, /vn-dupont
+4. Following the 11-step workflow architecture with dedicated step endpoints
 
 NO CROSS-CONTAMINATION:
 - Does NOT import international_routes or international dependencies
 - Does NOT use yfinance_service or international_ticker_service
 - Does NOT accept non-Vietnamese tickers
+
+WORKFLOW ENDPOINTS:
+- /vn-step-5-prepare-assumptions
+- /vn-step-6-fetch-data
+- /vn-step-7-retrieve-historical
+- /vn-step-8-initialize
+- /vn-step-9-confirm-assumptions
+- /vn-step-10-run-valuation
 """
 
 from fastapi import APIRouter, HTTPException, status
@@ -157,146 +165,42 @@ class VnDupontRequest(BaseModel):
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# DCF Valuation Endpoint
+# DEPRECATED LEGACY ENDPOINTS
 # ──────────────────────────────────────────────────────────────────────────────
-
-@router.post("/vn-valuate", response_model=Dict[str, Any])
-async def valuate_vietnamese_stock(request: VNDcfRequest):
-    """
-    Perform DCF valuation for a Vietnamese stock.
-
-    This endpoint uses Vietnam-specific parameters:
-    - Vietnam risk-free rate (10-year government bond)
-    - Vietnam market risk premium
-    - 20% corporate tax rate
-    - All calculations in VND
-
-    Args:
-        request: VNDcfRequest with company and financial data
-
-    Returns:
-        Complete DCF valuation results including:
-        - Intrinsic value per share (VND)
-        - Upside/downside percentage
-        - WACC breakdown
-        - FCF projections
-        - Terminal value calculation
-
-    Example:
-        POST /vietnamese/vn-valuate
-        {
-            "ticker": "VNM",
-            "company_name": "Vinamilk",
-            "exchange": "HOSE",
-            "sector": "Consumer Goods",
-            "current_price_vnd": 75000,
-            "shares_outstanding": 1000000000,
-            "revenue": 85500,
-            "ebit_margin": 0.185,
-            "depreciation": 2500,
-            "capex": 3000,
-            "total_debt": 5000,
-            "cash": 8500
-        }
-    """
-    try:
-        # Get service components
-        input_manager = get_vietnamese_input_manager()
-        dcf_engine = get_vietnamese_dcf_engine()
-
-        # Build Vietnamese DCF request
-        dcf_request = input_manager.build_vn_dcf_request(
-            ticker=request.ticker,
-            company_name=request.company_name,
-            exchange=request.exchange,
-            sector=request.sector,
-            current_price_vnd=request.current_price_vnd,
-            shares_outstanding=request.shares_outstanding,
-            risk_free_rate_vn=request.risk_free_rate_vn,
-            market_risk_premium_vn=request.market_risk_premium_vn,
-            beta=request.beta,
-            terminal_growth_rate=request.terminal_growth_rate,
-            forecast_years=request.forecast_years,
-            wacc_override=request.wacc_override
-        )
-
-        # Prepare financial data
-        financial_data = {
-            'revenue': request.revenue,
-            'ebit_margin': request.ebit_margin,
-            'depreciation': request.depreciation,
-            'capex': request.capex,
-            'change_in_nwc': request.change_in_nwc,
-            'revenue_growth_rates': request.revenue_growth_rates,
-            'cost_of_debt': request.cost_of_debt,
-            'debt_to_equity': request.debt_to_equity,
-            'total_debt': request.total_debt,
-            'cash': request.cash
-        }
-
-        # Perform DCF valuation
-        valuation_results = dcf_engine.valuate_vn_dcf(
-            request=dcf_request,
-            financial_data=financial_data
-        )
-
-        return {
-            "success": True,
-            "ticker": request.ticker,
-            "currency": "VND",
-            "results": valuation_results
-        }
-
-    except ValueError as e:
-        logger.error(f"Validation error for {request.ticker}: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid input: {str(e)}"
-        )
-    except Exception as e:
-        logger.error(f"DCF valuation failed for {request.ticker}: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Valuation failed: {str(e)}"
-        )
+# The following endpoints are DEPRECATED and bypass the structured 11-step workflow.
+# They are kept for backward compatibility only and should NOT be used in new implementations.
+# 
+# MIGRATION PATH:
+# - DCF Valuation: Use /vn-step-5 through /vn-step-10 workflow endpoints
+# - Comps Analysis: Use /vn-step-5 through /vn-step-10 workflow endpoints  
+# - DuPont Analysis: Use /vn-step-5 through /vn-step-10 workflow endpoints
+# ──────────────────────────────────────────────────────────────────────────────
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Comps Analysis Endpoint
+# DEPRECATED: Comps Analysis Endpoint (Legacy)
+# ──────────────────────────────────────────────────────────────────────────────
+# This endpoint is DEPRECATED. Use /vn-step-5 through /vn-step-10 workflow instead.
+# Kept for backward compatibility only.
 # ──────────────────────────────────────────────────────────────────────────────
 
 @router.post("/vn-comps", response_model=Dict[str, Any])
 async def analyze_vietnamese_comps(request: VnCompsRequest):
     """
-    Perform comparable company analysis for Vietnamese stocks.
-
-    This endpoint:
-    - Validates peer companies from Vietnamese market
-    - Applies IQR outlier filtering on peer multiples
-    - Calculates implied valuation multiples
-    - Uses VND currency throughout
-
-    Args:
-        request: VnCompsRequest with target and peer data
-
-    Returns:
-        Comps analysis results including:
-        - Filtered peer set
-        - Mean/median multiples
-        - Implied valuation ranges
-        - Target company relative positioning
-
-    Example:
-        POST /vietnamese/vn-comps
-        {
-            "target_ticker": "VNM",
-            "target_company_name": "Vinamilk",
-            "sector": "Consumer Goods",
-            "target_revenue_vnd": 85500,
-            "target_ebitda_vnd": 18200,
-            "peer_multiples": [...]
-        }
+    DEPRECATED: Perform comparable company analysis for Vietnamese stocks.
+    
+    This endpoint bypasses the structured 11-step workflow and should NOT be used.
+    Migration path: Use /vietnamese/vn-step-5-prepare-assumptions through 
+    /vietnamese/vn-step-10-run-valuation endpoints.
     """
+    import warnings
+    warnings.warn(
+        "The /vn-comps endpoint is deprecated. Please use the step-based workflow endpoints.",
+        DeprecationWarning,
+        stacklevel=2
+    )
+    logger.warning("Deprecated endpoint /vn-comps called. Migrate to step-based workflow.")
+    
     try:
         # Get input manager
         input_manager = get_vietnamese_input_manager()
@@ -378,6 +282,8 @@ async def analyze_vietnamese_comps(request: VnCompsRequest):
 
         return {
             "success": True,
+            "deprecated": True,
+            "migration_path": "Use /vn-step-5 through /vn-step-10 workflow endpoints",
             "results": results
         }
 
@@ -396,48 +302,29 @@ async def analyze_vietnamese_comps(request: VnCompsRequest):
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# DuPont Analysis Endpoint
+# DEPRECATED: DuPont Analysis Endpoint (Legacy)
+# ──────────────────────────────────────────────────────────────────────────────
+# This endpoint is DEPRECATED. Use /vn-step-5 through /vn-step-10 workflow instead.
+# Kept for backward compatibility only.
 # ──────────────────────────────────────────────────────────────────────────────
 
 @router.post("/vn-dupont", response_model=Dict[str, Any])
 async def analyze_vietnamese_dupont(request: VnDupontRequest):
     """
-    Perform DuPont analysis for Vietnamese companies.
-
-    Decomposes ROE into three components using TT99 financial statements:
-    1. Net Profit Margin (Profitability)
-    2. Asset Turnover (Efficiency)
-    3. Equity Multiplier (Leverage)
-
-    Formula: ROE = Net Profit Margin × Asset Turnover × Equity Multiplier
-
-    Args:
-        request: VnDupontRequest with ticker and financial data
-
-    Returns:
-        DuPont analysis results including:
-        - Component breakdown by year
-        - Trend analysis
-        - ROE decomposition
-        - Comparative metrics
-
-    Example:
-        POST /vietnamese/vn-dupont
-        {
-            "ticker": "VNM",
-            "company_name": "Vinamilk",
-            "exchange": "HOSE",
-            "years": [2021, 2022, 2023],
-            "financial_data_by_year": {
-                "2023": {
-                    "net_income": 12700,
-                    "revenue": 85500,
-                    "total_assets": 50500,
-                    "shareholders_equity": 32300
-                }
-            }
-        }
+    DEPRECATED: Perform DuPont analysis for Vietnamese companies.
+    
+    This endpoint bypasses the structured 11-step workflow and should NOT be used.
+    Migration path: Use /vietnamese/vn-step-5-prepare-assumptions through
+    /vietnamese/vn-step-10-run-valuation endpoints.
     """
+    import warnings
+    warnings.warn(
+        "The /vn-dupont endpoint is deprecated. Please use the step-based workflow endpoints.",
+        DeprecationWarning,
+        stacklevel=2
+    )
+    logger.warning("Deprecated endpoint /vn-dupont called. Migrate to step-based workflow.")
+    
     try:
         # Get input manager
         input_manager = get_vietnamese_input_manager()
@@ -501,6 +388,8 @@ async def analyze_vietnamese_dupont(request: VnDupontRequest):
 
         return {
             "success": True,
+            "deprecated": True,
+            "migration_path": "Use /vn-step-5 through /vn-step-10 workflow endpoints",
             "results": results
         }
 
@@ -530,7 +419,8 @@ async def get_vietnamese_workflow_info():
     Returns details about:
     - Supported exchanges (HOSE, HNX, UPCOM)
     - Vietnam-specific parameters
-    - Available endpoints
+    - Available step-based workflow endpoints
+    - Deprecated legacy endpoints
     """
     return {
         "workflow": "Vietnamese Stock Valuation",
@@ -544,10 +434,18 @@ async def get_vietnamese_workflow_info():
             "market_risk_premium_default": "~7.5%",
             "terminal_growth_max": "~6% (aligned with GDP growth)"
         },
-        "endpoints": {
-            "/vn-valuate": "DCF valuation",
-            "/vn-comps": "Comparable company analysis",
-            "/vn-dupont": "DuPont ROE decomposition"
+        "workflow_endpoints": {
+            "/vn-step-5-prepare-assumptions": "Prepare assumptions and requirements",
+            "/vn-step-6-fetch-data": "Fetch historical financial data",
+            "/vn-step-7-retrieve-historical": "Retrieve historical data using AI extraction",
+            "/vn-step-8-initialize": "Initialize AI-generated assumptions",
+            "/vn-step-9-confirm-assumptions": "Confirm/finalize assumptions",
+            "/vn-step-10-run-valuation": "Execute valuation"
+        },
+        "deprecated_endpoints": {
+            "/vn-valuate": "DEPRECATED - Use step-based workflow instead",
+            "/vn-comps": "DEPRECATED - Use step-based workflow instead",
+            "/vn-dupont": "DEPRECATED - Use step-based workflow instead"
         },
         "data_sources": [
             "VNStockDatabase",
