@@ -11,7 +11,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-class VNDataFetchInput(BaseModel):
+class vn_DataFetchInput(BaseModel):
     """Input for Step 6: Fetching raw data based on confirmed requirements."""
     ticker: str
     company_name: str
@@ -54,7 +54,7 @@ class RawDataBundle(BaseModel):
     pdf_sources_used: List[str] = Field(default_factory=list, description="List of PDF reports fetched for AI extraction")
 
 
-class VNDataFetchOutput(BaseModel):
+class vn_DataFetchOutput(BaseModel):
     """Output from Step 6: Ready for Step 7 processing."""
     success: bool
     ticker: str
@@ -67,7 +67,7 @@ class VNDataFetchOutput(BaseModel):
     sources_accessed: List[str]
 
 
-class VNStep6DataFetchProcessor:
+class vn_Step6DataFetchProcessor:
     """
     Processor for Step 6: Fetching raw Vietnamese financial data.
 

@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field, validator
 from datetime import datetime
 
 
-class VNAIAssumptionsInput(BaseModel):
+class vn_AIAssumptionsInput(BaseModel):
     """Input for Vietnamese AI assumptions generation"""
     session_id: str
     company_name: str
@@ -43,7 +43,7 @@ class VNAIAssumptionsInput(BaseModel):
     timestamp: datetime = Field(default_factory=datetime.utcnow)
 
 
-class VNAIAssumptionItem(BaseModel):
+class vn_AIAssumptionItem(BaseModel):
     """Single assumption with confidence and rationale"""
     parameter_name: str
     suggested_value: Any
@@ -56,11 +56,11 @@ class VNAIAssumptionItem(BaseModel):
     max_reasonable: Optional[Any] = None
 
 
-class VNAIAssumptionsOutput(BaseModel):
+class vn_AIAssumptionsOutput(BaseModel):
     """Output with AI-generated assumptions for Vietnamese market"""
     session_id: str
     model_type: str
-    assumptions: List[VNAIAssumptionItem]
+    assumptions: List[vn_AIAssumptionItem]
     sector_analysis: Dict[str, Any]
     macro_integration: Dict[str, Any]
     warnings: List[str]
@@ -101,7 +101,7 @@ class VNAIAssumptionsOutput(BaseModel):
         }
 
 
-class VNStep8AssumptionsProcessor:
+class vn_Step8AssumptionsProcessor:
     """
     Processor for generating Vietnam-calibrated AI assumptions
 

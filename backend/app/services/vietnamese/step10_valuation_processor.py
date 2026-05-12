@@ -8,7 +8,7 @@ from datetime import datetime
 import importlib
 
 
-class VNValuationInput(BaseModel):
+class vn_ValuationInput(BaseModel):
     """Input for Vietnamese valuation execution"""
     session_id: str
     company_name: str
@@ -33,7 +33,7 @@ class VNValuationInput(BaseModel):
     timestamp: datetime = Field(default_factory=datetime.utcnow)
 
 
-class VNValuationResult(BaseModel):
+class vn_ValuationResult(BaseModel):
     """Standardized valuation result structure"""
     model_type: str
     valuation_value: float
@@ -46,14 +46,14 @@ class VNValuationResult(BaseModel):
     calculation_details: Optional[Dict[str, Any]] = None
 
 
-class VNValuationOutput(BaseModel):
+class vn_ValuationOutput(BaseModel):
     """Output from Vietnamese valuation execution"""
     session_id: str
     company_name: str
     ticker: str
     exchange: str
     selected_model: str
-    result: VNValuationResult
+    result: vn_ValuationResult
     market_context: Dict[str, Any]
     execution_time_ms: float
     status: str = "success"
@@ -103,7 +103,7 @@ class VNValuationOutput(BaseModel):
         }
 
 
-class VNStep10ValuationProcessor:
+class vn_Step10ValuationProcessor:
     """
     Processor for executing Vietnamese valuation models
 
