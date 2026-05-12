@@ -2,11 +2,11 @@
 Valuation Routes - Refactored to use SessionService and International Services
 
 Handles valuation workflow steps 4-10 using advanced service processors.
+Routes are thin - only receiving requests, validating inputs, and delegating to service files.
 """
 
 import logging
 from typing import Dict, Any
-from datetime import datetime
 from fastapi import APIRouter, HTTPException, UploadFile, File
 from pydantic import BaseModel
 
@@ -59,19 +59,21 @@ from app.services.international.step10_valuation_processor import Step10Valuatio
 from app.services.international.yfinance_service import YFinanceService
 from app.services.international.valuation_orchestrator import orchestrator
 from app.services.international.peer_discovery_service import PeerDiscoveryService, PeerDiscoveryRequest
-from app.services.pdf_extraction_service import VietnamesePDFExtractor
-from app.services.international.step7_ai_web_search import AIWebSearchExtractor, calculate_historical_trends
+from app.services.international.step3_peer_management_service import Step3PeerManagementService
+from app.services.international.step7_data_enrichment_service import Step7DataEnrichmentService
 from app.api.schemas.unified_step_schemas import UnifiedStep6Response, UnifiedStep7Response
 
 logger = get_logger(__name__)
 
 router = APIRouter(tags=["Valuation"])
 
-# Initialize processors
+# Initialize processors and services
+step3_service = Step3PeerManagementService()
 step4_processor = Step4SelectedModelsProcessor(market="international")
 step5_processor = Step5RequiredInputsProcessor()
 step6_processor = Step6DataReviewProcessor()
 step7_processor = Step7HistoricalDataProcessor()
+step7_enrichment_service = Step7DataEnrichmentService()
 step8_processor = Step8ManualOverridesProcessor()
 step9_processor = Step9ConfirmationProcessor()
 step10_processor = Step10ValuationProcessor()
@@ -96,67 +98,19 @@ class SavePeersResponse(BaseModel):
 async def save_peers(request: SavePeersRequest):
     """
     Step 3: Save selected peer companies to session.
-    Delegates to PeerDiscoveryService for peer data fetching.
+    Delegates to Step3PeerManagementService for all business logic.
     """
     try:
-        # Validate session exists
-        session = session_service.get_session_data(request.session_id)
-        if not session:
-            raise HTTPException(status_code=404, detail="Session not found")
-
-        # Extract peer tickers from the peer objects
-        peer_tickers = [peer.get('symbol') or peer.get('ticker') for peer in request.peers]
-        peer_tickers = [t for t in peer_tickers if t]  # Filter out None values
-
-        if not peer_tickers:
-            raise HTTPException(status_code=400, detail="No valid peer tickers provided")
-
-        # Save peer tickers to session
-        session_service.update_session_data(request.session_id, "peer_tickers", peer_tickers)
-        session_service.update_session_data(request.session_id, "selected_peers", request.peers)
-
-        # Delegate to PeerDiscoveryService to fetch peer market data from yfinance
-        logger.info(f"Fetching market data for {len(peer_tickers)} peers: {peer_tickers}")
-        peer_data = {}
-        for ticker in peer_tickers:
-            try:
-                # Fetch key stats for each peer (includes 5 WACC metrics + costOfDebt)
-                peer_stats = yfinance_service.fetch_key_stats(ticker)
-
-                # Store in format expected by step6: peer_{TICKER}_info
-                # The 5 key WACC inputs per peer: Beta, Market Cap, Cost of Debt, Tax Rate, Risk-free Rate (global)
-                peer_info = {
-                    'marketCap': peer_stats.get('marketCap'),
-                    'beta': peer_stats.get('beta'),
-                    'totalDebt': peer_stats.get('totalDebt'),
-                    'cash': peer_stats.get('cash'),
-                    'effectiveTaxRate': peer_stats.get('effectiveTaxRate'),
-                    'costOfDebt': peer_stats.get('costOfDebt'),  # NEW: Pre-tax cost of debt
-                }
-                peer_data[f"peer_{ticker}_info"] = peer_info
-                logger.info(f"Fetched data for peer {ticker}: marketCap={peer_info['marketCap']}, beta={peer_info['beta']}, costOfDebt={peer_info['costOfDebt']}")
-            except Exception as peer_err:
-                logger.warning(f"Failed to fetch data for peer {ticker}: {peer_err}")
-                peer_data[f"peer_{ticker}_info"] = {
-                    'marketCap': None,
-                    'beta': None,
-                    'totalDebt': None,
-                    'cash': None,
-                    'effectiveTaxRate': None,
-                    'costOfDebt': None,
-                    'error': str(peer_err)
-                }
-
-        # Also store list of peers for easy access
-        peer_data['peers'] = peer_tickers
-
-        # Save all peer data to session
-        session_service.update_session_data(request.session_id, "retrieved_assumptions", peer_data)
-
+        # Delegate to service layer
+        result = step3_service.save_peers_and_fetch_data(
+            session_id=request.session_id,
+            peers=request.peers
+        )
+        
         return SavePeersResponse(
-            status="success",
-            message=f"Saved {len(peer_tickers)} peers and fetched market data",
-            peers_saved=len(peer_tickers)
+            status=result["status"],
+            message=result["message"],
+            peers_saved=result["peers_saved"]
         )
     except HTTPException:
         raise
@@ -616,7 +570,7 @@ async def upload_pdf_for_step7(
 
     Workflow:
     1. User uploads PDF in Step 7 frontend
-    2. Backend extracts financial data using VietnamesePDFExtractor
+    2. Backend extracts financial data using Step7DataEnrichmentService
     3. Extracted data is merged with Step 6 API data
     4. Updated historical data is stored in session for Step 8
 
@@ -630,135 +584,23 @@ async def upload_pdf_for_step7(
         Extraction results with extracted metrics and confidence scores
     """
     try:
-        # Validate session
-        session = session_service.get_session_data(session_id)
-        if not session:
-            raise HTTPException(status_code=404, detail="Session not found")
-
         # Validate file type
         if not file.filename.lower().endswith('.pdf'):
             raise HTTPException(status_code=400, detail="Only PDF files are supported")
 
-        # Read and save file temporarily
-        import tempfile
-        import os
-
+        # Read file content
         content = await file.read()
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp:
-            tmp.write(content)
-            tmp_path = tmp.name
-
-        try:
-            # Extract data from PDF
-            extractor = VietnamesePDFExtractor(extraction_method="auto")
-            result = extractor.extract_from_file(tmp_path)
-
-            # Convert to dict
-            extracted_data = extractor.to_dict(result)
-
-            # Get existing Step 6 data
-            method_lower = method.lower()
-            market_lower = market.lower()
-
-            step6_data = session_service.get_session_value(
-                session_id,
-                "financial_data",
-                market=market_lower,
-                method=method_lower
-            )
-
-            if not step6_data:
-                step6_data = session_service.get_session_value(session_id, "financial_data")
-
-            # Merge extracted data with Step 6 data
-            # Priority: PDF extraction > API data
-            merged_historical = {}
-
-            # Map extracted fields to Step 6 format
-            if result.revenue:
-                merged_historical['revenue'] = result.revenue
-            if result.net_income:
-                merged_historical['net_income'] = result.net_income
-            if result.ebitda:
-                merged_historical['ebitda'] = result.ebitda
-            if result.total_assets:
-                merged_historical['total_assets'] = result.total_assets
-            if result.total_equity:
-                merged_historical['total_equity'] = result.total_equity
-            if result.operating_cash_flow:
-                merged_historical['operating_cash_flow'] = result.operating_cash_flow
-            if result.capex:
-                merged_historical['capex'] = result.capex
-
-            # Store extracted data in session
-            extraction_metadata = {
-                'source': f'PDF_{file.filename}',
-                'fiscal_year': result.fiscal_year,
-                'company_name': result.company_name,
-                'extraction_method': result.extraction_method,
-                'confidence_score': result.confidence_score,
-                'upload_timestamp': datetime.now().isoformat(),
-                'extracted_metrics': list(merged_historical.keys())
-            }
-
-            session_service.update_session_data(
-                session_id,
-                "pdf_extraction_results",
-                {
-                    **extracted_data,
-                    'metadata': extraction_metadata
-                },
-                market=market_lower,
-                method=method_lower
-            )
-
-            # Update historical data with extracted values
-            if step6_data and 'historical_financials' in step6_data:
-                # Merge into existing structure
-                for key, value in merged_historical.items():
-                    step6_data['historical_financials'][key] = value
-
-            # Calculate historical trends and averages
-            trend_analysis = calculate_historical_trends(step6_data.get('historical_financials', {}) if step6_data else merged_historical)
-
-            session_service.update_session_data(
-                session_id,
-                "financial_data",
-                step6_data,
-                market=market_lower,
-                method=method_lower
-            )
-
-            # Store trend analysis for Step 8
-            session_service.update_session_data(
-                session_id,
-                "historical_trend_analysis",
-                trend_analysis,
-                market=market_lower,
-                method=method_lower
-            )
-
-            logger.info(
-                f"Successfully extracted {len(merged_historical)} metrics from {file.filename} "
-                f"for {session.get('ticker', 'UNKNOWN')} ({method})"
-            )
-
-            return {
-                "success": True,
-                "message": f"Extracted {len(merged_historical)} financial metrics from PDF",
-                "fiscal_year": result.fiscal_year,
-                "company_name": result.company_name,
-                "extraction_method": result.extraction_method,
-                "confidence_score": result.confidence_score,
-                "extracted_metrics": merged_historical,
-                "trend_analysis": trend_analysis,
-                "notes": result.notes
-            }
-
-        finally:
-            # Clean up temp file
-            if os.path.exists(tmp_path):
-                os.unlink(tmp_path)
+        
+        # Delegate to service layer
+        result = step7_enrichment_service.extract_from_pdf(
+            session_id=session_id,
+            file_content=content,
+            filename=file.filename,
+            method=method,
+            market=market
+        )
+        
+        return result
 
     except HTTPException:
         raise
@@ -800,114 +642,16 @@ async def ai_web_search_for_step7(
         Extraction results with time series data, metadata, and source URLs
     """
     try:
-        # Validate session
-        session = session_service.get_session_data(session_id)
-        if not session:
-            raise HTTPException(status_code=404, detail="Session not found")
-
-        # Get existing Step 6 data for merging
-        method_lower = method.lower()
-        market_lower = market.lower()
-
-        step6_data = session_service.get_session_value(
-            session_id,
-            "financial_data",
-            market=market_lower,
-            method=method_lower
-        )
-
-        if not step6_data:
-            step6_data = session_service.get_session_value(session_id, "financial_data")
-
-        # Initialize AI Web Search Extractor
-        extractor = AIWebSearchExtractor()
-
-        # Perform AI web search and extraction
-        result = await extractor.extract_data(
+        # Delegate to service layer
+        result = await step7_enrichment_service.extract_from_web_search(
+            session_id=session_id,
             ticker=ticker,
             company_name=company_name,
-            market=market,
-            context_data=step6_data
+            method=method,
+            market=market
         )
-
-        if not result.get("success"):
-            raise HTTPException(
-                status_code=500,
-                detail=result.get("error", "AI web search failed")
-            )
-
-        # Store results in session
-        extraction_metadata = {
-            'source': 'AI Web Search',
-            'provider_used': result['metadata']['provider_used'],
-            'confidence_score': result['metadata']['confidence_score'],
-            'sources': result['metadata'].get('sources', []),
-            'notes': result['metadata'].get('notes', ''),
-            'search_timestamp': datetime.now().isoformat(),
-            'extracted_metrics': list(result['data'].keys()) if result['data'] else []
-        }
-
-        session_service.update_session_data(
-            session_id,
-            "ai_web_search_results",
-            {
-                'time_series': result['data'],
-                'metadata': extraction_metadata
-            },
-            market=market_lower,
-            method=method_lower
-        )
-
-        # Update historical data with AI-extracted values
-        if step6_data:
-            if 'historical_financials' not in step6_data:
-                step6_data['historical_financials'] = {}
-
-            # Merge AI data into existing structure
-            for date_key, metrics in result['data'].items():
-                if date_key not in step6_data['historical_financials']:
-                    step6_data['historical_financials'][date_key] = metrics
-                else:
-                    # Fill gaps in existing data with AI data
-                    for metric, value in metrics.items():
-                        if step6_data['historical_financials'][date_key].get(metric) is None and value is not None:
-                            step6_data['historical_financials'][date_key][metric] = value
-
-        # Calculate historical trends and averages
-        trend_analysis = calculate_historical_trends(step6_data.get('historical_financials', {}) if step6_data else result['data'])
-
-        session_service.update_session_data(
-            session_id,
-            "financial_data",
-            step6_data,
-            market=market_lower,
-            method=method_lower
-        )
-
-        # Store trend analysis for Step 8
-        session_service.update_session_data(
-            session_id,
-            "historical_trend_analysis",
-            trend_analysis,
-            market=market_lower,
-            method=method_lower
-        )
-
-        logger.info(
-            f"Successfully extracted data via AI web search for {ticker} ({company_name}) "
-            f"using {result['metadata']['provider_used']}"
-        )
-
-        return {
-            "success": True,
-            "message": f"Successfully extracted data using {result['metadata']['provider_used']}",
-            "provider_used": result['metadata']['provider_used'],
-            "confidence_score": result['metadata']['confidence_score'],
-            "sources": result['metadata'].get('sources', []),
-            "time_series": result['data'],
-            "trend_analysis": trend_analysis,
-            "notes": result['metadata'].get('notes', '')
-        }
+        
+        return result
 
     except HTTPException:
         raise
