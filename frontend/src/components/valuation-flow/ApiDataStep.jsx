@@ -89,46 +89,34 @@ const ApiDataStep = ({
     { category: 'peer_comparables', key: 'peer_tax_rates', name: 'Peer Tax Rates', patterns: ['Peer Tax Rates', 'peer_tax_rates'] },
   ];
 
-  // Helper function to extract values from data_fields array format used by backend
-  // Backend returns: { years: [2020, 2021], data_fields: [{ field_name: 'Revenue_2020', value: 100 }, ...] }
-  // Frontend expects: { revenue: { 2020: 100, 2021: 110 }, ... }
-  const getFieldValues = (data, fieldNamePatterns) => {
-    if (!data || !data.data_fields) return {};
+  /**
+   * Helper function to extract values from unified schema format
+   * Backend returns: { historical_financials: { revenue: { value: [...], status: 'RETRIEVED', ... } } }
+   * Extracts period values from DataField objects
+   */
+  const getFieldValues = (data, fieldName) => {
+    if (!data || !data.historical_financials) return {};
 
-    const result = {};
-    const patterns = Array.isArray(fieldNamePatterns) ? fieldNamePatterns : [fieldNamePatterns];
+    const fieldData = data.historical_financials[fieldName];
+    if (!fieldData) return {};
 
-    data.data_fields.forEach(field => {
-      const matchedPattern = patterns.find(pattern => {
-        if (typeof pattern === 'string') {
-          // Check field_name and display_name for match
-          return field.field_name === pattern ||
-                 field.field_name.startsWith(pattern + '_') ||
-                 (field.display_name && field.display_name === pattern);
+    // Handle DataField with array of period values
+    if (fieldData.value && Array.isArray(fieldData.value)) {
+      const result = {};
+      fieldData.value.forEach(periodValue => {
+        if (periodValue.period && periodValue.value !== undefined) {
+          result[periodValue.period] = periodValue.value;
         }
-        if (pattern instanceof RegExp) {
-          return pattern.test(field.field_name);
-        }
-        return false;
       });
+      return result;
+    }
+    
+    // Handle single value case
+    if (fieldData.value !== undefined) {
+      return { value: fieldData.value };
+    }
 
-      if (matchedPattern) {
-        // Extract year from field_name (e.g., 'Revenue_2020' -> 2020)
-        const yearMatch = field.field_name.match(/_(\d{4})$/);
-        if (yearMatch) {
-          const year = yearMatch[1];
-          let key = typeof matchedPattern === 'string' ? matchedPattern.toLowerCase() : 'value';
-          // Handle special cases for key naming
-          if (key === 'total revenue') key = 'revenue';
-          result[year] = field.value;
-        } else {
-          // Non-yearly field, use the value directly
-          result['value'] = field.value;
-        }
-      }
-    });
-
-    return result;
+    return {};
   };
 
   // Helper function to format numbers
@@ -311,22 +299,21 @@ const ApiDataStep = ({
   // Render historical financials with detailed numbers (legacy view - kept for backward compatibility)
   const renderHistoricalDataLegacy = () => {
 
-    // Handle both old format (revenue: {2020: 100}) and new format (data_fields array)
-    // Extract data using getFieldValues helper for new backend format
-    const revenue = historicalData.revenue || getFieldValues(historicalData, ['Total Revenue', 'total_revenue', 'revenue']);
-    const ebitda = historicalData.ebitda || getFieldValues(historicalData, ['EBITDA', 'ebitda', 'Normalized EBITDA']);
-    const netIncome = historicalData.net_income || getFieldValues(historicalData, ['Net Income', 'net_income', 'netIncome']);
-    const cogs = historicalData.cogs || getFieldValues(historicalData, ['COGS', 'cogs', 'Cost Of Revenue', 'cost_of_revenue']);
-    const operatingExpenses = historicalData.operating_expenses || historicalData.sg_and_a || getFieldValues(historicalData, ['Operating Expenses', 'operating_expenses', 'SG&A', 'sg_and_a']);
-    const depreciation = historicalData.depreciation || getFieldValues(historicalData, ['Depreciation', 'depreciation', 'Depreciation And Amortization', 'depreciation_and_amortization']);
-    const capex = historicalData.capex || getFieldValues(historicalData, ['CapEx', 'capex', 'Capital Expenditures', 'capital_expenditures']);
-    const accountsReceivable = historicalData.accounts_receivable || getFieldValues(historicalData, ['Accounts Receivable', 'accounts_receivable', 'receivables']);
-    const inventory = historicalData.inventory || getFieldValues(historicalData, ['Inventory', 'inventory', 'inventories']);
-    const accountsPayable = historicalData.accounts_payable || getFieldValues(historicalData, ['Accounts Payable', 'accounts_payable', 'payables']);
-    const shareholdersEquity = historicalData.shareholders_equity || getFieldValues(historicalData, ['Shareholders Equity', 'shareholders_equity', 'total_stockholder_equity']);
-    const totalAssets = historicalData.total_assets || getFieldValues(historicalData, ['Total Assets', 'total_assets']);
-    const totalDebt = historicalData.total_debt || getFieldValues(historicalData, ['Total Debt', 'total_debt', 'long_term_debt']);
-    const freeCashFlow = historicalData.free_cash_flow || getFieldValues(historicalData, ['Free Cash Flow', 'free_cash_flow', 'fcf']);
+    // Extract data from unified schema format: historical_financials.{field_name}.value
+    const revenue = historicalData.historical_financials?.revenue || getFieldValues(historicalData, 'revenue');
+    const ebitda = historicalData.historical_financials?.ebitda || getFieldValues(historicalData, 'ebitda');
+    const netIncome = historicalData.historical_financials?.net_income || getFieldValues(historicalData, 'net_income');
+    const cogs = historicalData.historical_financials?.cogs || getFieldValues(historicalData, 'cogs');
+    const operatingExpenses = historicalData.historical_financials?.operating_expenses || getFieldValues(historicalData, 'operating_expenses');
+    const depreciation = historicalData.historical_financials?.depreciation || getFieldValues(historicalData, 'depreciation');
+    const capex = historicalData.historical_financials?.capex || getFieldValues(historicalData, 'capex');
+    const accountsReceivable = historicalData.historical_financials?.accounts_receivable || getFieldValues(historicalData, 'accounts_receivable');
+    const inventory = historicalData.historical_financials?.inventory || getFieldValues(historicalData, 'inventory');
+    const accountsPayable = historicalData.historical_financials?.accounts_payable || getFieldValues(historicalData, 'accounts_payable');
+    const shareholdersEquity = historicalData.historical_financials?.shareholders_equity || getFieldValues(historicalData, 'shareholders_equity');
+    const totalAssets = historicalData.historical_financials?.total_assets || getFieldValues(historicalData, 'total_assets');
+    const totalDebt = historicalData.historical_financials?.total_debt || getFieldValues(historicalData, 'total_debt');
+    const freeCashFlow = historicalData.historical_financials?.free_cash_flow || getFieldValues(historicalData, 'free_cash_flow');
 
     if (!historicalData) return null;
 

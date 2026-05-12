@@ -918,7 +918,7 @@ async def fetch_vn_data(request: vn_Step6FetchRequest):
 
             logger.info(f"Cached Vietnam market data for {ticker} in session")
 
-        # UNIFIED SCHEMA FIX: Transform to unified response format
+        # UNIFIED SCHEMA FIX: Transform to unified response format and return it
         transformer = VNStep6UnifiedTransformer()
         unified_response = transformer.transform(
             vn_output=result,
@@ -936,14 +936,7 @@ async def fetch_vn_data(request: vn_Step6FetchRequest):
             unified_response.model_dump() if hasattr(unified_response, 'model_dump') else unified_response.dict()
         )
 
-        return vn_Step6FetchResponse(
-            session_id=request.session_id,
-            ticker=ticker,
-            market="vietnam",
-            method=method,
-            session_cache=session
-        )
-        
+        # Return unified response (REMOVED DEAD CODE: vn_Step6FetchResponse)
         return unified_response
 
     except HTTPException:
