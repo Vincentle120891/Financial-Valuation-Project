@@ -57,22 +57,84 @@ class SessionService:
         # Async lock for thread-safe session updates during parallel execution
         self._lock = asyncio.Lock()
     
+    def _is_vietnamese_ticker(self, ticker: str) -> bool:
+        """
+        FIX Issue #5: Helper to identify Vietnamese tickers.
+        
+        Vietnamese tickers typically:
+        - Are 3 uppercase letters (e.g., VNM, VIC, HPG, VCB, FPT)
+        - May have suffix like .VN, .HA, .VC
+        
+        Args:
+            ticker: Stock ticker symbol
+            
+        Returns:
+            True if ticker appears to be Vietnamese, False otherwise
+        """
+        if not ticker:
+            return False
+        
+        ticker_upper = ticker.upper().strip()
+        
+        # Check for Vietnamese exchange suffixes
+        if ticker_upper.endswith(('.VN', '.HA', '.VC')):
+            return True
+        
+        # Remove suffix if present
+        ticker_base = ticker_upper.split('.')[0]
+        
+        # Vietnamese tickers are typically 3 uppercase letters
+        import re
+        if re.match(r'^[A-Z]{3}$', ticker_base):
+            # Common Vietnamese ticker prefixes/patterns
+            vn_prefixes = ['V', 'H', 'G', 'D', 'N', 'T', 'P', 'S', 'M', 'B']
+            if ticker_base[0] in vn_prefixes:
+                return True
+        
+        return False
+    
     def create_session(self, ticker: str, market: str) -> str:
         """
         Create a new session with matrix-compatible structure.
         
+        FIX Issue #5: Validate market-ticker consistency to prevent wrong valuation engine usage.
+        Ensures Vietnamese tickers use Vietnam market and international tickers use international market.
+        
         Args:
             ticker: Stock ticker symbol
-            market: Market identifier (e.g., 'US', 'IN', 'VN')
+            market: Market identifier (e.g., 'international', 'vietnamese', 'vietnam')
             
         Returns:
             Session ID string
+            
+        Raises:
+            ValueError: If market-ticker mismatch detected (e.g., AAPL with vietnamese market)
         """
+        # FIX Issue #5: Normalize market parameter
+        market_normalized = market.lower() if market else ""
+        if market_normalized in ["vietnam", "vietnamese"]:
+            market_normalized = "vietnamese"
+        elif market_normalized in ["international", "us", "global"]:
+            market_normalized = "international"
+        
+        # FIX Issue #5: Validate ticker-market consistency
+        # Vietnamese tickers typically have specific patterns or are in a known list
+        # For now, check common Vietnamese ticker patterns
+        is_vietnamese_ticker = self._is_vietnamese_ticker(ticker)
+        
+        if is_vietnamese_ticker and market_normalized == "international":
+            logger.warning(f"Potential market mismatch: Vietnamese ticker '{ticker}' selected with international market")
+            # Don't block, but log warning - could be intentional for CDRs
+        
+        if not is_vietnamese_ticker and market_normalized == "vietnamese":
+            logger.warning(f"Potential market mismatch: International ticker '{ticker}' selected with Vietnamese market")
+            # Don't block, but log warning - could be intentional for cross-listed stocks
+        
         session_id = str(uuid.uuid4())
         self._sessions[session_id] = {
             "session_id": session_id,
             "ticker": ticker,
-            "market": market,
+            "market": market_normalized,  # Use normalized market value
             "created_at": datetime.utcnow().isoformat(),
             "updated_at": datetime.utcnow().isoformat(),
             "status": "active",

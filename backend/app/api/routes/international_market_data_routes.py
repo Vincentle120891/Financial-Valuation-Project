@@ -26,6 +26,12 @@ from app.services.international.step5_required_inputs_processor import Step5Requ
 from app.services.international.step6_data_review import Step6DataReviewProcessor
 from app.services.international.yfinance_service import YFinanceService
 from app.services.international.ai_engine import suggest_peer_companies
+from app.api.schemas import (
+    UnifiedStep1Request,
+    UnifiedStep1Response,
+    CompanySearchResult,
+    MarketType
+)
 
 logger = logging.getLogger(__name__)
 
@@ -123,20 +129,99 @@ async def list_vietnamese_stocks():
     }
 
 
+@router.post("/step-1-search")
+async def search_vietnamese_stocks_unified(request: UnifiedStep1Request):
+    """
+    FIX Issue #1 & #3: Unified POST endpoint for Vietnamese stock search.
+    Replaces legacy GET /vietnam/search with unified POST /step-1-search.
+    Returns unified format matching international search response.
+    
+    Args:
+        request: UnifiedStep1Request with query, market, and limit parameters
+        
+    Returns:
+        UnifiedStep1Response with search results and metadata
+    """
+    logger.info(f"Searching Vietnamese tickers with query='{request.query}', market='vietnam'")
+    
+    try:
+        # Validate market is vietnamese/vietnam
+        market_str = request.market.value if isinstance(request.market, MarketType) else request.market
+        if market_str.lower() not in ["vietnamese", "vietnam"]:
+            return UnifiedStep1Response(
+                status="error",
+                query=request.query,
+                market=market_str,
+                results=[],
+                total_results=0,
+                message="Invalid market for Vietnamese search endpoint"
+            )
+        
+        results = vn_service.search_vietnamese_stocks(request.query)
+        
+        if not results:
+            logger.warning(f"No Vietnamese tickers found for query='{request.query}'")
+            return UnifiedStep1Response(
+                status="no_results",
+                query=request.query,
+                market="vietnamese",
+                results=[],
+                total_results=0,
+                message="No tickers found. Try exact symbol or company name."
+            )
+        
+        # FIX Issue #2: Transform to match CompanySearchResult format (use 'ticker' and 'company_name')
+        formatted_results = []
+        for stock in results:
+            formatted_results.append(CompanySearchResult(
+                ticker=stock.get("ticker", stock.get("symbol", "")),
+                company_name=stock.get("name", stock.get("company_name", "")),
+                exchange=stock.get("market", "VN"),
+                sector=stock.get("sector"),
+                industry=stock.get("industry"),
+                currency="VND",
+                country="Vietnam",
+                market="vietnamese"
+            ))
+        
+        logger.info(f"Found {len(formatted_results)} Vietnamese ticker(s) for query='{request.query}'")
+        return UnifiedStep1Response(
+            status="success",
+            query=request.query,
+            market="vietnamese",
+            results=formatted_results,
+            total_results=len(formatted_results),
+            message=f"Found {len(formatted_results)} matching companies"
+        )
+        
+    except Exception as e:
+        logger.error(f"Failed to search Vietnamese tickers: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
+
+
 @router.get("/vietnam/search")
-async def search_vietnamese_stocks(q: str = Query(..., description="Search query")):
+async def search_vietnamese_stocks_legacy(q: str = Query(..., description="Search query")):
     """
-    Search Vietnamese stocks by ticker or name
-    Returns unified format matching international search response
+    DEPRECATED: Use POST /step-1-search instead.
+    Legacy GET endpoint kept for backward compatibility only.
     """
+    import warnings
+    warnings.warn(
+        "The GET /vietnam/search endpoint is deprecated. Use POST /step-1-search with market='vietnamese'.",
+        DeprecationWarning,
+        stacklevel=2
+    )
+    logger.warning("DEPRECATED: Using legacy GET /vietnam/search. Migrate to POST /step-1-search.")
+    
     results = vn_service.search_vietnamese_stocks(q)
     
     # Transform to match CompanySearchResult format used by frontend
+    # FIX Issue #2: Use consistent field names (ticker, company_name)
     formatted_results = []
     for stock in results:
         formatted_results.append({
-            "symbol": stock["ticker"],
-            "name": stock["name"],
+            "ticker": stock.get("ticker", stock.get("symbol", "")),
+            "company_name": stock.get("name", stock.get("company_name", "")),
             "exchange": stock.get("market", "VN"),
             "sector": stock.get("sector"),
             "market": "vietnamese"
