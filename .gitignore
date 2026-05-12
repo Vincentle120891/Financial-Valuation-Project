@@ -1,1 +1,322 @@
-Nothing should be ignored based on the provided file changes, as they only include source code files (.py files) without any build artifacts, dependencies, or temporary files.
+# Compiled and build artifacts
+*.pyc
+__pycache__/
+*.o
+*.obj
+*.so
+*.dll
+*.exe
+*.class
+*.out
+
+# Dependencies
+.venv/
+venv/
+.env
+.env.local
+.env.*
+
+# Logs and temp files
+*.log
+*.tmp
+*.swp
+*.swo
+
+# Coverage reports
+.coverage
+coverage/
+htmlcov/
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+*.whl
+*.zip
+*.tar.gz
+*.tar.bz2
+*.tar.xz
+
+# Testing
+.pytest_cache/
+.mypy_cache/
+.hypothesis/
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Python specific
+*.py[cod]
+*$py.class
+*$py.o
+.Python
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Security
+secrets/
+credentials.json
+*.key
+*.pem
+*.crt
+*.cert
+
+# Documentation builds
+docs/_build/
+.sphinx/
+
+# Virtual environments
+.env/
+.venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Java
+target/
+.gradle/
+*.war
+*.jar
+*.class
+
+# Go
+*.exe
+*.dll
+*.so
+*.dylib
+
+# C/C++
+*.o
+*.a
+*.obj
+*.out
+*.exe
+*.dll
+*.so
+
+# Ruby
+*.gem
+.bundle/
+vendor/bundle/
+.ruby-version
+.rbenv-vars
+
+# Rust
+Cargo.lock
+target/
+
+# Julia
+julia-*/
+.JuliaUserprefs.toml
+
+# Zig
+zig-cache/
+zig-out/
+
+# Elixir
+mix.lock
+.erlang.cookie
+ebin/
+*.ez
+
+# PHP
+vendor/
+composer.phar
+composer.lock
+.php_cs.cache
+
+# .NET
+bin/
+obj/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+packages/
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Rr]eleases/
+x64/
+x86/
+build/
+bld/
+[Bb]in/
+[Oo]bj/
+
+# Android
+*.apk
+*.ap_
+local.properties
+.settings/
+.loadavg
+.gradle/
+build/
+
+# Xcode
+*.xcodeproj/
+*.xcworkspace/
+*.pbxuser
+*.mode1v3
+*.perspectivev3
+*.xcuserstate
+*.xccheckout
+*.moved-aside
+DerivedData/
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM/
+
+# Visual Studio
+*.sln
+*.vcxproj
+*.vcxproj.filters
+*.user
+*.suo
+*.obj
+*.ilk
+*.exp
+*.lib
+*.sdf
+*.opensdf
+*.userosscache
+*.VC.db
+*.VC.VC.opendb
+.ipch
+*.aps
+*.ncb
+*.opt
+*.plg
+*.tlb
+*.tli
+*.tlh
+*.tmp
+*.tmp_proj
+*_wpftmp.csproj
+*.log
+*.vspscc
+*.vssscc
+.builds
+*.pidb
+*.svclog
+*.scc
+
+# Qt Creator
+*.pro.user
+*.pro.user.*
+*.qbs.user
+*.qbs.user.*
+*.moc
+*.moc.cpp
+*.qm
+*.prl
+*.pri
+
+# CLion
+cmake-build-*/
+
+# Code::Blocks
+*.depend
+*.layout
+*.cbp
+*.workspace
+
+# Sublime Text
+*.sublime-workspace
+*.tmlanguage.cache
+*.cache
+*.sublime_session
+*.sublime_session_*
+Session.vim
+Sessionx.vim
+
+# Vim
+[._]*.s[a-w][a-z]
+[._]s[a-w][a-z]
+*.un~
+Session.vim
+.netrwhist
+*~
+.sw[a-p]
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+.\#*
+# org-mode
+*.org-[0-9]*.html
+*.txt~
+
+# Atom
+.atom/
+
+# NetBeans
+nbproject/private/
+build/
+nbbuild/
+dist/
+nbdist/
+.netbeans-settings/
+
+# Eclipse
+.metadata
+bin/
+tmp/
+*.tmp
+*.bak
+*.swp
+*~.nib
+local.properties
+.settings/
+.loadavg
+.recommenders
+.gradle/
+.idea/
+*.iws
+*.iml
+*.ipr
+*.log
+
+# IntelliJ
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# Visual Studio Code
+.vscode/
+
+# Kate
+.session
+# Folders to ignore
+node_modules/
+venv/
+.venv/
+__pycache__/
+dist/
+build/
+target/
+.gradle/
+.julia/
+zig-cache/
+zig-out/
+julia-*/

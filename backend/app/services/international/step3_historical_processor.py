@@ -64,13 +64,6 @@ class Step3Response(BaseModel):
 class Step3HistoricalProcessor:
     """
     Processor for Step 3: Historical Financial Data.
-
-    Responsibilities:
-    - Fetch historical financials (3-5 years)
-    - Handle currency conversion
-    - Fill missing years with estimates
-    - Calculate growth rates and margins
-    - Flag data gaps
     """
 
     MIN_YEARS_REQUIRED = 3
