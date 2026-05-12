@@ -423,6 +423,13 @@ const ValuationFlow = () => {
 
   // ==================== HANDLE MODEL SWITCH (Preserve all models' data) ====================
   const handleSelectModel = useCallback(async (modelType) => {
+    // Validation: Prevent model selection without peers selected (Unified Schema Requirement)
+    // UnifiedStep4Request requires either suggested_peers or custom_peers to be provided
+    if (!selectedPeers || selectedPeers.length === 0) {
+      setError('No peers selected. Please go back to Step 3 and select at least one peer company.');
+      return;
+    }
+
     // GAP 2 & GAP 3 FIX: Update selected model first, then deep merge to preserve other models' data
     // Single selection (radio button behavior) - modelType is a string, not array
     setSelectedModels(modelType);
@@ -441,7 +448,7 @@ const ValuationFlow = () => {
     } finally {
       setLoading(false);
     }
-  }, [sessionId, market]);
+  }, [sessionId, market, selectedPeers]);
 
   // ==================== DEEP MERGE UTILITY FOR MATRIX STATE ====================
   // Prevents data loss when switching between models by preserving all models' data
@@ -1054,7 +1061,7 @@ const ValuationFlow = () => {
           />
         );
       case 4:
-        return <ModelSelectionStep onSelectModel={handleSelectModel} selectedModels={selectedModels} />;
+        return <ModelSelectionStep onSelectModel={handleSelectModel} selectedModels={selectedModels} selectedPeers={selectedPeers} />;
       case 5:
         return (
           <RequirementsStep
@@ -1184,6 +1191,8 @@ const ValuationFlow = () => {
               className={`step-dot ${currentStep >= step ? 'active' : ''} ${currentStep === step ? 'current' : ''}`}
               title={`Step ${step}`}
               aria-label={`Step ${step}`}
+              onClick={() => step <= currentStep && setCurrentStep(step)}
+              style={{ cursor: step <= currentStep ? 'pointer' : 'default' }}
             />
           ))}
         </div>
