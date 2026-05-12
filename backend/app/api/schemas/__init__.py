@@ -1,8 +1,66 @@
-"""API Schemas module - Pydantic models for request/response validation."""
+"""API Schemas module - Pydantic models for request/response validation.
+
+This module imports unified schemas from unified_step_schemas.py to ensure
+consistent data structures across all 10 steps and both markets (International & Vietnam).
+
+The unified schemas provide:
+- Single source of truth for all API contracts
+- Nested data structures with DataField wrappers
+- Type safety for "3 Valuation Methods × 2 Market Versions" workflow
+- Prevention of mapping issues between backend and frontend
+"""
 
 from datetime import datetime, date
 from typing import Optional, Dict, Any, List
 from pydantic import BaseModel, Field, field_validator, ConfigDict
+
+# Import unified schemas - these are the single source of truth
+from .unified_step_schemas import (
+    # Core types
+    DataStatus,
+    ValuationMethod,
+    MarketType,
+    DataField,
+    MissingDataSummary,
+    
+    # Step 1-10 unified schemas
+    UnifiedStep1Request,
+    UnifiedStep1Response,
+    CompanySearchResult,
+    UnifiedStep2Request,
+    UnifiedStep2Response,
+    UnifiedStep3Request,
+    UnifiedStep3Response,
+    UnifiedStep4Request,
+    UnifiedStep4Response,
+    PeerCompany,
+    UnifiedStep5Request,
+    UnifiedStep5Response,
+    AssumptionCategory,
+    UnifiedStep6Request,
+    UnifiedStep6Response,
+    HistoricalFinancialsData,
+    ForecastDriversData,
+    MarketDataBase,
+    DuPontMetricsData,
+    CompsMultiplesData,
+    UnifiedStep7Request,
+    UnifiedStep7Response,
+    ProcessedHistoricalPeriod,
+    UnifiedStep8Request,
+    UnifiedStep8Response,
+    OverrideCategory,
+    UnifiedStep9Request,
+    UnifiedStep9Response,
+    UnifiedStep10Request,
+    UnifiedStep10Response,
+    ValuationResultSummary,
+    SensitivityAnalysis,
+    
+    # Utility schemas
+    SessionStatusResponse,
+    ErrorResponse,
+)
 
 
 # =============================================================================

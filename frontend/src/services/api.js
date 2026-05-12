@@ -76,13 +76,30 @@ export const prepareInputs = async (sessionId, method, market = 'international')
 };
 
 // Step 6: Fetch API Data - Now requires method and market parameters
+// MARKET-SPECIFIC ROUTING: Vietnamese market uses dedicated endpoint
 export const fetchApiData = async (sessionId, method, market = 'international') => {
-  const response = await api.post('/step-6-fetch-api-data', { 
-    session_id: sessionId,
-    method,
-    market 
-  });
-  return response.data;
+  // Route to Vietnamese-specific endpoint if market is vietnamese/vietnam
+  if (market && market.toLowerCase() === 'vietnamese' || market.toLowerCase() === 'vietnam') {
+    const response = await api.post('/vietnamese/vn-step-6-fetch-data', { 
+      session_id: sessionId,
+      method,
+      market: 'vietnam',
+      history_years: 5,
+      include_quarterly: true,
+      fetch_peer_data: method.toUpperCase() === 'COMPS',
+      peer_tickers: [],
+      fallback_to_ai_extraction: true
+    });
+    return response.data;
+  } else {
+    // Use international endpoint for international market
+    const response = await api.post('/step-6-fetch-api-data', { 
+      session_id: sessionId,
+      method,
+      market 
+    });
+    return response.data;
+  }
 };
 
 // Step 7: Retrieve Historical Data Using AI Extraction (uses longer timeout)
