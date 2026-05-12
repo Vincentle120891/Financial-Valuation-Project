@@ -16,7 +16,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-class VNHistoricalDataInput(BaseModel):
+class vn_HistoricalDataInput(BaseModel):
     """Input for Step 7: Raw data bundle from Step 6."""
     ticker: str
     company_name: str
@@ -91,7 +91,7 @@ class AIExtractionResult(BaseModel):
     warnings: List[str] = Field(default_factory=list)
 
 
-class VNHistoricalDataOutput(BaseModel):
+class vn_HistoricalDataOutput(BaseModel):
     """Output from Step 7: Normalized data ready for Step 8 assumptions."""
     success: bool
     ticker: str
@@ -109,7 +109,7 @@ class VNHistoricalDataOutput(BaseModel):
     source_breakdown: Dict[str, int]  # source_type -> count of fields
 
 
-class VNStep7HistoricalProcessor:
+class vn_Step7HistoricalProcessor:
     """
     Processor for Step 7: Normalizing Vietnamese historical data and AI extraction.
 

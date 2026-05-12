@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 from datetime import datetime
 
 
-class VNConfirmationInput(BaseModel):
+class vn_ConfirmationInput(BaseModel):
     """Input for Vietnamese confirmation step"""
     session_id: str
     company_name: str
@@ -36,7 +36,7 @@ class VNConfirmationInput(BaseModel):
     timestamp: datetime = Field(default_factory=datetime.utcnow)
 
 
-class VNConfirmedParameter(BaseModel):
+class vn_ConfirmedParameter(BaseModel):
     """Single confirmed parameter with source tracking"""
     parameter_name: str
     final_value: Any
@@ -48,14 +48,14 @@ class VNConfirmedParameter(BaseModel):
     vietnam_context: Optional[str] = None
 
 
-class VNConfirmationOutput(BaseModel):
+class vn_ConfirmationOutput(BaseModel):
     """Output with all confirmed parameters ready for valuation"""
     session_id: str
     company_name: str
     ticker: str
     exchange: str
     selected_model: str
-    confirmed_parameters: List[VNConfirmedParameter]
+    confirmed_parameters: List[vn_ConfirmedParameter]
     model_specific_inputs: Dict[str, Any]
     market_context: Dict[str, Any]
     validation_status: str
@@ -104,7 +104,7 @@ class VNConfirmationOutput(BaseModel):
         }
 
 
-class VNStep9ConfirmationProcessor:
+class vn_Step9ConfirmationProcessor:
     """
     Processor for final confirmation before Vietnamese valuation
 
