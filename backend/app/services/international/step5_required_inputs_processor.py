@@ -30,7 +30,7 @@ class Step5DataRetrievalResponse(BaseModel):
     retrieval_status: str = "PENDING"  # PENDING, IN_PROGRESS, COMPLETED
     message: str = "Click 'Retrieve Data' to fetch required inputs from external APIs"
 
-class Step5AssumptionsProcessor:
+class Step5RequiredInputsProcessor:
     """
     Step 5: Shows ONLY the inputs that can be retrieved from APIs.
     No calculations, no AI suggestions, no manual inputs.

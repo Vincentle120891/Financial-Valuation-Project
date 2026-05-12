@@ -47,7 +47,7 @@ from app.api.schemas.unified_step_schemas import (
     ValuationMethod
 )
 from app.services.international.step8_manual_overrides import FullAssumptionsResponse
-from app.services.international.step5_assumptions_processor import Step5AssumptionsProcessor
+from app.services.international.step5_required_inputs_processor import Step5RequiredInputsProcessor
 from app.services.international.step4_selected_models_processor import Step4SelectedModelsProcessor
 from app.services.international.step6_data_review import Step6DataReviewProcessor
 from app.services.international.step6_unified_transformer import Step6UnifiedTransformer
@@ -69,7 +69,7 @@ router = APIRouter(tags=["Valuation"])
 
 # Initialize processors
 step4_processor = Step4SelectedModelsProcessor(market="international")
-step5_processor = Step5AssumptionsProcessor()
+step5_processor = Step5RequiredInputsProcessor()
 step6_processor = Step6DataReviewProcessor()
 step7_processor = Step7HistoricalDataProcessor()
 step8_processor = Step8ManualOverridesProcessor()
@@ -305,17 +305,17 @@ async def select_models(request: UnifiedStep4Request):
 @router.post("/step-5-prepare-assumptions", response_model=UnifiedStep5Response)
 async def prepare_assumptions(request: UnifiedStep5Request):
     """
-    Step 5: Prepare assumptions for selected valuation model.
-    Uses SessionService for session management and Step5AssumptionsProcessor.
+    Step 5: Show required inputs for selected valuation model.
+    Uses SessionService for session management and Step5RequiredInputsProcessor.
 
     MATRIX WORKFLOW:
     - Retrieves model/method from request (REQUIRED - no fallback to session)
-    - Prepares assumptions specific to the valuation track
-    - Supports AI generation of initial assumptions
+    - Shows required inputs specific to the valuation track
+    - No AI generation, no calculations - just listing requirements
 
     METHOD-AGNOSTIC DESIGN:
     - Method MUST be provided in request.method - no session.selected_model fallback
-    - Each method operates independently with its own assumption track
+    - Each method operates independently with its own input requirements
     """
     try:
         # Get session data using SessionService
@@ -330,7 +330,7 @@ async def prepare_assumptions(request: UnifiedStep5Request):
         ticker = session.get("ticker")
         peer_tickers = session.get("peer_tickers", [])
 
-        # Use Step5AssumptionsProcessor to get required inputs
+        # Use Step5RequiredInputsProcessor to get required inputs
         result = step5_processor.process_data_retrieval_inputs(
             ticker=ticker or "UNKNOWN",
             valuation_model=method,
