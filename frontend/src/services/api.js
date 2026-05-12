@@ -54,23 +54,25 @@ export const validateManualPeers = async (sessionId, tickers, market = 'internat
   return response.data;
 };
 
-// Step 4: Select Models - Updated to support matrix workflow
-// Accepts single model per request (for parallel frontend calls) or use /step-10-valuate-multi for batch
-export const selectModels = async (sessionId, model, market = 'international') => {
-  const response = await api.post('/step-4-select-models', { 
-    session_id: sessionId, 
-    model,
-    market 
+// Step 4: Select Peers - Updated to use unified schema
+export const selectPeers = async (sessionId, method, market = 'international', suggestedPeers = [], customPeers = []) => {
+  const response = await api.post('/step-4-select-peers', { 
+    session_id: sessionId,
+    method: method.toUpperCase(),
+    market: market.toLowerCase(),
+    suggested_peers: suggestedPeers,
+    custom_peers: customPeers
   });
   return response.data;
 };
 
-// Step 5: Prepare Inputs - Now requires method and market parameters
-export const prepareInputs = async (sessionId, method, market = 'international') => {
-  const response = await api.post('/step-5-prepare-inputs', { 
+// Step 5: Prepare Assumptions - Updated to use unified schema
+export const prepareAssumptions = async (sessionId, method, market = 'international', generateAi = true) => {
+  const response = await api.post('/step-5-prepare-assumptions', { 
     session_id: sessionId,
-    method,
-    market 
+    method: method.toUpperCase(),
+    market: market.toLowerCase(),
+    generate_ai: generateAi
   });
   return response.data;
 };
