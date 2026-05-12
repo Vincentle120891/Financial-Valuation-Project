@@ -6,6 +6,7 @@ Routes are thin - only receiving requests, validating inputs, and delegating to 
 """
 
 import logging
+from datetime import datetime
 from typing import Dict, Any
 from fastapi import APIRouter, HTTPException, UploadFile, File
 from pydantic import BaseModel
@@ -38,6 +39,9 @@ from app.api.schemas.unified_step_schemas import (
     UnifiedStep5Response,
     UnifiedStep6Response,
     UnifiedStep7Response,
+    UnifiedStep8Response,
+    UnifiedStep9Response,
+    UnifiedStep10Response,
     PeerCompany,
     AssumptionCategory,
     DataField,
@@ -61,7 +65,6 @@ from app.services.international.valuation_orchestrator import orchestrator
 from app.services.international.peer_discovery_service import PeerDiscoveryService, PeerDiscoveryRequest
 from app.services.international.step3_peer_management_service import Step3PeerManagementService
 from app.services.international.step7_data_enrichment_service import Step7DataEnrichmentService
-from app.api.schemas.unified_step_schemas import UnifiedStep6Response, UnifiedStep7Response
 
 logger = get_logger(__name__)
 
@@ -660,7 +663,7 @@ async def ai_web_search_for_step7(
         raise HTTPException(status_code=500, detail=f"AI web search failed: {str(e)}")
 
 
-@router.post("/step-8-initialize", response_model=FullAssumptionsResponse)
+@router.post("/step-8-initialize", response_model=UnifiedStep8Response)
 async def initialize_step8_assumptions(request: GenerateAISuggestionRequest):
     """
     Step 8: Initialize assumptions with historical trendlines from Step 6.
@@ -833,7 +836,7 @@ async def generate_ai_suggestion(request: GenerateAISuggestionRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/step-9-confirm-assumptions", response_model=ConfirmAssumptionsResponse)
+@router.post("/step-9-confirm-assumptions", response_model=UnifiedStep9Response)
 async def confirm_assumptions(request: ConfirmAssumptionsRequest):
     """
     Step 9: Confirmation Processing - Consolidates Steps 6-8 inputs for Step 10.
@@ -945,8 +948,15 @@ async def confirm_assumptions(request: ConfirmAssumptionsRequest):
             f"ready for Step 10: {step9_output.ready_for_valuation}"
         )
 
-        return ConfirmAssumptionsResponse(
+        return UnifiedStep9Response(
             status="assumptions_confirmed",
+            session_id=request.session_id,
+            method=method,
+            market=market,
+            all_categories_confirmed=True,
+            confirmed_assumptions=step9_output.confirmed_inputs if hasattr(step9_output, 'confirmed_inputs') else {},
+            ready_for_valuation=step9_output.ready_for_valuation,
+            validation_errors=step9_output.errors if hasattr(step9_output, 'errors') else [],
             message=f"Assumptions confirmed successfully. {len(step9_output.warnings)} warnings." if step9_output.warnings else "Assumptions confirmed successfully."
         )
     except HTTPException:
@@ -956,7 +966,7 @@ async def confirm_assumptions(request: ConfirmAssumptionsRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/step-10-valuate", response_model=ValuateResponse)
+@router.post("/step-10-valuate", response_model=UnifiedStep10Response)
 async def valuate(request: ValuateRequest):
     """
     Step 10: Final Valuation - Uses ONLY Step 9 outputs.
@@ -1048,9 +1058,21 @@ async def valuate(request: ValuateRequest):
             f"Used Step 9 outputs only, validation status: {step9_confirmed_outputs.get('validation_status')}"
         )
 
-        return ValuateResponse(
+        return UnifiedStep10Response(
             status="success",
-            valuation_results=[result],
+            session_id=request.session_id,
+            method=method,
+            market=market,
+            ticker=ticker,
+            company_name=session.get("company_name", ticker),
+            valuation_summary=result.valuation_summary if hasattr(result, 'valuation_summary') else {},
+            detailed_outputs=result.detailed_outputs if hasattr(result, 'detailed_outputs') else result.dict() if hasattr(result, 'dict') else {},
+            sensitivity_analysis=result.sensitivity_analysis if hasattr(result, 'sensitivity_analysis') else None,
+            scenario_analysis=result.scenario_analysis if hasattr(result, 'scenario_analysis') else None,
+            confidence_level=result.confidence_level if hasattr(result, 'confidence_level') else "medium",
+            key_assumptions_summary=result.key_assumptions_summary if hasattr(result, 'key_assumptions_summary') else {},
+            warnings=result.warnings if hasattr(result, 'warnings') else [],
+            calculation_timestamp=datetime.now(),
             message=f"Valuation completed successfully for {method} ({market}) using Step 9 confirmed inputs"
         )
     except HTTPException:
