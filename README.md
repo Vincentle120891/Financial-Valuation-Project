@@ -70,32 +70,68 @@ See [MODEL_INTEGRITY_CONFIG.md](./backend/MODEL_INTEGRITY_CONFIG.md) for our com
 
 ## 🏗️ Architecture
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                     Frontend (React 18)                      │
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │  11-Step Guided Wizard Interface                     │   │
-│  │  • Market Toggle (VN/International)                  │   │
-│  │  • Interactive Data Visualization                    │   │
-│  │  • AI Assumption Review & Editing                    │   │
-│  │  • Sensitivity & Scenario Analysis Charts            │   │
-│  └──────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────┘
-                            ↕ HTTP/REST API
-┌─────────────────────────────────────────────────────────────┐
-│                 Backend (Python/FastAPI)                     │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
-│  │  DCF Engine  │  │ DuPont Engine│  │ Comps Engine │      │
-│  └──────────────┘  └──────────────┘  └──────────────┘      │
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │              Data Integration Layer                   │   │
-│  │  • yfinance (Yahoo Finance)                          │   │
-│  │  • Alpha Vantage API                                 │   │
-│  │  • AI Providers (Gemini/Groq)                        │   │
-│  │  • Damodaran Benchmarks                              │   │
-│  └──────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────┘
-```
+### ⚠️ CRITICAL DEVELOPMENT GUIDELINES
+
+#### 1. Market Separation (DO NOT MERGE MARKETS)
+**NEVER create "Generic Displayer" components that merge Vietnamese and International markets.**
+
+- **Why?** Fundamental differences exist:
+  - **Accounting Standards:** VAS (Vietnam) vs IFRS/US GAAP (International)
+  - **Currency:** VND vs USD with different formatting rules
+  - **Market Mechanics:** Foreign ownership limits, board types (HOSE/HNX/UPCoM), trading mechanisms
+  
+- **Correct Approach:**
+  - **UI Layer:** Keep `VietnameseMarketData.jsx` and `InternationalMarketData.jsx` separate
+  - **Service Layer:** Use `UnifiedTransformer` services ONLY for temporary normalization during peer comparison
+  - **Never** lose local precision or context by forcing a lowest-common-denominator schema
+
+#### 2. Thin Routes, Fat Services
+**Route handlers must NOT contain business logic.**
+
+- **Violation Example:** `save_peers()` in `valuation_routes.py` fetching yfinance data directly
+- **Correct Pattern:**
+  ```python
+  # ❌ WRONG - Route handling logic
+  @router.post("/step-3-save-peers")
+  def save_peers(data):
+      peers = fetch_yfinance_data(data.tickers)  # Don't do this!
+      ...
+  
+  # ✅ CORRECT - Delegate to service
+  @router.post("/step-3-save-peers")
+  def save_peers(data):
+      result = PeerDiscoveryService.discover_peers(data.tickers, data.market)
+      return result
+  ```
+
+- **Files to Check:**
+  - `valuation_routes.py` - Should only validate and delegate
+  - `search_routes.py` - Already correctly implemented
+
+#### 3. Workflow Step Integrity
+**File names MUST match their workflow step purpose.**
+
+| Step | Purpose | Correct File | Mismatched Files (Rename to `mismatch_*.py`) |
+|------|---------|--------------|---------------------------------------------|
+| **3** | Peer Company Selection | `peer_discovery_service.py` | `step3_historical_processor.py` |
+| **4** | Model Selection (DCF/DuPont/Comps) | `step4_selected_models_processor.py` | `step4_forecast_processor.py` |
+| **5** | Required Inputs Display | `step5_required_inputs_processor.py` | `step5_assumptions_processor.py` |
+
+- **Rule:** If a file name suggests a different purpose than its step number, rename it with `mismatch_` prefix to prevent accidental usage.
+
+#### 4. 3×2 Matrix Architecture
+The system supports **3 Valuation Methods × 2 Market Versions**:
+
+| | **International** | **Vietnam** |
+|---|---|---|
+| **DCF** | `services/international/dcf_engine.py` + processors | `services/vietnamese/vietnamese_dcf_engine.py` + processors |
+| **DuPont** | `services/international/dupont_engine.py` + processors | `services/vietnamese/vietnamese_dupont_engine.py` + processors |
+| **Comps** | `services/international/comps_engine.py` + processors | `services/vietnamese/vietnamese_comps_engine.py` |
+
+- **Implementation:** Data structure `valuationsData[market][method]` ensures strict separation while allowing unified orchestration.
+- **Frontend:** Step 4 uses **Radio Buttons** (single-select) to enforce one model at a time, preventing AI context hallucination.
+
+---
 
 ### Technology Stack
 
