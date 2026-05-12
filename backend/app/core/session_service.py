@@ -11,6 +11,10 @@ from typing import Dict, Any, Optional, List
 from datetime import datetime
 import uuid
 import asyncio
+import logging
+import re
+
+logger = logging.getLogger(__name__)
 
 
 class SessionService:
@@ -84,7 +88,6 @@ class SessionService:
         ticker_base = ticker_upper.split('.')[0]
         
         # Vietnamese tickers are typically 3 uppercase letters
-        import re
         if re.match(r'^[A-Z]{3}$', ticker_base):
             # Common Vietnamese ticker prefixes/patterns
             vn_prefixes = ['V', 'H', 'G', 'D', 'N', 'T', 'P', 'S', 'M', 'B']
