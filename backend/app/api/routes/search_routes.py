@@ -1,7 +1,8 @@
 """
-Search and Ticker Routes - Refactored to use SessionService and International Services
+Search and Ticker Routes - Refactored to use Unified Schemas and SessionService
 
 Handles ticker search and selection functionality using Step1-3 processors.
+Uses unified schemas for consistent API contracts across all steps.
 """
 
 import logging
@@ -11,7 +12,17 @@ from pydantic import BaseModel, Field
 
 from app.core.logging_config import get_logger
 from app.core.session_service import session_service
-from app.api.schemas import SearchRequest, TickerSelectRequest, SearchResponse, SessionCreateResponse, SearchResult
+from app.api.schemas import (
+    SearchResponse, 
+    SessionCreateResponse, 
+    SearchResult,
+    UnifiedStep1Request,
+    UnifiedStep1Response,
+    CompanySearchResult,
+    UnifiedStep2Request,
+    UnifiedStep2Response,
+    MarketType
+)
 from app.services.international.step1_ticker_processor import Step1TickerProcessor
 from app.services.international.step2_market_data_processor import Step2MarketDataProcessor
 from app.services.international.step3_historical_processor import Step3HistoricalProcessor
@@ -26,29 +37,61 @@ step2_processor = Step2MarketDataProcessor()
 step3_processor = Step3HistoricalProcessor()
 
 
-@router.post("/step-1-search", response_model=SearchResponse)
-async def search_tickers(request: SearchRequest):
+@router.post("/step-1-search", response_model=UnifiedStep1Response)
+async def search_tickers(request: UnifiedStep1Request):
     """
     Step 1: Search for tickers by symbol or company name.
     Uses Step1TickerProcessor for consistent search logic.
+    Returns unified schema response with proper status tracking.
 
     Args:
-        request: Search request with query and market parameters
+        request: UnifiedStep1Request with query, market, and limit parameters
 
     Returns:
-        List of matching tickers
+        UnifiedStep1Response with search results and metadata
     """
-    logger.info(f"Searching for tickers with query='{request.query}', market='{request.market}'")
+    logger.info(f"Searching for tickers with query='{request.query}', market='{request.market.value if isinstance(request.market, MarketType) else request.market}'")
 
     try:
-        results = await step1_processor.search_tickers(query=request.query, market=request.market)
+        # Convert market enum to string if needed
+        market_str = request.market.value if isinstance(request.market, MarketType) else request.market
+        
+        results = await step1_processor.search_tickers(query=request.query, market=market_str)
 
         if not results:
             logger.warning(f"No tickers found for query='{request.query}'")
-            return SearchResponse(results=[], message="No tickers found. Try exact symbol.")
+            return UnifiedStep1Response(
+                status="no_results",
+                query=request.query,
+                market=market_str,
+                results=[],
+                total_results=0,
+                message="No tickers found. Try exact symbol or company name."
+            )
 
-        logger.info(f"Found {len(results)} ticker(s) for query='{request.query}'")
-        return SearchResponse(results=[SearchResult(**r) for r in results])
+        # Convert raw results to CompanySearchResult format
+        company_results = []
+        for r in results:
+            company_results.append(CompanySearchResult(
+                ticker=r.get('symbol', ''),
+                company_name=r.get('name', ''),
+                exchange=r.get('exchange', ''),
+                market=r.get('market', market_str),
+                sector=r.get('sector'),
+                industry=r.get('industry'),
+                currency=r.get('currency'),
+                country=r.get('country')
+            ))
+
+        logger.info(f"Found {len(company_results)} ticker(s) for query='{request.query}'")
+        return UnifiedStep1Response(
+            status="success",
+            query=request.query,
+            market=market_str,
+            results=company_results,
+            total_results=len(company_results),
+            message=f"Found {len(company_results)} matching companies"
+        )
 
     except Exception as e:
         logger.error(f"Failed to search tickers: {str(e)}")

@@ -1,151 +1,123 @@
-"""Step 4: Forecast Drivers Processor - Model Selection Point"""
+"""Step 4: Forecast Drivers Processor - Model Selection Point
+
+Refactored to use Unified Schemas with DataField wrappers for consistent API contracts.
+"""
 import logging
 from typing import Dict, List, Optional
 from pydantic import BaseModel
 from enum import Enum
 
+from app.api.schemas.unified_step_schemas import (
+    PeerCompany,
+    DataField,
+    DataStatus,
+    ValuationMethod,
+    MarketType,
+    UnifiedStep4Response
+)
+
 logger = logging.getLogger(__name__)
 
-class ValuationModel(str, Enum):
-    """Type of valuation model to use"""
-    DCF = "DCF"
-    DUPONT = "DUPONT"
-    COMPS = "COMPS"
-
-class ForecastDriver(BaseModel):
-    metric: str
-    historical_avg: Optional[float] = None
-    suggested_value: float
-    min_reasonable: float
-    max_reasonable: float
-    rationale: str
-    formula: str
-    confidence: float
-    status: str = "SUGGESTED"
-
-class CompsInputs(BaseModel):
-    """Inputs specific to Comps analysis"""
-    peer_tickers: List[str] = []
-    valuation_multiples: List[str] = ["P/E", "EV/EBITDA", "P/B", "P/S"]
-    apply_outlier_filter: bool = True
-
-class DuPontInputs(BaseModel):
-    """Inputs specific to DuPont analysis"""
-    years_to_analyze: int = 3
-    include_trend_analysis: bool = True
-    custom_ratios: Optional[Dict[str, float]] = None
-
-class Step4Response(BaseModel):
-    ticker: str
-    valuation_model: ValuationModel
-    forecast_drivers: Optional[List[ForecastDriver]] = None
-    revenue_growth_forecast: Optional[List[Dict]] = None
-    margin_assumptions: Optional[Dict] = None
-    comps_inputs: Optional[CompsInputs] = None
-    dupont_inputs: Optional[DuPontInputs] = None
-    warnings: List[str] = []
-    data_quality_score: float = 0.0
-    model_specific_notes: str = ""
 
 class Step4ForecastProcessor:
-    def process_forecast_drivers(
-        self, 
-        ticker: str, 
-        historical_data: Dict, 
-        valuation_model: str = "DCF",
-        market: str = "international",
-        peer_tickers: Optional[List[str]] = None
-    ) -> Step4Response:
-        logger.info(f"Processing forecast drivers for {ticker} using {valuation_model} model")
+    """
+    Processor for Step 4: Peer Company Selection.
+    
+    Responsibilities:
+    - Process peer company selection for COMPS and WACC calculations
+    - Support both suggested peers (auto-discovered) and custom peers
+    - Return unified schema response with DataField wrappers
+    
+    Note: This processor is now method-agnostic and focuses on peer selection only.
+    Forecast drivers are handled in Step 5 (Assumptions Preparation).
+    """
+    
+    def process_peer_selection(
+        self,
+        ticker: str,
+        session_id: str,
+        method: str,
+        market: str,
+        suggested_peers: Optional[List[str]] = None,
+        custom_peers: Optional[List[str]] = None,
+        peer_data: Optional[Dict] = None
+    ) -> UnifiedStep4Response:
+        """
+        Process peer company selection and return unified response.
         
-        model_enum = ValuationModel(valuation_model.upper())
+        Args:
+            ticker: Target company ticker
+            session_id: Session identifier
+            method: Valuation method (DCF, DUPONT, COMPS)
+            market: Market type (international, vietnam)
+            suggested_peers: List of auto-suggested peer tickers
+            custom_peers: List of manually selected peer tickers
+            peer_data: Optional dictionary with peer company information
+            
+        Returns:
+            UnifiedStep4Response with peer selection results
+        """
+        logger.info(f"Processing peer selection for {ticker} using {method} model")
         
-        if model_enum == ValuationModel.DCF:
-            return self._process_dcf_inputs(ticker, historical_data, market)
-        elif model_enum == ValuationModel.COMPS:
-            return self._process_comps_inputs(ticker, historical_data, peer_tickers)
-        elif model_enum == ValuationModel.DUPONT:
-            return self._process_dupont_inputs(ticker, historical_data)
+        # Determine which peers to use
+        selected_peers = []
+        if custom_peers:
+            selected_peers = custom_peers
+        elif suggested_peers:
+            selected_peers = suggested_peers
         else:
-            raise ValueError(f"Unknown valuation model: {valuation_model}")
-    
-    def _process_dcf_inputs(self, ticker: str, historical_data: Dict, market: str) -> Step4Response:
-        """Process inputs for DCF model"""
-        hist_growth = historical_data.get('revenue_cagr_3y', 0.05)
-        suggested_growth = max(0.02, min(hist_growth * 0.9, 0.25))
-        hist_margin = historical_data.get('avg_ebitda_margin', 0.15)
-        tax_rate = 0.21 if market == "international" else 0.20
+            # No peers provided - return empty response
+            return UnifiedStep4Response(
+                status="no_peers",
+                session_id=session_id,
+                method=method.upper(),
+                market=market.lower(),
+                target_company=ticker,
+                suggested_peers=[],
+                selected_peers=[],
+                message="No peers provided. Please select peer companies for comparison."
+            )
         
-        drivers = [
-            ForecastDriver(metric="revenue_growth", historical_avg=hist_growth, suggested_value=suggested_growth, min_reasonable=0.0, max_reasonable=0.30, rationale=f"Based on 3Y CAGR", formula="CAGR × 0.9", confidence=0.75),
-            ForecastDriver(metric="ebitda_margin", historical_avg=hist_margin, suggested_value=hist_margin, min_reasonable=0.05, max_reasonable=0.40, rationale="Stable margins", formula="Historical avg", confidence=0.70),
-            ForecastDriver(metric="tax_rate", historical_avg=tax_rate, suggested_value=tax_rate, min_reasonable=0.15, max_reasonable=0.35, rationale="Statutory rate", formula="Corporate tax", confidence=0.95)
-        ]
+        # Build peer company objects with DataField wrappers
+        peer_companies = []
+        peer_data = peer_data or {}
         
-        current_rev = historical_data.get('latest_revenue', 1000)
-        rev_forecast = [{"year": y, "revenue": current_rev * ((1 + suggested_growth) ** y), "growth_rate": suggested_growth} for y in range(1, 6)]
+        for peer_ticker in selected_peers:
+            # Get peer info from provided data or create minimal object
+            peer_info = peer_data.get(peer_ticker, {})
+            
+            # Create DataField for market cap if available
+            market_cap_field = None
+            if peer_info.get('marketCap'):
+                market_cap_field = DataField(
+                    value=peer_info.get('marketCap'),
+                    status=DataStatus.RETRIEVED,
+                    source="yfinance",
+                    unit="USD",
+                    confidence_score=90.0
+                )
+            
+            peer_company = PeerCompany(
+                ticker=peer_ticker,
+                company_name=peer_info.get('name', peer_ticker),
+                sector=peer_info.get('sector', 'Unknown'),
+                industry=peer_info.get('industry', 'Unknown'),
+                market_cap=market_cap_field,
+                selected=True
+            )
+            peer_companies.append(peer_company)
         
-        return Step4Response(
-            ticker=ticker,
-            valuation_model=ValuationModel.DCF,
-            forecast_drivers=drivers,
-            revenue_growth_forecast=rev_forecast,
-            margin_assumptions={"ebitda_margin": hist_margin, "tax_rate": tax_rate},
-            data_quality_score=75.0,
-            model_specific_notes="DCF model requires cash flow projections, WACC, and terminal value assumptions"
-        )
-    
-    def _process_comps_inputs(self, ticker: str, historical_data: Dict, peer_tickers: Optional[List[str]] = None) -> Step4Response:
-        """Process inputs for Comps model"""
-        if peer_tickers is None:
-            peer_tickers = []
-            warnings = ["No peer tickers provided. Please select comparable companies."]
-            data_quality = 50.0
-        else:
-            warnings = []
-            data_quality = 80.0
+        # Calculate data quality score based on peer data completeness
+        peers_with_data = sum(1 for p in peer_companies if p.market_cap and p.market_cap.value)
+        data_quality = (peers_with_data / len(peer_companies) * 100) if peer_companies else 0
         
-        comps_inputs = CompsInputs(
-            peer_tickers=peer_tickers,
-            valuation_multiples=["P/E", "EV/EBITDA", "P/B", "P/S"],
-            apply_outlier_filter=True
-        )
-        
-        return Step4Response(
-            ticker=ticker,
-            valuation_model=ValuationModel.COMPS,
-            comps_inputs=comps_inputs,
-            warnings=warnings,
-            data_quality_score=data_quality,
-            model_specific_notes="Comps model compares valuation multiples against peer companies"
-        )
-    
-    def _process_dupont_inputs(self, ticker: str, historical_data: Dict) -> Step4Response:
-        """Process inputs for DuPont model"""
-        dupont_inputs = DuPontInputs(
-            years_to_analyze=3,
-            include_trend_analysis=True,
-            custom_ratios=None
-        )
-        
-        has_income_statement = 'net_income' in historical_data or 'latest_net_income' in historical_data
-        has_balance_sheet = 'total_assets' in historical_data or 'shareholders_equity' in historical_data
-        
-        warnings = []
-        data_quality = 85.0
-        
-        if not has_income_statement:
-            warnings.append("Income statement data missing for DuPont analysis")
-            data_quality -= 20.0
-        if not has_balance_sheet:
-            warnings.append("Balance sheet data missing for DuPont analysis")
-            data_quality -= 20.0
-        
-        return Step4Response(
-            ticker=ticker,
-            valuation_model=ValuationModel.DUPONT,
-            dupont_inputs=dupont_inputs,
-            warnings=warnings,
-            data_quality_score=max(data_quality, 0.0),
-            model_specific_notes="DuPont model decomposes ROE into Net Margin, Asset Turnover, and Equity Multiplier"
+        return UnifiedStep4Response(
+            status="success",
+            session_id=session_id,
+            method=method.upper(),
+            market=market.lower(),
+            target_company=ticker,
+            suggested_peers=peer_companies,
+            selected_peers=selected_peers,
+            message=f"Selected {len(selected_peers)} peer companies for {method.upper()} valuation"
         )
