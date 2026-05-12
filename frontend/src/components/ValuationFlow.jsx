@@ -86,7 +86,7 @@ const ValuationFlow = () => {
   const [manualPeerInput, setManualPeerInput] = useState('');
   const [manualPeerError, setManualPeerError] = useState(null);
   const [manualPeerLoading, setManualPeerLoading] = useState(false);
-  
+
   // Market validation state - ensures market selection is consistent throughout workflow
   const [marketValidation, setMarketValidation] = useState({
     isValid: true,
@@ -222,7 +222,7 @@ const ValuationFlow = () => {
   // ==================== STEP 1: SEARCH COMPANY ====================
   const handleSearch = useCallback(async () => {
     if (!searchQuery.trim()) return;
-    
+
     // Validate market selection before search
     if (!['international', 'vietnamese'].includes(market)) {
       setMarketValidation({
@@ -233,20 +233,20 @@ const ValuationFlow = () => {
       setError('Invalid market selection');
       return;
     }
-    
+
     // Update validation state
     setMarketValidation({
       isValid: true,
       message: `Searching in ${market === 'international' ? 'International' : 'Vietnamese'} market`,
       selectedMarket: market
     });
-    
+
     setLoading(true);
     setError(null);
     try {
       const data = await searchCompanies(searchQuery, market);
       console.log('Search response:', data);
-      
+
       // Unified response handling - both markets now return the same format
       if (data.results && data.results.length > 0) {
         setSearchResults(data.results);
@@ -268,7 +268,7 @@ const ValuationFlow = () => {
   const handleFindPeers = useCallback(async (company) => {
     setLoading(true);
     setError(null);
-    
+
     // Validate market selection before finding peers
     if (!['international', 'vietnamese'].includes(market)) {
       setMarketValidation({
@@ -280,7 +280,7 @@ const ValuationFlow = () => {
       setLoading(false);
       return;
     }
-    
+
     try {
       const ticker = company.ticker || company.symbol;
       const data = await suggestPeers(ticker, company.market || market, 10);
@@ -311,11 +311,9 @@ const ValuationFlow = () => {
   // ==================== STEP 3: TOGGLE PEER SELECTION ====================
   const handleTogglePeer = useCallback((peer) => {
     setSelectedPeers(prev => {
-      // Check using both symbol and ticker for robust matching
-      const peerId = peer.symbol || peer.ticker;
-      const exists = prev.find(p => (p.symbol || p.ticker) === peerId);
+      const exists = prev.find(p => p.symbol === peer.symbol);
       if (exists) {
-        return prev.filter(p => (p.symbol || p.ticker) !== peerId);
+        return prev.filter(p => p.symbol !== peer.symbol);
       } else {
         return [...prev, peer];
       }
@@ -352,7 +350,7 @@ const ValuationFlow = () => {
   // ==================== STEP 1: SELECT COMPANY ====================
   const handleSelectCompany = useCallback(async (company) => {
     setLoading(true);
-    
+
     // Validate market selection before selecting company
     if (!['international', 'vietnamese'].includes(market)) {
       setMarketValidation({
@@ -364,7 +362,7 @@ const ValuationFlow = () => {
       setLoading(false);
       return;
     }
-    
+
     try {
       // Call backend to create session and get session_id
       // Use the explicitly selected market from Step 1 radio button
@@ -404,7 +402,7 @@ const ValuationFlow = () => {
         }
 
         setSelectedCompany(enrichedCompany);
-        
+
         // Update market validation to confirm successful market routing
         const ticker = company.ticker || company.symbol;
         setMarketValidation({
@@ -412,7 +410,7 @@ const ValuationFlow = () => {
           message: `Company ${ticker} selected in ${market === 'international' ? 'International' : 'Vietnamese'} market`,
           selectedMarket: market
         });
-        
+
         setCurrentStep(2); // Move to Step 2: Company Overview
       }
     } catch (err) {
@@ -425,13 +423,6 @@ const ValuationFlow = () => {
 
   // ==================== HANDLE MODEL SWITCH (Preserve all models' data) ====================
   const handleSelectModel = useCallback(async (modelType) => {
-    // Validation: Prevent model selection without peers selected (Unified Schema Requirement)
-    // UnifiedStep4Request requires either suggested_peers or custom_peers to be provided
-    if (!selectedPeers || selectedPeers.length === 0) {
-      setError('No peers selected. Please go back to Step 3 and select at least one peer company.');
-      return;
-    }
-
     // GAP 2 & GAP 3 FIX: Update selected model first, then deep merge to preserve other models' data
     // Single selection (radio button behavior) - modelType is a string, not array
     setSelectedModels(modelType);
@@ -439,8 +430,7 @@ const ValuationFlow = () => {
     setLoading(true);
     try {
       // Always use single model endpoint (multi-select is now forbidden per documentation)
-      // Pass selectedPeers as suggested_peers to the backend
-      const data = await selectModels(sessionId, modelType, market, selectedPeers);
+      const data = await selectModels(sessionId, modelType, market);
       console.log('Select model response:', data);
       if (data.message) {
         setCurrentStep(5);
@@ -451,7 +441,7 @@ const ValuationFlow = () => {
     } finally {
       setLoading(false);
     }
-  }, [sessionId, market, selectedPeers]);
+  }, [sessionId, market]);
 
   // ==================== DEEP MERGE UTILITY FOR MATRIX STATE ====================
   // Prevents data loss when switching between models by preserving all models' data
@@ -667,10 +657,31 @@ const ValuationFlow = () => {
   const fetchRequiredInputs = useCallback(async (method) => {
     try {
       const targetMethod = method || selectedModels;
-      const data = await prepareInputs(sessionId, targetMethod, market);
+      // FIX: Call prepareAssumptions (the correct API function) instead of non-existent prepareInputs
+      const data = await prepareAssumptions(sessionId, targetMethod, market);
       console.log('Required inputs response:', data);
-      if (data.status && data.required_inputs) {
-        setRequiredFields(data.required_inputs);
+
+      // FIX: Transform unified schema categories into requiredFields format
+      if (data.status && data.categories) {
+        const transformedFields = [];
+
+        data.categories.forEach(category => {
+          if (category.assumptions) {
+            Object.entries(category.assumptions).forEach(([key, field]) => {
+              transformedFields.push({
+                category: category.category_name,
+                name: field.description || key,
+                fieldName: key,
+                requiresInput: category.requires_user_input,
+                status: field.status,
+                value: field.value,
+                isMissing: field.is_missing
+              });
+            });
+          }
+        });
+
+        setRequiredFields(transformedFields);
       }
     } catch (err) {
       console.error('Prepare inputs error:', err);
@@ -704,9 +715,9 @@ const ValuationFlow = () => {
       // Handle both International and Vietnamese response formats
       // International format: { status, data: { historical_financials, ... }, message }
       // Vietnamese format: { session_id, status, ticker, success, source_provider, ..., periods_fetched, ... }
-      
+
       let financialData = null;
-      
+
       if (market && (market.toLowerCase() === 'vietnamese' || market.toLowerCase() === 'vietnam')) {
         // Vietnamese response format - wrap raw data in expected structure
         if (fetchDataResponse.success) {
@@ -1064,7 +1075,7 @@ const ValuationFlow = () => {
           />
         );
       case 4:
-        return <ModelSelectionStep onSelectModel={handleSelectModel} selectedModels={selectedModels} selectedPeers={selectedPeers} />;
+        return <ModelSelectionStep onSelectModel={handleSelectModel} selectedModels={selectedModels} />;
       case 5:
         return (
           <RequirementsStep
@@ -1194,8 +1205,6 @@ const ValuationFlow = () => {
               className={`step-dot ${currentStep >= step ? 'active' : ''} ${currentStep === step ? 'current' : ''}`}
               title={`Step ${step}`}
               aria-label={`Step ${step}`}
-              onClick={() => step <= currentStep && setCurrentStep(step)}
-              style={{ cursor: step <= currentStep ? 'pointer' : 'default' }}
             />
           ))}
         </div>
