@@ -54,9 +54,9 @@ export const validateManualPeers = async (sessionId, tickers, market = 'internat
   return response.data;
 };
 
-// Step 4: Select Peers - Updated to use unified schema
-export const selectPeers = async (sessionId, method, market = 'international', suggestedPeers = [], customPeers = []) => {
-  const response = await api.post('/step-4-select-peers', { 
+// Step 4: Select Models - Updated to use unified schema
+export const selectModels = async (sessionId, method, market = 'international', suggestedPeers = [], customPeers = []) => {
+  const response = await api.post('/step-4-select-models', { 
     session_id: sessionId,
     method: method.toUpperCase(),
     market: market.toLowerCase(),

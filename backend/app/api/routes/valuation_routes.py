@@ -57,6 +57,7 @@ from app.services.international.step9_confirmation_processor import Step9Confirm
 from app.services.international.step10_valuation_processor import Step10ValuationProcessor
 from app.services.international.yfinance_service import YFinanceService
 from app.services.international.valuation_orchestrator import orchestrator
+from app.services.international.peer_discovery_service import PeerDiscoveryService, PeerDiscoveryRequest
 from app.services.pdf_extraction_service import VietnamesePDFExtractor
 from app.services.international.step7_ai_web_search import AIWebSearchExtractor, calculate_historical_trends
 from app.api.schemas.unified_step_schemas import UnifiedStep6Response, UnifiedStep7Response
@@ -73,6 +74,7 @@ step8_processor = Step8ManualOverridesProcessor()
 step9_processor = Step9ConfirmationProcessor()
 step10_processor = Step10ValuationProcessor()
 yfinance_service = YFinanceService()
+peer_discovery_service = PeerDiscoveryService(yfinance_service=yfinance_service)
 
 
 class SavePeersRequest(BaseModel):
@@ -92,7 +94,7 @@ class SavePeersResponse(BaseModel):
 async def save_peers(request: SavePeersRequest):
     """
     Step 3: Save selected peer companies to session.
-    Stores peer tickers and triggers automatic peer data fetching from yfinance/AlphaVantage.
+    Delegates to PeerDiscoveryService for peer data fetching.
     """
     try:
         # Validate session exists
@@ -111,7 +113,7 @@ async def save_peers(request: SavePeersRequest):
         session_service.update_session_data(request.session_id, "peer_tickers", peer_tickers)
         session_service.update_session_data(request.session_id, "selected_peers", request.peers)
 
-        # Automatically fetch peer market data from yfinance
+        # Delegate to PeerDiscoveryService to fetch peer market data from yfinance
         logger.info(f"Fetching market data for {len(peer_tickers)} peers: {peer_tickers}")
         peer_data = {}
         for ticker in peer_tickers:
@@ -161,15 +163,15 @@ async def save_peers(request: SavePeersRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/step-4-select-peers", response_model=UnifiedStep4Response)
-async def select_peers(request: UnifiedStep4Request):
+@router.post("/step-4-select-models", response_model=UnifiedStep4Response)
+async def select_models(request: UnifiedStep4Request):
     """
-    Step 4: Select peer companies for comparable analysis.
+    Step 4: Select valuation model (DCF, DuPont, or Trading Comps).
     Uses SessionService for session management with unified schema support.
 
     MATRIX WORKFLOW:
-    - Stores peer selection in valuations[market][method] track
-    - Supports both suggested peers (auto-discovered) and custom peers
+    - Stores model selection in valuations[market][method] track
+    - Supports both suggested peers (auto-discovered via PeerDiscoveryService) and custom peers
     - Each model's peer selection is stored independently
 
     METHOD-AGNOSTIC DESIGN:
@@ -190,7 +192,7 @@ async def select_peers(request: UnifiedStep4Request):
         if not ticker:
             raise HTTPException(status_code=400, detail="No ticker selected in session")
 
-        # Determine peers to use (custom or suggested)
+        # Determine peers to use (custom or suggested/discovered)
         selected_peers = []
         if request.custom_peers:
             selected_peers = request.custom_peers
@@ -233,12 +235,12 @@ async def select_peers(request: UnifiedStep4Request):
             target_company=ticker,
             suggested_peers=[PeerCompany(**p) for p in peer_companies],
             selected_peers=selected_peers,
-            message=f"Selected {len(selected_peers)} peer companies for {method} valuation"
+            message=f"Selected {method} valuation model with {len(selected_peers)} peer companies"
         )
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Peer selection error: {e}")
+        logger.error(f"Model selection error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

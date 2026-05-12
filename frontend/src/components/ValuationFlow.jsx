@@ -5,7 +5,7 @@ import {
   selectCompany,
   savePeers,
   validateManualPeers,
-  selectPeers,
+  selectModels,
   prepareAssumptions,
   fetchApiData,
   retrieveHistoricalData,
