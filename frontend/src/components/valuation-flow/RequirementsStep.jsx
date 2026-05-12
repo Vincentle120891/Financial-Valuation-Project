@@ -3,7 +3,7 @@ import React from 'react';
 /**
  * RequirementsStep Component
  * Step 5: Review Data Requirements & Retrieved Data
- * 
+ *
  * Features:
  * - Model-specific data requirements display
  * - Historical vs forecast period breakdown
@@ -11,11 +11,11 @@ import React from 'react';
  * - Back navigation to model selection
  * - Continue button after data retrieval
  */
-const RequirementsStep = ({ 
-  selectedModel, 
-  onBackToModelSelection, 
-  onRetrieveData, 
-  loading, 
+const RequirementsStep = ({
+  selectedModel,
+  onBackToModelSelection,
+  onRetrieveData,
+  loading,
   historicalData,
   forecastDrivers,
   peerData,
@@ -32,7 +32,7 @@ const RequirementsStep = ({
   // Group required fields by category
   const getGroupedRequiredFields = () => {
     if (!requiredFields || requiredFields.length === 0) return {};
-    
+
     return requiredFields.reduce((groups, field) => {
       const category = field.category || 'Other';
       if (!groups[category]) {
@@ -46,7 +46,7 @@ const RequirementsStep = ({
   // Render all required inputs from backend
   const renderAllRequiredInputs = () => {
     const groupedFields = getGroupedRequiredFields();
-    
+
     if (Object.keys(groupedFields).length === 0) {
       return null;
     }
@@ -54,7 +54,7 @@ const RequirementsStep = ({
     return (
       <div className="summary-box" style={{ background: 'linear-gradient(135deg, #f5f5f5 0%, #e0e0e0 100%)', marginTop: '20px' }}>
         <h3>📋 All Required Inputs ({requiredFields.length} total)</h3>
-        
+
         {Object.entries(groupedFields).map(([category, fields]) => (
           <div key={category} style={{ marginBottom: '20px' }}>
             <h4 style={{ color: '#1976d2', marginBottom: '12px', borderBottom: '2px solid #1976d2', paddingBottom: '6px' }}>
@@ -62,11 +62,11 @@ const RequirementsStep = ({
             </h4>
             <div style={{ display: 'grid', gap: '8px' }}>
               {fields.map((field, idx) => (
-                <div 
-                  key={idx} 
-                  style={{ 
-                    display: 'flex', 
-                    justifyContent: 'space-between', 
+                <div
+                  key={idx}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
                     alignItems: 'center',
                     padding: '10px 14px',
                     background: field.requiresInput ? '#fff3e0' : '#e8f5e9',
@@ -77,9 +77,9 @@ const RequirementsStep = ({
                   <span style={{ fontWeight: field.requiresInput ? 600 : 400, color: '#333' }}>
                     {field.name}
                   </span>
-                  <span style={{ 
-                    fontSize: '12px', 
-                    padding: '4px 8px', 
+                  <span style={{
+                    fontSize: '12px',
+                    padding: '4px 8px',
                     borderRadius: '4px',
                     background: field.requiresInput ? '#ff9800' : '#4caf50',
                     color: 'white',
@@ -92,10 +92,10 @@ const RequirementsStep = ({
             </div>
           </div>
         ))}
-        
+
         <div style={{ marginTop: '16px', padding: '12px', background: '#e3f2fd', borderRadius: '6px' }}>
           <p style={{ margin: 0, fontSize: '14px', color: '#1565c0' }}>
-            <strong>Legend:</strong> 
+            <strong>Legend:</strong>
             <span style={{ marginLeft: '12px' }}>🟠 Orange = Requires manual input/confirmation</span>
             <span style={{ marginLeft: '12px' }}>🟢 Green = Automatically fetched from data sources</span>
           </p>
@@ -107,40 +107,32 @@ const RequirementsStep = ({
   // Check if data has been retrieved
   const hasRetrievedData = historicalData || peerData || dcfInputs || dupontResults || compsResults || (aiData && Object.keys(aiData).length > 0);
 
-  // Helper function to extract values from data_fields array format used by backend
-  // Backend returns: { years: [2020, 2021], data_fields: [{ field_name: 'Revenue_2020', value: 100 }, ...] }
-  // Frontend expects: { revenue: { 2020: 100, 2021: 110 }, ... }
-  const getFieldValues = (data, fieldNamePatterns) => {
-    if (!data || !data.data_fields) return {};
-    
-    const result = {};
-    const patterns = Array.isArray(fieldNamePatterns) ? fieldNamePatterns : [fieldNamePatterns];
-    
-    data.data_fields.forEach(field => {
-      const matchedPattern = patterns.find(pattern => {
-        if (typeof pattern === 'string') {
-          return field.field_name === pattern || field.field_name.startsWith(pattern + '_');
+  // Helper function to extract values from unified schema format
+  // Backend returns: { historical_financials: { revenue: DataField, ebitda: DataField, ... } }
+  // Extracts period values from DataField objects
+  const getFieldValues = (data, fieldName) => {
+    if (!data || !data.historical_financials) return {};
+
+    const fieldData = data.historical_financials[fieldName];
+    if (!fieldData) return {};
+
+    // Handle DataField with array of period values
+    if (fieldData.value && Array.isArray(fieldData.value)) {
+      const result = {};
+      fieldData.value.forEach(periodValue => {
+        if (periodValue.period && periodValue.value !== undefined) {
+          result[periodValue.period] = periodValue.value;
         }
-        if (pattern instanceof RegExp) {
-          return pattern.test(field.field_name);
-        }
-        return false;
       });
-      
-      if (matchedPattern) {
-        // Extract year from field_name (e.g., 'Revenue_2020' -> 2020)
-        const yearMatch = field.field_name.match(/_(\d{4})$/);
-        if (yearMatch) {
-          const year = yearMatch[1];
-          let key = typeof matchedPattern === 'string' ? matchedPattern.toLowerCase() : 'value';
-          // Handle special cases for key naming
-          if (key === 'total revenue') key = 'revenue';
-          result[year] = field.value;
-        }
-      }
-    });
-    
-    return result;
+      return result;
+    }
+
+    // Handle single value case
+    if (fieldData.value !== undefined) {
+      return { value: fieldData.value };
+    }
+
+    return {};
   };
 
   // Render retrieved data summary
@@ -150,58 +142,58 @@ const RequirementsStep = ({
     return (
       <div className="summary-box" style={{ background: 'linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%)', marginTop: '20px' }}>
         <h3>✓ Retrieved Data Summary</h3>
-        
+
         {/* Historical Data */}
         {historicalData && (
           <div style={{ marginBottom: '16px' }}>
             <h4 style={{ color: '#2e7d32', marginBottom: '8px' }}>Historical Financials</h4>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '12px' }}>
-              {/* Handle both old format (revenue: {2020: 100}) and new format (data_fields array) */}
-              {(historicalData.revenue || (historicalData.data_fields && getFieldValues(historicalData, ['Total Revenue', 'total_revenue', 'revenue']))) && (
+              {/* Unified schema format: historical_financials.{field}.value */}
+              {(historicalData.historical_financials?.revenue || getFieldValues(historicalData, 'revenue')) && (
                 <div style={{ background: 'white', padding: '12px', borderRadius: '6px' }}>
                   <strong>Revenue:</strong>
                   <p style={{ margin: '4px 0 0 0', color: '#666' }}>
-                    {Object.keys(historicalData.revenue || getFieldValues(historicalData, ['Total Revenue', 'total_revenue', 'revenue'])).length} years ✓
+                    {Object.keys(historicalData.historical_financials?.revenue || getFieldValues(historicalData, 'revenue')).length} years ✓
                   </p>
                 </div>
               )}
-              {(historicalData.ebitda || (historicalData.data_fields && getFieldValues(historicalData, ['EBITDA', 'ebitda', 'Normalized EBITDA']))) && (
+              {(historicalData.historical_financials?.ebitda || getFieldValues(historicalData, 'ebitda')) && (
                 <div style={{ background: 'white', padding: '12px', borderRadius: '6px' }}>
                   <strong>EBITDA:</strong>
                   <p style={{ margin: '4px 0 0 0', color: '#666' }}>
-                    {Object.keys(historicalData.ebitda || getFieldValues(historicalData, ['EBITDA', 'ebitda', 'Normalized EBITDA'])).length} years ✓
+                    {Object.keys(historicalData.historical_financials?.ebitda || getFieldValues(historicalData, 'ebitda')).length} years ✓
                   </p>
                 </div>
               )}
-              {(historicalData.net_income || (historicalData.data_fields && getFieldValues(historicalData, ['Net Income', 'net_income', 'netIncome']))) && (
+              {(historicalData.historical_financials?.net_income || getFieldValues(historicalData, 'net_income')) && (
                 <div style={{ background: 'white', padding: '12px', borderRadius: '6px' }}>
                   <strong>Net Income:</strong>
                   <p style={{ margin: '4px 0 0 0', color: '#666' }}>
-                    {Object.keys(historicalData.net_income || getFieldValues(historicalData, ['Net Income', 'net_income', 'netIncome'])).length} years ✓
+                    {Object.keys(historicalData.historical_financials?.net_income || getFieldValues(historicalData, 'net_income')).length} years ✓
                   </p>
                 </div>
               )}
-              {(historicalData.operating_expenses || (historicalData.data_fields && getFieldValues(historicalData, ['Operating Expenses', 'operating_expenses', 'SG&A', 'sg_and_a']))) && (
+              {(historicalData.historical_financials?.operating_expenses || getFieldValues(historicalData, 'operating_expenses')) && (
                 <div style={{ background: 'white', padding: '12px', borderRadius: '6px' }}>
                   <strong>OpEx:</strong>
                   <p style={{ margin: '4px 0 0 0', color: '#666' }}>
-                    {Object.keys(historicalData.operating_expenses || getFieldValues(historicalData, ['Operating Expenses', 'operating_expenses', 'SG&A', 'sg_and_a'])).length} years ✓
+                    {Object.keys(historicalData.historical_financials?.operating_expenses || getFieldValues(historicalData, 'operating_expenses')).length} years ✓
                   </p>
                 </div>
               )}
-              {(historicalData.capex || (historicalData.data_fields && getFieldValues(historicalData, ['CapEx', 'capex', 'Capital Expenditures', 'capital_expenditures']))) && (
+              {(historicalData.historical_financials?.capex || getFieldValues(historicalData, 'capex')) && (
                 <div style={{ background: 'white', padding: '12px', borderRadius: '6px' }}>
                   <strong>CapEx:</strong>
                   <p style={{ margin: '4px 0 0 0', color: '#666' }}>
-                    {Object.keys(historicalData.capex || getFieldValues(historicalData, ['CapEx', 'capex', 'Capital Expenditures', 'capital_expenditures'])).length} years ✓
+                    {Object.keys(historicalData.historical_financials?.capex || getFieldValues(historicalData, 'capex')).length} years ✓
                   </p>
                 </div>
               )}
-              {(historicalData.depreciation || (historicalData.data_fields && getFieldValues(historicalData, ['Depreciation', 'depreciation', 'Depreciation And Amortization', 'depreciation_and_amortization']))) && (
+              {(historicalData.historical_financials?.depreciation || getFieldValues(historicalData, 'depreciation')) && (
                 <div style={{ background: 'white', padding: '12px', borderRadius: '6px' }}>
                   <strong>D&A:</strong>
                   <p style={{ margin: '4px 0 0 0', color: '#666' }}>
-                    {Object.keys(historicalData.depreciation || getFieldValues(historicalData, ['Depreciation', 'depreciation', 'Depreciation And Amortization', 'depreciation_and_amortization'])).length} years ✓
+                    {Object.keys(historicalData.historical_financials?.depreciation || getFieldValues(historicalData, 'depreciation')).length} years ✓
                   </p>
                 </div>
               )}
@@ -371,7 +363,7 @@ const RequirementsStep = ({
   // Render missing data warning
   const renderMissingData = () => {
     const missingItems = [];
-    
+
     if (selectedModel === 'DCF' && !historicalData) {
       missingItems.push('Historical Financials');
     }
@@ -381,7 +373,7 @@ const RequirementsStep = ({
     if (selectedModel === 'COMPS' && !peerData) {
       missingItems.push('Peer Comparison Data');
     }
-    
+
     if (missingItems.length > 0 && hasRetrievedData) {
       return (
         <div className="summary-box" style={{ background: 'linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%)', marginTop: '20px' }}>
@@ -401,7 +393,7 @@ const RequirementsStep = ({
   // Render AI error warning in Step 5 with detailed provider errors
   const renderAiError = () => {
     if (!aiError || !hasRetrievedData) return null;
-    
+
     // Try to parse detailed error info from aiError
     let detailedErrors = null;
     let fallbackReason = null;
@@ -419,22 +411,22 @@ const RequirementsStep = ({
     } catch (e) {
       // Not a JSON string, use as is
     }
-    
+
     return (
       <div className="summary-box" style={{ background: 'linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%)', border: '2px solid #ff9800', marginTop: '20px' }}>
         <h3 style={{ color: '#e65100' }}>⚠️ AI Suggestions Failed</h3>
         <p style={{ marginBottom: '12px', color: '#e65100' }}>{fallbackReason || aiError}</p>
-        
+
         {/* Show detailed provider errors if available */}
         {detailedErrors && Object.keys(detailedErrors).length > 0 && (
           <div style={{ background: 'white', padding: '12px', borderRadius: '6px', marginTop: '12px', marginBottom: '12px' }}>
             <strong>🔍 Detailed Error Information:</strong>
             <div style={{ marginTop: '8px' }}>
               {Object.entries(detailedErrors).map(([provider, error]) => (
-                <div key={provider} style={{ 
-                  padding: '8px', 
-                  margin: '6px 0', 
-                  background: '#ffebee', 
+                <div key={provider} style={{
+                  padding: '8px',
+                  margin: '6px 0',
+                  background: '#ffebee',
                   borderRadius: '4px',
                   borderLeft: '3px solid #f44336'
                 }}>
@@ -447,11 +439,11 @@ const RequirementsStep = ({
             </div>
           </div>
         )}
-        
+
         <div style={{ background: 'white', padding: '12px', borderRadius: '6px', marginTop: '12px' }}>
           <strong>💡 What this means:</strong>
           <p style={{ margin: '8px 0', color: '#333' }}>
-            Financial data was successfully loaded, but AI-powered suggestions could not be generated. 
+            Financial data was successfully loaded, but AI-powered suggestions could not be generated.
             You can still proceed to view the retrieved data and manually enter your assumptions.
           </p>
           <strong>📋 Next Steps:</strong>
@@ -477,23 +469,23 @@ const RequirementsStep = ({
           ← Change Model
         </button>
       </div>
-      
+
       {/* Render ALL required inputs from backend - comprehensive list */}
       {renderAllRequiredInputs()}
 
       {/* Show retrieved data if available */}
       {renderRetrievedData()}
-      
+
       {/* Show missing data warning if applicable */}
       {renderMissingData()}
-      
+
       {/* Show AI error warning if applicable */}
       {renderAiError()}
 
       <div style={{ marginTop: '20px', display: 'flex', gap: '10px' }}>
         {!hasRetrievedData ? (
-          <button 
-            onClick={onRetrieveData} 
+          <button
+            onClick={onRetrieveData}
             className="btn-primary"
             disabled={loading}
           >
@@ -501,15 +493,15 @@ const RequirementsStep = ({
           </button>
         ) : (
           <>
-            <button 
-              onClick={onRetrieveData} 
+            <button
+              onClick={onRetrieveData}
               className="btn-secondary"
               disabled={loading}
             >
               {loading ? '🔄 Refreshing Data...' : '🔄 Refresh Data'}
             </button>
-            <button 
-              onClick={onShowInputs} 
+            <button
+              onClick={onShowInputs}
               className="btn-primary"
             >
               Continue to Review Data →
