@@ -196,7 +196,7 @@ class CompsStep6Processor:
 
         # Extract years from financial statements (last 3-5 years for comps)
         if financials_df is not None and not financials_df.empty:
-            years = [col.year if hasattr(col, 'year') else str(col) for col in financials_df.columns[-5:]]
+            years = [str(col.year) if hasattr(col, 'year') else str(col) for col in financials_df.columns[-5:]]
 
         # Trading Comps-specific historical fields (critical for multiple calculations)
         comps_historical_fields = [
