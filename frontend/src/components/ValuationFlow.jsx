@@ -433,12 +433,20 @@ const ValuationFlow = () => {
   const handleSelectModel = useCallback(async (modelType) => {
     // GAP 2 & GAP 3 FIX: Update selected model first, then deep merge to preserve other models' data
     // Single selection (radio button behavior) - modelType is a string, not array
+    
+    // Client-side validation: Ensure peers are selected before model selection
+    if (!selectedPeers || selectedPeers.length === 0) {
+      alert('⚠️ No peers selected! Please go back to Step 3 and select at least one peer company.');
+      return;
+    }
+    
     setSelectedModels(modelType);
 
     setLoading(true);
     try {
       // Always use single model endpoint (multi-select is now forbidden per documentation)
-      const data = await selectModels(sessionId, modelType, market);
+      // Pass the selected peers as custom_peers to the backend
+      const data = await selectModels(sessionId, modelType, market, [], selectedPeers);
       console.log('Select model response:', data);
       if (data.message) {
         setCurrentStep(5);
@@ -449,7 +457,7 @@ const ValuationFlow = () => {
     } finally {
       setLoading(false);
     }
-  }, [sessionId, market]);
+  }, [sessionId, market, selectedPeers]);
 
   // ==================== DEEP MERGE UTILITY FOR MATRIX STATE ====================
   // Prevents data loss when switching between models by preserving all models' data
@@ -1083,7 +1091,7 @@ const ValuationFlow = () => {
           />
         );
       case 4:
-        return <ModelSelectionStep onSelectModel={handleSelectModel} selectedModels={selectedModels} />;
+        return <ModelSelectionStep onSelectModel={handleSelectModel} selectedModels={selectedModels} selectedPeers={selectedPeers} />;
       case 5:
         return (
           <RequirementsStep
