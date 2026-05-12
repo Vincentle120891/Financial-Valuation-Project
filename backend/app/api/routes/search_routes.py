@@ -77,19 +77,26 @@ async def select_ticker(request: TickerSelectRequest):
         )
         
         # Validate and enrich session data using Step2 processor
-        result = await step2_processor.select_company(
+        unified_response = step2_processor.process_market_data(
             ticker=request.ticker,
             market=request.market,
-            session_id=session_id
+            session_id=session_id,
+            company_name=None
         )
+        
+        # Build result dict from unified response
+        result = {
+            "status": unified_response.status,
+            "message": unified_response.message,
+            "data": unified_response.model_dump()
+        }
 
         # Update session status from processor result
         session_service.update_session_data(session_id, "status", result["status"])
 
-        # Extract company data from the result if available
+        # Extract company data from the unified response
         company_data = None
-        if result.get("data"):
-            data = result["data"]
+        if unified_response:
             # Build company_data dict with key metrics
             company_data = {
                 "current_price": None,
@@ -103,28 +110,27 @@ async def select_ticker(request: TickerSelectRequest):
             }
             
             # Extract from market_data array
-            if "market_data" in data:
-                for md in data["market_data"]:
-                    if md.get("metric") == "current_price":
-                        company_data["current_price"] = md.get("value")
-                    elif md.get("metric") == "market_cap":
-                        company_data["market_cap"] = md.get("value")
-                    elif md.get("metric") == "beta":
-                        company_data["beta"] = md.get("value")
-                    elif md.get("metric") == "risk_free_rate":
-                        company_data["risk_free_rate"] = md.get("value")
-                    elif md.get("metric") == "market_risk_premium":
-                        company_data["market_risk_premium"] = md.get("value")
+            for md in unified_response.market_data:
+                if md.metric == "current_price":
+                    company_data["current_price"] = md.value
+                elif md.metric == "market_cap":
+                    company_data["market_cap"] = md.value
+                elif md.metric == "beta":
+                    company_data["beta"] = md.value
+                elif md.metric == "risk_free_rate":
+                    company_data["risk_free_rate"] = md.value
+                elif md.metric == "market_risk_premium":
+                    company_data["market_risk_premium"] = md.value
             
             # Extract from risk_metrics
-            if "risk_metrics" in data:
-                risk_metrics = data["risk_metrics"]
-                if not company_data["beta"] and risk_metrics.get("beta"):
-                    company_data["beta"] = risk_metrics.get("beta")
-                if not company_data["risk_free_rate"] and risk_metrics.get("risk_free_rate"):
-                    company_data["risk_free_rate"] = risk_metrics.get("risk_free_rate")
-                if not company_data["market_risk_premium"] and risk_metrics.get("market_risk_premium"):
-                    company_data["market_risk_premium"] = risk_metrics.get("market_risk_premium")
+            if unified_response.risk_metrics:
+                risk_metrics = unified_response.risk_metrics
+                if not company_data["beta"] and risk_metrics.beta and risk_metrics.beta.value:
+                    company_data["beta"] = risk_metrics.beta.value
+                if not company_data["risk_free_rate"] and risk_metrics.risk_free_rate and risk_metrics.risk_free_rate.value:
+                    company_data["risk_free_rate"] = risk_metrics.risk_free_rate.value
+                if not company_data["market_risk_premium"] and risk_metrics.market_risk_premium and risk_metrics.market_risk_premium.value:
+                    company_data["market_risk_premium"] = risk_metrics.market_risk_premium.value
             
             # Get sector/industry/country from yfinance ticker info
             ticker_info = step2_processor.yfinance_service.get_ticker_info(request.ticker)
