@@ -282,7 +282,8 @@ const ValuationFlow = () => {
     }
     
     try {
-      const data = await suggestPeers(company.symbol, company.market || market, 10);
+      const ticker = company.ticker || company.symbol;
+      const data = await suggestPeers(ticker, company.market || market, 10);
       console.log('Suggest peers response:', data);
       if (data.peers && data.peers.length > 0) {
         setSuggestedPeers(data.peers);
@@ -365,7 +366,8 @@ const ValuationFlow = () => {
     try {
       // Call backend to create session and get session_id
       // Use the explicitly selected market from Step 1 radio button
-      const data = await selectCompany('', company.symbol, company.market || market);
+      const ticker = company.ticker || company.symbol;
+      const data = await selectCompany('', ticker, company.market || market);
       console.log('Select company response:', data);
       if (data.session_id) {
         setSessionId(data.session_id);
@@ -402,9 +404,10 @@ const ValuationFlow = () => {
         setSelectedCompany(enrichedCompany);
         
         // Update market validation to confirm successful market routing
+        const ticker = company.ticker || company.symbol;
         setMarketValidation({
           isValid: true,
-          message: `Company ${company.symbol} selected in ${market === 'international' ? 'International' : 'Vietnamese'} market`,
+          message: `Company ${ticker} selected in ${market === 'international' ? 'International' : 'Vietnamese'} market`,
           selectedMarket: market
         });
         
