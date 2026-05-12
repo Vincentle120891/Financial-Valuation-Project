@@ -8,6 +8,8 @@ import InternationalMarketData from './InternationalMarketData';
  * Displays selected company details with sector, industry, and market cap information
  * Provides "Find Peers" button to trigger automatic peer discovery
  * Uses market-specific components for Vietnamese and International markets
+ * 
+ * STYLED TO MATCH: ResultsStep.jsx (Step 8)
  */
 const CompanySelectionStep = ({
   selectedCompany,
@@ -16,8 +18,8 @@ const CompanySelectionStep = ({
   onBack,
   loading,
   hasPeers = false,
-  market = 'international', // Market type from parent component
-  marketData = null // Market-specific data from backend
+  market = 'international',
+  marketData = null
 }) => {
   const [peerSearchLoading, setPeerSearchLoading] = useState(false);
   const [priceHistory, setPriceHistory] = useState(null);
@@ -32,7 +34,6 @@ const CompanySelectionStep = ({
     }
   };
 
-  // Fetch price history when component mounts or company changes
   React.useEffect(() => {
     const fetchPriceHistory = async () => {
       const ticker = selectedCompany?.ticker || selectedCompany?.symbol;
@@ -40,7 +41,6 @@ const CompanySelectionStep = ({
 
       setChartLoading(true);
       try {
-        // Pass market_code parameter to ensure correct ticker format
         const marketCode = market === 'vietnamese' ? 'VN' : 'US';
         const response = await fetch(`/api/market-data/${ticker}/price-history?market_code=${marketCode}`);
         if (response.ok) {
@@ -63,7 +63,8 @@ const CompanySelectionStep = ({
 
   if (!selectedCompany) {
     return (
-      <div className="max-w-4xl mx-auto p-6">
+      <div className="step-container">
+        <h2>Step 2: Company Overview</h2>
         <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded">
           <p className="text-yellow-700">No company selected. Please go back to Step 1.</p>
         </div>
@@ -72,25 +73,14 @@ const CompanySelectionStep = ({
   }
 
   return (
-    <div className="max-w-4xl mx-auto p-6">
-      <div className="mb-8">
-        <div className="flex items-center gap-3 mb-2">
-          <div className="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center">
-            <svg className="w-6 h-6 text-indigo-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M3 21h18M5 21V7l8-4 8 4v14M8 21v-9a4 4 0 0 1 4-4h0a4 4 0 0 1 4 4v9M9 10a1 1 0 1 0 0-2 1 1 0 0 0 0 2z" />
-            </svg>
-          </div>
-          <h2 className="text-2xl font-bold text-gray-900">
-            Step 2: Company Overview
-          </h2>
-        </div>
-        <p className="text-gray-600 ml-13">
-          Review the selected company details before proceeding to peer selection.
-        </p>
-      </div>
+    <div className="step-container">
+      <h2>Step 2: Company Overview</h2>
+      <p style={{ marginBottom: '24px', color: '#666' }}>
+        Review the selected company details before proceeding to peer selection.
+      </p>
 
       {/* Company Details Card */}
-      <div className="bg-white shadow-lg rounded-lg p-6 mb-6">
+      <div className="summary-box" style={{ marginBottom: '24px' }}>
         <div className="flex items-start justify-between mb-4">
           <div>
             <h3 className="text-xl font-semibold text-gray-900">
@@ -207,8 +197,8 @@ const CompanySelectionStep = ({
       </div>
 
       {/* Price History Chart */}
-      <div className="bg-white shadow-lg rounded-lg p-6 mb-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Price History (3 Months)</h3>
+      <div className="summary-box" style={{ marginBottom: '24px' }}>
+        <h3 style={{ marginBottom: '16px' }}>📈 Price History (3 Months)</h3>
         {chartLoading ? (
           <div className="flex items-center justify-center h-64">
             <svg className="animate-spin h-8 w-8 text-indigo-600" viewBox="0 0 24 24">
@@ -265,24 +255,21 @@ const CompanySelectionStep = ({
       <div className="flex justify-between items-center mt-8 gap-4">
         <button
           onClick={onBack}
-          className="px-6 py-3 border border-gray-300 text-gray-700 bg-white rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-sm"
+          className="btn-secondary"
           disabled={loading}
         >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-          </svg>
-          Back to Search
+          ← Back to Search
         </button>
 
         <div className="flex gap-4">
           <button
             onClick={handleFindPeers}
             disabled={peerSearchLoading || loading}
-            className="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-md"
+            className="btn-primary"
           >
             {peerSearchLoading ? (
               <>
-                <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                <svg className="animate-spin h-4 w-4 mr-2" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                 </svg>
@@ -290,7 +277,7 @@ const CompanySelectionStep = ({
               </>
             ) : (
               <>
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                 </svg>
                 Auto-Find Peers
@@ -301,12 +288,9 @@ const CompanySelectionStep = ({
           <button
             onClick={onContinue}
             disabled={!hasPeers || loading}
-            className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-md"
+            className="btn-success"
           >
-            Continue to Peer Selection
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-            </svg>
+            Continue to Peer Selection →
           </button>
         </div>
       </div>
