@@ -476,10 +476,10 @@ class VNStep6UnifiedTransformer:
             data_quality_flags=vn_output.data_bundle.data_quality_flags
         )
 
-        # Determine periods covered
+        # Determine periods covered (ensure strings for Pydantic validation)
         periods_covered = []
         if vn_output.data_bundle.income_statement_raw:
-            periods_covered = list(vn_output.data_bundle.income_statement_raw.keys())
+            periods_covered = [str(k) for k in vn_output.data_bundle.income_statement_raw.keys()]
 
         # Build unified response
         response = UnifiedStep6Response(

@@ -240,11 +240,11 @@ class vn_Step7HistoricalProcessor:
 
         # 6. Compile Output
         processing_duration = (time.time() - start_time) * 1000
-        periods_covered = list(set(
+        periods_covered = [str(p) for p in set(
             list(normalized.revenue.keys()) +
             list(normalized.total_assets.keys()) +
             list(normalized.operating_cash_flow.keys())
-        ))
+        )]
 
         return vn_HistoricalDataOutput(
             success=len(missing_critical) == 0 or (ai_result and ai_result.success),

@@ -293,7 +293,7 @@ class DCFStep6Processor:
 
         # Extract years from financial statements
         if financials_df is not None and not financials_df.empty:
-            years = [col.year if hasattr(col, 'year') else str(col) for col in financials_df.columns[-5:]]
+            years = [str(col.year) if hasattr(col, 'year') else str(col) for col in financials_df.columns[-5:]]
 
         # DCF-specific historical fields (11 fields)
         dcf_historical_fields = [

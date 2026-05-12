@@ -227,7 +227,7 @@ class DuPontStep6Processor:
         years = []
 
         if financials_df is not None and not financials_df.empty:
-            years = [col.year if hasattr(col, 'year') else str(col) for col in financials_df.columns[-5:]]
+            years = [str(col.year) if hasattr(col, 'year') else str(col) for col in financials_df.columns[-5:]]
 
         # DuPont-specific historical fields
         dupont_fields = [
