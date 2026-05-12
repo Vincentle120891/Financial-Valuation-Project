@@ -1,12 +1,1 @@
-# Documentation files that were deleted
-BACKEND_FRONTEND_MAPPING_ANALYSIS.md
-BACKEND_FRONTEND_STEPS_3_4_5_ANALYSIS.md
-STEP6_MAPPING_ANALYSIS.md
-UNIFIED_SCHEMA_IMPLEMENTATION_PLAN.md
-Vietnamese_Schema_Alignment_Analysis.md
-backend/FLOW_IMPLEMENTATION.md
-backend/INPUT_SOURCE_DOCUMENTATION.md
-backend/MODEL_INTEGRITY_CONFIG.md
-backend/VIETNAMESE_PDF_EXTRACTION_GUIDE.md
-backend/vietnamese_unified_transformers_README.md
-frontend/ARCHITECTURE.md
+Nothing should be ignored since only a Python source file was modified and no build artifacts, dependencies, or temporary files were detected in the changes.
