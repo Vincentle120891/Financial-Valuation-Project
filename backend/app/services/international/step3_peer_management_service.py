@@ -123,7 +123,8 @@ class Step3PeerManagementService:
             "message": f"Saved {len(peer_tickers)} peers and fetched market data",
             "peers_saved": len(peer_tickers),
             "successful_fetches": successful_fetches,
-            "failed_fetches": failed_fetches
+            "failed_fetches": failed_fetches,
+            "peer_data": peer_data
         }
     
     def _fetch_peer_market_data(self, ticker: str) -> PeerDataResult:
