@@ -65,10 +65,6 @@ class Step3HistoricalProcessor:
     """
     Processor for Step 3: Historical Financial Data.
     """
-
-    MIN_YEARS_REQUIRED = 3
-    IDEAL_YEARS = 5
-
     def __init__(self, yfinance_service: Optional[YFinanceService] = None):
         self.yfinance_service = yfinance_service or YFinanceService()
 
