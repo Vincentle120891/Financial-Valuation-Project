@@ -145,30 +145,35 @@ const SearchStep = ({
       {/* Search Results */}
       {searchResults.length > 0 && (
         <div className="search-results">
-          {searchResults.map((result) => (
-            <div key={result.symbol} className="result-item">
-              <div style={{ flex: 1 }}>
-                <span style={{ fontWeight: 'bold' }}>{result.name}</span>
-                <span style={{ marginLeft: '8px', color: '#666' }}>({result.symbol})</span>
-                {result.sector && (
-                  <span style={{ marginLeft: '8px', fontSize: '0.85em', color: '#888' }}>
-                    • {result.sector}
-                  </span>
-                )}
-                {result.exchange && (
-                  <span style={{ marginLeft: '8px', fontSize: '0.85em', color: '#888' }}>
-                    • {result.exchange}
-                  </span>
-                )}
+          {searchResults.map((result, index) => {
+            // Create a more unique key by combining symbol, name, and index
+            const uniqueKey = `${result.symbol}-${result.name}-${index}`;
+            
+            return (
+              <div key={uniqueKey} className="result-item">
+                <div style={{ flex: 1 }}>
+                  <span style={{ fontWeight: 'bold' }}>{result.name}</span>
+                  <span style={{ marginLeft: '8px', color: '#666' }}>({result.symbol})</span>
+                  {result.sector && (
+                    <span style={{ marginLeft: '8px', fontSize: '0.85em', color: '#888' }}>
+                      • {result.sector}
+                    </span>
+                  )}
+                  {result.exchange && (
+                    <span style={{ marginLeft: '8px', fontSize: '0.85em', color: '#888' }}>
+                      • {result.exchange}
+                    </span>
+                  )}
+                </div>
+                <button 
+                  onClick={() => onSelectCompany(result)} 
+                  className="btn-secondary"
+                >
+                  Select
+                </button>
               </div>
-              <button 
-                onClick={() => onSelectCompany(result)} 
-                className="btn-secondary"
-              >
-                Select
-              </button>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
