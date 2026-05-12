@@ -31,6 +31,21 @@ from app.api.schemas import (
     MultiMethodValuateRequest,
     MultiMethodValuateResponse
 )
+from app.api.schemas.unified_step_schemas import (
+    UnifiedStep4Request,
+    UnifiedStep4Response,
+    UnifiedStep5Request,
+    UnifiedStep5Response,
+    UnifiedStep6Response,
+    UnifiedStep7Response,
+    PeerCompany,
+    AssumptionCategory,
+    DataField,
+    DataStatus,
+    MissingDataSummary,
+    MarketType,
+    ValuationMethod
+)
 from app.services.international.step8_manual_overrides import FullAssumptionsResponse
 from app.services.international.step5_assumptions_processor import Step5AssumptionsProcessor
 from app.services.international.step6_data_review import Step6DataReviewProcessor
@@ -146,80 +161,20 @@ async def save_peers(request: SavePeersRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/step-4-select-models", response_model=ModelSelectResponse)
-async def select_models(request: ModelSelectRequest):
+@router.post("/step-4-select-peers", response_model=UnifiedStep4Response)
+async def select_peers(request: UnifiedStep4Request):
     """
-    Step 4: User selects valuation model.
-    Uses SessionService for session management with matrix workflow support.
+    Step 4: Select peer companies for comparable analysis.
+    Uses SessionService for session management with unified schema support.
 
     MATRIX WORKFLOW:
-    - Stores model selection in valuations[market][method] track
-    - Does NOT overwrite other models - each model runs independently
-    - Market defaults to 'international' if not specified
+    - Stores peer selection in valuations[market][method] track
+    - Supports both suggested peers (auto-discovered) and custom peers
+    - Each model's peer selection is stored independently
 
     METHOD-AGNOSTIC DESIGN:
-    - This endpoint accepts a SINGLE method per request
-    - For multiple methods, frontend should fire parallel requests OR use /step-10-valuate-multi
-    - No reliance on global session.selected_model - uses request.method only
-    """
-    try:
-        # Get session data using SessionService
-        session = session_service.get_session_data(request.session_id)
-        if not session:
-            raise HTTPException(status_code=404, detail="Session not found")
-
-        # Normalize market and method from request ONLY (no session fallback)
-        market = request.market.lower()  # 'international' or 'vietnam'
-        method = request.model.upper()  # 'DCF', 'DUPONT', 'COMPS'
-
-        # Update the specific valuation track (matrix structure)
-        session_service.update_valuation_status(
-            request.session_id,
-            market=market,
-            method=method.lower(),
-            status="selected"
-        )
-
-        # Store selected_model in the specific valuation track (not root session)
-        session_service.update_session_data(
-            request.session_id,
-            "selected_model",
-            method,
-            market=market,
-            method=method.lower()
-        )
-
-        session_service.update_session_data(
-            request.session_id,
-            "status",
-            "ready_for_data_fetch",
-            market=market,
-            method=method.lower()
-        )
-
-        return ModelSelectResponse(
-            message=f"Model {method} selected for {market} market",
-            next_step="fetch_data",
-            selected_model=method
-        )
-    except Exception as e:
-        logger.error(f"Model selection error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post("/step-5-prepare-inputs", response_model=PrepareInputsResponse)
-async def prepare_inputs(request: PrepareInputsRequest):
-    """
-    Step 5: Prepare required inputs for selected model.
-    Uses SessionService for session management and Step5AssumptionsProcessor for international markets.
-
-    MATRIX WORKFLOW:
-    - Retrieves model/method from request (REQUIRED - no fallback to session)
-    - Prepares inputs specific to the valuation track
-
-    METHOD-AGNOSTIC DESIGN:
-    - Method MUST be provided in request.method - no session.selected_model fallback
-    - Each method operates independently with its own data track
+    - Method MUST be provided in request.method - no session fallback
+    - Each method operates independently with its own peer track
     """
     try:
         # Get session data using SessionService
@@ -228,35 +183,146 @@ async def prepare_inputs(request: PrepareInputsRequest):
             raise HTTPException(status_code=404, detail="Session not found")
 
         # Use market/method from request ONLY (no fallback to session)
-        market = request.market.lower() if request.market else "international"
+        market = request.market.value if isinstance(request.market, MarketType) else request.market.lower()
+        method = request.method.value if isinstance(request.method, ValuationMethod) else request.method.upper()
 
-        # Validate method is provided
-        if not request.method:
-            raise HTTPException(status_code=400, detail="Method parameter is required")
+        ticker = session.get("ticker")
+        if not ticker:
+            raise HTTPException(status_code=400, detail="No ticker selected in session")
 
-        method = request.method.upper()
+        # Determine peers to use (custom or suggested)
+        selected_peers = []
+        if request.custom_peers:
+            selected_peers = request.custom_peers
+        elif request.suggested_peers:
+            selected_peers = request.suggested_peers
+        else:
+            raise HTTPException(status_code=400, detail="Either custom_peers or suggested_peers must be provided")
+
+        # Save peer tickers to session
+        session_service.update_session_data(request.session_id, "peer_tickers", selected_peers)
+        
+        # Build peer company objects with available data
+        peer_companies = []
+        for peer_ticker in selected_peers:
+            peer_info = {
+                "ticker": peer_ticker,
+                "company_name": peer_ticker,  # Will be enriched later
+                "sector": session.get("sector", "Unknown"),
+                "industry": session.get("industry", "Unknown"),
+                "market_cap": None,
+                "selected": True
+            }
+            peer_companies.append(peer_info)
+
+        # Store detailed peer info for Step 6 retrieval
+        session_service.update_session_data(request.session_id, "selected_peers", peer_companies)
+
+        session_service.update_session_step(
+            request.session_id,
+            step_number=4,
+            market=market,
+            method=method.lower()
+        )
+
+        return UnifiedStep4Response(
+            status="success",
+            session_id=request.session_id,
+            method=method,
+            market=market,
+            target_company=ticker,
+            suggested_peers=[PeerCompany(**p) for p in peer_companies],
+            selected_peers=selected_peers,
+            message=f"Selected {len(selected_peers)} peer companies for {method} valuation"
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Peer selection error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/step-5-prepare-assumptions", response_model=UnifiedStep5Response)
+async def prepare_assumptions(request: UnifiedStep5Request):
+    """
+    Step 5: Prepare assumptions for selected valuation model.
+    Uses SessionService for session management and Step5AssumptionsProcessor.
+
+    MATRIX WORKFLOW:
+    - Retrieves model/method from request (REQUIRED - no fallback to session)
+    - Prepares assumptions specific to the valuation track
+    - Supports AI generation of initial assumptions
+
+    METHOD-AGNOSTIC DESIGN:
+    - Method MUST be provided in request.method - no session.selected_model fallback
+    - Each method operates independently with its own assumption track
+    """
+    try:
+        # Get session data using SessionService
+        session = session_service.get_session_data(request.session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        # Use market/method from request ONLY (no fallback to session)
+        market = request.market.value if isinstance(request.market, MarketType) else request.market.lower()
+        method = request.method.value if isinstance(request.method, ValuationMethod) else request.method.upper()
 
         ticker = session.get("ticker")
         peer_tickers = session.get("peer_tickers", [])
 
-        # Use Step5AssumptionsProcessor to get required inputs from international service
+        # Use Step5AssumptionsProcessor to get required inputs
         result = step5_processor.process_data_retrieval_inputs(
             ticker=ticker or "UNKNOWN",
             valuation_model=method,
             peer_tickers=peer_tickers
         )
 
-        # Convert retrieval groups to InputRequirement format for frontend
-        required_inputs = []
+        # Convert to unified AssumptionCategory format
+        categories = []
+        total_fields = 0
+        missing_fields = []
+        
         for group_name, fields in result.retrieval_groups.items():
+            assumptions_dict = {}
+            requires_input = False
+            
             for field in fields:
-                required_inputs.append({
-                    "category": group_name,
-                    "name": field.field_name,
-                    "requiresInput": field.is_required,
-                    "description": field.description,
-                    "unit": None
-                })
+                total_fields += 1
+                assumptions_dict[field.field_name] = DataField(
+                    value=None,
+                    status=DataStatus.MISSING,
+                    source=None,
+                    description=field.description,
+                    is_missing=True,
+                    can_override=True
+                )
+                if field.is_required:
+                    requires_input = True
+                    missing_fields.append(f"{group_name}.{field.field_name}")
+            
+            categories.append(AssumptionCategory(
+                category_name=group_name,
+                assumptions=assumptions_dict,
+                requires_user_input=requires_input,
+                ai_generated=False
+            ))
+
+        # Build missing data summary
+        missing_summary = MissingDataSummary(
+            total_fields=total_fields,
+            retrieved_count=0,
+            calculated_count=0,
+            estimated_count=0,
+            missing_count=len(missing_fields),
+            manual_override_count=0,
+            completion_percentage=0.0,
+            critical_missing=missing_fields[:10],  # Top 10 critical
+            optional_missing=[],
+            valuation_ready=False,
+            data_quality_score=0.0,
+            warnings=["No data retrieved yet. Proceed to Step 6 to fetch data."],
+            recommendations=["Click 'Fetch Data' in Step 6 to retrieve required inputs"]
+        )
 
         session_service.update_session_step(
             request.session_id,
@@ -265,13 +331,20 @@ async def prepare_inputs(request: PrepareInputsRequest):
             method=method.lower()
         )
 
-        return PrepareInputsResponse(
-            status="ready_to_fetch",
-            required_inputs=required_inputs,
+        return UnifiedStep5Response(
+            status="prepared",
+            session_id=request.session_id,
+            method=method,
+            market=market,
+            categories=categories,
+            missing_data_summary=missing_summary,
+            ai_provider=None,
             message=result.message
         )
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Prepare inputs error: {e}")
+        logger.error(f"Prepare assumptions error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
