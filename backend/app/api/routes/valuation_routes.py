@@ -38,6 +38,7 @@ from app.services.international.step6_unified_transformer import Step6UnifiedTra
 from app.services.international.step7_historical_data_processor import Step7HistoricalDataProcessor
 from app.services.international.step7_unified_transformer import Step7UnifiedTransformer
 from app.services.international.step8_manual_overrides import Step8ManualOverridesProcessor
+from app.services.international.step9_confirmation_processor import Step9ConfirmationProcessor
 from app.services.international.step10_valuation_processor import Step10ValuationProcessor
 from app.services.international.yfinance_service import YFinanceService
 from app.services.international.valuation_orchestrator import orchestrator
@@ -54,6 +55,7 @@ step5_processor = Step5AssumptionsProcessor()
 step6_processor = Step6DataReviewProcessor()
 step7_processor = Step7HistoricalDataProcessor()
 step8_processor = Step8ManualOverridesProcessor()
+step9_processor = Step9ConfirmationProcessor()
 step10_processor = Step10ValuationProcessor()
 yfinance_service = YFinanceService()
 
@@ -957,12 +959,19 @@ async def generate_ai_suggestion(request: GenerateAISuggestionRequest):
 @router.post("/step-9-confirm-assumptions", response_model=ConfirmAssumptionsResponse)
 async def confirm_assumptions(request: ConfirmAssumptionsRequest):
     """
-    Step 9: User confirms or overrides assumptions.
-    Uses SessionService for session management and Step8ManualOverridesProcessor for assumption management.
+    Step 9: Confirmation Processing - Consolidates Steps 6-8 inputs for Step 10.
+    
+    Uses Step9ConfirmationProcessor to:
+    1. Receive all inputs from Step 6 (historical financials), Step 7 (gap-filled data), 
+       and Step 8 (manual overrides + AI suggestions)
+    2. Process and validate all confirmed parameters
+    3. Build model-specific inputs exclusively for Step 10
+    4. Store output that Step 10 will use (Step 10 cannot access earlier steps directly)
 
     MATRIX WORKFLOW:
     - Uses market/method from request parameters (REQUIRED - no fallback)
     - Confirms assumptions for the specific valuation track
+    - Ensures Step 8 manual overrides are included in final inputs
 
     METHOD-AGNOSTIC DESIGN:
     - Method MUST be provided in request.method - no session.selected_model fallback
@@ -985,6 +994,7 @@ async def confirm_assumptions(request: ConfirmAssumptionsRequest):
         method = request.method.upper()
 
         # Get data from the specific valuation track
+        # Step 6: Aggregated historical financials and market data
         step6_data = session_service.get_session_value(
             request.session_id,
             "financial_data",
@@ -992,6 +1002,7 @@ async def confirm_assumptions(request: ConfirmAssumptionsRequest):
             market=market,
             method=method.lower()
         )
+        # Step 7: Gap-filled historical data
         step7_data = session_service.get_session_value(
             request.session_id,
             "historical_data_gaps_filled",
@@ -999,9 +1010,10 @@ async def confirm_assumptions(request: ConfirmAssumptionsRequest):
             market=market,
             method=method.lower()
         )
-        ai_suggestions = session_service.get_session_value(
+        # Step 8: Final inputs including manual overrides and AI suggestions
+        step8_final_inputs = session_service.get_session_value(
             request.session_id,
-            "ai_suggestions",
+            "confirmed_assumptions",
             {},
             market=market,
             method=method.lower()
@@ -1010,40 +1022,33 @@ async def confirm_assumptions(request: ConfirmAssumptionsRequest):
         if not ticker:
             raise HTTPException(status_code=400, detail="No ticker found in session")
 
-        # First initialize assumptions with historical data
-        initial_result = await step8_processor.initialize_assumptions(
+        if not step8_final_inputs:
+            raise HTTPException(
+                status_code=400, 
+                detail="No Step 8 confirmed assumptions found. Please complete Step 8 first."
+            )
+
+        # Use Step9ConfirmationProcessor to consolidate all inputs
+        step9_output = await step9_processor.process_confirmation(
+            session_id=request.session_id,
             ticker=ticker,
             valuation_model=method,
             step6_data=step6_data,
-            step7_data=step7_data if step7_data else None
+            step7_data=step7_data if step7_data else None,
+            step8_final_inputs=step8_final_inputs,
+            market=market
         )
 
-        # Apply user overrides to the initialized assumptions
-        final_result = initial_result
-        if request.confirmed_values:
-            for category, metrics in request.confirmed_values.items():
-                if isinstance(metrics, dict):
-                    for metric, value in metrics.items():
-                        try:
-                            final_result = await step8_processor.apply_user_override(
-                                ticker=ticker,
-                                valuation_model=method,
-                                category=category,
-                                metric=metric,
-                                user_value=float(value),
-                                current_response=final_result
-                            )
-                        except Exception as e:
-                            logger.warning(f"Failed to apply override for {category}.{metric}: {e}")
+        # Validate Step 9 output
+        if not step9_output.ready_for_valuation:
+            error_msg = f"Step 9 validation failed: {', '.join(step9_output.errors)}"
+            raise HTTPException(status_code=400, detail=error_msg)
 
-        # Validate all assumptions
-        final_result = await step8_processor.validate_all_assumptions(final_result)
-
-        # Store confirmed assumptions in the specific valuation track
+        # Store Step 9 output in session - this is what Step 10 will use
         session_service.update_session_data(
             request.session_id,
-            "confirmed_assumptions",
-            final_result.model_dump() if hasattr(final_result, 'model_dump') else final_result.dict(),
+            "step9_confirmed_outputs",
+            step9_output.model_dump() if hasattr(step9_output, 'model_dump') else step9_output.dict(),
             market=market,
             method=method.lower()
         )
@@ -1055,19 +1060,35 @@ async def confirm_assumptions(request: ConfirmAssumptionsRequest):
             method=method.lower()
         )
 
+        # Log confirmation summary
+        logger.info(
+            f"Step 9 confirmation completed for {ticker} ({method}): "
+            f"{step9_output.total_parameters_confirmed} parameters confirmed, "
+            f"{step9_output.parameters_manually_overridden} manually overridden, "
+            f"ready for Step 10: {step9_output.ready_for_valuation}"
+        )
+
         return ConfirmAssumptionsResponse(
             status="assumptions_confirmed",
-            message="Assumptions confirmed successfully"
+            message=f"Assumptions confirmed successfully. {len(step9_output.warnings)} warnings." if step9_output.warnings else "Assumptions confirmed successfully."
         )
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Confirm assumptions error: {e}")
+        logger.error(f"Step 9 confirmation error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/step-10-valuate", response_model=ValuateResponse)
 async def valuate(request: ValuateRequest):
     """
-    Step 10: Run valuation engine.
+    Step 10: Final Valuation - Uses ONLY Step 9 outputs.
+    
+    CRITICAL WORKFLOW CONSTRAINT:
+    - Step 10 CANNOT access Step 6, 7, or 8 data directly
+    - Step 10 receives inputs EXCLUSIVELY from Step 9 confirmed outputs
+    - This ensures strict workflow order and proper confirmation/override processing
+    
     Uses SessionService for session management and Step10ValuationProcessor for comprehensive multi-model valuation.
 
     MATRIX WORKFLOW:
@@ -1096,18 +1117,41 @@ async def valuate(request: ValuateRequest):
 
         method = request.method.upper()
 
-        # Get confirmed assumptions from the specific valuation track
-        confirmed_assumptions = session_service.get_session_value(
+        # CRITICAL: Get Step 9 confirmed outputs (Step 10 can ONLY use this)
+        # Step 10 cannot access step6_data, step7_data, or step8_final_inputs directly
+        step9_confirmed_outputs = session_service.get_session_value(
             request.session_id,
-            "confirmed_assumptions",
+            "step9_confirmed_outputs",
+            None,
             market=market,
             method=method.lower()
         )
 
-        if not confirmed_assumptions:
-            raise HTTPException(status_code=400, detail="No confirmed assumptions available")
+        if not step9_confirmed_outputs:
+            raise HTTPException(
+                status_code=400, 
+                detail="No Step 9 confirmed outputs available. Please complete Step 9 confirmation first."
+            )
+
+        # Extract model-specific inputs from Step 9 output
+        # This is the ONLY data source Step 10 can use
+        model_specific_inputs = step9_confirmed_outputs.get('model_specific_inputs', {})
+        historical_summary = step9_confirmed_outputs.get('historical_financials_summary', {})
+        market_context = step9_confirmed_outputs.get('market_context', {})
+        
+        # Build consolidated assumptions dict for Step 10 processor
+        # Combining Step 9 outputs into format expected by Step 10 engines
+        confirmed_assumptions = {
+            'model_specific_inputs': model_specific_inputs,
+            'historical_financials_summary': historical_summary,
+            'market_context': market_context,
+            'confirmed_parameters': step9_confirmed_outputs.get('confirmed_parameters', []),
+            'validation_status': step9_confirmed_outputs.get('validation_status', 'passed'),
+            'warnings': step9_confirmed_outputs.get('warnings', [])
+        }
 
         # Use Step10ValuationProcessor for comprehensive valuation
+        # Pass only Step 9 derived data - no direct access to earlier steps
         result = await step10_processor.run_valuation(
             ticker=ticker,
             model=method,
@@ -1122,13 +1166,20 @@ async def valuate(request: ValuateRequest):
             results=result
         )
 
+        logger.info(
+            f"Step 10 valuation completed for {ticker} ({method}): "
+            f"Used Step 9 outputs only, validation status: {step9_confirmed_outputs.get('validation_status')}"
+        )
+
         return ValuateResponse(
             status="success",
             valuation_results=[result],
-            message=f"Valuation completed successfully for {method} ({market})"
+            message=f"Valuation completed successfully for {method} ({market}) using Step 9 confirmed inputs"
         )
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Valuation error: {e}")
+        logger.error(f"Step 10 valuation error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
