@@ -26,11 +26,11 @@ const ApiDataStep = ({
   loading
 }) => {
   // Check if data has been retrieved - improved check to include peerData with companies
-  const hasRetrievedData = historicalData || 
-                           (peerData && peerData.companies && peerData.companies.length > 0) || 
-                           dcfInputs || 
-                           dupontResults || 
-                           compsResults || 
+  const hasRetrievedData = historicalData ||
+                           (peerData && peerData.companies && peerData.companies.length > 0) ||
+                           dcfInputs ||
+                           dupontResults ||
+                           compsResults ||
                            calculatedMetrics;
 
   // Comprehensive list of ALL expected inputs to display (even if missing/errors)
@@ -89,23 +89,52 @@ const ApiDataStep = ({
     { category: 'peer_comparables', key: 'peer_tax_rates', name: 'Peer Tax Rates', patterns: ['Peer Tax Rates', 'peer_tax_rates'] },
   ];
 
-  /**
-   * Helper function to extract values from unified schema format
-   * Backend returns: { historical_financials: { revenue: { value: [...], status: 'RETRIEVED', ... } } }
-   * Extracts period values from DataField objects
-   */
-  const getFieldValues = (data, fieldName) => {
-    if (!data || !data.historical_financials) return {};
+  // Helper function to extract values from UNIFIED SCHEMA structure
+  // Unified schema returns: { revenue: { value: [100, 110], status: "RETRIEVED", source: "yfinance" }, ... }
+  // This replaces the legacy getFieldValues that handled data_fields array format
+  const getUnifiedFieldValues = (historicalFinancials, fieldName) => {
+    if (!historicalFinancials) return {};
 
-    const fieldData = data.historical_financials[fieldName];
+    const fieldData = historicalFinancials[fieldName];
     if (!fieldData) return {};
 
-    // Handle DataField with array of period values
-    if (fieldData.value && Array.isArray(fieldData.value)) {
-      const result = {};
-      fieldData.value.forEach(periodValue => {
-        if (periodValue.period && periodValue.value !== undefined) {
-          result[periodValue.period] = periodValue.value;
+    // Unified schema: fieldData = { value: [...], status, source, formula, confidence_score }
+    if (fieldData.value !== undefined && fieldData.value !== null) {
+      return fieldData.value;
+    }
+
+    return {};
+  };
+
+  // Helper function to get DataField metadata (status, source, confidence)
+  const getDataFieldMetadata = (historicalFinancials, fieldName) => {
+    if (!historicalFinancials) return { status: 'MISSING', source: null, confidence_score: null };
+
+    const fieldData = historicalFinancials[fieldName];
+    if (!fieldData) return { status: 'MISSING', source: null, confidence_score: null };
+
+    return {
+      status: fieldData.status || 'UNKNOWN',
+      source: fieldData.source || null,
+      confidence_score: fieldData.confidence_score || null,
+      formula: fieldData.formula || null
+    };
+  };
+
+  // Legacy helper - DEPRECATED: Only kept for backward compatibility with Vietnamese market v1
+  // Will be removed in v2 when Vietnamese market uses unified schema
+  const getFieldValues = (data, fieldNamePatterns) => {
+    if (!data || !data.data_fields) return {};
+
+    const result = {};
+    const patterns = Array.isArray(fieldNamePatterns) ? fieldNamePatterns : [fieldNamePatterns];
+
+    data.data_fields.forEach(field => {
+      const matchedPattern = patterns.find(pattern => {
+        if (typeof pattern === 'string') {
+          return field.field_name === pattern ||
+                 field.field_name.startsWith(pattern + '_') ||
+                 (field.display_name && field.display_name === pattern);
         }
       });
       return result;
@@ -116,7 +145,20 @@ const ApiDataStep = ({
       return { value: fieldData.value };
     }
 
-    return {};
+      if (matchedPattern) {
+        const yearMatch = field.field_name.match(/_(\d{4})$/);
+        if (yearMatch) {
+          const year = yearMatch[1];
+          let key = typeof matchedPattern === 'string' ? matchedPattern.toLowerCase() : 'value';
+          if (key === 'total revenue') key = 'revenue';
+          result[year] = field.value;
+        } else {
+          result['value'] = field.value;
+        }
+      }
+    });
+
+    return result;
   };
 
   // Helper function to format numbers
@@ -143,7 +185,7 @@ const ApiDataStep = ({
   const renderAllInputs = () => {
     // Check if we have ANY data to display (historical, peer, dcf inputs, etc.)
     const hasAnyData = hasRetrievedData;
-    
+
     if (!hasAnyData) {
       return (
         <div className="summary-box" style={{ background: '#ffebee', marginBottom: '20px' }}>
@@ -180,35 +222,29 @@ const ApiDataStep = ({
 
               <div style={{ display: 'grid', gap: '12px' }}>
                 {categoryInputs.map(input => {
-                  // Get full field objects with status and source info
-                  const matchingFields = historicalData.data_fields?.filter(field => {
-                    return input.patterns.some(pattern => {
-                      if (typeof pattern === 'string') {
-                        return field.field_name === pattern ||
-                               field.field_name.startsWith(pattern + '_') ||
-                               (field.display_name && field.display_name === pattern);
-                      }
-                      if (pattern instanceof RegExp) {
-                        return pattern.test(field.field_name);
-                      }
-                      return false;
-                    });
-                  }) || [];
+                  // UNIFIED SCHEMA ACCESS: historicalData is now HistoricalFinancialsData with DataField wrappers
+                  // Structure: { revenue: { value, status, source, formula, confidence_score }, ... }
+                  const fieldData = historicalData?.[input.key];
+                  const hasData = fieldData && fieldData.value !== null && fieldData.value !== undefined;
 
-                  const hasData = matchingFields.length > 0 && matchingFields.some(f => f.value !== null && f.value !== undefined);
-                  const years = historicalData.years || [];
+                  // Get status from DataField wrapper (unified schema) or fallback to legacy format
+                  const status = fieldData?.status ||
+                                (fieldData && 'RETRIEVED') ||
+                                'MISSING';
+                  const source = fieldData?.source || null;
+                  const confidenceScore = fieldData?.confidence_score || null;
+                  const formula = fieldData?.formula || null;
 
                   // Determine overall status for this input
                   const getStatusInfo = () => {
                     if (!hasData) return { status: 'MISSING', label: '⚠ MISSING', color: '#ff9800', bg: '#fff3e0' };
 
-                    const hasRetrieved = matchingFields.some(f => f.status === 'RETRIEVED');
-                    const hasCalculated = matchingFields.some(f => f.status === 'CALCULATED');
-
-                    if (hasRetrieved) {
+                    if (status === 'RETRIEVED') {
                       return { status: 'RETRIEVED', label: '✓ FETCHED', color: '#4caf50', bg: '#e8f5e9' };
-                    } else if (hasCalculated) {
+                    } else if (status === 'CALCULATED') {
                       return { status: 'CALCULATED', label: '📊 CALCULATED', color: '#2196f3', bg: '#e3f2fd' };
+                    } else if (status === 'ESTIMATED') {
+                      return { status: 'ESTIMATED', label: '🤖 ESTIMATED', color: '#9c27b0', bg: '#f3e5f5' };
                     }
                     return { status: 'UNKNOWN', label: '? UNKNOWN', color: '#9e9e9e', bg: '#f5f5f5' };
                   };
@@ -296,24 +332,27 @@ const ApiDataStep = ({
     );
   };
 
-  // Render historical financials with detailed numbers (legacy view - kept for backward compatibility)
-  const renderHistoricalDataLegacy = () => {
+  // Render historical financials with detailed numbers - UPDATED FOR UNIFIED SCHEMA
+  // Unified schema structure: historical_financials = { revenue: { value, status, source }, ebitda: {...}, ... }
+  const renderHistoricalDataUnified = () => {
+    if (!historicalData) return null;
 
-    // Extract data from unified schema format: historical_financials.{field_name}.value
-    const revenue = historicalData.historical_financials?.revenue || getFieldValues(historicalData, 'revenue');
-    const ebitda = historicalData.historical_financials?.ebitda || getFieldValues(historicalData, 'ebitda');
-    const netIncome = historicalData.historical_financials?.net_income || getFieldValues(historicalData, 'net_income');
-    const cogs = historicalData.historical_financials?.cogs || getFieldValues(historicalData, 'cogs');
-    const operatingExpenses = historicalData.historical_financials?.operating_expenses || getFieldValues(historicalData, 'operating_expenses');
-    const depreciation = historicalData.historical_financials?.depreciation || getFieldValues(historicalData, 'depreciation');
-    const capex = historicalData.historical_financials?.capex || getFieldValues(historicalData, 'capex');
-    const accountsReceivable = historicalData.historical_financials?.accounts_receivable || getFieldValues(historicalData, 'accounts_receivable');
-    const inventory = historicalData.historical_financials?.inventory || getFieldValues(historicalData, 'inventory');
-    const accountsPayable = historicalData.historical_financials?.accounts_payable || getFieldValues(historicalData, 'accounts_payable');
-    const shareholdersEquity = historicalData.historical_financials?.shareholders_equity || getFieldValues(historicalData, 'shareholders_equity');
-    const totalAssets = historicalData.historical_financials?.total_assets || getFieldValues(historicalData, 'total_assets');
-    const totalDebt = historicalData.historical_financials?.total_debt || getFieldValues(historicalData, 'total_debt');
-    const freeCashFlow = historicalData.historical_financials?.free_cash_flow || getFieldValues(historicalData, 'free_cash_flow');
+    // Extract data from unified schema structure
+    // Each field is a DataField wrapper: { value, status, source, formula, confidence_score }
+    const revenue = getUnifiedFieldValues(historicalData, 'revenue');
+    const ebitda = getUnifiedFieldValues(historicalData, 'ebitda');
+    const netIncome = getUnifiedFieldValues(historicalData, 'net_income');
+    const cogs = getUnifiedFieldValues(historicalData, 'cogs');
+    const operatingExpenses = getUnifiedFieldValues(historicalData, 'operating_expenses');
+    const depreciation = getUnifiedFieldValues(historicalData, 'depreciation');
+    const capex = getUnifiedFieldValues(historicalData, 'capex');
+    const accountsReceivable = getUnifiedFieldValues(historicalData, 'accounts_receivable');
+    const inventory = getUnifiedFieldValues(historicalData, 'inventory');
+    const accountsPayable = getUnifiedFieldValues(historicalData, 'accounts_payable');
+    const shareholdersEquity = getUnifiedFieldValues(historicalData, 'shareholders_equity');
+    const totalAssets = getUnifiedFieldValues(historicalData, 'total_assets');
+    const totalDebt = getUnifiedFieldValues(historicalData, 'total_debt');
+    const freeCashFlow = getUnifiedFieldValues(historicalData, 'free_cash_flow');
 
     if (!historicalData) return null;
 
@@ -1018,20 +1057,20 @@ const ApiDataStep = ({
         </p>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
           {calculatedMetrics.data_fields.map((metric, idx) => (
-            <div key={idx} style={{ 
-              background: 'white', 
-              padding: '12px', 
+            <div key={idx} style={{
+              background: 'white',
+              padding: '12px',
               borderRadius: '6px',
               border: '2px solid #4caf50',
               position: 'relative'
             }}>
-              <div style={{ 
-                position: 'absolute', 
-                top: '4px', 
-                right: '4px', 
-                background: '#4caf50', 
-                color: 'white', 
-                padding: '2px 6px', 
+              <div style={{
+                position: 'absolute',
+                top: '4px',
+                right: '4px',
+                background: '#4caf50',
+                color: 'white',
+                padding: '2px 6px',
                 borderRadius: '4px',
                 fontSize: '10px',
                 fontWeight: 600
@@ -1042,9 +1081,9 @@ const ApiDataStep = ({
                 {metric.field_name || metric.display_name || 'Unknown Metric'}
               </strong>
               <div style={{ fontSize: '18px', fontWeight: 700, color: '#1b5e20' }}>
-                {metric.unit === '%' 
+                {metric.unit === '%'
                   ? `${(metric.value * 100).toFixed(2)}%`
-                  : metric.unit === 'USD' 
+                  : metric.unit === 'USD'
                     ? formatCurrency(metric.value)
                     : formatNumber(metric.value, 2)
                 }
