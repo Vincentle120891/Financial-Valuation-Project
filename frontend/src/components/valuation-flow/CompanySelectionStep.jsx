@@ -1,10 +1,13 @@
 import React, { useState } from 'react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import VietnameseMarketData from './VietnameseMarketData';
+import InternationalMarketData from './InternationalMarketData';
 
 /**
  * CompanySelectionStep - Step 2
  * Displays selected company details with sector, industry, and market cap information
  * Provides "Find Peers" button to trigger automatic peer discovery
+ * Uses market-specific components for Vietnamese and International markets
  */
 const CompanySelectionStep = ({
   selectedCompany,
@@ -13,7 +16,8 @@ const CompanySelectionStep = ({
   onBack,
   loading,
   hasPeers = false,
-  market = 'international' // Market type from parent component
+  market = 'international', // Market type from parent component
+  marketData = null // Market-specific data from backend
 }) => {
   const [peerSearchLoading, setPeerSearchLoading] = useState(false);
   const [priceHistory, setPriceHistory] = useState(null);
@@ -172,6 +176,17 @@ const CompanySelectionStep = ({
             <p className="text-gray-700 text-sm leading-relaxed">
               {selectedCompany.description}
             </p>
+          </div>
+        )}
+
+        {/* Market-Specific Data Display */}
+        {marketData && (
+          <div className="mt-6">
+            {market === 'vietnamese' ? (
+              <VietnameseMarketData vietnamData={marketData} />
+            ) : (
+              <InternationalMarketData internationalData={marketData} />
+            )}
           </div>
         )}
 

@@ -4,6 +4,64 @@
 +++ frontend/ARCHITECTURE.md (修改后)
 # Frontend Architecture - Financial Valuation Platform
 
+## ⚠️ CRITICAL DEVELOPMENT GUIDELINES
+
+### 1. Market Separation (DO NOT MERGE MARKETS)
+**NEVER create "Generic Displayer" components that merge Vietnamese and International markets.**
+
+- **Why?** Fundamental differences exist:
+  - **Accounting Standards:** VAS/TT99 (Vietnam) vs IFRS/US GAAP (International)
+  - **Currency:** VND vs USD with different formatting rules and magnitudes (VND is ~25,000x USD)
+  - **Market Mechanics:** Foreign ownership limits, board types (HOSE/HNX/UPCoM), trading mechanisms
+  
+- **Correct Approach:**
+  - **Keep Separate:** `VietnameseMarketData.jsx` and `InternationalMarketData.jsx` must remain separate
+  - **No Generic Components:** Do not create unified displayers that force lowest-common-denominator schemas
+  - **Service Layer Only:** Use `UnifiedTransformer` services ONLY for temporary normalization during peer comparison
+
+### 2. Component Responsibilities
+**UI components should ONLY display data, not process it.**
+
+- **Violation Example:** Components fetching API data directly or containing business logic
+- **Correct Pattern:**
+  ```jsx
+  // ❌ WRONG - Component handling logic
+  function MarketDataDisplay({ ticker }) {
+      const data = await fetch(`/api/market-data/${ticker}`); // Don't do this!
+      const processed = calculateMetrics(data); // Don't do this!
+      ...
+  }
+  
+  // ✅ CORRECT - Component only displays
+  function MarketDataDisplay({ data }) {
+      return <div>{data.companyName}</div>;
+  }
+  ```
+
+- **Files to Check:**
+  - `ValuationFlow.jsx` - Should orchestrate steps, not process data
+  - Market-specific components - Should only render passed props
+
+### 3. Workflow Step Integrity
+**Component names and step rendering MUST match backend workflow steps.**
+
+| Step | Purpose | Frontend Component | Backend Endpoint |
+|------|---------|-------------------|------------------|
+| **3** | Peer Company Selection | `PeerSelectionStep.jsx` | `/step-3-save-peers` |
+| **4** | Model Selection (DCF/DuPont/Comps) | Radio buttons in `ValuationFlow.jsx` | `/step-4-select-models` |
+| **5** | Required Inputs Display | `RequirementsStep.jsx` | `/step-5-prepare-inputs` |
+
+- **Rule:** Step 5 should ONLY show required inputs list, NOT retrieved data tables (that's Step 6)
+
+### 4. Single Model Execution
+**Step 4 uses Radio Buttons (single-select) to prevent AI context corruption.**
+
+- **Never** allow multiple models to run in parallel through Steps 7-9
+- **Reason:** Parallel execution causes context hallucination and state race conditions in AI processing
+- **Implementation:** Radio buttons enforce one model at a time
+
+---
+
 ## Overview
 Complete React-based frontend for DCF, DuPont Analysis, and Trading Comps valuation models with AI-powered data retrieval and assumption generation.
 
