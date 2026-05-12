@@ -426,16 +426,18 @@ class Step2MarketDataProcessor:
                     "name": ticker_info.get('longName', ticker),
                     "sector": ticker_info.get('sector'),
                     "industry": ticker_info.get('industry'),
-                    "market_cap": ticker_info.get('marketCap')
+                    "marketCap": ticker_info.get('marketCap')
                 },
                 "peers": [
                     {
+                        "ticker": peer.ticker,
                         "symbol": peer.symbol,
+                        "company_name": peer.company_name,
                         "name": peer.name,
                         "sector": peer.sector,
                         "industry": peer.industry,
-                        "market_cap": peer.market_cap,
-                        "score": peer.similarity_score,
+                        "marketCap": peer.marketCap,
+                        "score": peer.score,
                         "match_reasons": peer.match_reasons
                     }
                     for peer in response.peers
