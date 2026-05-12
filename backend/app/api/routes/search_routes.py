@@ -25,7 +25,8 @@ from app.api.schemas import (
 )
 from app.services.international.step1_ticker_processor import Step1TickerProcessor
 from app.services.international.step2_market_data_processor import Step2MarketDataProcessor
-from app.services.international.step3_historical_processor import Step3HistoricalProcessor
+# NOTE: step3_historical_processor.py renamed to step3_historical_processor_DEPRECATED_NOT_USED_IN_CURRENT_WORKFLOW.py
+# Historical data validation now handled differently in the new workflow
 
 logger = get_logger(__name__)
 
@@ -34,7 +35,7 @@ router = APIRouter(tags=["Search & Ticker"])
 # Initialize processors
 step1_processor = Step1TickerProcessor()
 step2_processor = Step2MarketDataProcessor()
-step3_processor = Step3HistoricalProcessor()
+# NOTE: step3_processor removed - historical data validation now handled differently
 
 
 @router.post("/step-1-search", response_model=UnifiedStep1Response)
@@ -200,19 +201,26 @@ async def select_ticker(request: TickerSelectRequest):
 @router.post("/validate-ticker")
 async def validate_ticker(ticker: str, market: str = "US"):
     """
-    Step 3: Validate ticker has sufficient historical data.
-    Uses Step3HistoricalProcessor for robust data verification.
+    Validate ticker has sufficient historical data.
+    NOTE: This endpoint is deprecated in the new workflow.
+    Historical data validation is now handled during data retrieval steps.
     """
     try:
-        is_valid, message = await step3_processor.validate_ticker(
-            ticker=ticker,
-            market=market
-        )
-
-        return {
-            "valid": is_valid,
-            "message": message
-        }
+        # Simple validation - just check if ticker exists
+        from app.services.international.yfinance_service import YFinanceService
+        yf_service = YFinanceService()
+        ticker_info = yf_service.get_ticker_info(ticker)
+        
+        if ticker_info and ticker_info.get('currentPrice'):
+            return {
+                "valid": True,
+                "message": f"Ticker {ticker} is valid"
+            }
+        else:
+            return {
+                "valid": False,
+                "message": f"Ticker {ticker} not found or no price data available"
+            }
     except Exception as e:
         logger.error(f"Validate ticker error: {e}")
         return {
