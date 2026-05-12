@@ -47,7 +47,8 @@ from app.api.schemas.unified_step_schemas import (
     ValuationMethod
 )
 from app.services.international.step8_manual_overrides import FullAssumptionsResponse
-from app.services.international.step5_assumptions_processor import Step5AssumptionsProcessor
+from app.services.international.step5_required_inputs_processor import Step5RequiredInputsProcessor
+from app.services.international.step4_selected_models_processor import Step4SelectedModelsProcessor
 from app.services.international.step6_data_review import Step6DataReviewProcessor
 from app.services.international.step6_unified_transformer import Step6UnifiedTransformer
 from app.services.international.step7_historical_data_processor import Step7HistoricalDataProcessor
@@ -67,7 +68,8 @@ logger = get_logger(__name__)
 router = APIRouter(tags=["Valuation"])
 
 # Initialize processors
-step5_processor = Step5AssumptionsProcessor()
+step4_processor = Step4SelectedModelsProcessor(market="international")
+step5_processor = Step5RequiredInputsProcessor()
 step6_processor = Step6DataReviewProcessor()
 step7_processor = Step7HistoricalDataProcessor()
 step8_processor = Step8ManualOverridesProcessor()
@@ -163,10 +165,59 @@ async def save_peers(request: SavePeersRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/step-3-discover-peers", response_model=Dict[str, Any])
+async def discover_peers_endpoint(session_id: str, ticker: str, max_peers: int = 10, market: str = "international"):
+    """
+    Step 3: Discover peer companies automatically.
+    Delegates to PeerDiscoveryService for peer discovery logic.
+    """
+    try:
+        # Validate session exists
+        session = session_service.get_session_data(session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        # Get target company info from session or yfinance
+        target_sector = session.get("sector")
+        target_industry = session.get("industry")
+        target_market_cap = session.get("marketCap")
+
+        # Delegate to PeerDiscoveryService
+        discovery_request = PeerDiscoveryRequest(
+            target_ticker=ticker,
+            target_sector=target_sector,
+            target_industry=target_industry,
+            target_market_cap=target_market_cap,
+            max_peers=max_peers,
+            market=market
+        )
+
+        discovery_response = await peer_discovery_service.discover_peers(discovery_request)
+
+        # Convert peers to dict format for frontend
+        peers_dict = [peer.dict() for peer in discovery_response.peers]
+
+        return {
+            "status": "success",
+            "session_id": session_id,
+            "target_ticker": ticker,
+            "discovered_peers": peers_dict,
+            "total_found": discovery_response.total_found,
+            "search_criteria": discovery_response.search_criteria,
+            "warnings": discovery_response.warnings
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Peer discovery error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/step-4-select-models", response_model=UnifiedStep4Response)
 async def select_models(request: UnifiedStep4Request):
     """
     Step 4: Select valuation model (DCF, DuPont, or Trading Comps).
+    Delegates to Step4SelectedModelsProcessor for model validation.
     Uses SessionService for session management with unified schema support.
 
     MATRIX WORKFLOW:
@@ -200,6 +251,13 @@ async def select_models(request: UnifiedStep4Request):
             selected_peers = request.suggested_peers
         else:
             raise HTTPException(status_code=400, detail="Either custom_peers or suggested_peers must be provided")
+
+        # Delegate to Step4SelectedModelsProcessor for model validation
+        processor = Step4SelectedModelsProcessor(market=market)
+        model_result = processor.process_model_selection([method])
+        
+        if not model_result['is_valid']:
+            raise HTTPException(status_code=400, detail=f"Invalid model selected: {model_result['invalid_models']}")
 
         # Save peer tickers to session
         session_service.update_session_data(request.session_id, "peer_tickers", selected_peers)
@@ -247,17 +305,17 @@ async def select_models(request: UnifiedStep4Request):
 @router.post("/step-5-prepare-assumptions", response_model=UnifiedStep5Response)
 async def prepare_assumptions(request: UnifiedStep5Request):
     """
-    Step 5: Prepare assumptions for selected valuation model.
-    Uses SessionService for session management and Step5AssumptionsProcessor.
+    Step 5: Show required inputs for selected valuation model.
+    Uses SessionService for session management and Step5RequiredInputsProcessor.
 
     MATRIX WORKFLOW:
     - Retrieves model/method from request (REQUIRED - no fallback to session)
-    - Prepares assumptions specific to the valuation track
-    - Supports AI generation of initial assumptions
+    - Shows required inputs specific to the valuation track
+    - No AI generation, no calculations - just listing requirements
 
     METHOD-AGNOSTIC DESIGN:
     - Method MUST be provided in request.method - no session.selected_model fallback
-    - Each method operates independently with its own assumption track
+    - Each method operates independently with its own input requirements
     """
     try:
         # Get session data using SessionService
@@ -272,7 +330,7 @@ async def prepare_assumptions(request: UnifiedStep5Request):
         ticker = session.get("ticker")
         peer_tickers = session.get("peer_tickers", [])
 
-        # Use Step5AssumptionsProcessor to get required inputs
+        # Use Step5RequiredInputsProcessor to get required inputs
         result = step5_processor.process_data_retrieval_inputs(
             ticker=ticker or "UNKNOWN",
             valuation_model=method,
