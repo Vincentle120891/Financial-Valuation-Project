@@ -41,7 +41,7 @@ const RunValuationStep = ({
       
       <div className="summary-box">
         <h3>Configuration Summary</h3>
-        <p><strong>Company:</strong> {selectedCompany?.name} ({selectedCompany?.symbol})</p>
+        <p><strong>Company:</strong> {selectedCompany?.company_name || selectedCompany?.name} ({selectedCompany?.ticker || selectedCompany?.symbol})</p>
         <p><strong>Model:</strong> {getModelName()}</p>
         <p><strong>Scenario:</strong> {selectedScenario.replace('_', ' ').toUpperCase()}</p>
         <p><strong>Confirmed Inputs:</strong> {Object.keys(confirmedValues).length} fields</p>
