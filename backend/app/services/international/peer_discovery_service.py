@@ -15,14 +15,18 @@ logger = logging.getLogger(__name__)
 class PeerCandidate(BaseModel):
     """Peer candidate company."""
     symbol: str
+    ticker: str  # Alias for frontend compatibility
     name: str
+    company_name: str  # Alias for frontend compatibility
     exchange: str
     sector: Optional[str] = None
     industry: Optional[str] = None
-    market_cap: Optional[float] = None
+    market_cap: Optional[float] = None  # Internal snake_case
+    marketCap: Optional[float] = None  # camelCase for frontend
     current_price: Optional[float] = None
     beta: Optional[float] = None
     similarity_score: float = 0.0
+    score: float = 0.0  # Alias for frontend compatibility
     match_reasons: List[str] = []
 
 
@@ -561,14 +565,18 @@ class PeerDiscoveryService:
             # Create peer candidate
             peer = PeerCandidate(
                 symbol=candidate['symbol'],
+                ticker=candidate['symbol'],
                 name=candidate['name'],
+                company_name=candidate['name'],
                 exchange=candidate['exchange'],
                 sector=candidate.get('sector'),
                 industry=candidate.get('industry'),
                 market_cap=candidate_market_cap,
+                marketCap=candidate_market_cap,
                 current_price=candidate.get('current_price'),
                 beta=candidate.get('beta'),
                 similarity_score=score,
+                score=score,
                 match_reasons=match_reasons
             )
             
