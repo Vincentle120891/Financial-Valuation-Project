@@ -25,7 +25,7 @@ from app.api.schemas import (
 )
 from app.services.international.step1_ticker_processor import Step1TickerProcessor
 from app.services.international.step2_market_data_processor import Step2MarketDataProcessor
-# NOTE: step3_historical_processor.py renamed to step3_historical_processor_DEPRECATED_NOT_USED_IN_CURRENT_WORKFLOW.py
+# NOTE: step3_historical_processor.py renamed to mismatch_historical_processor.py
 # Historical data validation now handled differently in the new workflow
 
 logger = get_logger(__name__)

@@ -40,10 +40,10 @@ from app.services.international.shared_context_service import (
 # Step Processors - Complete 10-Step Workflow
 from app.services.international.step1_ticker_processor import Step1TickerProcessor
 from app.services.international.step2_market_data_processor import Step2MarketDataProcessor
-# NOTE: step3_historical_processor.py renamed to step3_historical_processor_DEPRECATED_NOT_USED_IN_CURRENT_WORKFLOW.py
+# NOTE: step3_historical_processor.py renamed to mismatch_historical_processor.py
 # Step 3 is now handled by peer_discovery_service for peer selection, not historical data processing
-from app.services.international.step4_forecast_processor import Step4ForecastProcessor
-from app.services.international.step5_assumptions_processor import Step5AssumptionsProcessor
+from app.services.international.mismatch_forecast_processor import Step4ForecastProcessor
+from app.services.international.step5_required_inputs_processor import Step5AssumptionsProcessor
 from app.services.international.step6_data_review import Step6DataReviewProcessor
 # Step 6 Specialized Processors - Individual Valuation Method Processors
 from app.services.international.step6_dcf_data_review import DCFStep6Processor as DCFDataReviewProcessor
