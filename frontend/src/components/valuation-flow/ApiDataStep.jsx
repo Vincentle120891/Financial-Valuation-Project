@@ -136,11 +136,14 @@ const ApiDataStep = ({
                  field.field_name.startsWith(pattern + '_') ||
                  (field.display_name && field.display_name === pattern);
         }
-        if (pattern instanceof RegExp) {
-          return pattern.test(field.field_name);
-        }
-        return false;
       });
+      return result;
+    }
+    
+    // Handle single value case
+    if (fieldData.value !== undefined) {
+      return { value: fieldData.value };
+    }
 
       if (matchedPattern) {
         const yearMatch = field.field_name.match(/_(\d{4})$/);
