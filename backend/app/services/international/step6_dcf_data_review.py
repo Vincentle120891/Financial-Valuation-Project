@@ -45,7 +45,7 @@ class DataField(BaseModel):
 
 class HistoricalFinancialsDisplay(BaseModel):
     """Historical financial data display for DCF"""
-    years: List[int] = []
+    years: List[str] = []  # Changed from List[int] to List[str] to match UnifiedStep6Response.periods_covered
     data_fields: List[DataField] = []
 
 
