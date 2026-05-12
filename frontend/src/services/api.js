@@ -58,12 +58,20 @@ export const validateManualPeers = async (sessionId, tickers, market = 'internat
 
 // Step 4: Select Models - Updated to use unified schema
 export const selectModels = async (sessionId, method, market = 'international', suggestedPeers = [], customPeers = []) => {
+  // Convert peer objects to ticker strings if needed
+  const suggestedPeerTickers = suggestedPeers && suggestedPeers.length > 0 
+    ? suggestedPeers.map(p => p.ticker || p.symbol) 
+    : [];
+  const customPeerTickers = customPeers && customPeers.length > 0 
+    ? customPeers.map(p => p.ticker || p.symbol) 
+    : [];
+  
   const response = await api.post('/step-4-select-models', { 
     session_id: sessionId,
     method: method.toUpperCase(),
     market: market.toLowerCase(),
-    suggested_peers: suggestedPeers && suggestedPeers.length > 0 ? suggestedPeers : undefined,
-    custom_peers: customPeers && customPeers.length > 0 ? customPeers : undefined
+    suggested_peers: suggestedPeerTickers.length > 0 ? suggestedPeerTickers : undefined,
+    custom_peers: customPeerTickers.length > 0 ? customPeerTickers : undefined
   });
   return response.data;
 };

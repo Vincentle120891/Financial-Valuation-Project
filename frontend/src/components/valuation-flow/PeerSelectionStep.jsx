@@ -25,13 +25,15 @@ const PeerSelectionStep = ({
   const handleSelectAll = () => {
     if (selectedPeers.length === suggestedPeers.length) {
       suggestedPeers.forEach(peer => {
-        if (selectedPeers.find(p => p.symbol === peer.symbol || p.ticker === peer.ticker)) {
+        const peerId = peer.symbol || peer.ticker;
+        if (selectedPeers.find(p => (p.symbol || p.ticker) === peerId)) {
           onTogglePeer(peer);
         }
       });
     } else {
       suggestedPeers.forEach(peer => {
-        if (!selectedPeers.find(p => p.symbol === peer.symbol || p.ticker === peer.ticker)) {
+        const peerId = peer.symbol || peer.ticker;
+        if (!selectedPeers.find(p => (p.symbol || p.ticker) === peerId)) {
           onTogglePeer(peer);
         }
       });
