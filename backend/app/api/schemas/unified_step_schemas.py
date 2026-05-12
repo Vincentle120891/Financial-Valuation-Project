@@ -70,7 +70,7 @@ class DataField(BaseModel):
     currency: Optional[str] = Field(None, description="Currency code if applicable")
     reporting_period: Optional[str] = Field(None, description="Reporting period (FY2023, Q1-2024, etc.)")
     last_updated: Optional[datetime] = Field(None, description="Last update timestamp")
-
+    description: Optional[str] = Field(None, description="Field description for UI display")
 
 class MissingDataSummary(BaseModel):
     """Comprehensive summary of missing data for any step"""
