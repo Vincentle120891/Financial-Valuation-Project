@@ -7,8 +7,12 @@ import React from 'react';
  * FIXED: Now uses Radio Buttons instead of checkboxes.
  * Per documentation: "MUST use Radio Buttons. Multi-select is forbidden."
  * This prevents AI context hallucination from multiple simultaneous model selections.
+ * 
+ * UNIFIED SCHEMA REQUIREMENT:
+ * Requires selectedPeers prop to ensure peers are selected before model selection.
+ * UnifiedStep4Request schema requires either suggested_peers or custom_peers.
  */
-const ModelSelectionStep = ({ onSelectModel, selectedModels }) => {
+const ModelSelectionStep = ({ onSelectModel, selectedModels, selectedPeers }) => {
   const models = [
     { 
       id: 'DCF', 
@@ -29,6 +33,12 @@ const ModelSelectionStep = ({ onSelectModel, selectedModels }) => {
 
   // GAP 2 FIX: Use single selection (radio button behavior) instead of array-based multi-select
   const handleSelectModel = (modelId) => {
+    // Client-side validation: Prevent model selection without peers (Unified Schema Requirement)
+    if (!selectedPeers || selectedPeers.length === 0) {
+      alert('⚠️ No peers selected! Please go back to Step 3 and select at least one peer company.');
+      return;
+    }
+    
     // Single selection - just pass the model ID directly (not an array)
     onSelectModel(modelId);
   };
