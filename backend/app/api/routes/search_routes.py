@@ -72,11 +72,12 @@ async def search_tickers(request: UnifiedStep1Request):
             )
 
         # Convert raw results to CompanySearchResult format
+        # FIX Issue #2: Ensure field names match CompanySearchResult schema (ticker, company_name)
         company_results = []
         for r in results:
             company_results.append(CompanySearchResult(
-                ticker=r.get('symbol', ''),
-                company_name=r.get('name', ''),
+                ticker=r.get('ticker', r.get('symbol', '')),  # Prefer 'ticker', fallback to 'symbol'
+                company_name=r.get('company_name', r.get('name', '')),  # Prefer 'company_name', fallback to 'name'
                 exchange=r.get('exchange', ''),
                 market=r.get('market', market_str),
                 sector=r.get('sector'),

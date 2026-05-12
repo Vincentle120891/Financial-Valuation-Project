@@ -21,16 +21,11 @@ const aiApi = axios.create({
 });
 
 // Step 1: Search Company
+// FIX Issue #1 & #3: Use unified POST endpoint for both markets
 export const searchCompanies = async (query, market = 'international') => {
-  if (market === 'vietnamese') {
-    // Use Vietnamese-specific endpoint but return unified format
-    const response = await api.get('/vietnam/search', { params: { q: query } });
-    return response.data;
-  } else {
-    // Use international unified endpoint
-    const response = await api.post('/step-1-search', { query, market });
-    return response.data;
-  }
+  // Use unified POST endpoint for ALL markets - no routing based on market
+  const response = await api.post('/step-1-search', { query, market });
+  return response.data;
 };
 
 // Step 2: Suggest Peers
