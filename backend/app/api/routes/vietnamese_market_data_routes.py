@@ -48,7 +48,14 @@ from app.services.vietnamese.vn_step6_data_fetch_processor import (
     vn_DataFetchInput,
 )
 from app.services.vietnamese.vn_step6_unified_transformer import VNStep6UnifiedTransformer
-from app.api.schemas.unified_step_schemas import UnifiedStep6Response
+from app.api.schemas.unified_step_schemas import (
+    UnifiedStep5Response,
+    UnifiedStep6Response,
+    UnifiedStep7Response,
+    UnifiedStep8Response,
+    UnifiedStep9Response,
+    UnifiedStep10Response,
+)
 from app.services.vietnamese.vn_step7_historical_processor import (
     vn_Step7HistoricalProcessor,
     vn_HistoricalDataInput,
@@ -608,7 +615,7 @@ class vn_Step5Response(BaseModel):
     next_step: int
 
 
-@router.post("/vn-step-5-collect-requirements", response_model=vn_Step5Response)
+@router.post("/vn-step-5-collect-requirements", response_model=UnifiedStep5Response)
 async def collect_vn_requirements(request: vn_Step5Request):
     """
     Step 5: Collect Valuation Requirements & Parameters (Vietnamese Market)
@@ -710,21 +717,36 @@ async def collect_vn_requirements(request: vn_Step5Request):
             f"Comps={result.parameter_validation.get('comps')}"
         )
 
-        return vn_Step5Response(
-            session_id=result.session_id,
-            status="requirements_collected",
-            dcf_parameters=result.dcf_parameters,
-            dupont_parameters=result.dupont_parameters,
-            comps_parameters=result.comps_parameters,
-            parameter_validation=result.parameter_validation,
-            market_context=result.market_context,
-            input_sources=result.input_sources,
-            message=f"Requirements collected successfully. "
-                    f"Risk-free rate: {result.dcf_parameters.get('risk_free_rate', 0)*100:.1f}%, "
-                    f"Market premium: {result.dcf_parameters.get('market_risk_premium', 0)*100:.1f}%, "
-                    f"Tax rate: {result.dcf_parameters.get('tax_rate', 0)*100:.0f}%",
-            next_step=result.next_step
+        # UNIFIED SCHEMA FIX: Transform to unified response format
+        from app.services.vietnamese.vn_step9_10_unified_transformer import VNStep9UnifiedTransformer
+        
+        # Build confirmed assumptions from result
+        confirmed_assumptions = {
+            "dcf_parameters": result.dcf_parameters,
+            "dupont_parameters": result.dupont_parameters,
+            "comps_parameters": result.comps_parameters,
+            "parameter_validation": result.parameter_validation,
+            "market_context": result.market_context,
+            "input_sources": result.input_sources
+        }
+        
+        transformer = VNStep9UnifiedTransformer()
+        unified_response = transformer.transform(
+            vn_output=result,
+            session_id=request.session_id,
+            method=method,
+            market=market,
+            confirmed_assumptions=confirmed_assumptions
         )
+        
+        # Store unified response in session for frontend access
+        session_service.update_session_value(
+            request.session_id,
+            "unified_step5_response",
+            unified_response.model_dump() if hasattr(unified_response, 'model_dump') else unified_response.dict()
+        )
+
+        return unified_response
 
     except HTTPException:
         raise
@@ -978,7 +1000,7 @@ class vn_Step7Response(BaseModel):
     message: str
 
 
-@router.post("/vn-step-7-retrieve-historical-data", response_model=vn_Step7Response)
+@router.post("/vn-step-7-retrieve-historical-data", response_model=UnifiedStep7Response)
 async def retrieve_vn_historical_data(request: vn_Step7Request):
     """
     Step 7: Retrieve Historical Data Using AI Extraction (Vietnamese Market)
@@ -1107,19 +1129,7 @@ async def retrieve_vn_historical_data(request: vn_Step7Request):
             unified_response.model_dump() if hasattr(unified_response, 'model_dump') else unified_response.dict()
         )
 
-        return vn_Step7Response(
-            status="historical_data_ready" if result.success else "partial_success",
-            ticker=ticker,
-            success=result.success,
-            completeness_score=result.completeness_score,
-            periods_covered=result.periods_covered,
-            missing_critical_fields=result.missing_critical_fields,
-            data_warnings=result.data_warnings,
-            source_breakdown=result.source_breakdown,
-            message=f"Historical data retrieval complete. "
-                    f"Completeness: {result.completeness_score:.1%}. "
-                    f"Periods: {', '.join(result.periods_covered)}."
-        )
+        return unified_response
 
     except HTTPException:
         raise
@@ -1159,7 +1169,7 @@ class vn_Step8InitializeResponse(BaseModel):
     message: str
 
 
-@router.post("/vn-step-8-initialize", response_model=vn_Step8InitializeResponse)
+@router.post("/vn-step-8-initialize", response_model=UnifiedStep8Response)
 async def initialize_vn_step8_assumptions(request: vn_Step8InitializeRequest):
     """
     Step 8: Initialize AI Assumptions (Vietnamese Market)
