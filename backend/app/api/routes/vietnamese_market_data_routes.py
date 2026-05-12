@@ -39,21 +39,21 @@ from app.services.vietnamese.vietnamese_dupont_engine import (
     VNDuPontAnalyzer,
     VNFinancialStatements,
 )
-from app.services.vietnamese.step5_requirements_processor import (
-    VNStep5RequirementsProcessor,
-    VNRequirementsInput,
+from app.services.vietnamese.vn_step5_requirements_processor import (
+    vn_Step5RequirementsProcessor,
+    vn_RequirementsInput,
 )
-from app.services.vietnamese.step6_data_fetch_processor import (
-    VNStep6DataFetchProcessor,
-    VNDataFetchInput,
+from app.services.vietnamese.vn_step6_data_fetch_processor import (
+    vn_Step6DataFetchProcessor,
+    vn_DataFetchInput,
 )
-from app.services.vietnamese.step7_historical_processor import (
-    VNStep7HistoricalProcessor,
-    VNHistoricalDataInput,
+from app.services.vietnamese.vn_step7_historical_processor import (
+    vn_Step7HistoricalProcessor,
+    vn_HistoricalDataInput,
 )
-from app.services.vietnamese.step8_assumptions_processor import (
-    VNStep8AssumptionsProcessor,
-    VNAIAssumptionsInput,
+from app.services.vietnamese.vn_step8_assumptions_processor import (
+    vn_Step8AssumptionsProcessor,
+    vn_AIAssumptionsInput,
 )
 from app.core.session_service import session_service
 
@@ -538,7 +538,7 @@ async def get_vietnamese_workflow_info():
 # Step 5: Requirements & Parameters (Vietnamese Market)
 # ──────────────────────────────────────────────────────────────────────────────
 
-class VNStep5Request(BaseModel):
+class vn_Step5Request(BaseModel):
     """Request model for Vietnamese Step 5 requirements collection."""
     session_id: str = Field(..., description="Session identifier")
     method: str = Field(..., description="Valuation method: DCF, DuPont, or Comps")
@@ -585,7 +585,7 @@ class VNStep5Request(BaseModel):
         return v
 
 
-class VNStep5Response(BaseModel):
+class vn_Step5Response(BaseModel):
     """Response model for Vietnamese Step 5 requirements collection."""
     session_id: str
     status: str
@@ -599,8 +599,8 @@ class VNStep5Response(BaseModel):
     next_step: int
 
 
-@router.post("/vn-step-5-collect-requirements", response_model=VNStep5Response)
-async def collect_vn_requirements(request: VNStep5Request):
+@router.post("/vn-step-5-collect-requirements", response_model=vn_Step5Response)
+async def collect_vn_requirements(request: vn_Step5Request):
     """
     Step 5: Collect Valuation Requirements & Parameters (Vietnamese Market)
 
@@ -624,10 +624,10 @@ async def collect_vn_requirements(request: VNStep5Request):
     - GDP growth reference for terminal value (~5.5%)
 
     Args:
-        request: VNStep5Request with session_id, method, and all parameters
+        request: vn_Step5Request with session_id, method, and all parameters
 
     Returns:
-        VNStep5Response with:
+        vn_Step5Response with:
         - Validated parameters by model (DCF, DuPont, Comps)
         - Market context and benchmarks
         - Input source tracking
@@ -662,7 +662,7 @@ async def collect_vn_requirements(request: VNStep5Request):
             raise HTTPException(status_code=400, detail="No ticker found in session")
 
         # Build input for Vietnamese Step 5 processor
-        vn_input = VNRequirementsInput(
+        vn_input = vn_RequirementsInput(
             session_id=request.session_id,
             dcf_forecast_years=request.dcf_forecast_years,
             dcf_terminal_growth_rate=request.dcf_terminal_growth_rate,
@@ -681,7 +681,7 @@ async def collect_vn_requirements(request: VNStep5Request):
         )
 
         # Execute Vietnamese Step 5 processor
-        processor = VNStep5RequirementsProcessor(session_service=session_service)
+        processor = vn_Step5RequirementsProcessor(session_service=session_service)
         result = await processor.process(vn_input)
 
         # Update session step
@@ -701,7 +701,7 @@ async def collect_vn_requirements(request: VNStep5Request):
             f"Comps={result.parameter_validation.get('comps')}"
         )
 
-        return VNStep5Response(
+        return vn_Step5Response(
             session_id=result.session_id,
             status="requirements_collected",
             dcf_parameters=result.dcf_parameters,
@@ -728,7 +728,7 @@ async def collect_vn_requirements(request: VNStep5Request):
 # Step 6: Data Fetch (Vietnamese Market) - "Fetch Once, Use Many"
 # ──────────────────────────────────────────────────────────────────────────────
 
-class VNStep6FetchRequest(BaseModel):
+class vn_Step6FetchRequest(BaseModel):
     """Request model for Vietnamese Step 6 data fetch."""
     session_id: str = Field(..., description="Session identifier")
     method: str = Field(..., description="Valuation method: DCF, DuPont, or Comps")
@@ -748,7 +748,7 @@ class VNStep6FetchRequest(BaseModel):
         return v.upper()
 
 
-class VNStep6FetchResponse(BaseModel):
+class vn_Step6FetchResponse(BaseModel):
     """Response model for Vietnamese Step 6 data fetch."""
     session_id: str
     status: str
@@ -765,32 +765,32 @@ class VNStep6FetchResponse(BaseModel):
     next_step: str = "step7_historical_processing"
 
 
-@router.post("/vn-step-6-fetch-data", response_model=VNStep6FetchResponse)
-async def fetch_vn_data(request: VNStep6FetchRequest):
+@router.post("/vn-step-6-fetch-data", response_model=vn_Step6FetchResponse)
+async def fetch_vn_data(request: vn_Step6FetchRequest):
     """
     Step 6: Fetch Raw Financial Data (Vietnamese Market)
-    
+
     Implements "Fetch Once, Use Many" architecture for Vietnamese market:
     - Fetches ALL market data in ONE API call
     - Stores in shared cache session['vietnam_market_data']
     - Reuses cached data when switching between DCF/DuPont/Comps models
-    
+
     Vietnam-Specific Features:
     - Uses Vietnamese data sources (Vietstock, FireAnt, company reports)
     - Handles VND currency and TT99 accounting standards
     - Falls back to AI PDF extraction for missing data
     - Fetches peer data for Comps/WACC calculations
-    
+
     Args:
-        request: VNStep6FetchRequest with session_id, method, and fetch parameters
-        
+        request: vn_Step6FetchRequest with session_id, method, and fetch parameters
+
     Returns:
-        VNStep6FetchResponse with:
+        vn_Step6FetchResponse with:
         - Fetched data summary
         - Source provider information
         - Data quality flags
         - Periods covered
-        
+
     Example:
         POST /vietnamese/vn-step-6-fetch-data
         {
@@ -806,24 +806,24 @@ async def fetch_vn_data(request: VNStep6FetchRequest):
         session = session_service.get_session_data(request.session_id)
         if not session:
             raise HTTPException(status_code=404, detail="Session not found")
-        
+
         ticker = session.get("ticker")
         company_name = session.get("company_name", ticker)
         exchange = session.get("exchange", "HOSE")
-        
+
         if not ticker:
             raise HTTPException(status_code=400, detail="No ticker found in session")
-        
+
         # GAP 1 FIX: Check session cache for "Fetch Once, Use Many"
         market = "vietnam"
         method = request.method.upper()
-        
+
         # Check if vietnam_market_data already exists in session cache
         cached_market_data = session_service.get_session_value(
             request.session_id,
             "vietnam_market_data"
         )
-        
+
         if cached_market_data:
             # Check cache age (valid for 5 minutes)
             from datetime import datetime, timedelta
@@ -833,7 +833,7 @@ async def fetch_vn_data(request: VNStep6FetchRequest):
                 if cache_age < timedelta(minutes=5):
                     logger.info(f"Using cached Vietnam market data for {ticker} (age: {cache_age.seconds}s)")
                     # Return cached data without re-fetching
-                    return VNStep6FetchResponse(
+                    return vn_Step6FetchResponse(
                         session_id=request.session_id,
                         status="cached_data_used",
                         ticker=ticker,
@@ -847,9 +847,9 @@ async def fetch_vn_data(request: VNStep6FetchRequest):
                         pdf_sources_used=cached_market_data.get('pdf_sources_used', []),
                         message=f"Using cached data for {ticker} - no API call needed"
                     )
-        
+
         # Build input for Vietnamese Step 6 processor
-        vn_input = VNDataFetchInput(
+        vn_input = vn_DataFetchInput(
             ticker=ticker,
             company_name=company_name,
             exchange=exchange,
@@ -864,11 +864,11 @@ async def fetch_vn_data(request: VNStep6FetchRequest):
             preferred_source="vietstock",
             fallback_to_ai_extraction=request.fallback_to_ai_extraction
         )
-        
+
         # Execute Vietnamese Step 6 processor with session cache for "Fetch Once, Use Many"
-        processor = VNStep6DataFetchProcessor()
+        processor = vn_Step6DataFetchProcessor()
         result = await processor.execute(vn_input, session_cache=session)
-        
+
         # GAP 1 FIX: Store fetched data in session cache for "Fetch Once, Use Many"
         if result.success:
             from datetime import datetime
@@ -886,14 +886,14 @@ async def fetch_vn_data(request: VNStep6FetchRequest):
                 'pdf_sources_used': result.data_bundle.pdf_sources_used,
                 'periods_fetched': list(result.data_bundle.income_statement_raw.keys()) if result.data_bundle.income_statement_raw else []
             }
-            
+
             # Store in session under shared cache key
             session_service.update_session_value(
                 request.session_id,
                 "vietnam_market_data",
                 cache_data
             )
-            
+
             # Also store in method-specific track for backward compatibility
             session_service.update_session_data(
                 request.session_id,
@@ -902,10 +902,10 @@ async def fetch_vn_data(request: VNStep6FetchRequest):
                 market=market,
                 method=method.lower()
             )
-            
+
             logger.info(f"Cached Vietnam market data for {ticker} in session")
-        
-        return VNStep6FetchResponse(
+
+        return vn_Step6FetchResponse(
             session_id=request.session_id,
             status="data_fetched" if result.success else "partial_success",
             ticker=ticker,
@@ -920,7 +920,7 @@ async def fetch_vn_data(request: VNStep6FetchRequest):
             message=result.message,
             next_step=result.next_step
         )
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -932,7 +932,7 @@ async def fetch_vn_data(request: VNStep6FetchRequest):
 # Step 7: Historical Data Retrieval (Vietnamese Market)
 # ──────────────────────────────────────────────────────────────────────────────
 
-class VNStep7Request(BaseModel):
+class vn_Step7Request(BaseModel):
     """Request model for Vietnamese Step 7 historical data retrieval."""
     session_id: str = Field(..., description="Session identifier")
     method: str = Field(..., description="Valuation method: DCF, DuPont, or Comps")
@@ -947,7 +947,7 @@ class VNStep7Request(BaseModel):
         return v.upper()
 
 
-class VNStep7Response(BaseModel):
+class vn_Step7Response(BaseModel):
     """Response model for Vietnamese Step 7 historical data retrieval."""
     status: str
     ticker: str
@@ -960,8 +960,8 @@ class VNStep7Response(BaseModel):
     message: str
 
 
-@router.post("/vn-step-7-retrieve-historical-data", response_model=VNStep7Response)
-async def retrieve_vn_historical_data(request: VNStep7Request):
+@router.post("/vn-step-7-retrieve-historical-data", response_model=vn_Step7Response)
+async def retrieve_vn_historical_data(request: vn_Step7Request):
     """
     Step 7: Retrieve Historical Data Using AI Extraction (Vietnamese Market)
 
@@ -981,10 +981,10 @@ async def retrieve_vn_historical_data(request: VNStep7Request):
     - Handles VND currency units properly
 
     Args:
-        request: VNStep7Request with session_id and method
+        request: vn_Step7Request with session_id and method
 
     Returns:
-        VNStep7Response with:
+        vn_Step7Response with:
         - Completeness score (0-1)
         - Periods covered
         - Missing critical fields
@@ -1033,7 +1033,7 @@ async def retrieve_vn_historical_data(request: VNStep7Request):
             raise HTTPException(status_code=400, detail="No financial data available")
 
         # Build input for Vietnamese Step 7 processor
-        vn_input = VNHistoricalDataInput(
+        vn_input = vn_HistoricalDataInput(
             ticker=ticker,
             company_name=company_name,
             exchange=exchange,
@@ -1048,7 +1048,7 @@ async def retrieve_vn_historical_data(request: VNStep7Request):
         )
 
         # Execute Vietnamese Step 7 processor
-        processor = VNStep7HistoricalProcessor()
+        processor = vn_Step7HistoricalProcessor()
         result = await processor.execute(vn_input)
 
         # Store historical data in session
@@ -1073,7 +1073,7 @@ async def retrieve_vn_historical_data(request: VNStep7Request):
             f"{len(result.periods_covered)} periods covered"
         )
 
-        return VNStep7Response(
+        return vn_Step7Response(
             status="historical_data_ready" if result.success else "partial_success",
             ticker=ticker,
             success=result.success,
@@ -1098,7 +1098,7 @@ async def retrieve_vn_historical_data(request: VNStep7Request):
 # Step 8: AI Assumptions Generation (Vietnamese Market)
 # ──────────────────────────────────────────────────────────────────────────────
 
-class VNStep8InitializeRequest(BaseModel):
+class vn_Step8InitializeRequest(BaseModel):
     """Request model for Vietnamese Step 8 initialization."""
     session_id: str = Field(..., description="Session identifier")
     method: str = Field(..., description="Valuation method: DCF, DuPont, or Comps")
@@ -1113,7 +1113,7 @@ class VNStep8InitializeRequest(BaseModel):
         return v.upper()
 
 
-class VNStep8InitializeResponse(BaseModel):
+class vn_Step8InitializeResponse(BaseModel):
     """Response model for Vietnamese Step 8 initialization."""
     session_id: str
     model_type: str
@@ -1125,8 +1125,8 @@ class VNStep8InitializeResponse(BaseModel):
     message: str
 
 
-@router.post("/vn-step-8-initialize", response_model=VNStep8InitializeResponse)
-async def initialize_vn_step8_assumptions(request: VNStep8InitializeRequest):
+@router.post("/vn-step-8-initialize", response_model=vn_Step8InitializeResponse)
+async def initialize_vn_step8_assumptions(request: vn_Step8InitializeRequest):
     """
     Step 8: Initialize AI Assumptions (Vietnamese Market)
 
@@ -1141,10 +1141,10 @@ async def initialize_vn_step8_assumptions(request: VNStep8InitializeRequest):
     - Exchange-specific considerations (HOSE, HNX, UPCOM)
 
     Args:
-        request: VNStep8InitializeRequest with session_id and method
+        request: vn_Step8InitializeRequest with session_id and method
 
     Returns:
-        VNStep8InitializeResponse with:
+        vn_Step8InitializeResponse with:
         - AI-generated assumptions with confidence scores
         - Sector analysis for Vietnamese market
         - Macro integration details
@@ -1193,7 +1193,7 @@ async def initialize_vn_step8_assumptions(request: VNStep8InitializeRequest):
         )
 
         # Build input for Vietnamese Step 8 processor
-        vn_input = VNAIAssumptionsInput(
+        vn_input = vn_AIAssumptionsInput(
             session_id=request.session_id,
             company_name=company_name,
             ticker=ticker,
@@ -1211,7 +1211,7 @@ async def initialize_vn_step8_assumptions(request: VNStep8InitializeRequest):
         )
 
         # Execute Vietnamese Step 8 processor
-        processor = VNStep8AssumptionsProcessor()
+        processor = vn_Step8AssumptionsProcessor()
         result = await processor.process(vn_input)
 
         # Store assumptions in session
@@ -1240,7 +1240,7 @@ async def initialize_vn_step8_assumptions(request: VNStep8InitializeRequest):
         for assumption in result.assumptions:
             assumptions_dict.append(assumption.model_dump() if hasattr(assumption, 'model_dump') else assumption.dict())
 
-        return VNStep8InitializeResponse(
+        return vn_Step8InitializeResponse(
             session_id=request.session_id,
             model_type=result.model_type,
             assumptions=assumptions_dict,
