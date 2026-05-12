@@ -34,19 +34,11 @@ const SearchStep = ({
 
   const performSearch = async () => {
     if (market === 'vietnamese' && searchQuery.trim()) {
-      // Use Vietnamese-specific search
+      // Use Vietnamese-specific search - results will be handled by parent's handleSearch
       setVietnameseSearchLoading(true);
       try {
-        const results = await searchVietnameseStocks(searchQuery.trim());
-        // Transform results to match expected format
-        const formattedResults = results.map(stock => ({
-          symbol: stock.ticker,
-          name: stock.name_en || stock.name_vi,
-          exchange: stock.exchange,
-          sector: stock.sector,
-          market: 'vietnamese'
-        }));
-        onSearch(formattedResults);
+        // Call onSearch which triggers parent's handleSearch to fetch and set results
+        await onSearch();
       } catch (err) {
         console.error('Vietnamese search error:', err);
       } finally {
@@ -54,7 +46,7 @@ const SearchStep = ({
       }
     } else {
       // Use international search
-      onSearch();
+      await onSearch();
     }
   };
 
