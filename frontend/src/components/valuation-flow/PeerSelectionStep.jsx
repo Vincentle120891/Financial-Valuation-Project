@@ -108,7 +108,8 @@ const PeerSelectionStep = ({
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {suggestedPeers.map((peer) => {
-                const isSelected = selectedPeers.find(p => p.symbol === peer.symbol || p.ticker === peer.ticker);
+                const peerId = peer.symbol || peer.ticker;
+                const isSelected = selectedPeers.find(p => (p.symbol || p.ticker) === peerId);
                 
                 const isInvalidPeer = 
                   peer.symbol?.startsWith('^') ||
