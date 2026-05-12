@@ -34,13 +34,16 @@ from app.api.schemas import (
 from app.services.international.step8_manual_overrides import FullAssumptionsResponse
 from app.services.international.step5_assumptions_processor import Step5AssumptionsProcessor
 from app.services.international.step6_data_review import Step6DataReviewProcessor
+from app.services.international.step6_unified_transformer import Step6UnifiedTransformer
 from app.services.international.step7_historical_data_processor import Step7HistoricalDataProcessor
+from app.services.international.step7_unified_transformer import Step7UnifiedTransformer
 from app.services.international.step8_manual_overrides import Step8ManualOverridesProcessor
 from app.services.international.step10_valuation_processor import Step10ValuationProcessor
 from app.services.international.yfinance_service import YFinanceService
 from app.services.international.valuation_orchestrator import orchestrator
 from app.services.pdf_extraction_service import VietnamesePDFExtractor
 from app.services.international.step7_ai_web_search import AIWebSearchExtractor, calculate_historical_trends
+from app.api.schemas.unified_step_schemas import UnifiedStep6Response, UnifiedStep7Response
 
 logger = get_logger(__name__)
 
@@ -270,11 +273,17 @@ async def prepare_inputs(request: PrepareInputsRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/step-6-fetch-api-data", response_model=FetchDataResponse)
+@router.post("/step-6-fetch-api-data", response_model=UnifiedStep6Response)
 async def fetch_api_data(request: FetchDataRequest):
     """
     Step 6: Fetch financial data from APIs and calculate metrics.
     Uses SessionService for session management and Step6DataReviewProcessor for comprehensive data review.
+
+    PHASE 1.2 UNIFIED SCHEMA IMPLEMENTATION:
+    - Returns UnifiedStep6Response instead of legacy FetchDataResponse
+    - Transforms method-specific outputs (DCF/DuPont/Comps) to unified schema
+    - Preserves ALL original calculations and data values
+    - Only changes the wrapping structure to match unified contract
 
     MATRIX WORKFLOW:
     - Uses market/method from request parameters (REQUIRED - no fallback)
@@ -312,7 +321,7 @@ async def fetch_api_data(request: FetchDataRequest):
         session_cache = session_service.get_session_data(request.session_id)
 
         # Use Step6DataReviewProcessor for comprehensive data fetching and calculation
-        result = await step6_processor.process_data_review(
+        legacy_result = await step6_processor.process_data_review(
             ticker=ticker,
             market=market,
             valuation_model=method,
@@ -320,9 +329,15 @@ async def fetch_api_data(request: FetchDataRequest):
             session_cache=session_cache  # PASS session cache to enable caching
         )
 
+        # PHASE 1.2: Transform legacy response to unified schema
+        unified_response = Step6UnifiedTransformer.transform_any_response(
+            response=legacy_result,
+            valuation_model=method
+        )
+
         # Store results in session using SessionService (with JSON serialization)
         # Store in the specific valuation track
-        result_dict = result.model_dump(mode='json') if hasattr(result, 'model_dump') else result
+        result_dict = unified_response.model_dump(mode='json') if hasattr(unified_response, 'model_dump') else unified_response
         session_service.update_session_data(
             request.session_id,
             "financial_data",
@@ -338,17 +353,14 @@ async def fetch_api_data(request: FetchDataRequest):
             method=method.lower()
         )
 
-        return FetchDataResponse(
-            status="data_ready",
-            data=result_dict,
-            message="Financial data retrieved successfully from APIs."
-        )
+        return unified_response
+
     except Exception as e:
         logger.error(f"Fetch API data error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/step-7-retrieve-historical-data", response_model=GenerateAIResponse)
+@router.post("/step-7-retrieve-historical-data", response_model=UnifiedStep7Response)
 async def retrieve_historical_data(request: GenerateAIRequest):
     """
     Step 7: Retrieve Historical Data Using AI Extraction
@@ -373,6 +385,11 @@ async def retrieve_historical_data(request: GenerateAIRequest):
     METHOD-AGNOSTIC DESIGN:
     - Method MUST be provided in request.method - no session.selected_model fallback
     - Each method operates independently with its own data track
+
+    UNIFIED SCHEMA OUTPUT:
+    - Returns UnifiedStep7Response with standardized ProcessedHistoricalPeriod structures
+    - Includes trend analysis (CAGR, average growth rates)
+    - Provides MissingDataSummary for data quality tracking
     """
     try:
         # Get session data using SessionService
@@ -406,7 +423,7 @@ async def retrieve_historical_data(request: GenerateAIRequest):
             raise HTTPException(status_code=400, detail="No financial data available")
 
         # Use Step7HistoricalDataProcessor for AI-powered historical data extraction
-        result = await step7_processor.retrieve_historical_data(
+        legacy_result = await step7_processor.retrieve_historical_data(
             ticker=ticker,
             company_name=session.get("company_name", ticker),
             valuation_model=method,
@@ -414,11 +431,14 @@ async def retrieve_historical_data(request: GenerateAIRequest):
             step6_financial_data=financial_data
         )
 
+        # Transform to unified schema using Step7UnifiedTransformer
+        unified_result = Step7UnifiedTransformer.transform_any_response(legacy_result, method)
+
         # Store historical data in session using SessionService - in the specific valuation track
         session_service.update_session_data(
             request.session_id,
             "historical_data_gaps_filled",
-            result,
+            unified_result,  # Store unified format
             market=market,
             method=method.lower()
         )
@@ -430,22 +450,10 @@ async def retrieve_historical_data(request: GenerateAIRequest):
             method=method.lower()
         )
 
-        # Convert HistoricalDataRetrievalResponse to dict for GenerateAIResponse
-        if hasattr(result, 'model_dump'):
-            result_dict = result.model_dump()
-        elif hasattr(result, 'dict'):
-            result_dict = result.dict()
-        else:
-            result_dict = dict(result) if isinstance(result, dict) else str(result)
+        logger.info(f"Step 7 complete: {unified_result.missing_data_summary.retrieved_count}/{unified_result.missing_data_summary.total_fields} gaps filled, completeness: {unified_result.missing_data_summary.completion_percentage:.1%}")
 
-        logger.info(f"Step 7 complete: {result.total_gaps_filled}/{result.total_gaps_found} gaps filled, completeness: {result.data_completeness_score:.1%}")
+        return unified_result
 
-        return GenerateAIResponse(
-            status="historical_data_ready",
-            suggestions=result_dict,
-            message=f"Historical data retrieval complete. {result.total_gaps_filled} gaps filled with {result.data_completeness_score:.1%} completeness.",
-            _metadata={"model_version": "v2.0"}
-        )
     except Exception as e:
         logger.error(f"Step 7 historical data retrieval error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
