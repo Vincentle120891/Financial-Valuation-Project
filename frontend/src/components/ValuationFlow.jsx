@@ -1191,6 +1191,8 @@ const ValuationFlow = () => {
               className={`step-dot ${currentStep >= step ? 'active' : ''} ${currentStep === step ? 'current' : ''}`}
               title={`Step ${step}`}
               aria-label={`Step ${step}`}
+              onClick={() => step <= currentStep && setCurrentStep(step)}
+              style={{ cursor: step <= currentStep ? 'pointer' : 'default' }}
             />
           ))}
         </div>
