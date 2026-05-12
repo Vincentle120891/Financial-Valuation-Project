@@ -62,8 +62,8 @@ export const selectModels = async (sessionId, method, market = 'international', 
     session_id: sessionId,
     method: method.toUpperCase(),
     market: market.toLowerCase(),
-    suggested_peers: suggestedPeers,
-    custom_peers: customPeers
+    suggested_peers: suggestedPeers && suggestedPeers.length > 0 ? suggestedPeers : undefined,
+    custom_peers: customPeers && customPeers.length > 0 ? customPeers : undefined
   });
   return response.data;
 };
