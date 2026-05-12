@@ -7,11 +7,9 @@ Routes are thin - only receiving requests, validating inputs, and delegating to 
 
 import logging
 from datetime import datetime
-from typing import Dict, Any
+from typing import Dict, Any, List, Optional
 from fastapi import APIRouter, HTTPException, UploadFile, File
 from pydantic import BaseModel
-
-from typing import List, Dict, Any
 from app.core.logging_config import get_logger
 from app.core.session_service import session_service
 from app.api.schemas import (
@@ -95,6 +93,7 @@ class SavePeersResponse(BaseModel):
     status: str
     message: str
     peers_saved: int
+    peer_data: Optional[Dict[str, Any]] = None
 
 
 @router.post("/step-3-save-peers", response_model=SavePeersResponse)
@@ -113,7 +112,8 @@ async def save_peers(request: SavePeersRequest):
         return SavePeersResponse(
             status=result["status"],
             message=result["message"],
-            peers_saved=result["peers_saved"]
+            peers_saved=result["peers_saved"],
+            peer_data=result.get("peer_data")
         )
     except HTTPException:
         raise

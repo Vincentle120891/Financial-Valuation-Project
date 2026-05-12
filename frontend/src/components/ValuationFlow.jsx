@@ -311,9 +311,11 @@ const ValuationFlow = () => {
   // ==================== STEP 3: TOGGLE PEER SELECTION ====================
   const handleTogglePeer = useCallback((peer) => {
     setSelectedPeers(prev => {
-      const exists = prev.find(p => p.symbol === peer.symbol);
+      // Use ticker or symbol as the unique identifier for consistency
+      const peerId = peer.ticker || peer.symbol;
+      const exists = prev.find(p => (p.ticker || p.symbol) === peerId);
       if (exists) {
-        return prev.filter(p => p.symbol !== peer.symbol);
+        return prev.filter(p => (p.ticker || p.symbol) !== peerId);
       } else {
         return [...prev, peer];
       }
@@ -335,6 +337,12 @@ const ValuationFlow = () => {
 
       if (saveResponse.status === 'success') {
         console.log(`✅ Saved ${saveResponse.peers_saved} peers to session with auto-fetched market data`);
+        
+        // Store peer data from the response for later steps
+        if (saveResponse.peer_data) {
+          setPeerData(saveResponse.peer_data);
+        }
+        
         setCurrentStep(4);
       } else {
         setError('Failed to save peers');
