@@ -53,39 +53,39 @@ from app.services.vietnamese.vietnamese_dupont_engine import (
     VNDuPontResult,
 )
 
-from app.services.vietnamese.step1_ticker_processor import (
-    VNStep1TickerProcessor,
-    VNTickerInfo,
-    VNStep1Response,
+from app.services.vietnamese.vn_step1_ticker_processor import (
+    vn_Step1TickerProcessor,
+    vn_TickerInfo,
+    vn_Step1Response,
 )
 
-from app.services.vietnamese.step2_market_data_processor import (
-    VNStep2MarketDataProcessor,
-    VNMarketDataPoint,
-    VNMarketRiskMetrics,
-    VNStep2Response,
+from app.services.vietnamese.vn_step2_market_data_processor import (
+    vn_Step2MarketDataProcessor,
+    vn_MarketDataPoint,
+    vn_MarketRiskMetrics,
+    vn_Step2Response,
 )
 
-from app.services.vietnamese.step3_historical_processor import (
-    VNStep3HistoricalProcessor,
-    VNHistoricalYearData,
-    VNCalculatedMetrics,
-    VNStep3Response,
+from app.services.vietnamese.vn_step3_historical_processor import (
+    vn_Step3HistoricalProcessor,
+    vn_HistoricalYearData,
+    vn_CalculatedMetrics,
+    vn_Step3Response,
 )
 
-from app.services.vietnamese.step8_dcf_assumptions import (
-    VNDCFStep8Processor,
-    VNDCFAssumptionsOutput,
+from app.services.vietnamese.vn_step8_dcf_assumptions import (
+    vn_DCFStep8Processor,
+    vn_DCFAssumptionsOutput,
 )
 
-from app.services.vietnamese.step8_dupont_assumptions import (
-    VNDuPontStep8Processor,
-    VNDuPontAssumptionsOutput,
+from app.services.vietnamese.vn_step8_dupont_assumptions import (
+    vn_DuPontStep8Processor,
+    vn_DuPontAssumptionsOutput,
 )
 
-from app.services.vietnamese.step8_comps_assumptions import (
-    VNCompsStep8Processor,
-    VNCompsAssumptionsOutput,
+from app.services.vietnamese.vn_step8_comps_assumptions import (
+    vn_CompsStep8Processor,
+    vn_CompsAssumptionsOutput,
 )
 
 __all__ = [
@@ -127,29 +127,29 @@ __all__ = [
     "VNDuPontResult",
 
     # Step Processors
-    "VNStep1TickerProcessor",
-    "VNTickerInfo",
-    "VNStep1Response",
+    "vn_Step1TickerProcessor",
+    "vn_TickerInfo",
+    "vn_Step1Response",
 
-    "VNStep2MarketDataProcessor",
-    "VNMarketDataPoint",
-    "VNMarketRiskMetrics",
-    "VNStep2Response",
+    "vn_Step2MarketDataProcessor",
+    "vn_MarketDataPoint",
+    "vn_MarketRiskMetrics",
+    "vn_Step2Response",
 
-    "VNStep3HistoricalProcessor",
-    "VNHistoricalYearData",
-    "VNCalculatedMetrics",
-    "VNStep3Response",
+    "vn_Step3HistoricalProcessor",
+    "vn_HistoricalYearData",
+    "vn_CalculatedMetrics",
+    "vn_Step3Response",
 
     # Step 8 DCF Assumptions
-    "VNDCFStep8Processor",
-    "VNDCFAssumptionsOutput",
+    "vn_DCFStep8Processor",
+    "vn_DCFAssumptionsOutput",
 
     # Step 8 DuPont Assumptions
-    "VNDuPontStep8Processor",
-    "VNDuPontAssumptionsOutput",
+    "vn_DuPontStep8Processor",
+    "vn_DuPontAssumptionsOutput",
 
     # Step 8 Comps Assumptions
-    "VNCompsStep8Processor",
-    "VNCompsAssumptionsOutput",
+    "vn_CompsStep8Processor",
+    "vn_CompsAssumptionsOutput",
 ]
