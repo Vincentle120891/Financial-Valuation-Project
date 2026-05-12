@@ -34,6 +34,7 @@ from app.api.schemas import (
 from app.services.international.step8_manual_overrides import FullAssumptionsResponse
 from app.services.international.step5_assumptions_processor import Step5AssumptionsProcessor
 from app.services.international.step6_data_review import Step6DataReviewProcessor
+from app.services.international.step6_unified_transformer import Step6UnifiedTransformer
 from app.services.international.step7_historical_data_processor import Step7HistoricalDataProcessor
 from app.services.international.step8_manual_overrides import Step8ManualOverridesProcessor
 from app.services.international.step10_valuation_processor import Step10ValuationProcessor
@@ -41,6 +42,7 @@ from app.services.international.yfinance_service import YFinanceService
 from app.services.international.valuation_orchestrator import orchestrator
 from app.services.pdf_extraction_service import VietnamesePDFExtractor
 from app.services.international.step7_ai_web_search import AIWebSearchExtractor, calculate_historical_trends
+from app.api.schemas.unified_step_schemas import UnifiedStep6Response
 
 logger = get_logger(__name__)
 
@@ -270,12 +272,18 @@ async def prepare_inputs(request: PrepareInputsRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/step-6-fetch-api-data", response_model=FetchDataResponse)
+@router.post("/step-6-fetch-api-data", response_model=UnifiedStep6Response)
 async def fetch_api_data(request: FetchDataRequest):
     """
     Step 6: Fetch financial data from APIs and calculate metrics.
     Uses SessionService for session management and Step6DataReviewProcessor for comprehensive data review.
-
+    
+    PHASE 1.2 UNIFIED SCHEMA IMPLEMENTATION:
+    - Returns UnifiedStep6Response instead of legacy FetchDataResponse
+    - Transforms method-specific outputs (DCF/DuPont/Comps) to unified schema
+    - Preserves ALL original calculations and data values
+    - Only changes the wrapping structure to match unified contract
+    
     MATRIX WORKFLOW:
     - Uses market/method from request parameters (REQUIRED - no fallback)
     - Stores financial data in the specific valuation track
@@ -312,7 +320,7 @@ async def fetch_api_data(request: FetchDataRequest):
         session_cache = session_service.get_session_data(request.session_id)
 
         # Use Step6DataReviewProcessor for comprehensive data fetching and calculation
-        result = await step6_processor.process_data_review(
+        legacy_result = await step6_processor.process_data_review(
             ticker=ticker,
             market=market,
             valuation_model=method,
@@ -320,9 +328,15 @@ async def fetch_api_data(request: FetchDataRequest):
             session_cache=session_cache  # PASS session cache to enable caching
         )
 
+        # PHASE 1.2: Transform legacy response to unified schema
+        unified_response = Step6UnifiedTransformer.transform_any_response(
+            response=legacy_result,
+            valuation_model=method
+        )
+
         # Store results in session using SessionService (with JSON serialization)
         # Store in the specific valuation track
-        result_dict = result.model_dump(mode='json') if hasattr(result, 'model_dump') else result
+        result_dict = unified_response.model_dump(mode='json') if hasattr(unified_response, 'model_dump') else unified_response
         session_service.update_session_data(
             request.session_id,
             "financial_data",
@@ -338,11 +352,8 @@ async def fetch_api_data(request: FetchDataRequest):
             method=method.lower()
         )
 
-        return FetchDataResponse(
-            status="data_ready",
-            data=result_dict,
-            message="Financial data retrieved successfully from APIs."
-        )
+        return unified_response
+        
     except Exception as e:
         logger.error(f"Fetch API data error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
