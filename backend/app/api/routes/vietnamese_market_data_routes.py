@@ -55,6 +55,13 @@ from app.services.vietnamese.vn_step8_assumptions_processor import (
     vn_Step8AssumptionsProcessor,
     vn_AIAssumptionsInput,
 )
+from app.services.vietnamese.vn_step6_unified_transformer import VNStep6UnifiedTransformer
+from app.services.vietnamese.vn_step7_unified_transformer import VNStep7UnifiedTransformer
+from app.services.vietnamese.vn_step8_unified_transformer import VNStep8UnifiedTransformer
+from app.services.vietnamese.vn_step9_10_unified_transformer import (
+    VNStep9UnifiedTransformer,
+    VNStep10UnifiedTransformer,
+)
 from app.core.session_service import session_service
 
 logger = logging.getLogger(__name__)
@@ -905,6 +912,24 @@ async def fetch_vn_data(request: vn_Step6FetchRequest):
 
             logger.info(f"Cached Vietnam market data for {ticker} in session")
 
+        # UNIFIED SCHEMA FIX: Transform to unified response format
+        transformer = VNStep6UnifiedTransformer()
+        unified_response = transformer.transform(
+            vn_output=result,
+            session_id=request.session_id,
+            ticker=ticker,
+            market=market,
+            method=method,
+            session_cache=session
+        )
+        
+        # Store unified response in session for frontend access
+        session_service.update_session_value(
+            request.session_id,
+            "unified_step6_response",
+            unified_response.model_dump() if hasattr(unified_response, 'model_dump') else unified_response.dict()
+        )
+
         return vn_Step6FetchResponse(
             session_id=request.session_id,
             status="data_fetched" if result.success else "partial_success",
@@ -1073,6 +1098,22 @@ async def retrieve_vn_historical_data(request: vn_Step7Request):
             f"{len(result.periods_covered)} periods covered"
         )
 
+        # UNIFIED SCHEMA FIX: Transform to unified response format
+        transformer = VNStep7UnifiedTransformer()
+        unified_response = transformer.transform(
+            vn_output=result,
+            session_id=request.session_id,
+            method=method,
+            market=market
+        )
+        
+        # Store unified response in session for frontend access
+        session_service.update_session_value(
+            request.session_id,
+            "unified_step7_response",
+            unified_response.model_dump() if hasattr(unified_response, 'model_dump') else unified_response.dict()
+        )
+
         return vn_Step7Response(
             status="historical_data_ready" if result.success else "partial_success",
             ticker=ticker,
@@ -1233,6 +1274,24 @@ async def initialize_vn_step8_assumptions(request: vn_Step8InitializeRequest):
         logger.info(
             f"VN Step 8 initialized for {ticker}: "
             f"{len(result.assumptions)} assumptions generated"
+        )
+
+        # UNIFIED SCHEMA FIX: Transform to unified response format
+        transformer = VNStep8UnifiedTransformer()
+        unified_response = transformer.transform(
+            vn_output=result,
+            session_id=request.session_id,
+            method=method,
+            market=market,
+            ticker=ticker,
+            operation_type="generate_ai"
+        )
+        
+        # Store unified response in session for frontend access
+        session_service.update_session_value(
+            request.session_id,
+            "unified_step8_response",
+            unified_response.model_dump() if hasattr(unified_response, 'model_dump') else unified_response.dict()
         )
 
         # Convert assumptions to dict format
