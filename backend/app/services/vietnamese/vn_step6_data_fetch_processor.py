@@ -117,7 +117,7 @@ class vn_Step6DataFetchProcessor:
                 logger.warning("VietnameseReportScraper not available")
                 self.report_scraper = None
 
-    async def execute(self, input_data: VNDataFetchInput, session_cache: Optional[Dict] = None) -> VNDataFetchOutput:
+    async def execute(self, input_data: vn_DataFetchInput, session_cache: Optional[Dict] = None) -> vn_DataFetchOutput:
         """
         Execute Step 6: Fetch raw data.
         
@@ -127,7 +127,7 @@ class vn_Step6DataFetchProcessor:
                         If cache exists and is < 5 minutes old, returns cached data without re-fetching
         
         Returns:
-            VNDataFetchOutput with fetched data bundle
+            vn_DataFetchOutput with fetched data bundle
         """
         import time
         start_time = time.time()
@@ -150,7 +150,7 @@ class vn_Step6DataFetchProcessor:
                     if cache_age < timedelta(minutes=5):
                         logger.info(f"Using cached Vietnam market data for {input_data.ticker} (age: {cache_age.seconds}s)")
                         # Return cached data without re-fetching
-                        return VNDataFetchOutput(
+                        return vn_DataFetchOutput(
                             success=True,
                             ticker=input_data.ticker,
                             data_bundle=RawDataBundle(
@@ -182,7 +182,7 @@ class vn_Step6DataFetchProcessor:
                 if cache_age < timedelta(minutes=5):
                     logger.info(f"Using cached Vietnamese market data (age: {cache_age.seconds}s)")
                     # Return cached data bundle
-                    return VNDataFetchOutput(
+                    return vn_DataFetchOutput(
                         success=True,
                         ticker=input_data.ticker,
                         data_bundle=RawDataBundle(**cached_data['data_bundle']),
@@ -339,7 +339,7 @@ class vn_Step6DataFetchProcessor:
                 session_cache['vietnam_market_data'] = cache_data
                 logger.info(f"Stored Vietnam market data in cache for {input_data.ticker}")
 
-            return VNDataFetchOutput(
+            return vn_DataFetchOutput(
                 success=True,
                 ticker=input_data.ticker,
                 data_bundle=data_bundle,
@@ -351,7 +351,7 @@ class vn_Step6DataFetchProcessor:
         except Exception as e:
             logger.error(f"Error fetching data for {input_data.ticker}: {str(e)}")
             fetch_duration = (time.time() - start_time) * 1000
-            return VNDataFetchOutput(
+            return vn_DataFetchOutput(
                 success=False,
                 ticker=input_data.ticker,
                 data_bundle=RawDataBundle(

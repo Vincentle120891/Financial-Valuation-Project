@@ -174,7 +174,7 @@ class vn_Step7HistoricalProcessor:
                 logger.warning("PDF Extraction service not available")
                 self.ai_extraction_service = None
 
-    async def execute(self, input_data: VNHistoricalDataInput) -> VNHistoricalDataOutput:
+    async def execute(self, input_data: vn_HistoricalDataInput) -> vn_HistoricalDataOutput:
         """Execute Step 7: Normalize and extract historical data."""
         import time
         start_time = time.time()
@@ -246,7 +246,7 @@ class vn_Step7HistoricalProcessor:
             list(normalized.operating_cash_flow.keys())
         ))
 
-        return VNHistoricalDataOutput(
+        return vn_HistoricalDataOutput(
             success=len(missing_critical) == 0 or (ai_result and ai_result.success),
             ticker=input_data.ticker,
             normalized_financials=normalized,
