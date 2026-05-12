@@ -497,41 +497,163 @@ class UnifiedStep7Response(BaseModel):
 
 
 # =============================================================================
-# STEP 8: MANUAL OVERRIDES & AI SUGGESTIONS
+# STEP 8: ASSUMPTIONS & AI SUGGESTION STUDIO
 # =============================================================================
 
-class OverrideCategory(BaseModel):
-    """Category with override values"""
-    category: str
-    original_values: Dict[str, DataField]
-    suggested_values: Dict[str, DataField]
-    user_overrides: Dict[str, DataField]
-    final_values: Dict[str, DataField]
+class OverrideStatus(str, Enum):
+    """Status of manual override"""
+    ACCEPTED_AI = "ACCEPTED_AI"
+    MANUAL_OVERRIDE = "MANUAL_OVERRIDE"
+    DEFAULT = "DEFAULT"
 
 
-class UnifiedStep8Request(BaseModel):
-    """Step 8: Manual overrides"""
-    session_id: str
-    method: ValuationMethod
-    market: MarketType
-    category: str
-    overrides: Dict[str, Any]
-    generate_ai_suggestion: bool = True
+class AssumptionCategoryType(str, Enum):
+    """Categories for assumptions across all valuation methods"""
+    REVENUE_DRIVERS = "REVENUE_DRIVERS"
+    COST_MARGINS = "COST_MARGINS"
+    WORKING_CAPITAL = "WORKING_CAPITAL"
+    WACC_COMPONENTS = "WACC_COMPONENTS"
+    TERMINAL_VALUE = "TERMINAL_VALUE"
+    DUPONT_TARGETS = "DUPONT_TARGETS"
+    COMPS_MULTIPLES = "COMPS_MULTIPLES"
+
+
+class HistoricalTrendPoint(BaseModel):
+    """A single point in a historical trend"""
+    year: int = Field(..., description="Year of the data point")
+    value: float = Field(..., description="Value for this year")
+    label: Optional[str] = Field("", description="Optional label for the data point")
+
+
+class HistoricalTrendline(BaseModel):
+    """Historical trend data for an assumption with statistical analysis"""
+    metric: str = Field(..., description="Name of the metric")
+    trend_points: List[HistoricalTrendPoint] = Field(..., description="Historical data points")
+    average: float = Field(..., description="Average value across historical period")
+    cagr: Optional[float] = Field(None, description="Compound Annual Growth Rate")
+    trend_direction: str = Field("stable", description="Trend direction: increasing, decreasing, stable")
+    volatility: str = Field("low", description="Volatility level: low, medium, high")
+
+
+class AISuggestion(BaseModel):
+    """AI suggestion for an assumption with reasoning and confidence"""
+    metric: str = Field(..., description="Name of the metric")
+    suggested_value: float = Field(..., description="AI-recommended value")
+    reasoning: str = Field(..., description="Explanation of why this value is suggested")
+    confidence_level: str = Field("medium", description="Confidence level: low, medium, high")
+    min_range: float = Field(..., description="Minimum reasonable value")
+    max_range: float = Field(..., description="Maximum reasonable value")
+    category: AssumptionCategoryType = Field(..., description="Category this suggestion belongs to")
+
+
+class AssumptionInput(BaseModel):
+    """A single assumption input with full context for user decision-making"""
+    metric: str = Field(..., description="Name of the metric")
+    category: AssumptionCategoryType = Field(..., description="Category this assumption belongs to")
+    description: str = Field(..., description="Description of what this assumption represents")
+    unit: str = Field("%", description="Unit of measurement (%, days, x, ratio, etc.)")
+    
+    # Historical context
+    historical_trendline: Optional[HistoricalTrendline] = Field(None, description="Historical trend data")
+    
+    # Current state
+    ai_suggestion: Optional[AISuggestion] = Field(None, description="AI-generated suggestion")
+    user_value: Optional[float] = Field(None, description="User-provided override value")
+    final_value: Optional[float] = Field(None, description="Final value after AI/user resolution")
+    status: OverrideStatus = Field(OverrideStatus.DEFAULT, description="Current status of this assumption")
+    
+    # Validation
+    is_valid: bool = Field(True, description="Whether this assumption passes validation")
+    validation_message: Optional[str] = Field(None, description="Validation error message if invalid")
+    warning_message: Optional[str] = Field(None, description="Warning message if value is outside typical range")
+    
+    # Multi-year support (for forecast years 1-5)
+    is_multi_year: bool = Field(False, description="Whether this assumption has different values per forecast year")
+    year_values: Dict[int, float] = Field(default_factory=dict, description="Year -> value mapping for multi-year assumptions")
+
+
+class AssumptionCategoryResponse(BaseModel):
+    """Response for a single assumption category with all its assumptions"""
+    category: AssumptionCategoryType = Field(..., description="Category type")
+    category_name: str = Field(..., description="Human-readable category name")
+    assumptions: List[AssumptionInput] = Field(..., description="List of assumptions in this category")
+    ai_generated: bool = Field(False, description="Whether AI suggestions have been generated")
+    generation_timestamp: Optional[datetime] = Field(None, description="When AI suggestions were generated")
+    message: str = Field("", description="Category-specific message or instructions")
+
+
+class FullAssumptionsResponse(BaseModel):
+    """Complete Step 8 response with all categories for the selected valuation method"""
+    session_id: str = Field(..., description="Session identifier")
+    ticker: str = Field(..., description="Ticker symbol")
+    timestamp: datetime = Field(..., description="Response generation timestamp")
+    valuation_model: str = Field(..., description="Valuation model: DCF, DUPONT, COMPS")
+    categories: Dict[str, AssumptionCategoryResponse] = Field(..., description="All assumption categories")
+    
+    # Summary and validation
+    all_categories_complete: bool = Field(False, description="Whether all categories have been processed")
+    all_validations_passed: bool = Field(True, description="Whether all assumptions pass validation")
+    total_validation_errors: List[str] = Field(default_factory=list, description="List of all validation errors")
+    ready_for_calculation: bool = Field(False, description="Whether assumptions are ready for valuation calculation")
+    
+    # What-if preview
+    sensitivity_preview: Optional[Dict[str, Any]] = Field(None, description="Mini sensitivity analysis preview")
+    message: str = Field("", description="Overall message or instructions")
+
+
+class UnifiedStep8InitializeRequest(BaseModel):
+    """Step 8: Initialize assumptions with historical trendlines"""
+    session_id: str = Field(..., description="Session identifier")
+    method: ValuationMethod = Field(..., description="Valuation method")
+    market: MarketType = Field(..., description="Market type")
+    include_ai_suggestions: bool = Field(False, description="Whether to include AI suggestions on initialization")
+
+
+class UnifiedStep8GenerateAISuggestionRequest(BaseModel):
+    """Step 8: Generate AI suggestions for a specific category"""
+    session_id: str = Field(..., description="Session identifier")
+    method: ValuationMethod = Field(..., description="Valuation method")
+    market: MarketType = Field(..., description="Market type")
+    category: AssumptionCategoryType = Field(..., description="Category to generate suggestions for")
+
+
+class UnifiedStep8ApplyOverrideRequest(BaseModel):
+    """Step 8: Apply user override or accept AI suggestion"""
+    session_id: str = Field(..., description="Session identifier")
+    method: ValuationMethod = Field(..., description="Valuation method")
+    market: MarketType = Field(..., description="Market type")
+    category: AssumptionCategoryType = Field(..., description="Category of the assumption")
+    metric: str = Field(..., description="Metric name to override")
+    override_value: Optional[float] = Field(None, description="User-provided override value")
+    accept_ai_suggestion: bool = Field(False, description="Whether to accept AI suggestion instead of manual override")
+    year: Optional[int] = Field(None, description="Forecast year for multi-year assumptions")
 
 
 class UnifiedStep8Response(BaseModel):
-    """Step 8: Overrides applied"""
-    status: str
-    session_id: str
-    method: str
-    market: str
-    category: str
-    original_values: Dict[str, DataField]
-    ai_suggestions: Optional[Dict[str, DataField]] = None
-    user_overrides: Dict[str, DataField]
-    final_values: Dict[str, DataField]
-    impact_on_valuation: Optional[Dict[str, Any]] = None
-    message: str
+    """Step 8: Complete assumptions response (used for all Step 8 operations)"""
+    status: str = Field(..., description="Operation status: success, partial, failed")
+    session_id: str = Field(..., description="Session identifier")
+    method: str = Field(..., description="Valuation method")
+    market: str = Field(..., description="Market type")
+    operation_type: str = Field(..., description="Type of operation: initialize, generate_ai, apply_override")
+    
+    # Full assumptions data
+    ticker: str = Field(..., description="Ticker symbol")
+    valuation_model: str = Field(..., description="Valuation model")
+    categories: Dict[str, AssumptionCategoryResponse] = Field(default_factory=dict, description="All assumption categories")
+    
+    # For targeted responses (single category)
+    targeted_category: Optional[AssumptionCategoryType] = Field(None, description="Category that was specifically requested")
+    
+    # Data quality
+    all_categories_complete: bool = Field(False, description="Whether all categories have been processed")
+    all_validations_passed: bool = Field(True, description="Whether all assumptions pass validation")
+    total_validation_errors: List[str] = Field(default_factory=list, description="List of all validation errors")
+    ready_for_calculation: bool = Field(False, description="Whether assumptions are ready for valuation calculation")
+    
+    # What-if preview
+    sensitivity_preview: Optional[Dict[str, Any]] = Field(None, description="Mini sensitivity analysis preview")
+    message: str = Field(..., description="Human-readable message")
 
 
 # =============================================================================
