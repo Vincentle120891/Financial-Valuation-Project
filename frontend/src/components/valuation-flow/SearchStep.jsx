@@ -138,14 +138,16 @@ const SearchStep = ({
       {searchResults.length > 0 && (
         <div className="search-results">
           {searchResults.map((result, index) => {
-            // Create a more unique key by combining symbol, name, and index
-            const uniqueKey = `${result.symbol}-${result.name}-${index}`;
+            // Support both old (symbol/name) and new (ticker/company_name) field names for backward compatibility
+            const ticker = result.ticker || result.symbol;
+            const companyName = result.company_name || result.name;
+            const uniqueKey = `${ticker}-${companyName}-${index}`;
             
             return (
               <div key={uniqueKey} className="result-item">
                 <div style={{ flex: 1 }}>
-                  <span style={{ fontWeight: 'bold' }}>{result.name}</span>
-                  <span style={{ marginLeft: '8px', color: '#666' }}>({result.symbol})</span>
+                  <span style={{ fontWeight: 'bold' }}>{companyName}</span>
+                  <span style={{ marginLeft: '8px', color: '#666' }}>({ticker})</span>
                   {result.sector && (
                     <span style={{ marginLeft: '8px', fontSize: '0.85em', color: '#888' }}>
                       • {result.sector}

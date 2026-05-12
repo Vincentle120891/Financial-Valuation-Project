@@ -35,20 +35,21 @@ const CompanySelectionStep = ({
   // Fetch price history when component mounts or company changes
   React.useEffect(() => {
     const fetchPriceHistory = async () => {
-      if (!selectedCompany?.symbol) return;
+      const ticker = selectedCompany?.ticker || selectedCompany?.symbol;
+      if (!ticker) return;
 
       setChartLoading(true);
       try {
         // Pass market_code parameter to ensure correct ticker format
         const marketCode = market === 'vietnamese' ? 'VN' : 'US';
-        const response = await fetch(`/api/market-data/${selectedCompany.symbol}/price-history?market_code=${marketCode}`);
+        const response = await fetch(`/api/market-data/${ticker}/price-history?market_code=${marketCode}`);
         if (response.ok) {
           const data = await response.json();
           setPriceHistory(data);
         } else if (response.status === 404) {
-          console.warn(`Ticker ${selectedCompany.symbol} not found or delisted`);
+          console.warn(`Ticker ${ticker} not found or delisted`);
         } else if (response.status === 422) {
-          console.warn(`Insufficient price data for ${selectedCompany.symbol}`);
+          console.warn(`Insufficient price data for ${ticker}`);
         }
       } catch (error) {
         console.error('Failed to fetch price history:', error);
@@ -58,7 +59,7 @@ const CompanySelectionStep = ({
     };
 
     fetchPriceHistory();
-  }, [selectedCompany?.symbol, market]);
+  }, [selectedCompany?.ticker || selectedCompany?.symbol, market]);
 
   if (!selectedCompany) {
     return (
@@ -93,9 +94,9 @@ const CompanySelectionStep = ({
         <div className="flex items-start justify-between mb-4">
           <div>
             <h3 className="text-xl font-semibold text-gray-900">
-              {selectedCompany.name || selectedCompany.symbol}
+              {selectedCompany.company_name || selectedCompany.name || selectedCompany.ticker || selectedCompany.symbol}
             </h3>
-            <p className="text-gray-500 text-sm">{selectedCompany.symbol}</p>
+            <p className="text-gray-500 text-sm">{selectedCompany.ticker || selectedCompany.symbol}</p>
           </div>
           {selectedCompany.exchange && (
             <span className="px-3 py-1 bg-blue-100 text-blue-800 text-sm font-medium rounded-full">
