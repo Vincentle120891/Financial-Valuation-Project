@@ -123,26 +123,74 @@ class UnifiedStep1Response(BaseModel):
 
 
 # =============================================================================
-# STEP 2: MARKET CONFIRMATION
+# STEP 2: MARKET CONFIRMATION & MARKET DATA
 # =============================================================================
 
 class UnifiedStep2Request(BaseModel):
-    """Step 2: Confirm market selection"""
+    """Step 2: Confirm market selection and fetch market data"""
     session_id: str
     ticker: str
     market: MarketType
     company_name: Optional[str] = None
 
 
+class MarketDataPoint(BaseModel):
+    """Individual market data point with status tracking"""
+    metric: str = Field(..., description="Metric name (e.g., 'current_price', 'beta', 'market_cap')")
+    value: Optional[float] = Field(None, description="Metric value")
+    source: str = Field("retrieved", description="Data source (yfinance, vietstock, calculated, default)")
+    status: DataStatus = Field(DataStatus.RETRIEVED, description="Data retrieval status")
+    formula: Optional[str] = Field(None, description="Calculation formula if calculated")
+    confidence_score: Optional[float] = Field(None, ge=0, le=100, description="Confidence score 0-100")
+    currency: Optional[str] = Field(None, description="Currency code (USD, VND, etc.)")
+    unit: Optional[str] = Field(None, description="Unit of measurement")
+
+
+class MarketRiskMetrics(BaseModel):
+    """Market risk metrics for valuation"""
+    risk_free_rate: Optional[DataField] = Field(None, description="Risk-free rate (government bond yield)")
+    market_risk_premium: Optional[DataField] = Field(None, description="Equity risk premium")
+    beta: Optional[DataField] = Field(None, description="Levered beta")
+    levered_beta: Optional[DataField] = Field(None, description="Levered beta (same as beta if not separated)")
+    unlevered_beta: Optional[DataField] = Field(None, description="Unlevered beta")
+    equity_risk_premium: Optional[DataField] = Field(None, description="Total equity risk premium")
+    country_risk_premium: Optional[DataField] = Field(None, description="Country-specific risk premium")
+    vnindex_performance: Optional[Dict[str, Any]] = Field(None, description="VNINDEX performance (Vietnam only)")
+
+
+class ExchangeInfo(BaseModel):
+    """Exchange information (Vietnam-specific)"""
+    code: Optional[str] = Field(None, description="Exchange code (VN, HA, VC)")
+    name: Optional[str] = Field(None, description="Full exchange name")
+    trading_hours: Optional[str] = Field(None, description="Trading hours")
+    settlement: Optional[str] = Field(None, description="Settlement period (e.g., T+2)")
+    price_band: Optional[str] = Field(None, description="Daily price band limit")
+    currency: Optional[str] = Field(None, description="Trading currency")
+
+
 class UnifiedStep2Response(BaseModel):
-    """Step 2: Market confirmation result"""
-    status: str
-    session_id: str
-    ticker: str
-    market: str
-    company_name: str
-    confirmed: bool
-    message: str
+    """Step 2: Market confirmation and market data result"""
+    status: str = Field(..., description="Status (completed, partial, failed)")
+    session_id: str = Field(..., description="Session identifier")
+    ticker: str = Field(..., description="Ticker symbol")
+    market: str = Field(..., description="Market type (international, vietnam)")
+    company_name: str = Field(..., description="Company name")
+    confirmed: bool = Field(..., description="Whether market selection is confirmed")
+    
+    # Market data (detailed)
+    market_data: List[MarketDataPoint] = Field(default_factory=list, description="Array of market data points")
+    risk_metrics: Optional[MarketRiskMetrics] = Field(None, description="Market risk metrics")
+    
+    # Vietnam-specific fields
+    market_code: Optional[str] = Field(None, description="Vietnam market code (VN, HA, VC)")
+    exchange_info: Optional[ExchangeInfo] = Field(None, description="Exchange information")
+    
+    # Data quality
+    missing_data: List[str] = Field(default_factory=list, description="List of missing data fields")
+    warnings: List[str] = Field(default_factory=list, description="Data quality warnings")
+    data_quality_score: float = Field(0.0, ge=0, le=100, description="Overall data quality score 0-100")
+    
+    message: str = Field(..., description="Human-readable message")
 
 
 # =============================================================================

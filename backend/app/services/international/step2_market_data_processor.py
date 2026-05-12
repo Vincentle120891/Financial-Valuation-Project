@@ -1,20 +1,29 @@
 """
-Step 2: Market Data Processor
+Step 2: Market Data Processor - UNIFIED SCHEMA VERSION
 Handles market data retrieval, beta calculations, and risk metrics.
+Outputs unified schema compatible with both International and Vietnamese markets.
 """
 
 import logging
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 from pydantic import BaseModel
 
 from app.services.international.yfinance_service import YFinanceService
 from app.services.international.peer_discovery_service import PeerDiscoveryService, PeerDiscoveryRequest
+from app.api.schemas.unified_step_schemas import (
+    UnifiedStep2Response,
+    MarketDataPoint,
+    MarketRiskMetrics,
+    ExchangeInfo,
+    DataField,
+    DataStatus
+)
 
 logger = logging.getLogger(__name__)
 
 
-class MarketDataPoint(BaseModel):
-    """Individual market data point with status."""
+class MarketDataPointLegacy(BaseModel):
+    """Individual market data point with status (legacy format for internal use)."""
     metric: str
     value: Optional[float] = None
     source: str = "yfinance"
@@ -23,8 +32,8 @@ class MarketDataPoint(BaseModel):
     confidence: float = 1.0
 
 
-class MarketRiskMetrics(BaseModel):
-    """Market risk metrics."""
+class MarketRiskMetricsLegacy(BaseModel):
+    """Market risk metrics (legacy format for internal use)."""
     risk_free_rate: Optional[float] = None
     market_risk_premium: Optional[float] = None
     beta: Optional[float] = None
@@ -32,16 +41,6 @@ class MarketRiskMetrics(BaseModel):
     unlevered_beta: Optional[float] = None
     equity_risk_premium: Optional[float] = None
     country_risk_premium: Optional[float] = None
-
-
-class Step2Response(BaseModel):
-    """Step 2 response model."""
-    ticker: str
-    market_data: List[MarketDataPoint]
-    risk_metrics: MarketRiskMetrics
-    missing_data: List[str] = []
-    warnings: List[str] = []
-    data_quality_score: float = 0.0
 
 
 class Step2MarketDataProcessor:
@@ -112,37 +111,52 @@ class Step2MarketDataProcessor:
     def process_market_data(
         self,
         ticker: str,
-        market: str = "international"
-    ) -> Step2Response:
+        market: str = "international",
+        session_id: Optional[str] = None,
+        company_name: Optional[str] = None
+    ) -> UnifiedStep2Response:
         """
-        Process market data for a ticker.
+        Process market data for a ticker using unified schema.
         
         Args:
             ticker: Ticker symbol
-            market: Market type
+            market: Market type (international or vietnam)
+            session_id: Optional session ID
+            company_name: Optional company name
             
         Returns:
-            Step2Response with market data and risk metrics
+            UnifiedStep2Response with market data and risk metrics
         """
-        logger.info(f"Processing market data for ticker='{ticker}'")
+        logger.info(f"Processing market data for ticker='{ticker}', market='{market}'")
         
         # Fetch ticker info
         ticker_info = self.yfinance_service.get_ticker_info(ticker)
         
         if not ticker_info:
-            return Step2Response(
+            return UnifiedStep2Response(
+                status="failed",
+                session_id=session_id or "",
                 ticker=ticker,
+                market=market,
+                company_name=company_name or ticker,
+                confirmed=False,
                 market_data=[],
-                risk_metrics=MarketRiskMetrics(),
+                risk_metrics=None,
                 missing_data=["All market data"],
                 warnings=[f"Could not fetch any data for {ticker}"],
-                data_quality_score=0.0
+                data_quality_score=0.0,
+                message=f"Failed to fetch data for {ticker}"
             )
         
-        # Build market data points
+        # Build market data points using unified schema
         market_data_points: List[MarketDataPoint] = []
         missing_data: List[str] = []
         warnings: List[str] = []
+        
+        # Get currency from ticker info
+        currency = ticker_info.get('currency', 'USD')
+        if market == "vietnamese" or market == "vietnam":
+            currency = 'VND'
         
         # Current Price
         current_price = ticker_info.get('currentPrice')
@@ -151,8 +165,10 @@ class Step2MarketDataProcessor:
                 metric="current_price",
                 value=current_price,
                 source="yfinance",
-                status="RETRIEVED",
-                confidence=0.95
+                status=DataStatus.RETRIEVED,
+                confidence_score=95.0,
+                currency=currency,
+                unit=currency
             ))
         else:
             missing_data.append("current_price")
@@ -165,15 +181,17 @@ class Step2MarketDataProcessor:
                 metric="market_cap",
                 value=market_cap,
                 source="yfinance",
-                status="RETRIEVED",
-                confidence=0.90
+                status=DataStatus.RETRIEVED,
+                confidence_score=90.0,
+                currency=currency,
+                unit=currency
             ))
         else:
             missing_data.append("market_cap")
         
         # Beta
         beta = ticker_info.get('beta')
-        beta_status = "RETRIEVED" if beta else "ESTIMATED"
+        beta_status = DataStatus.RETRIEVED if beta else DataStatus.ESTIMATED
         beta_value = beta if beta else 1.0
         beta_formula = "Beta = Covariance(stock, market) / Variance(market)" if beta else "Default beta = 1.0 (market average)"
         
@@ -183,7 +201,9 @@ class Step2MarketDataProcessor:
             source="yfinance" if beta else "default",
             status=beta_status,
             formula=beta_formula,
-            confidence=0.85 if beta else 0.50
+            confidence_score=85.0 if beta else 50.0,
+            currency=None,
+            unit=None
         ))
         
         if not beta:
@@ -195,9 +215,11 @@ class Step2MarketDataProcessor:
             metric="risk_free_rate",
             value=risk_free_rate,
             source="government_bond",
-            status="RETRIEVED",
+            status=DataStatus.RETRIEVED,
             formula="10-year Government Bond Yield",
-            confidence=0.95
+            confidence_score=95.0,
+            currency=None,
+            unit="%"
         ))
         
         # Market Risk Premium
@@ -206,34 +228,120 @@ class Step2MarketDataProcessor:
             metric="market_risk_premium",
             value=market_premium,
             source="historical_average",
-            status="ESTIMATED",
+            status=DataStatus.ESTIMATED,
             formula="Historical Equity Risk Premium",
-            confidence=0.75
+            confidence_score=75.0,
+            currency=None,
+            unit="%"
         ))
         
-        # Build risk metrics
+        # Country Risk Premium (if applicable)
+        country_risk = self._get_country_risk_premium(market)
+        if country_risk:
+            market_data_points.append(MarketDataPoint(
+                metric="country_risk_premium",
+                value=country_risk,
+                source="country_risk_model",
+                status=DataStatus.ESTIMATED,
+                formula="Sovereign Risk Spread",
+                confidence_score=65.0,
+                currency=None,
+                unit="%"
+            ))
+        
+        # Build risk metrics using DataField wrappers
+        unlevered_beta_value = self._unlever_beta(beta_value, ticker_info)
+        
         risk_metrics = MarketRiskMetrics(
-            risk_free_rate=risk_free_rate,
-            market_risk_premium=market_premium,
-            beta=beta_value,
-            levered_beta=beta_value,  # Same as beta for now
-            unlevered_beta=self._unlever_beta(beta_value, ticker_info),
-            equity_risk_premium=market_premium,
-            country_risk_premium=self._get_country_risk_premium(market)
+            risk_free_rate=DataField(
+                value=risk_free_rate,
+                status=DataStatus.RETRIEVED,
+                source="government_bond",
+                formula="10-year Government Bond Yield",
+                confidence_score=95.0,
+                unit="%",
+                currency=None
+            ),
+            market_risk_premium=DataField(
+                value=market_premium,
+                status=DataStatus.ESTIMATED,
+                source="historical_average",
+                formula="Historical Equity Risk Premium",
+                confidence_score=75.0,
+                unit="%",
+                currency=None
+            ),
+            beta=DataField(
+                value=beta_value,
+                status=beta_status,
+                source="yfinance" if beta else "default",
+                formula=beta_formula,
+                confidence_score=85.0 if beta else 50.0,
+                currency=None,
+                unit=None
+            ),
+            levered_beta=DataField(
+                value=beta_value,
+                status=beta_status,
+                source="yfinance" if beta else "default",
+                formula=beta_formula,
+                confidence_score=85.0 if beta else 50.0,
+                currency=None,
+                unit=None
+            ),
+            unlevered_beta=DataField(
+                value=unlevered_beta_value,
+                status=DataStatus.CALCULATED,
+                source="calculated",
+                formula="βu = βl / (1 + (1-t)(D/E))",
+                confidence_score=70.0,
+                currency=None,
+                unit=None
+            ),
+            equity_risk_premium=DataField(
+                value=market_premium + (country_risk or 0),
+                status=DataStatus.ESTIMATED,
+                source="calculated",
+                formula="ERP + CRP",
+                confidence_score=70.0,
+                unit="%",
+                currency=None
+            ),
+            country_risk_premium=DataField(
+                value=country_risk,
+                status=DataStatus.ESTIMATED if country_risk else DataStatus.MISSING,
+                source="country_risk_model",
+                formula="Sovereign Risk Spread",
+                confidence_score=65.0 if country_risk else None,
+                unit="%",
+                currency=None
+            ) if country_risk else None
         )
         
         # Calculate data quality score
         total_metrics = len(market_data_points)
-        retrieved_count = sum(1 for md in market_data_points if md.status == "RETRIEVED")
+        retrieved_count = sum(1 for md in market_data_points if md.status == DataStatus.RETRIEVED)
         data_quality_score = (retrieved_count / total_metrics * 100) if total_metrics > 0 else 0
         
-        return Step2Response(
+        # Determine confirmation status
+        confirmed = data_quality_score >= 50
+        
+        # Get company name
+        final_company_name = company_name or ticker_info.get('longName', ticker_info.get('shortName', ticker))
+        
+        return UnifiedStep2Response(
+            status="completed" if confirmed else "partial",
+            session_id=session_id or "",
             ticker=ticker,
+            market=market,
+            company_name=final_company_name,
+            confirmed=confirmed,
             market_data=market_data_points,
             risk_metrics=risk_metrics,
             missing_data=missing_data,
             warnings=warnings,
-            data_quality_score=data_quality_score
+            data_quality_score=data_quality_score,
+            message=f"Successfully processed market data for {final_company_name}"
         )
     
     def _get_risk_free_rate(self, market: str) -> float:
