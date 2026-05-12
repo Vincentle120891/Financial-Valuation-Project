@@ -22,8 +22,15 @@ const aiApi = axios.create({
 
 // Step 1: Search Company
 export const searchCompanies = async (query, market = 'international') => {
-  const response = await api.post('/step-1-search', { query, market });
-  return response.data;
+  if (market === 'vietnamese') {
+    // Use Vietnamese-specific endpoint but return unified format
+    const response = await api.get('/vietnam/search', { params: { q: query } });
+    return response.data;
+  } else {
+    // Use international unified endpoint
+    const response = await api.post('/step-1-search', { query, market });
+    return response.data;
+  }
 };
 
 // Step 2: Suggest Peers

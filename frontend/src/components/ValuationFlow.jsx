@@ -246,6 +246,8 @@ const ValuationFlow = () => {
     try {
       const data = await searchCompanies(searchQuery, market);
       console.log('Search response:', data);
+      
+      // Unified response handling - both markets now return the same format
       if (data.results && data.results.length > 0) {
         setSearchResults(data.results);
         setError(null);

@@ -127,12 +127,28 @@ async def list_vietnamese_stocks():
 async def search_vietnamese_stocks(q: str = Query(..., description="Search query")):
     """
     Search Vietnamese stocks by ticker or name
+    Returns unified format matching international search response
     """
     results = vn_service.search_vietnamese_stocks(q)
+    
+    # Transform to match CompanySearchResult format used by frontend
+    formatted_results = []
+    for stock in results:
+        formatted_results.append({
+            "symbol": stock["ticker"],
+            "name": stock["name"],
+            "exchange": stock.get("market", "VN"),
+            "sector": stock.get("sector"),
+            "market": "vietnamese"
+        })
+    
     return {
+        "status": "success",
         "query": q,
-        "results_count": len(results),
-        "stocks": results
+        "market": "vietnamese",
+        "results": formatted_results,
+        "total_results": len(formatted_results),
+        "message": f"Found {len(formatted_results)} matching companies"
     }
 
 
