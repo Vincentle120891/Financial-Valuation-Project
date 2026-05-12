@@ -417,9 +417,13 @@ class AlphaVantageService:
     def _fetch_analyst_ratings(self, symbol: str) -> Dict[str, Any]:
         """Fetch analyst recommendations."""
         try:
+            # Note: ANALYST_RECOMMENDATIONS endpoint may not be available for all symbols
+            # or may require premium API access. We gracefully handle this by returning
+            # empty dict if the endpoint doesn't exist or fails.
             data = self._make_request('ANALYST_RECOMMENDATIONS', {'symbol': symbol})
             
             if not data or 'data' not in data:
+                logger.info(f"No analyst recommendations available for {symbol} from AlphaVantage")
                 return {}
             
             # Get most recent recommendation
@@ -435,7 +439,7 @@ class AlphaVantageService:
             }
             
         except Exception as e:
-            logger.error(f"Error fetching analyst ratings: {str(e)}")
+            logger.info(f"Analyst ratings not available for {symbol}: {str(e)}")
             return {}
     
     def _fetch_price_targets(self, symbol: str) -> Dict[str, Any]:
