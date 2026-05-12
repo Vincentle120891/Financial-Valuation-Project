@@ -17,7 +17,7 @@ from typing import Dict, List, Any, Optional
 from datetime import datetime
 
 from app.core.session_service import session_service
-from app.services.international.step5_required_inputs_processor import Step5AssumptionsProcessor
+from app.services.international.step5_required_inputs_processor import Step5RequiredInputsProcessor
 from app.services.international.step6_data_review import Step6DataReviewProcessor
 from app.services.international.step7_historical_data_processor import Step7HistoricalDataProcessor
 from app.services.international.step8_manual_overrides import Step8ManualOverridesProcessor
@@ -72,7 +72,7 @@ class ValuationOrchestrator:
     
     def __init__(self):
         # Initialize processors (shared across all methods)
-        self.step5_processor = Step5AssumptionsProcessor()
+        self.step5_processor = Step5RequiredInputsProcessor()
         self.step6_processor = Step6DataReviewProcessor()
         self.step7_processor = Step7HistoricalDataProcessor()
         self.step8_processor = Step8ManualOverridesProcessor()

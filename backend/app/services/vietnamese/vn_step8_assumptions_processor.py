@@ -140,7 +140,7 @@ class vn_Step8AssumptionsProcessor:
         "Materials": {"net_margin": 0.08, "operating_margin": 0.12}
     }
 
-    async def process(self, input_data: VNAIAssumptionsInput) -> VNAIAssumptionsOutput:
+    async def process(self, input_data: vn_AIAssumptionsInput) -> vn_AIAssumptionsOutput:
         """
         Generate AI assumptions calibrated for Vietnamese market
 
@@ -148,7 +148,7 @@ class vn_Step8AssumptionsProcessor:
             input_data: Input with historical data and context
 
         Returns:
-            VNAIAssumptionsOutput with suggested assumptions
+            vn_AIAssumptionsOutput with suggested assumptions
 
         Note:
             In production, this would call actual AI/ML models.
@@ -190,7 +190,7 @@ class vn_Step8AssumptionsProcessor:
         if input_data.historical_financials.get("years_available", 0) < 3:
             warnings.append("Less than 3 years of historical data - assumptions less reliable")
 
-        return VNAIAssumptionsOutput(
+        return vn_AIAssumptionsOutput(
             session_id=input_data.session_id,
             model_type=input_data.selected_model,
             assumptions=assumptions,
@@ -201,7 +201,7 @@ class vn_Step8AssumptionsProcessor:
             status="success"
         )
 
-    def _generate_dcf_assumptions(self, input_data: VNAIAssumptionsInput) -> List[VNAIAssumptionItem]:
+    def _generate_dcf_assumptions(self, input_data: vn_AIAssumptionsInput) -> List[vn_AIAssumptionItem]:
         """Generate DCF-specific assumptions for Vietnamese companies"""
         assumptions = []
         sector = input_data.sector
@@ -219,7 +219,7 @@ class vn_Step8AssumptionsProcessor:
             terminal_growth = input_data.vietnam_macro.get("gdp_growth", 0.055)
             suggested_growth = terminal_growth + (base_growth - terminal_growth) * decay_factor
 
-            assumptions.append(VNAIAssumptionItem(
+            assumptions.append(vn_AIAssumptionItem(
                 parameter_name=f"revenue_growth_year_{year}",
                 suggested_value=round(suggested_growth, 3),
                 unit="percentage",
@@ -232,7 +232,7 @@ class vn_Step8AssumptionsProcessor:
             ))
 
         # Operating margin assumptions
-        assumptions.append(VNAIAssumptionItem(
+        assumptions.append(vn_AIAssumptionItem(
             parameter_name="target_operating_margin",
             suggested_value=margin_benchmarks["operating_margin"],
             unit="percentage",
@@ -245,7 +245,7 @@ class vn_Step8AssumptionsProcessor:
         ))
 
         # Tax rate (Vietnam standard CIT)
-        assumptions.append(VNAIAssumptionItem(
+        assumptions.append(vn_AIAssumptionItem(
             parameter_name="tax_rate",
             suggested_value=0.20,
             unit="percentage",
@@ -259,7 +259,7 @@ class vn_Step8AssumptionsProcessor:
 
         # Terminal growth rate
         gdp_growth = input_data.vietnam_macro.get("gdp_growth", 0.055)
-        assumptions.append(VNAIAssumptionItem(
+        assumptions.append(vn_AIAssumptionItem(
             parameter_name="terminal_growth_rate",
             suggested_value=gdp_growth,
             unit="percentage",
@@ -273,7 +273,7 @@ class vn_Step8AssumptionsProcessor:
 
         # Capex as % of revenue
         capex_ratio = 0.05 if sector in ["Technology", "Services"] else 0.08
-        assumptions.append(VNAIAssumptionItem(
+        assumptions.append(vn_AIAssumptionItem(
             parameter_name="capex_as_percent_revenue",
             suggested_value=capex_ratio,
             unit="percentage",
@@ -287,7 +287,7 @@ class vn_Step8AssumptionsProcessor:
 
         # NWC as % of revenue
         nwc_ratio = 0.15 if sector == "Retail" else 0.10
-        assumptions.append(VNAIAssumptionItem(
+        assumptions.append(vn_AIAssumptionItem(
             parameter_name="nwc_as_percent_revenue",
             suggested_value=nwc_ratio,
             unit="percentage",
@@ -301,7 +301,7 @@ class vn_Step8AssumptionsProcessor:
 
         return assumptions
 
-    def _generate_dupont_assumptions(self, input_data: VNAIAssumptionsInput) -> List[VNAIAssumptionItem]:
+    def _generate_dupont_assumptions(self, input_data: vn_AIAssumptionsInput) -> List[vn_AIAssumptionItem]:
         """Generate DuPont-specific assumptions"""
         assumptions = []
         sector = input_data.sector
@@ -309,7 +309,7 @@ class vn_Step8AssumptionsProcessor:
         # For DuPont, we focus on current period analysis rather than projections
         margin_benchmarks = self.SECTOR_MARGIN_BENCHMARKS.get(sector, {"net_margin": 0.10})
 
-        assumptions.append(VNAIAssumptionItem(
+        assumptions.append(vn_AIAssumptionItem(
             parameter_name="target_net_margin",
             suggested_value=margin_benchmarks["net_margin"],
             unit="percentage",
@@ -323,12 +323,12 @@ class vn_Step8AssumptionsProcessor:
 
         return assumptions
 
-    def _generate_comps_assumptions(self, input_data: VNAIAssumptionsInput) -> List[VNAIAssumptionItem]:
+    def _generate_comps_assumptions(self, input_data: vn_AIAssumptionsInput) -> List[vn_AIAssumptionItem]:
         """Generate Comps-specific assumptions"""
         assumptions = []
 
         # Suggest number of peers
-        assumptions.append(VNAIAssumptionItem(
+        assumptions.append(vn_AIAssumptionItem(
             parameter_name="num_peers_final",
             suggested_value=5,
             unit="count",
@@ -341,7 +341,7 @@ class vn_Step8AssumptionsProcessor:
         ))
 
         # Liquidity filter
-        assumptions.append(VNAIAssumptionItem(
+        assumptions.append(vn_AIAssumptionItem(
             parameter_name="liquidity_filter_days",
             suggested_value=60,
             unit="trading_days",

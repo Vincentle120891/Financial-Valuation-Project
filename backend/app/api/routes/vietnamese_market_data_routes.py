@@ -47,6 +47,8 @@ from app.services.vietnamese.vn_step6_data_fetch_processor import (
     vn_Step6DataFetchProcessor,
     vn_DataFetchInput,
 )
+from app.services.vietnamese.vn_step6_unified_transformer import VNStep6UnifiedTransformer
+from app.api.schemas.unified_step_schemas import UnifiedStep6Response
 from app.services.vietnamese.vn_step7_historical_processor import (
     vn_Step7HistoricalProcessor,
     vn_HistoricalDataInput,
@@ -755,24 +757,7 @@ class vn_Step6FetchRequest(BaseModel):
         return v.upper()
 
 
-class vn_Step6FetchResponse(BaseModel):
-    """Response model for Vietnamese Step 6 data fetch."""
-    session_id: str
-    status: str
-    ticker: str
-    success: bool
-    source_provider: str
-    fetch_timestamp: str
-    currency_unit: str
-    periods_fetched: List[str]
-    missing_periods: List[str]
-    data_quality_flags: List[str]
-    pdf_sources_used: List[str]
-    message: str
-    next_step: str = "step7_historical_processing"
-
-
-@router.post("/vn-step-6-fetch-data", response_model=vn_Step6FetchResponse)
+@router.post("/vn-step-6-fetch-data", response_model=UnifiedStep6Response)
 async def fetch_vn_data(request: vn_Step6FetchRequest):
     """
     Step 6: Fetch Raw Financial Data (Vietnamese Market)
@@ -839,20 +824,41 @@ async def fetch_vn_data(request: vn_Step6FetchRequest):
                 cache_age = datetime.now() - cache_timestamp
                 if cache_age < timedelta(minutes=5):
                     logger.info(f"Using cached Vietnam market data for {ticker} (age: {cache_age.seconds}s)")
-                    # Return cached data without re-fetching
-                    return vn_Step6FetchResponse(
-                        session_id=request.session_id,
-                        status="cached_data_used",
-                        ticker=ticker,
-                        success=True,
+                    # Transform cached data to unified format
+                    transformer = VNStep6UnifiedTransformer()
+                    # Create a mock vn_output from cached data for transformation
+                    from app.services.vietnamese.vn_step6_data_fetch_processor import vn_DataFetchOutput, RawDataBundle
+                    from datetime import datetime
+                    
+                    mock_data_bundle = RawDataBundle(
                         source_provider=cached_market_data.get('source_provider', 'cache'),
-                        fetch_timestamp=cached_market_data.get('fetch_timestamp', '').isoformat() if hasattr(cached_market_data.get('fetch_timestamp'), 'isoformat') else str(cached_market_data.get('fetch_timestamp', '')),
+                        fetch_timestamp=cached_market_data.get('fetch_timestamp', datetime.now()),
                         currency_unit=cached_market_data.get('currency_unit', 'millions_VND'),
-                        periods_fetched=cached_market_data.get('periods_fetched', []),
+                        income_statement_raw=cached_market_data.get('income_statement_raw', {}),
+                        balance_sheet_raw=cached_market_data.get('balance_sheet_raw', {}),
+                        cash_flow_raw=cached_market_data.get('cash_flow_raw', {}),
+                        peer_data_raw=cached_market_data.get('peer_data_raw', {}),
                         missing_periods=cached_market_data.get('missing_periods', []),
                         data_quality_flags=cached_market_data.get('data_quality_flags', []),
-                        pdf_sources_used=cached_market_data.get('pdf_sources_used', []),
-                        message=f"Using cached data for {ticker} - no API call needed"
+                        pdf_sources_used=cached_market_data.get('pdf_sources_used', [])
+                    )
+                    
+                    mock_vn_output = vn_DataFetchOutput(
+                        success=True,
+                        ticker=ticker,
+                        data_bundle=mock_data_bundle,
+                        message=f"Using cached data for {ticker} - no API call needed",
+                        fetch_duration_ms=0,
+                        sources_accessed=['cache']
+                    )
+                    
+                    return transformer.transform(
+                        vn_output=mock_vn_output,
+                        session_id=request.session_id,
+                        ticker=ticker,
+                        market="vietnam",
+                        method=method,
+                        session_cache=cached_market_data
                     )
 
         # Build input for Vietnamese Step 6 processor
@@ -932,19 +938,13 @@ async def fetch_vn_data(request: vn_Step6FetchRequest):
 
         return vn_Step6FetchResponse(
             session_id=request.session_id,
-            status="data_fetched" if result.success else "partial_success",
             ticker=ticker,
-            success=result.success,
-            source_provider=result.data_bundle.source_provider,
-            fetch_timestamp=result.data_bundle.fetch_timestamp.isoformat() if hasattr(result.data_bundle.fetch_timestamp, 'isoformat') else str(result.data_bundle.fetch_timestamp),
-            currency_unit=result.data_bundle.currency_unit,
-            periods_fetched=list(result.data_bundle.income_statement_raw.keys()) if result.data_bundle.income_statement_raw else [],
-            missing_periods=result.data_bundle.missing_periods,
-            data_quality_flags=result.data_bundle.data_quality_flags,
-            pdf_sources_used=result.data_bundle.pdf_sources_used,
-            message=result.message,
-            next_step=result.next_step
+            market="vietnam",
+            method=method,
+            session_cache=session
         )
+        
+        return unified_response
 
     except HTTPException:
         raise

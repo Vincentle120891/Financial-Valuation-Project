@@ -21,7 +21,8 @@ from app.api.schemas import (
     CompanySearchResult,
     UnifiedStep2Request,
     UnifiedStep2Response,
-    MarketType
+    MarketType,
+    TickerSelectRequest
 )
 from app.services.international.step1_ticker_processor import Step1TickerProcessor
 from app.services.international.step2_market_data_processor import Step2MarketDataProcessor

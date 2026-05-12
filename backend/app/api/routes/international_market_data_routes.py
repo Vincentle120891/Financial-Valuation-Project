@@ -22,7 +22,7 @@ import logging
 from app.services.international import InternationalTickerService
 from app.services.vietnamese import VietnameseTickerService
 from app.services.international import MetricsCalculator
-from app.services.international.step5_required_inputs_processor import Step5AssumptionsProcessor, ValuationModel
+from app.services.international.step5_required_inputs_processor import Step5RequiredInputsProcessor, ValuationModel
 from app.services.international.step6_data_review import Step6DataReviewProcessor
 from app.services.international.yfinance_service import YFinanceService
 from app.services.international.ai_engine import suggest_peer_companies
@@ -35,7 +35,7 @@ router = APIRouter(tags=["International & Vietnamese Tickers"])
 intl_service = InternationalTickerService()
 vn_service = VietnameseTickerService()
 metrics_calc = MetricsCalculator()
-step5_processor = Step5AssumptionsProcessor()
+step5_processor = Step5RequiredInputsProcessor()
 step6_processor = Step6DataReviewProcessor()
 yfinance_service = YFinanceService()
 

@@ -93,7 +93,7 @@ __all__ = [
     "Step2MarketDataProcessor",
     "Step3HistoricalProcessor",
     "Step4ForecastProcessor",
-    "Step5AssumptionsProcessor",
+    "Step5RequiredInputsProcessor",
     "Step6DataReviewProcessor",
     "DCFDataReviewProcessor",  # Step 6 DCF-specific processor alias
     "DuPontDataReviewProcessor",  # Step 6 DuPont-specific processor alias
