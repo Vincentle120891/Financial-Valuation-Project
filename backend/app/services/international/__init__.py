@@ -42,8 +42,9 @@ from app.services.international.step1_ticker_processor import Step1TickerProcess
 from app.services.international.step2_market_data_processor import Step2MarketDataProcessor
 # NOTE: step3_historical_processor.py renamed to mismatch_historical_processor.py
 # Step 3 is now handled by peer_discovery_service for peer selection, not historical data processing
+from app.services.international.mismatch_historical_processor import Step3HistoricalProcessor
 from app.services.international.mismatch_forecast_processor import Step4ForecastProcessor
-from app.services.international.step5_required_inputs_processor import Step5AssumptionsProcessor
+from app.services.international.step5_required_inputs_processor import Step5RequiredInputsProcessor
 from app.services.international.step6_data_review import Step6DataReviewProcessor
 # Step 6 Specialized Processors - Individual Valuation Method Processors
 from app.services.international.step6_dcf_data_review import DCFStep6Processor as DCFDataReviewProcessor
@@ -59,7 +60,7 @@ from app.services.international.step8_dcf_assumptions import DCFStep8Processor a
 from app.services.international.step8_dupont_assumptions import DuPontStep8Processor as DuPontAssumptionsProcessor
 from app.services.international.step8_comps_assumptions import CompsStep8Processor as CompsAssumptionsProcessor
 from app.services.international.step8_manual_overrides import Step8ManualOverridesProcessor
-from app.services.international.step9_final_calculation import Step9FinalCalculationProcessor
+from app.services.international.step9_confirmation_processor import Step9ConfirmationProcessor as Step9FinalCalculationProcessor
 from app.services.international.step10_valuation_processor import Step10ValuationProcessor
 
 __all__ = [
