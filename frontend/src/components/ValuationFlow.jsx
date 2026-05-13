@@ -297,8 +297,8 @@ const ValuationFlow = () => {
 
         console.log(`Auto-selected ${topPeers.length} peers with highest scores:`, topPeers.map(p => p.symbol));
 
-        // Move to Step 4: Peer Selection (NEW STEP NUMBER AFTER SWAP)
-        setCurrentStep(4);
+        // Move to Step 3: Method Selection (AFTER SWAP: Method Selection comes BEFORE Peer Selection)
+        setCurrentStep(3);
       } else {
         setError('No peers found for this company. Try a different company or manually add peers later.');
       }
@@ -345,7 +345,7 @@ const ValuationFlow = () => {
           setPeerData(saveResponse.peer_data);
         }
         
-        setCurrentStep(5);  // Move to Step 5: Model Selection (NEW STEP NUMBER AFTER SWAP)
+        setCurrentStep(4);  // Move to Step 4: Method Selection (AFTER SWAP: Peer Selection is now Step 4)
       } else {
         setError('Failed to save peers');
       }
@@ -432,12 +432,12 @@ const ValuationFlow = () => {
     }
   }, [market]);
 
-  // ==================== STEP 3: SELECT MODEL ====================
+  // ==================== STEP 3: SELECT MODEL (NOW STEP 3 AFTER SWAP) ====================
   const handleSelectModel = useCallback(async (modelType) => {
     // GAP 2 & GAP 3 FIX: Update selected model first, then deep merge to preserve other models' data
     // Single selection (radio button behavior) - modelType is a string, not array
     
-    // Client-side validation: Ensure peers are selected before model selection
+    // Client-side validation: Ensure peers are selected before model selection (peers now selected in Step 4 BEFORE this step)
     if (!selectedPeers || selectedPeers.length === 0) {
       alert('⚠️ No peers selected! Please go back to Step 4 and select at least one peer company.');
       return;
@@ -452,7 +452,7 @@ const ValuationFlow = () => {
       const data = await selectModels(sessionId, modelType, market, [], selectedPeers);
       console.log('Select model response:', data);
       if (data.message) {
-        setCurrentStep(5);
+        setCurrentStep(5);  // Move to Step 5: Requirements Review
       }
     } catch (err) {
       console.error('Select model error:', err);
@@ -501,7 +501,7 @@ const ValuationFlow = () => {
     return handleRunValuation();
   }, []);
 
-  // ==================== BACK TO MODEL SELECTION ====================
+  // ==================== BACK TO MODEL SELECTION (STEP 3) ====================
   const handleBackToModelSelection = () => {
     const currentMethod = selectedModels?.toLowerCase();
 
@@ -539,11 +539,11 @@ const ValuationFlow = () => {
       }
     }));
 
-    // Reset selection and navigation
+    // Reset selection and navigation - go back to Step 3: Method Selection
     setSelectedModels('');
     setRequiredFields([]);
     setConfirmedValues({});
-    setCurrentStep(4);
+    setCurrentStep(3);  // AFTER SWAP: Go back to Step 3 (Method Selection)
     setError(null);
     // Keep market locked - user selected company already, just switching models
   };
@@ -1120,18 +1120,18 @@ const ValuationFlow = () => {
           />
         );
       case 3:
+        return <ModelSelectionStep onSelectModel={handleSelectModel} selectedModels={selectedModels} selectedPeers={selectedPeers} />;
+      case 4:
         return (
           <PeerSelectionStep
             suggestedPeers={suggestedPeers}
             selectedPeers={selectedPeers}
             onTogglePeer={handleTogglePeer}
             onContinue={handleContinueToModelSelection}
-            onBack={() => setCurrentStep(2)}
+            onBack={() => setCurrentStep(3)}  // AFTER SWAP: Go back to Step 3 (Method Selection)
             loading={loading}
           />
         );
-      case 4:
-        return <ModelSelectionStep onSelectModel={handleSelectModel} selectedModels={selectedModels} selectedPeers={selectedPeers} />;
       case 5:
         return (
           <RequirementsStep
@@ -1271,15 +1271,15 @@ const ValuationFlow = () => {
           <span className="step-name">
             {currentStep === 1 ? 'Search Company' :
              currentStep === 2 ? 'Company Overview' :
-             currentStep === 3 ? 'Peer Selection' :
-             currentStep === 4 ? 'Select Model' :
+             currentStep === 3 ? 'Method Selection' :  // SWAPPED: Was Peer Selection
+             currentStep === 4 ? 'Peer Selection' :     // SWAPPED: Was Method Selection
              currentStep === 5 ? 'Review Requirements' :
              currentStep === 6 ? 'View Retrieved Inputs' :
              currentStep === 7 ? 'Historical Data Extraction' :
              currentStep === 8 ? 'Forecast Drivers & DCF Inputs' :
              currentStep === 9 ? 'Confirm Assumptions' :
              currentStep === 10 ? 'Run Valuation' :
-             currentStep === 11 ? 'View Results' : 'In Progress'}
+             currentStep === 11 ? 'Results & Export' : 'In Progress'}
           </span>
           <span className="step-progress">{Math.round((currentStep / 11) * 100)}% Complete</span>
         </div>
