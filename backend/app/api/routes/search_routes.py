@@ -101,8 +101,8 @@ async def search_tickers(request: UnifiedStep1Request):
         raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
 
 
-@router.post("/step-3-select-ticker", response_model=SessionCreateResponse)
-async def select_ticker(request: TickerSelectRequest):
+@router.post("/step-2-create-session", response_model=SessionCreateResponse)
+async def create_session(request: TickerSelectRequest):
     """
     Step 2: User chooses ticker and creates a session.
     Uses SessionService for session management and Step2MarketDataProcessor for validation.
@@ -231,10 +231,10 @@ async def validate_ticker(ticker: str, market: str = "US"):
         }
 
 
-@router.post("/step-2-suggest-peers")
+@router.post("/step-3-suggest-peers")
 async def suggest_peers_endpoint(request: dict):
     """
-    Suggest peer companies for a given ticker.
+    Step 3: Suggest peer companies for a given ticker.
     Uses Step2MarketDataProcessor with PeerDiscoveryService.
     
     Args:
@@ -283,18 +283,18 @@ async def suggest_peers_endpoint(request: dict):
 @router.post("/suggest-peers")
 async def suggest_peers_legacy(ticker: str, max_peers: int = 10, market: str = "international"):
     """
-    DEPRECATED: Use /step-2-suggest-peers instead.
+    DEPRECATED: Use /step-3-suggest-peers instead.
     
     Legacy endpoint for suggesting peers (kept for backward compatibility).
     This endpoint will be removed in a future version.
     """
     import warnings
     warnings.warn(
-        "The /suggest-peers endpoint is deprecated. Use /step-2-suggest-peers instead.",
+        "The /suggest-peers endpoint is deprecated. Use /step-3-suggest-peers instead.",
         DeprecationWarning,
         stacklevel=2
     )
-    logger.warning("DEPRECATED: Using legacy /suggest-peers endpoint. Migrate to /step-2-suggest-peers.")
+    logger.warning("DEPRECATED: Using legacy /suggest-peers endpoint. Migrate to /step-3-suggest-peers.")
     
     try:
         result = await step2_processor.suggest_peers(
