@@ -91,7 +91,7 @@ __all__ = [
     "Step2MarketDataProcessor",
     "Step3HistoricalProcessor",
     "PeerSelectionProcessor",
-    "Step4ModelSelection",
+    "Step4SelectModelProcessor",
     "Step5RequiredInputsProcessor",
     "Step6DataReviewProcessor",
     "DCFDataReviewProcessor",  # Step 6 DCF-specific processor alias
