@@ -42,6 +42,12 @@ const ModelSelectionStep = ({ onSelectModel, selectedModels, selectedPeers }) =>
     // Single selection - just pass the model ID directly (not an array)
     onSelectModel(modelId);
   };
+
+  // Helper to check if model is selected
+  const isSelected = (modelId) => selectedModels === modelId;
+
+  return (
+    <div className="model-selection-step">
       <div className="model-options">
         {models.map((model) => (
           <div 

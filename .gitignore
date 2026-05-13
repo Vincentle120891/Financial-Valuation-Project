@@ -45,7 +45,7 @@ lerna-debug.log*
 # Environment
 .env
 .env.local
-*.env.*
+.env.*
 
 # Build outputs
 dist/
