@@ -82,24 +82,31 @@ const SearchStep = ({
 
       {/* Market Toggle */}
       <div className="market-toggle" style={{ marginBottom: '20px', marginTop: '20px' }}>
-        <label style={{ marginRight: '20px' }}>
+        <label style={{ marginRight: '20px', opacity: marketValidation?.isLocked ? 0.5 : 1, cursor: marketValidation?.isLocked ? 'not-allowed' : 'pointer' }}>
           <input
             type="radio"
             value="international"
             checked={market === 'international'}
-            onChange={(e) => setMarket(e.target.value)}
+            onChange={(e) => !marketValidation?.isLocked && setMarket(e.target.value)}
+            disabled={marketValidation?.isLocked}
           />
           International Company
         </label>
-        <label>
+        <label style={{ opacity: marketValidation?.isLocked ? 0.5 : 1, cursor: marketValidation?.isLocked ? 'not-allowed' : 'pointer' }}>
           <input
             type="radio"
             value="vietnamese"
             checked={market === 'vietnamese'}
-            onChange={(e) => setMarket(e.target.value)}
+            onChange={(e) => !marketValidation?.isLocked && setMarket(e.target.value)}
+            disabled={marketValidation?.isLocked}
           />
           Vietnamese Company
         </label>
+        {marketValidation?.isLocked && (
+          <span style={{ marginLeft: '15px', fontSize: '0.85em', color: '#856404', backgroundColor: '#fff3cd', padding: '4px 8px', borderRadius: '4px', border: '1px solid #ffc107' }}>
+            🔒 Market locked after company selection
+          </span>
+        )}
       </div>
 
       {/* Search Input */}

@@ -91,7 +91,8 @@ const ValuationFlow = () => {
   const [marketValidation, setMarketValidation] = useState({
     isValid: true,
     message: '',
-    selectedMarket: 'international'
+    selectedMarket: 'international',
+    isLocked: false // Lock market after Step 1 to prevent mid-workflow switching
   });
 
   // Step 5: Required inputs
@@ -411,12 +412,13 @@ const ValuationFlow = () => {
 
         setSelectedCompany(enrichedCompany);
 
-        // Update market validation to confirm successful market routing
+        // Lock market after successful company selection to prevent mid-workflow switching
         const ticker = company.ticker || company.symbol;
         setMarketValidation({
           isValid: true,
           message: `Company ${ticker} selected in ${market === 'international' ? 'International' : 'Vietnamese'} market`,
-          selectedMarket: market
+          selectedMarket: market,
+          isLocked: true // Market is now locked - cannot be changed after Step 1
         });
 
         setCurrentStep(2); // Move to Step 2: Company Overview
@@ -542,6 +544,7 @@ const ValuationFlow = () => {
     setConfirmedValues({});
     setCurrentStep(4);
     setError(null);
+    // Keep market locked - user selected company already, just switching models
   };
 
   // ==================== SHOW API DATA (STEP 6) ====================
@@ -556,6 +559,13 @@ const ValuationFlow = () => {
     const method = selectedModels;
     if (!method) {
       setError('No valuation method selected');
+      setLoading(false);
+      return;
+    }
+
+    // Market validation: Ensure market is locked and matches session
+    if (!marketValidation?.isLocked) {
+      setError('⚠️ Market must be locked before retrieving historical data. Please select a company first.');
       setLoading(false);
       return;
     }
@@ -672,6 +682,12 @@ const ValuationFlow = () => {
   // ==================== FETCH REQUIRED INPUTS ====================
   const fetchRequiredInputs = useCallback(async (method) => {
     try {
+      // Market validation: Ensure market is locked and matches session
+      if (!marketValidation?.isLocked) {
+        console.warn('⚠️ Market not locked when fetching required inputs - this may indicate workflow issue');
+        return;
+      }
+
       const targetMethod = method || selectedModels;
       // FIX: Call prepareAssumptions (the correct API function) instead of non-existent prepareInputs
       const data = await prepareAssumptions(sessionId, targetMethod, market);
@@ -719,6 +735,13 @@ const ValuationFlow = () => {
     const method = selectedModels;
     if (!method) {
       setError('No valuation method selected');
+      setLoading(false);
+      return;
+    }
+
+    // Market validation: Ensure market is locked and matches session
+    if (!marketValidation?.isLocked) {
+      setError('⚠️ Market must be locked before retrieving data. Please select a company first.');
       setLoading(false);
       return;
     }
@@ -1005,6 +1028,13 @@ const ValuationFlow = () => {
     setError(null);
     setAiError(null); // Clear AI errors on reset
     setMarket('international');
+    // Reset market validation and unlock market for new workflow
+    setMarketValidation({
+      isValid: true,
+      message: '',
+      selectedMarket: 'international',
+      isLocked: false // Unlock market for new workflow
+    });
     // Reset all matrix structures
     setValuationsData({
       international: {
