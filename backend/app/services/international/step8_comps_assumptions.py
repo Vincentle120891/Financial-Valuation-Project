@@ -24,6 +24,15 @@ from enum import Enum
 from datetime import datetime
 import json
 from .ai_engine import AIFallbackEngine
+from .statistical_utils import (
+    generate_historical_statistics,
+    extract_numeric_values,
+    calculate_average,
+    calculate_median,
+    calculate_cagr,
+    calculate_volatility,
+    calculate_year_over_year_growth
+)
 
 logger = logging.getLogger(__name__)
 
@@ -282,58 +291,73 @@ class CompsStep8Processor:
             if not values:
                 return None
             
-            # Build trend points
-            trend_points = []
-            numeric_values = []
+            # Convert to DataField format for statistical_utils
+            from app.schemas.unified_schema import DataField
+            data_fields = []
             for year, value in sorted(values.items()):
                 if isinstance(year, str) and year.isdigit():
                     year = int(year)
                 if isinstance(value, (int, float)) and value is not None:
-                    trend_points.append(HistoricalTrendPoint(year=int(year), value=float(value)))
-                    numeric_values.append(float(value))
+                    data_fields.append(DataField(field_name=data_key, value=float(value), year=int(year)))
             
-            if not trend_points:
+            if not data_fields:
                 return None
             
-            # Calculate statistics
-            average = sum(numeric_values) / len(numeric_values) if numeric_values else 0.0
+            # Use statistical_utils to generate comprehensive statistics
+            stats = generate_historical_statistics(data_fields, metric)
             
-            # Calculate CAGR if we have multiple years
-            cagr = None
-            if len(numeric_values) >= 2:
-                first_value = numeric_values[0]
-                last_value = numeric_values[-1]
-                n_years = len(numeric_values) - 1
-                if first_value > 0 and n_years > 0:
-                    cagr = ((last_value / first_value) ** (1 / n_years)) - 1
+            if stats.get("status") == "insufficient_data":
+                # Still build basic trendline with limited data
+                trend_points = [HistoricalTrendPoint(year=y, value=v) for y, v in zip(stats.get("raw_years", []), stats.get("raw_values", []))]
+                return HistoricalTrendline(
+                    metric=metric,
+                    trend_points=trend_points,
+                    average=stats.get("average", 0.0) or 0.0,
+                    cagr=None,
+                    trend_direction="stable",
+                    volatility="low"
+                )
+            
+            # Build trend points from raw data
+            trend_points = [HistoricalTrendPoint(year=y, value=v) for y, v in zip(stats["raw_years"], stats["raw_values"])]
             
             # Determine trend direction
             trend_direction = "stable"
-            if len(numeric_values) >= 2:
-                if numeric_values[-1] > numeric_values[0] * 1.1:
+            if stats["oldest_value"] and stats["latest_value"]:
+                if stats["latest_value"] > stats["oldest_value"] * 1.1:
                     trend_direction = "increasing"
-                elif numeric_values[-1] < numeric_values[0] * 0.9:
+                elif stats["latest_value"] < stats["oldest_value"] * 0.9:
                     trend_direction = "decreasing"
             
-            # Calculate volatility
+            # Convert volatility (std_dev) to low/medium/high
             volatility = "low"
-            if len(numeric_values) >= 2:
-                avg_val = average
-                variance = sum((v - avg_val) ** 2 for v in numeric_values) / len(numeric_values)
-                std_dev = variance ** 0.5
-                cv = std_dev / abs(avg_val) if avg_val != 0 else 0
-                if cv > 0.3:
-                    volatility = "high"
-                elif cv > 0.15:
-                    volatility = "medium"
+            if stats.get("volatility"):
+                avg_val = stats.get("average", 0)
+                if avg_val != 0:
+                    cv = stats["volatility"] / abs(avg_val)
+                    if cv > 0.3:
+                        volatility = "high"
+                    elif cv > 0.15:
+                        volatility = "medium"
             
             return HistoricalTrendline(
                 metric=metric,
                 trend_points=trend_points,
-                average=average,
-                cagr=cagr,
+                average=stats["average"],
+                cagr=stats.get("cagr"),
                 trend_direction=trend_direction,
-                volatility=volatility
+                volatility=volatility,
+                # Enhanced statistics from statistical_utils
+                median=stats.get("median"),
+                min_value=stats.get("min"),
+                max_value=stats.get("max"),
+                standard_deviation=stats.get("volatility"),
+                average_yoy_growth=stats.get("average_yoy_growth"),
+                yoy_growth_details=stats.get("yoy_growth_details"),
+                year_range=stats.get("year_range"),
+                periods=stats.get("periods"),
+                latest_value=stats.get("latest_value"),
+                oldest_value=stats.get("oldest_value")
             )
         except Exception as e:
             logger.error(f"Error building historical trendline for {metric}: {e}")
@@ -528,52 +552,68 @@ Return JSON with: value (decimal), reasoning (string), confidence (low/medium/hi
             if not values:
                 return None
             
-            trend_points = []
-            numeric_values = []
+            # Convert to DataField format for statistical_utils
+            from app.schemas.unified_schema import DataField
+            data_fields = []
             for year, value in sorted(values.items()):
                 if isinstance(year, str) and year.isdigit():
                     year = int(year)
                 if isinstance(value, (int, float)) and value is not None:
-                    trend_points.append(HistoricalTrendPoint(year=int(year), value=float(value)))
-                    numeric_values.append(float(value))
+                    data_fields.append(DataField(field_name=data_key, value=float(value), year=int(year)))
             
-            if not trend_points:
+            if not data_fields:
                 return None
             
-            average = sum(numeric_values) / len(numeric_values) if numeric_values else 0.0
-            cagr = None
-            if len(numeric_values) >= 2:
-                first_value = numeric_values[0]
-                last_value = numeric_values[-1]
-                n_years = len(numeric_values) - 1
-                if first_value > 0 and n_years > 0:
-                    cagr = ((last_value / first_value) ** (1 / n_years)) - 1
+            # Use statistical_utils to generate comprehensive statistics
+            stats = generate_historical_statistics(data_fields, metric)
+            
+            if stats.get("status") == "insufficient_data":
+                trend_points = [HistoricalTrendPoint(year=y, value=v) for y, v in zip(stats.get("raw_years", []), stats.get("raw_values", []))]
+                return HistoricalTrendline(
+                    metric=metric,
+                    trend_points=trend_points,
+                    average=stats.get("average", 0.0) or 0.0,
+                    cagr=None,
+                    trend_direction="stable",
+                    volatility="low"
+                )
+            
+            trend_points = [HistoricalTrendPoint(year=y, value=v) for y, v in zip(stats["raw_years"], stats["raw_values"])]
             
             trend_direction = "stable"
-            if len(numeric_values) >= 2:
-                if numeric_values[-1] > numeric_values[0] * 1.1:
+            if stats["oldest_value"] and stats["latest_value"]:
+                if stats["latest_value"] > stats["oldest_value"] * 1.1:
                     trend_direction = "increasing"
-                elif numeric_values[-1] < numeric_values[0] * 0.9:
+                elif stats["latest_value"] < stats["oldest_value"] * 0.9:
                     trend_direction = "decreasing"
             
             volatility = "low"
-            if len(numeric_values) >= 2:
-                avg_val = average
-                variance = sum((v - avg_val) ** 2 for v in numeric_values) / len(numeric_values)
-                std_dev = variance ** 0.5
-                cv = std_dev / abs(avg_val) if avg_val != 0 else 0
-                if cv > 0.3:
-                    volatility = "high"
-                elif cv > 0.15:
-                    volatility = "medium"
+            if stats.get("volatility"):
+                avg_val = stats.get("average", 0)
+                if avg_val != 0:
+                    cv = stats["volatility"] / abs(avg_val)
+                    if cv > 0.3:
+                        volatility = "high"
+                    elif cv > 0.15:
+                        volatility = "medium"
             
             return HistoricalTrendline(
                 metric=metric,
                 trend_points=trend_points,
-                average=average,
-                cagr=cagr,
+                average=stats["average"],
+                cagr=stats.get("cagr"),
                 trend_direction=trend_direction,
-                volatility=volatility
+                volatility=volatility,
+                median=stats.get("median"),
+                min_value=stats.get("min"),
+                max_value=stats.get("max"),
+                standard_deviation=stats.get("volatility"),
+                average_yoy_growth=stats.get("average_yoy_growth"),
+                yoy_growth_details=stats.get("yoy_growth_details"),
+                year_range=stats.get("year_range"),
+                periods=stats.get("periods"),
+                latest_value=stats.get("latest_value"),
+                oldest_value=stats.get("oldest_value")
             )
         except Exception:
             return None

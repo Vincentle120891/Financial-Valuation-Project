@@ -28,6 +28,15 @@ from enum import Enum
 from datetime import datetime
 import json
 from .ai_engine import AIFallbackEngine
+from .statistical_utils import (
+    generate_historical_statistics,
+    extract_numeric_values,
+    calculate_average,
+    calculate_median,
+    calculate_cagr,
+    calculate_volatility,
+    calculate_year_over_year_growth
+)
 
 logger = logging.getLogger(__name__)
 
@@ -514,9 +523,6 @@ class Step8ManualOverridesProcessor:
     ) -> Optional[HistoricalTrendline]:
         """Build historical trendline from Step 6 data for a given metric"""
         try:
-            trend_points = []
-            values = []
-            
             # Extract historical financials from Step 6
             hist_financials = step6_data.get('historical_financials', {})
             years = hist_financials.get('years', [])
@@ -554,58 +560,72 @@ class Step8ManualOverridesProcessor:
             if not field:
                 return None
             
-            # Get historical values
-            for i, year in enumerate(years[-5:]):  # Last 5 years max
+            # Convert to DataField format for statistical_utils
+            from app.schemas.unified_schema import DataField
+            data_fields = []
+            for year in years[-5:]:  # Last 5 years max
                 value = hist_financials.get(field, {}).get(year)
                 if value is not None:
-                    trend_points.append(HistoricalTrendPoint(year=year, value=float(value)))
-                    values.append(float(value))
+                    data_fields.append(DataField(field_name=field, value=float(value), year=int(year)))
             
-            if not values:
+            if not data_fields:
                 return None
             
-            # Calculate statistics
-            avg_value = sum(values) / len(values)
+            # Use statistical_utils to generate comprehensive statistics
+            stats = generate_historical_statistics(data_fields, metric)
+            
+            if stats.get("status") == "insufficient_data":
+                # Still build basic trendline with limited data
+                trend_points = [HistoricalTrendPoint(year=y, value=v) for y, v in zip(stats.get("raw_years", []), stats.get("raw_values", []))]
+                return HistoricalTrendline(
+                    metric=metric,
+                    trend_points=trend_points,
+                    average=stats.get("average", 0.0) or 0.0,
+                    cagr=None,
+                    trend_direction="stable",
+                    volatility="low"
+                )
+            
+            # Build trend points from raw data
+            trend_points = [HistoricalTrendPoint(year=y, value=v) for y, v in zip(stats["raw_years"], stats["raw_values"])]
             
             # Determine trend direction
-            if len(values) >= 2:
-                if values[-1] > values[0] * 1.1:
+            trend_direction = "stable"
+            if stats["oldest_value"] and stats["latest_value"]:
+                if stats["latest_value"] > stats["oldest_value"] * 1.1:
                     trend_direction = "increasing"
-                elif values[-1] < values[0] * 0.9:
+                elif stats["latest_value"] < stats["oldest_value"] * 0.9:
                     trend_direction = "decreasing"
-                else:
-                    trend_direction = "stable"
-            else:
-                trend_direction = "stable"
             
-            # Calculate volatility
-            if len(values) >= 2:
-                variance = sum((x - avg_value) ** 2 for x in values) / len(values)
-                std_dev = variance ** 0.5
-                cv = std_dev / abs(avg_value) if avg_value != 0 else 0
-                if cv > 0.3:
-                    volatility = "high"
-                elif cv > 0.15:
-                    volatility = "medium"
-                else:
-                    volatility = "low"
-            else:
-                volatility = "low"
-            
-            # Calculate CAGR for growth metrics
-            cagr = None
-            if len(values) >= 2 and "Growth" in metric:
-                n = len(values) - 1
-                if values[0] != 0:
-                    cagr = ((values[-1] / values[0]) ** (1/n)) - 1
+            # Convert volatility (std_dev) to low/medium/high
+            volatility = "low"
+            if stats.get("volatility"):
+                avg_val = stats.get("average", 0)
+                if avg_val != 0:
+                    cv = stats["volatility"] / abs(avg_val)
+                    if cv > 0.3:
+                        volatility = "high"
+                    elif cv > 0.15:
+                        volatility = "medium"
             
             return HistoricalTrendline(
                 metric=metric,
                 trend_points=trend_points,
-                average=avg_value,
-                cagr=cagr,
+                average=stats["average"],
+                cagr=stats.get("cagr"),
                 trend_direction=trend_direction,
-                volatility=volatility
+                volatility=volatility,
+                # Enhanced statistics from statistical_utils
+                median=stats.get("median"),
+                min_value=stats.get("min"),
+                max_value=stats.get("max"),
+                standard_deviation=stats.get("volatility"),
+                average_yoy_growth=stats.get("average_yoy_growth"),
+                yoy_growth_details=stats.get("yoy_growth_details"),
+                year_range=stats.get("year_range"),
+                periods=stats.get("periods"),
+                latest_value=stats.get("latest_value"),
+                oldest_value=stats.get("oldest_value")
             )
         except Exception as e:
             logger.warning(f"Failed to build trendline for {metric}: {e}")
