@@ -28,15 +28,15 @@ export const searchCompanies = async (query, market = 'international') => {
   return response.data;
 };
 
-// Step 2: Suggest Peers
+// Step 3: Suggest Peers
 export const suggestPeers = async (ticker, market = 'international', maxPeers = 10) => {
-  const response = await api.post('/step-2-suggest-peers', { ticker, market, max_peers: maxPeers });
+  const response = await api.post('/step-3-suggest-peers', { ticker, market, max_peers: maxPeers });
   return response.data;
 };
 
-// Step 3: Select Company
+// Step 2: Select Company (Create Session)
 export const selectCompany = async (sessionId, ticker, market = 'international') => {
-  const response = await api.post('/step-3-select-ticker', { session_id: sessionId, ticker, market });
+  const response = await api.post('/step-2-create-session', { session_id: sessionId, ticker, market });
   return response.data;
 };
 
