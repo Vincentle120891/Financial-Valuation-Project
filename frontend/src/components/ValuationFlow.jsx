@@ -58,12 +58,12 @@ const useDebounce = (callback, delay) => {
  * Orchestrates the 10-step valuation workflow (ALIGNED WITH BACKEND):
  * 1. Search Company (Input ticker/name)
  * 2. Company Overview & Market Confirmation (get session_id)
- * 3. Select Valuation Method (DCF/DuPont/Comps) - MOVED FROM STEP 4
- * 4. Select Peer Companies (For Comps & WACC) - MOVED FROM STEP 3
+ * 3. Select Peer Companies (For Comps & WACC)
+ * 4. Select Valuation Method (DCF/DuPont/Comps)
  * 5. Assumptions Preparation (Show data requirements + AI generation)
  * 6. Fetch API Data (Retrieve all financial inputs)
  * 7. Historical Data Processing (AI extraction & trendlines)
- * 8. Manual Overrides (Forecast Drivers & DCF Inputs adjustment)
+ * 8. Manual Overrides (Assumption & AI Suggestion adjustment)
  * 9. Confirm Assumptions (Final confirmation before calculation)
  * 10. Execute Valuation & View Results (Run models + display results)
  *
@@ -132,7 +132,7 @@ const ValuationFlow = () => {
   const [selectedScenario, setSelectedScenario] = useState('base_case');
   const [validationErrors, setValidationErrors] = useState([]);
 
-  // Step 8-9: Forecast Drivers & DCF Inputs - Matrix structure: forecastDriversData[market][method]
+  // Step 8-9: Assumption & AI Suggestion - Matrix structure: forecastDriversData[market][method]
   // This enables "3 Valuation Methods × 2 Market Versions" architecture
   const [forecastDriversData, setForecastDriversData] = useState({
     international: {
@@ -297,7 +297,7 @@ const ValuationFlow = () => {
 
         console.log(`Auto-selected ${topPeers.length} peers with highest scores:`, topPeers.map(p => p.symbol));
 
-        // Move to Step 3: Method Selection (AFTER SWAP: Method Selection comes BEFORE Peer Selection)
+        // Move to Step 3: Peer Selection
         setCurrentStep(3);
       } else {
         setError('No peers found for this company. Try a different company or manually add peers later.');
@@ -324,7 +324,7 @@ const ValuationFlow = () => {
     });
   }, []);
 
-  // ==================== STEP 4: CONTINUE TO MODEL SELECTION ====================
+  // ==================== STEP 3: CONTINUE TO MODEL SELECTION ====================
   const handleContinueToModelSelection = useCallback(async () => {
     if (!sessionId || selectedPeers.length === 0) {
       setError('No session or peers selected');
@@ -345,7 +345,7 @@ const ValuationFlow = () => {
           setPeerData(saveResponse.peer_data);
         }
         
-        setCurrentStep(4);  // Move to Step 4: Method Selection (AFTER SWAP: Peer Selection is now Step 4)
+        setCurrentStep(4);  // Move to Step 4: Model Selection
       } else {
         setError('Failed to save peers');
       }
@@ -432,14 +432,14 @@ const ValuationFlow = () => {
     }
   }, [market]);
 
-  // ==================== STEP 3: SELECT MODEL (NOW STEP 3 AFTER SWAP) ====================
+  // ==================== STEP 4: SELECT MODEL ====================
   const handleSelectModel = useCallback(async (modelType) => {
     // GAP 2 & GAP 3 FIX: Update selected model first, then deep merge to preserve other models' data
     // Single selection (radio button behavior) - modelType is a string, not array
     
-    // Client-side validation: Ensure peers are selected before model selection (peers now selected in Step 4 BEFORE this step)
+    // Client-side validation: Ensure peers are selected before model selection (peers selected in Step 3)
     if (!selectedPeers || selectedPeers.length === 0) {
-      alert('⚠️ No peers selected! Please go back to Step 4 and select at least one peer company.');
+      alert('⚠️ No peers selected! Please go back to Step 3 and select at least one peer company.');
       return;
     }
     
@@ -501,7 +501,7 @@ const ValuationFlow = () => {
     return handleRunValuation();
   }, []);
 
-  // ==================== BACK TO MODEL SELECTION (STEP 3) ====================
+  // ==================== BACK TO MODEL SELECTION (STEP 4) ====================
   const handleBackToModelSelection = () => {
     const currentMethod = selectedModels?.toLowerCase();
 
@@ -539,11 +539,11 @@ const ValuationFlow = () => {
       }
     }));
 
-    // Reset selection and navigation - go back to Step 3: Method Selection
+    // Reset selection and navigation - go back to Step 4: Model Selection
     setSelectedModels('');
     setRequiredFields([]);
     setConfirmedValues({});
-    setCurrentStep(3);  // AFTER SWAP: Go back to Step 3 (Method Selection)
+    setCurrentStep(4);  // Go back to Step 4: Model Selection
     setError(null);
     // Keep market locked - user selected company already, just switching models
   };
@@ -1120,18 +1120,18 @@ const ValuationFlow = () => {
           />
         );
       case 3:
-        return <ModelSelectionStep onSelectModel={handleSelectModel} selectedModels={selectedModels} selectedPeers={selectedPeers} />;
-      case 4:
         return (
           <PeerSelectionStep
             suggestedPeers={suggestedPeers}
             selectedPeers={selectedPeers}
             onTogglePeer={handleTogglePeer}
             onContinue={handleContinueToModelSelection}
-            onBack={() => setCurrentStep(3)}  // AFTER SWAP: Go back to Step 3 (Method Selection)
+            onBack={() => setCurrentStep(2)}  // Go back to Step 2 (Company Overview)
             loading={loading}
           />
         );
+      case 4:
+        return <ModelSelectionStep onSelectModel={handleSelectModel} selectedModels={selectedModels} selectedPeers={selectedPeers} />;
       case 5:
         return (
           <RequirementsStep
@@ -1276,7 +1276,7 @@ const ValuationFlow = () => {
              currentStep === 5 ? 'Review Requirements' :
              currentStep === 6 ? 'View Retrieved Inputs' :
              currentStep === 7 ? 'Historical Data Extraction' :
-             currentStep === 8 ? 'Forecast Drivers & DCF Inputs' :
+             currentStep === 8 ? 'Assumption & AI Suggestion' :
              currentStep === 9 ? 'Confirm Assumptions' :
              currentStep === 10 ? 'Run Valuation' :
              currentStep === 11 ? 'Results & Export' : 'In Progress'}

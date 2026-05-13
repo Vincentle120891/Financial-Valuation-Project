@@ -42,19 +42,6 @@ const ModelSelectionStep = ({ onSelectModel, selectedModels, selectedPeers }) =>
     // Single selection - just pass the model ID directly (not an array)
     onSelectModel(modelId);
   };
-
-  const isSelected = (modelId) => {
-    // Single selection - selectedModels is now a string (not array)
-    return selectedModels === modelId;
-  };
-
-  return (
-    <div className="step-container">
-      <h2>Step 4: Select Valuation Model</h2>
-      <p style={{ marginBottom: '20px', color: '#666' }}>
-        Choose one valuation methodology to apply.
-        <strong style={{ color: '#667eea' }}> Single selection ensures accurate AI context for the chosen method.</strong>
-      </p>
       <div className="model-options">
         {models.map((model) => (
           <div 
