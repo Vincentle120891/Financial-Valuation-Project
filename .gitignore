@@ -1,4 +1,14 @@
 ```
+# Compiled Python files
+*.pyc
+__pycache__/
+
+# Dependencies
+venv/
+.venv/
+.env
+.env.local
+.env.*
 # Dependencies
 __pycache__/
 *.pyc
@@ -34,11 +44,29 @@ wheels/
 # Logs
 *.log
 
+# Coverage reports
+.coverage
+coverage/
+htmlcov/
+
+# IDE files
 # Editor
 .vscode/
 .idea/
 *.swp
 *.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+build/
+dist/
+target/
+.mypy_cache/
+.pytest_cache/
+```
 *.tmp
 
 # OS
