@@ -115,8 +115,9 @@ class Step3PeerManagementService:
         # Also store list of peers for easy access
         peer_data['peers'] = peer_tickers
         
-        # Save all peer data to session
-        session_service.update_session_data(session_id, "retrieved_assumptions", peer_data)
+        # Save all peer data to session using shared_context (Step 3 data)
+        # This ensures it's accessible by Step 6 via get_session_value
+        session_service.update_shared_context(session_id, "retrieved_assumptions", peer_data)
         
         return {
             "status": "success",
