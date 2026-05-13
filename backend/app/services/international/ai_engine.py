@@ -571,6 +571,229 @@ class AIFallbackEngine:
             
         return fallback_result
     
+    def generate_analysis(self, prompt: str, model_preference: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Generate analysis from AI providers with fallback logic.
+        
+        This is a generic method for Step 7 web search analysis that tries multiple
+        AI providers in order and returns structured results.
+        
+        Args:
+            prompt: The prompt to send to AI
+            model_preference: Optional preference for provider ('groq', 'gemini', 'qwen')
+                             If None, uses default priority order
+            
+        Returns:
+            Dict with 'success', 'analysis', 'metadata' keys:
+            {
+                "success": True/False,
+                "analysis": "<AI response text>",
+                "metadata": {
+                    "provider": "groq/gemini/qwen",
+                    "response_time": <seconds>,
+                    "errors": {}
+                }
+            }
+        """
+        import time
+        
+        last_error = None
+        provider_errors = {}
+        
+        logger.info(f"🚀 Starting AI analysis generation with {len(self.providers)} available providers...")
+        
+        # Determine provider order
+        providers_to_try = self.providers[:]
+        if model_preference:
+            # Reorder to try preferred provider first
+            preferred = [(name, func) for name, func in self.providers if name == model_preference]
+            others = [(name, func) for name, func in self.providers if name != model_preference]
+            if preferred:
+                providers_to_try = preferred + others
+        
+        # Try each provider in order
+        for provider_name, provider_func in providers_to_try:
+            try:
+                logger.info(f"🤖 Attempting AI analysis via {provider_name.upper()}...")
+                start_time = time.time()
+                logger.info(f"⏳ Waiting for {provider_name.upper()} response (timeout: 50s)...")
+                
+                response = provider_func(prompt)
+                elapsed = time.time() - start_time
+                
+                if response:
+                    logger.info(f"✅ Successfully generated analysis via {provider_name.upper()} in {elapsed:.2f}s")
+                    return {
+                        "success": True,
+                        "analysis": response,
+                        "metadata": {
+                            "provider": provider_name,
+                            "response_time": elapsed,
+                            "errors": provider_errors
+                        }
+                    }
+                else:
+                    logger.warning(f"⚠️ {provider_name.upper()} returned empty response")
+                    provider_errors[provider_name] = "Empty response"
+                    
+            except Exception as e:
+                error_msg = f"{provider_name.upper()}: {str(e)}"
+                logger.error(f"❌ {error_msg}")
+                provider_errors[provider_name] = str(e)
+                last_error = error_msg
+                logger.info(f"🔄 Falling back to next provider...")
+                continue
+        
+        # All providers exhausted
+        logger.warning(f"⚠️ All AI providers exhausted for analysis generation")
+        
+        return {
+            "success": False,
+            "analysis": None,
+            "metadata": {
+                "provider": None,
+                "response_time": None,
+                "errors": provider_errors,
+                "fallback_reason": last_error or "No AI providers configured"
+            }
+        }
+    
+    def extract_financial_metric(
+        self, 
+        text: str, 
+        metric: str, 
+        fiscal_year: int, 
+        company_name: str
+    ) -> Dict[str, Any]:
+        """
+        Extract a specific financial metric from PDF/filing text using AI.
+        
+        This method is used in Step 7 to extract historical financial data from
+        annual reports, SEC filings, or other documents when structured APIs fail.
+        
+        Args:
+            text: Raw text extracted from PDF/filing
+            metric: The metric to extract (e.g., "Revenue", "EBITDA", "CapEx")
+            fiscal_year: The fiscal year to extract data for
+            company_name: Company name for context
+            
+        Returns:
+            Dict with extraction result:
+            {
+                "success": True/False,
+                "value": <extracted number or None>,
+                "metric": "<metric name>",
+                "fiscal_year": <year>,
+                "source": "PDF_Annual_Report_YYYY" or "SEC_Filing_YYYY",
+                "confidence": <0-1 score>,
+                "notes": "<any relevant notes>"
+            }
+        """
+        import time
+        
+        # Build extraction prompt
+        extraction_prompt = f"""SYSTEM:
+You are a financial data extraction specialist. Extract the EXACT value for the specified metric from the provided text.
+Output ONLY raw JSON. No markdown. No explanation outside the JSON. No preamble. No trailing text.
+
+USER:
+Extract the following financial metric from the text below:
+
+**Target Metric**: {metric}
+**Fiscal Year**: {fiscal_year}
+**Company**: {company_name}
+
+**CRITICAL RULES**:
+1. Only extract values for the EXACT fiscal year {fiscal_year}
+2. Do NOT estimate, interpolate, or invent numbers
+3. If the exact value is not found, return null for the value
+4. Be careful with units (millions, billions, thousands) - convert to absolute numbers
+5. Distinguish between similar metrics (e.g., Operating Income vs EBITDA)
+6. Watch for negative values (losses) indicated by parentheses or minus signs
+
+**Return exactly this JSON structure**:
+{{
+    "value": <number or null>,
+    "unit": "<currency unit, e.g., USD millions>",
+    "found": <true/false>,
+    "confidence": <0.0 to 1.0>,
+    "excerpt": "<short quote from text showing the value>",
+    "notes": "<any relevant context or warnings>"
+}}
+
+**TEXT TO ANALYZE**:
+{text[:8000]}
+
+Now return the JSON:""".strip()
+        
+        last_error = None
+        provider_errors = {}
+        
+        logger.info(f"🚀 Starting financial metric extraction for {metric} ({fiscal_year})...")
+        
+        # Try each provider in order
+        for provider_name, provider_func in self.providers:
+            try:
+                logger.info(f"🤖 Attempting extraction via {provider_name.upper()}...")
+                start_time = time.time()
+                logger.info(f"⏳ Waiting for {provider_name.upper()} response (timeout: 50s)...")
+                
+                response = provider_func(extraction_prompt)
+                elapsed = time.time() - start_time
+                
+                if response:
+                    logger.info(f"✅ Successfully extracted {metric} via {provider_name.upper()} in {elapsed:.2f}s")
+                    
+                    # Parse the JSON response
+                    try:
+                        import json
+                        extracted_data = json.loads(response)
+                        
+                        # Return formatted result
+                        return {
+                            "success": extracted_data.get("found", False),
+                            "value": extracted_data.get("value"),
+                            "metric": metric,
+                            "fiscal_year": fiscal_year,
+                            "source": f"AI_extraction_{provider_name}",
+                            "confidence": extracted_data.get("confidence", 0.5),
+                            "notes": extracted_data.get("notes", ""),
+                            "excerpt": extracted_data.get("excerpt", ""),
+                            "provider": provider_name
+                        }
+                    except json.JSONDecodeError as je:
+                        logger.warning(f"⚠️ Failed to parse JSON from {provider_name}: {je}")
+                        provider_errors[f"{provider_name}_parse"] = str(je)
+                        continue
+                        
+                else:
+                    logger.warning(f"⚠️ {provider_name.upper()} returned empty response")
+                    provider_errors[provider_name] = "Empty response"
+                    
+            except Exception as e:
+                error_msg = f"{provider_name.upper()}: {str(e)}"
+                logger.error(f"❌ {error_msg}")
+                provider_errors[provider_name] = str(e)
+                last_error = error_msg
+                logger.info(f"🔄 Falling back to next provider...")
+                continue
+        
+        # All providers exhausted
+        logger.warning(f"⚠️ All AI providers exhausted for metric extraction")
+        
+        return {
+            "success": False,
+            "value": None,
+            "metric": metric,
+            "fiscal_year": fiscal_year,
+            "source": None,
+            "confidence": 0.0,
+            "notes": f"Failed to extract: {last_error or 'No AI providers configured'}",
+            "excerpt": "",
+            "provider": None,
+            "errors": provider_errors
+        }
+    
     def _build_dcf_prompt(self, data: Dict[str, Any]) -> str:
         ticker = data.get('ticker', 'UNKNOWN')
         company_name = data.get('company_name', 'Unknown Company')
