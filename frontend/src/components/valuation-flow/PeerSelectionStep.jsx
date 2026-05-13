@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 /**
  * PeerSelectionStep - Step 3
  * Displays auto-discovered peer companies with similarity scores in table format
- * Allows users to select/deselect peers for DCF comparison
+ * Allows users to select/deselect peers for valuation models
  * 
  * STYLED TO MATCH: ResultsStep.jsx (Step 8)
  */
@@ -267,7 +267,7 @@ const PeerSelectionStep = ({
           disabled={selectedPeers.length === 0 || loading}
           className="btn-success"
         >
-          Continue to Model Selection →
+          Continue to Step 4: Model Selection →
         </button>
       </div>
     </div>
