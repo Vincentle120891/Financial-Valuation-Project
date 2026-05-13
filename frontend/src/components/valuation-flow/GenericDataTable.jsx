@@ -16,7 +16,7 @@ import {
  *
  * @param {Array} columns - Column definitions with field keys and metadata
  * @param {Object} data - Data object containing fields to display
- * @param {string} market - Market type ('international' or 'vietnamese') for currency/unit handling
+ * @param {string} market - Market type ('international' or 'vietnam') for currency/unit handling
  * @param {boolean} showStatus - Whether to show status badges (RETRIEVED, CALCULATED, etc.)
  * @param {string} title - Optional table title
  */
@@ -31,7 +31,7 @@ const GenericDataTable = ({
     return null;
   }
 
-  const currency = market === 'vietnamese' ? 'VND' : 'USD';
+  const currency = market === 'vietnam' ? 'VND' : 'USD';
 
   // Helper to render cell value based on column type
   const renderCellValue = (value, column) => {
@@ -59,7 +59,7 @@ const GenericDataTable = ({
       case 'number':
         return (
           <span>
-            {formatNumber(extractedValue, market === 'vietnamese' ? 'vi-VN' : 'en-US', column.decimals ?? 2)}
+            {formatNumber(extractedValue, market === 'vietnam' ? 'vi-VN' : 'en-US', column.decimals ?? 2)}
           </span>
         );
 

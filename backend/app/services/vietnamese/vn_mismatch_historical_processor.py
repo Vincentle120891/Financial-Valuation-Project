@@ -138,7 +138,7 @@ class vn_Step3HistoricalProcessor:
     async def validate_ticker(
         self,
         ticker: str,
-        market: str = "vietnamese"
+        market: str = "vietnam"
     ) -> tuple[bool, str]:
         """
         Validate that a Vietnamese ticker has sufficient historical data.
@@ -170,7 +170,7 @@ class vn_Step3HistoricalProcessor:
     def process_historical_data(
         self,
         ticker: str,
-        market: str = "vietnamese"
+        market: str = "vietnam"
     ) -> vn_Step3Response:
         """
         Process Vietnamese historical financial data for a ticker.

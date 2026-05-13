@@ -73,7 +73,7 @@ class PeerDiscoveryService:
     # Exchange filters by market type
     MARKET_EXCHANGE_FILTERS = {
         "international": ["NMS", "NYQ", "NGM", "NCM"],  # NASDAQ, NYSE
-        "vietnamese": ["HOSE", "HNX", "UPCOM"],  # Vietnam exchanges
+        "vietnam": ["HOSE", "HNX", "UPCOM"],  # Vietnam exchanges
         "us": ["NMS", "NYQ", "NGM", "NCM"],
         "uk": ["LSE"],
         "eu": ["GER", "FRA", "BER", "MUN", "STU", "DUS"],  # German exchanges

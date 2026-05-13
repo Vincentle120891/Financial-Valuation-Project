@@ -49,7 +49,7 @@ class VietnamDataAggregator:
             self.vnstock_available = False
             logger.warning("vnstock not available - will rely on fallback sources")
     
-    def fetch_comprehensive_data(self, ticker: str, market: str = "vietnamese") -> Dict[str, Any]:
+    def fetch_comprehensive_data(self, ticker: str, market: str = "vietnam") -> Dict[str, Any]:
         """
         Fetch comprehensive data for Vietnamese stock using cascading fallback.
         
@@ -430,7 +430,7 @@ class VietnamDataAggregator:
         
         # Add currency and market info
         merged['currency'] = 'VND'
-        merged['market'] = result.get('market', 'vietnamese')
+        merged['market'] = result.get('market', 'vietnam')
         
         return merged
     

@@ -194,7 +194,7 @@ class vn_RequirementsOutput(BaseModel):
                     "comps": True
                 },
                 "market_context": {
-                    "market": "vietnamese",
+                    "market": "vietnam",
                     "currency": "VND",
                     "currency_symbol": "₫",
                     "risk_free_rate_source": "Vietnamese 10Y Government Bond",
@@ -355,7 +355,7 @@ class vn_Step5RequirementsProcessor:
             "currency": input_data.currency,
             "currency_symbol": "₫",
             "fiscal_year_end": input_data.fiscal_year_end,
-            "market": "vietnamese"
+            "market": "vietnam"
         }
 
     def _build_comps_parameters(self, input_data: vn_RequirementsInput) -> Dict[str, Any]:
@@ -367,7 +367,7 @@ class vn_Step5RequirementsProcessor:
             "currency": input_data.currency,
             "currency_symbol": "₫",
             "fiscal_year_end": input_data.fiscal_year_end,
-            "market": "vietnamese",
+            "market": "vietnam",
             "exchange_filters": ["HOSE", "HNX", "UPCOM"]
         }
 
@@ -431,7 +431,7 @@ class vn_Step5RequirementsProcessor:
     def _build_market_context(self, input_data: vn_RequirementsInput) -> Dict[str, Any]:
         """Build Vietnamese market context information."""
         return {
-            "market": "vietnamese",
+            "market": "vietnam",
             "currency": input_data.currency,
             "currency_symbol": "₫",
             "risk_free_rate_source": self.VN_MARKET_BENCHMARKS["risk_free_rate"]["source"],

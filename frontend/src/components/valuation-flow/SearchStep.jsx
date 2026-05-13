@@ -24,7 +24,7 @@ const SearchStep = ({
   onSelectCompany,
   marketValidation
 }) => {
-  const [vietnameseSearchLoading, setVietnameseSearchLoading] = useState(false);
+  const [vietnamSearchLoading, setVietnameseSearchLoading] = useState(false);
   
   const handleKeyPress = async (e) => {
     if (e.key === 'Enter') {
@@ -33,7 +33,7 @@ const SearchStep = ({
   };
 
   const performSearch = async () => {
-    if (market === 'vietnamese' && searchQuery.trim()) {
+    if (market === 'vietnam' && searchQuery.trim()) {
       // Use Vietnamese-specific search - results will be handled by parent's handleSearch
       setVietnameseSearchLoading(true);
       try {
@@ -50,7 +50,7 @@ const SearchStep = ({
     }
   };
 
-  const isLoading = loading || vietnameseSearchLoading;
+  const isLoading = loading || vietnamSearchLoading;
 
   return (
     <div className="step-container">
@@ -95,8 +95,8 @@ const SearchStep = ({
         <label style={{ opacity: marketValidation?.isLocked ? 0.5 : 1, cursor: marketValidation?.isLocked ? 'not-allowed' : 'pointer' }}>
           <input
             type="radio"
-            value="vietnamese"
-            checked={market === 'vietnamese'}
+            value="vietnam"
+            checked={market === 'vietnam'}
             onChange={(e) => !marketValidation?.isLocked && setMarket(e.target.value)}
             disabled={marketValidation?.isLocked}
           />
@@ -114,7 +114,7 @@ const SearchStep = ({
         <input
           type="text"
           placeholder={
-            market === 'vietnamese' 
+            market === 'vietnam' 
               ? "Enter ticker (e.g., VNM, VIC, HPG) or company name (Vinamilk, Vingroup)" 
               : "Enter ticker (e.g., AAPL, MSFT) or company name"
           }
@@ -134,7 +134,7 @@ const SearchStep = ({
       </div>
 
       {/* Market-specific hints */}
-      {market === 'vietnamese' && (
+      {market === 'vietnam' && (
         <div className="market-hint" style={{ marginTop: '10px', fontSize: '0.9em', color: '#666' }}>
           <p><strong>Popular Vietnamese stocks:</strong> VNM (Vinamilk), VIC (Vingroup), HPG (Hoa Phat), VCB (Vietcombank), FPT (FPT Corp)</p>
           <p><strong>Supported exchanges:</strong> HOSE (.VN), HNX (.HA), UPCOM (.VC)</p>

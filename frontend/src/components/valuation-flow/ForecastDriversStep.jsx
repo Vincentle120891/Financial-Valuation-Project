@@ -66,12 +66,12 @@ const ForecastDriversStep = ({
   // Initialize local state for DCF inputs with market-specific defaults
   const [localDcfInputs, setLocalDcfInputs] = useState(
     initialDcfInputs || {
-      risk_free_rate: market === 'vietnamese' ? 0.065 : 0.045,
-      equity_risk_premium: market === 'vietnamese' ? 0.075 : 0.06,
+      risk_free_rate: market === 'vietnam' ? 0.065 : 0.045,
+      equity_risk_premium: market === 'vietnam' ? 0.075 : 0.06,
       beta: 1.0,
-      cost_of_debt: market === 'vietnamese' ? 0.08 : 0.05,
-      wacc: market === 'vietnamese' ? 0.11 : 0.085,
-      terminal_growth_rate: market === 'vietnamese' ? 0.05 : 0.02,
+      cost_of_debt: market === 'vietnam' ? 0.08 : 0.05,
+      wacc: market === 'vietnam' ? 0.11 : 0.085,
+      terminal_growth_rate: market === 'vietnam' ? 0.05 : 0.02,
       terminal_ebitda_multiple: 10.0,
       useful_life_existing: 10,
       useful_life_new: 10

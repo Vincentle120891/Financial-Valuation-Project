@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field, field_validator, ConfigDict
 class SearchRequest(BaseModel):
     """Request model for ticker search."""
     query: str = Field(..., min_length=1, max_length=50, description="Search query (ticker symbol or company name)")
-    market: str = Field(default="international", description="Market type", examples=["international", "vietnamese"])
+    market: str = Field(default="international", description="Market type", examples=["international", "vietnam"])
 
     @field_validator('query')
     @classmethod
@@ -27,7 +27,7 @@ class SearchRequest(BaseModel):
     @classmethod
     def validate_market(cls, v: str) -> str:
         """Validate market parameter."""
-        allowed_markets = ["international", "vietnamese"]
+        allowed_markets = ["international", "vietnam"]
         if v.lower() not in allowed_markets:
             raise ValueError(f"Market must be one of: {allowed_markets}")
         return v.lower()
@@ -54,7 +54,7 @@ class TickerSelectRequest(BaseModel):
     @classmethod
     def validate_market(cls, v: str) -> str:
         """Validate market parameter."""
-        allowed_markets = ["international", "vietnamese"]
+        allowed_markets = ["international", "vietnam"]
         if v.lower() not in allowed_markets:
             raise ValueError(f"Market must be one of: {allowed_markets}")
         return v.lower()
@@ -79,11 +79,11 @@ class ModelSelectRequest(BaseModel):
     @classmethod
     def validate_market(cls, v: str) -> str:
         """Validate market parameter."""
-        allowed_markets = ["international", "vietnam", "vietnamese"]
+        allowed_markets = ["international", "vietnam", "vietnam"]
         if v.lower() not in allowed_markets:
             raise ValueError(f"Market must be one of: international, vietnam")
         # Normalize to 'international' or 'vietnam'
-        return "vietnam" if v.lower() in ["vietnam", "vietnamese"] else "international"
+        return "vietnam" if v.lower() in ["vietnam", "vietnam"] else "international"
 
 
 class ModelSelectResponse(BaseModel):
@@ -361,7 +361,7 @@ from pydantic import BaseModel, Field, field_validator, ConfigDict
 class SearchRequest(BaseModel):
     """Request model for ticker search."""
     query: str = Field(..., min_length=1, max_length=50, description="Search query (ticker symbol or company name)")
-    market: str = Field(default="international", description="Market type", examples=["international", "vietnamese"])
+    market: str = Field(default="international", description="Market type", examples=["international", "vietnam"])
 
     @field_validator('query')
     @classmethod
@@ -375,7 +375,7 @@ class SearchRequest(BaseModel):
     @classmethod
     def validate_market(cls, v: str) -> str:
         """Validate market parameter."""
-        allowed_markets = ["international", "vietnamese"]
+        allowed_markets = ["international", "vietnam"]
         if v.lower() not in allowed_markets:
             raise ValueError(f"Market must be one of: {allowed_markets}")
         return v.lower()
@@ -402,7 +402,7 @@ class TickerSelectRequest(BaseModel):
     @classmethod
     def validate_market(cls, v: str) -> str:
         """Validate market parameter."""
-        allowed_markets = ["international", "vietnamese"]
+        allowed_markets = ["international", "vietnam"]
         if v.lower() not in allowed_markets:
             raise ValueError(f"Market must be one of: {allowed_markets}")
         return v.lower()
@@ -427,11 +427,11 @@ class ModelSelectRequest(BaseModel):
     @classmethod
     def validate_market(cls, v: str) -> str:
         """Validate market parameter."""
-        allowed_markets = ["international", "vietnam", "vietnamese"]
+        allowed_markets = ["international", "vietnam", "vietnam"]
         if v.lower() not in allowed_markets:
             raise ValueError(f"Market must be one of: international, vietnam")
         # Normalize to 'international' or 'vietnam'
-        return "vietnam" if v.lower() in ["vietnam", "vietnamese"] else "international"
+        return "vietnam" if v.lower() in ["vietnam", "vietnam"] else "international"
 
 
 class ModelSelectResponse(BaseModel):

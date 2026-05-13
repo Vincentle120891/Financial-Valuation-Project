@@ -15,7 +15,7 @@ import {
  * Accepts unified data structure and renders based on available fields.
  *
  * @param {Object} marketData - Market data object with standardized fields
- * @param {string} marketType - Market type ('international' or 'vietnamese')
+ * @param {string} marketType - Market type ('international' or 'vietnam')
  * @param {string} title - Optional custom title
  */
 const MarketInfoCard = ({ marketData, marketType = 'international', title = null }) => {
@@ -23,12 +23,12 @@ const MarketInfoCard = ({ marketData, marketType = 'international', title = null
     return null;
   }
 
-  const currency = marketType === 'vietnamese' ? 'VND' : 'USD';
-  const locale = marketType === 'vietnamese' ? 'vi-VN' : 'en-US';
+  const currency = marketType === 'vietnam' ? 'VND' : 'USD';
+  const locale = marketType === 'vietnam' ? 'vi-VN' : 'en-US';
 
   // Default title based on market type
-  const defaultTitle = marketType === 'vietnamese'
-    ? '🇻🇳 Vietnamese Market Data'
+  const defaultTitle = marketType === 'vietnam'
+    ? '🇻🇳 Vietnam Market Data'
     : '🌍 International Market Data';
 
   const displayTitle = title || defaultTitle;
@@ -125,10 +125,10 @@ const MarketInfoCard = ({ marketData, marketType = 'international', title = null
   if (marketData.stock_info || marketData.ticker_info) {
     const info = marketData.stock_info || marketData.ticker_info;
     sections.push({
-      title: marketType === 'vietnamese' ? 'Stock Information' : 'Company Information',
-      icon: marketType === 'vietnamese' ? '🏢' : '🏭',
+      title: marketType === 'vietnam' ? 'Stock Information' : 'Company Information',
+      icon: marketType === 'vietnam' ? '🏢' : '🏭',
       items: [
-        { label: marketType === 'vietnamese' ? 'Ticker' : 'Symbol', value: info.ticker || info.symbol, type: 'text', highlight: true },
+        { label: marketType === 'vietnam' ? 'Ticker' : 'Symbol', value: info.ticker || info.symbol, type: 'text', highlight: true },
         { label: 'Company Name', value: info.name_en || info.name_vi || info.name, type: 'text' },
         { label: 'Sector', value: info.sector, type: 'text' },
         { label: 'Industry', value: info.industry, type: 'text' },
@@ -162,15 +162,15 @@ const MarketInfoCard = ({ marketData, marketType = 'international', title = null
       title: 'Currency Information',
       icon: '💱',
       items: [
-        { label: 'Local Currency', value: marketType === 'vietnamese' ? 'VND (Vietnamese Dong)' : `${info.currency_code} (${info.currency_name})`, type: 'text' },
-        { label: marketType === 'vietnamese' ? 'USD/VND Rate' : `USD/${info.currency_code || ''} Rate`, value: info.usd_vnd_rate || info.usd_exchange_rate, type: 'number' },
+        { label: 'Local Currency', value: marketType === 'vietnam' ? 'VND (Vietnamese Dong)' : `${info.currency_code} (${info.currency_name})`, type: 'text' },
+        { label: marketType === 'vietnam' ? 'USD/VND Rate' : `USD/${info.currency_code || ''} Rate`, value: info.usd_vnd_rate || info.usd_exchange_rate, type: 'number' },
         { label: 'Market Cap (USD)', value: info.market_cap_usd, type: 'currency', highlight: true }
       ]
     });
   }
 
   // Vietnam-specific: Foreign Ownership Status
-  if (marketType === 'vietnamese' && marketData.fol_status) {
+  if (marketType === 'vietnam' && marketData.fol_status) {
     const info = marketData.fol_status;
     sections.push({
       title: 'Foreign Ownership Status',
@@ -186,7 +186,7 @@ const MarketInfoCard = ({ marketData, marketType = 'international', title = null
   }
 
   // Vietnam-specific: Trading Calendar
-  if (marketType === 'vietnamese' && marketData.trading_calendar) {
+  if (marketType === 'vietnam' && marketData.trading_calendar) {
     const info = marketData.trading_calendar;
     sections.push({
       title: 'Trading Calendar',
@@ -230,7 +230,7 @@ const MarketInfoCard = ({ marketData, marketType = 'international', title = null
   }
 
   // Index Data (Vietnam)
-  if (marketType === 'vietnamese' && marketData.index_data) {
+  if (marketType === 'vietnam' && marketData.index_data) {
     const info = marketData.index_data;
     sections.push({
       title: 'Market Index Performance',

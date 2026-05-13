@@ -487,7 +487,7 @@ class VietnamDataStrategy:
                 data_package = {
                     "symbol": f"{ticker_symbol}.VN",
                     "fetch_timestamp": result['fetch_timestamp'],
-                    "market": "vietnamese",
+                    "market": "vietnam",
                     "data_sources_used": result['data_sources_used'],
                     "data_quality_score": result['data_quality_score'],
                     "warnings": result.get('warnings', []),
@@ -524,7 +524,7 @@ class VietnamDataStrategy:
     
     def get_market_type(self) -> str:
         """Return market type identifier."""
-        return "vietnamese"
+        return "vietnam"
 
 
 # === Strategy Factory ===
@@ -537,7 +537,7 @@ def get_data_strategy(market: str, enable_alphavantage_fallback: bool = True) ->
     - vietnamese → VietnamDataStrategy (vnstock primary)
     - international/other → InternationalDataStrategy (yfinance + AlphaVantage)
     """
-    if market.lower() in ["vietnamese", "vietnam", "vn"]:
+    if market.lower() in ["vietnam", "vietnam", "vn"]:
         return VietnamDataStrategy()
     else:
         return InternationalDataStrategy(enable_alphavantage_fallback=enable_alphavantage_fallback)
@@ -831,7 +831,7 @@ class YFinanceService:
                 data_package = {
                     "symbol": f"{ticker_symbol}.VN",
                     "fetch_timestamp": result['fetch_timestamp'],
-                    "market": "vietnamese",
+                    "market": "vietnam",
                     "data_sources_used": result['data_sources_used'],
                     "data_quality_score": result['data_quality_score'],
                     "warnings": result.get('warnings', []),
@@ -883,7 +883,7 @@ class YFinanceService:
         return {
             "symbol": full_ticker,
             "fetch_timestamp": datetime.now().isoformat(),
-            "market": "vietnamese",
+            "market": "vietnam",
             "data_sources_used": ["yfinance"],
             "data_quality_score": 0.5,  # Lower score for fallback
             "warnings": ["Using yfinance fallback - vnstock data not available"],
