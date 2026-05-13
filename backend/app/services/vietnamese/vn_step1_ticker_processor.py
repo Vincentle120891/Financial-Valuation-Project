@@ -55,14 +55,14 @@ class vn_Step1TickerProcessor:
     def process_ticker_selection(
         self,
         tickers: List[str],
-        market: str = "vietnamese"
+        market: str = "vietnam"
     ) -> vn_Step1Response:
         """
         Process multiple Vietnamese tickers for validation and info retrieval.
 
         Args:
             tickers: List of Vietnamese ticker symbols
-            market: Market type (should be 'vietnamese')
+            market: Market type (should be 'vietnam')
 
         Returns:
             vn_Step1Response with validated tickers and warnings
@@ -228,14 +228,14 @@ class vn_Step1TickerProcessor:
     async def search_tickers(
         self,
         query: str,
-        market: str = "vietnamese"
+        market: str = "vietnam"
     ) -> List[Dict]:
         """
         Search for Vietnamese tickers based on query string.
 
         Args:
             query: Search query (company name or partial ticker)
-            market: Market type (should be 'vietnamese')
+            market: Market type (should be 'vietnam')
 
         Returns:
             List of matching ticker dictionaries with Vietnam-specific fields

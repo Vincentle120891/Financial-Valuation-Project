@@ -115,8 +115,8 @@ class SessionService:
         """
         # FIX Issue #5: Normalize market parameter
         market_normalized = market.lower() if market else ""
-        if market_normalized in ["vietnam", "vietnamese"]:
-            market_normalized = "vietnamese"
+        if market_normalized == "vietnam":
+            market_normalized = "vietnam"
         elif market_normalized in ["international", "us", "global"]:
             market_normalized = "international"
         
@@ -129,8 +129,8 @@ class SessionService:
             logger.warning(f"Potential market mismatch: Vietnamese ticker '{ticker}' selected with international market")
             # Don't block, but log warning - could be intentional for CDRs
         
-        if not is_vietnamese_ticker and market_normalized == "vietnamese":
-            logger.warning(f"Potential market mismatch: International ticker '{ticker}' selected with Vietnamese market")
+        if not is_vietnamese_ticker and market_normalized == "vietnam":
+            logger.warning(f"Potential market mismatch: International ticker '{ticker}' selected with Vietnam market")
             # Don't block, but log warning - could be intentional for cross-listed stocks
         
         session_id = str(uuid.uuid4())

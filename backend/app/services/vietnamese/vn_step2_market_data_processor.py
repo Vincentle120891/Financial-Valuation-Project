@@ -71,7 +71,7 @@ class vn_Step2MarketDataProcessor:
     async def select_company(
         self,
         ticker: str,
-        market: str = "vietnamese",
+        market: str = "vietnam",
         session_id: Optional[str] = None
     ) -> Dict:
         """
@@ -79,7 +79,7 @@ class vn_Step2MarketDataProcessor:
 
         Args:
             ticker: Vietnamese ticker symbol
-            market: Market type (should be 'vietnamese')
+            market: Market type (should be 'vietnam')
             session_id: Optional session ID
 
         Returns:
@@ -116,7 +116,7 @@ class vn_Step2MarketDataProcessor:
     def process_market_data(
         self,
         ticker: str,
-        market: str = "vietnamese"
+        market: str = "vietnam"
     ) -> vn_Step2Response:
         """
         Process Vietnamese market data for a ticker.
@@ -353,7 +353,7 @@ class vn_Step2MarketDataProcessor:
         self,
         ticker: str,
         max_peers: int = 10,
-        market: str = "vietnamese"
+        market: str = "vietnam"
     ) -> Dict:
         """
         Suggest Vietnamese peer companies based on sector and market cap.
