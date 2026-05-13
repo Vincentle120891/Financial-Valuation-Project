@@ -89,7 +89,7 @@ __all__ = [
     # Step Processors - Complete 10-Step Workflow
     "Step1TickerProcessor",
     "Step2MarketDataProcessor",
-    "Step3HistoricalProcessor",
+    "Step3PeerManagementService",
     "PeerSelectionProcessor",
     "Step4SelectModelProcessor",
     "Step5RequiredInputsProcessor",
