@@ -28,6 +28,7 @@ from enum import Enum
 from datetime import datetime
 import json
 from .ai_engine import AIFallbackEngine
+from .statistical_utils import generate_historical_statistics, extract_numeric_values
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +67,18 @@ class HistoricalTrendline(BaseModel):
     trend_direction: str = "stable"  # increasing, decreasing, stable
     volatility: str = "low"  # low, medium, high
 
+    # Enhanced statistical context from Step 6/7 historical data
+    median: Optional[float] = None
+    min_value: Optional[float] = None
+    max_value: Optional[float] = None
+    standard_deviation: Optional[float] = None
+    average_yoy_growth: Optional[float] = None
+    yoy_growth_details: Optional[List[Dict[str, Any]]] = None
+    year_range: Optional[str] = None
+    periods: Optional[int] = None
+    latest_value: Optional[float] = None
+    oldest_value: Optional[float] = None
+
 class AISuggestion(BaseModel):
     """AI suggestion for an assumption"""
     metric: str
@@ -82,21 +95,21 @@ class AssumptionInput(BaseModel):
     category: AssumptionCategory
     description: str
     unit: str = "%"
-    
+
     # Historical context
     historical_trendline: Optional[HistoricalTrendline] = None
-    
+
     # Current state
     ai_suggestion: Optional[AISuggestion] = None
     user_value: Optional[float] = None
     final_value: Optional[float] = None
     status: OverrideStatus = OverrideStatus.DEFAULT
-    
+
     # Validation
     is_valid: bool = True
     validation_message: Optional[str] = None
     warning_message: Optional[str] = None
-    
+
     # Multi-year support (for forecast years 1-5)
     is_multi_year: bool = False
     year_values: Dict[int, float] = {}  # year -> value
@@ -117,13 +130,13 @@ class DCFAssumptionsResponse(BaseModel):
     timestamp: datetime
     valuation_model: ValuationModel = ValuationModel.DCF
     categories: Dict[str, AssumptionCategoryResponse]
-    
+
     # Summary and validation
     all_categories_complete: bool = False
     all_validations_passed: bool = True
     total_validation_errors: List[str] = []
     ready_for_calculation: bool = False
-    
+
     # What-if preview
     sensitivity_preview: Optional[Dict[str, Any]] = None
     message: str = ""
@@ -132,19 +145,19 @@ class DCFAssumptionsResponse(BaseModel):
 class DCFStep8Processor:
     """
     Step 8: The DCF Assumption Studio
-    
+
     Features:
     1. Context-Aware Historical Trendlines (3-5 years from Step 6)
     2. Modular AI Suggestion Engines (5 Button Strategy)
     3. Smart Validation & Guardrails
     4. What-If Preview (Mini-Step 9 sensitivity)
-    
+
     Output: DCFAssumptionsResponse with complete DCF assumption set
     """
-    
+
     # Forecast period configuration
     FORECAST_YEARS = [1, 2, 3, 4, 5]
-    
+
     # DCF Assumption Categories Definition
     DCF_CATEGORIES = {
         AssumptionCategory.REVENUE_DRIVERS: {
@@ -278,10 +291,10 @@ class DCFStep8Processor:
             ]
         }
     }
-    
+
     def __init__(self):
         self.ai_fallback = AIFallbackEngine()
-    
+
     async def initialize_assumptions(
         self,
         ticker: str,
@@ -293,7 +306,7 @@ class DCFStep8Processor:
         No AI suggestions yet - user must click buttons to generate them.
         """
         categories = await self._initialize_dcf_categories(ticker, step6_data, step7_data)
-        
+
         return DCFAssumptionsResponse(
             session_id=f"step8_dcf_{ticker}_{datetime.now().strftime('%Y%m%d%H%M%S')}",
             ticker=ticker,
@@ -305,7 +318,7 @@ class DCFStep8Processor:
             ready_for_calculation=False,
             message="DCF assumptions initialized with historical trendlines. Click AI suggestion buttons to generate recommendations for each category."
         )
-    
+
     async def _initialize_dcf_categories(
         self,
         ticker: str,
@@ -314,7 +327,7 @@ class DCFStep8Processor:
     ) -> Dict[AssumptionCategory, AssumptionCategoryResponse]:
         """Initialize DCF assumption categories with historical trendlines"""
         categories = {}
-        
+
         for category, config in self.DCF_CATEGORIES.items():
             assumptions = []
             for assumption_def in config["assumptions"]:
@@ -324,7 +337,7 @@ class DCFStep8Processor:
                     step6_data,
                     step7_data
                 )
-                
+
                 assumption = AssumptionInput(
                     metric=assumption_def["metric"],
                     category=category,
@@ -335,7 +348,7 @@ class DCFStep8Processor:
                     is_valid=True
                 )
                 assumptions.append(assumption)
-            
+
             categories[category] = AssumptionCategoryResponse(
                 category=category,
                 category_name=config["name"],
@@ -343,9 +356,9 @@ class DCFStep8Processor:
                 ai_generated=False,
                 message=f"Historical trendlines loaded. Click 'Generate AI Suggestions' to get recommendations for {config['name']}."
             )
-        
+
         return categories
-    
+
     async def _build_historical_trendline(
         self,
         metric: str,
@@ -356,7 +369,7 @@ class DCFStep8Processor:
         try:
             # Extract historical data from Step 6
             historical_data = step6_data.get("dcf_historical_metrics", {})
-            
+
             # Map metric names to data keys
             metric_mapping = {
                 "Revenue Volume Growth": "revenue",
@@ -375,9 +388,9 @@ class DCFStep8Processor:
                 "Terminal Growth Rate": "terminal_growth",
                 "Terminal EBITDA Multiple": "ebitda_multiple"
             }
-            
+
             data_key = metric_mapping.get(metric, metric.lower().replace(" ", "_").replace("%", "").replace("/", "_"))
-            
+
             # Get historical values
             values = historical_data.get(data_key, {})
             if not values:
@@ -386,10 +399,10 @@ class DCFStep8Processor:
                     values = historical_data.get(alt_key, {})
                     if values:
                         break
-            
+
             if not values:
                 return None
-            
+
             # Build trend points
             trend_points = []
             numeric_values = []
@@ -399,13 +412,13 @@ class DCFStep8Processor:
                 if isinstance(value, (int, float)) and value is not None:
                     trend_points.append(HistoricalTrendPoint(year=int(year), value=float(value)))
                     numeric_values.append(float(value))
-            
+
             if not trend_points:
                 return None
-            
+
             # Calculate statistics
             average = sum(numeric_values) / len(numeric_values) if numeric_values else 0.0
-            
+
             # Calculate CAGR if we have multiple years
             cagr = None
             if len(numeric_values) >= 2:
@@ -414,7 +427,7 @@ class DCFStep8Processor:
                 n_years = len(numeric_values) - 1
                 if first_value > 0 and n_years > 0:
                     cagr = ((last_value / first_value) ** (1 / n_years)) - 1
-            
+
             # Determine trend direction
             trend_direction = "stable"
             if len(numeric_values) >= 2:
@@ -422,7 +435,7 @@ class DCFStep8Processor:
                     trend_direction = "increasing"
                 elif numeric_values[-1] < numeric_values[0] * 0.9:
                     trend_direction = "decreasing"
-            
+
             # Calculate volatility
             volatility = "low"
             if len(numeric_values) >= 2:
@@ -434,7 +447,7 @@ class DCFStep8Processor:
                     volatility = "high"
                 elif cv > 0.15:
                     volatility = "medium"
-            
+
             return HistoricalTrendline(
                 metric=metric,
                 trend_points=trend_points,
@@ -446,7 +459,7 @@ class DCFStep8Processor:
         except Exception as e:
             logger.error(f"Error building historical trendline for {metric}: {e}")
             return None
-    
+
     async def generate_ai_suggestions_for_category(
         self,
         ticker: str,
@@ -458,10 +471,10 @@ class DCFStep8Processor:
         """Generate AI suggestions for a specific DCF assumption category"""
         if category not in self.DCF_CATEGORIES:
             raise ValueError(f"Invalid DCF category: {category}")
-        
+
         config = self.DCF_CATEGORIES[category]
         assumptions = []
-        
+
         for assumption_def in config["assumptions"]:
             # Generate AI suggestion
             ai_suggestion = await self._generate_single_ai_suggestion(
@@ -473,7 +486,7 @@ class DCFStep8Processor:
                 step6_data=step6_data,
                 step7_data=step7_data
             )
-            
+
             assumption = AssumptionInput(
                 metric=assumption_def["metric"],
                 category=category,
@@ -487,7 +500,7 @@ class DCFStep8Processor:
                 is_valid=True
             )
             assumptions.append(assumption)
-        
+
         return AssumptionCategoryResponse(
             category=category,
             category_name=config["name"],
@@ -496,7 +509,7 @@ class DCFStep8Processor:
             generation_timestamp=datetime.now(),
             message=f"AI suggestions generated for {config['name']} based on historical trends, peer analysis, and market conditions."
         )
-    
+
     async def _generate_single_ai_suggestion(
         self,
         ticker: str,
@@ -519,20 +532,20 @@ class DCFStep8Processor:
                 step6_data=step6_data,
                 step7_data=step7_data
             )
-            
+
             # Call AI engine
             ai_response = await self.ai_fallback.generate_suggestion(prompt)
-            
+
             # Parse AI response
             suggested_value = float(ai_response.get("value", 0.0))
             reasoning = ai_response.get("reasoning", "AI-based recommendation")
             confidence = ai_response.get("confidence", "medium")
-            
+
             # Apply validation constraints
             min_val = validation_rules.get("min", float("-inf"))
             max_val = validation_rules.get("max", float("inf"))
             suggested_value = max(min_val, min(max_val, suggested_value))
-            
+
             return AISuggestion(
                 metric=metric,
                 suggested_value=suggested_value,
@@ -560,7 +573,7 @@ class DCFStep8Processor:
                 max_range=validation_rules.get("max", 1.0),
                 category=category
             )
-    
+
     def _build_dcf_assumption_prompt(
         self,
         ticker: str,
@@ -571,11 +584,17 @@ class DCFStep8Processor:
         step6_data: Dict[str, Any],
         step7_data: Optional[Dict[str, Any]] = None
     ) -> str:
-        """Build prompt for DCF assumption AI generation"""
+        """Build prompt for DCF assumption AI generation
+
+        Now includes comprehensive statistical context from Step 6/7 historical data:
+        - CAGR, Average, Median, Min/Max
+        - Standard Deviation (Volatility)
+        - Year-over-Year Growth rates with details
+        """
         historical_trendline = None
         if step6_data:
             historical_trendline = self._build_historical_trendline_sync(metric, step6_data, step7_data)
-        
+
         prompt = f"""Generate a forward-looking assumption for DCF valuation:
 
 Company: {ticker}
@@ -589,37 +608,67 @@ Validation Constraints:
 - Warning Range: {validation_rules.get('warning_min', 'N/A')} to {validation_rules.get('warning_max', 'N/A')}
 
 """
-        
-        if historical_trendline:
-            prompt += f"""Historical Context:
-- Average: {historical_trendline.average:.2%}
-- CAGR: {historical_trendline.cagr:.2%} if historical_trendline.cagr else 'N/A'
-- Trend: {historical_trendline.trend_direction}
-- Volatility: {historical_trendline.volatility}
 
-Historical Values:
+        if historical_trendline:
+            # Enhanced prompt with comprehensive statistics
+            prompt += f"""Historical Context ({historical_trendline.year_range or 'N/A'}):
 """
+            # Core metrics
+            prompt += f"- Latest Value: {historical_trendline.latest_value:.2%}\n" if historical_trendline.latest_value else ""
+            prompt += f"- Average: {historical_trendline.average:.2%}\n"
+            prompt += f"- Median: {historical_trendline.median:.2%}\n" if historical_trendline.median else ""
+            prompt += f"- CAGR: {historical_trendline.cagr:.2%}\n" if historical_trendline.cagr else "- CAGR: N/A\n"
+
+            # Range and volatility
+            if historical_trendline.min_value is not None and historical_trendline.max_value is not None:
+                prompt += f"- Range: {historical_trendline.min_value:.2%} to {historical_trendline.max_value:.2%}\n"
+            prompt += f"- Trend Direction: {historical_trendline.trend_direction}\n"
+            prompt += f"- Volatility (Std Dev): {historical_trendline.standard_deviation:.4f}" if historical_trendline.standard_deviation else "- Volatility: N/A"
+            if historical_trendline.volatility:
+                prompt += f" ({historical_trendline.volatility})\n"
+            else:
+                prompt += "\n"
+
+            # YoY growth analysis
+            if historical_trendline.average_yoy_growth is not None:
+                prompt += f"- Average YoY Growth: {historical_trendline.average_yoy_growth:.2%}\n"
+
+            # Detailed YoY breakdown if available
+            if historical_trendline.yoy_growth_details:
+                prompt += "\nYear-over-Year Growth Breakdown:\n"
+                for yoy in historical_trendline.yoy_growth_details[-5:]:
+                    prompt += f"  - {yoy['year']}: {yoy['growth_rate']:.2%} (from {yoy['previous_value']:.2%} to {yoy['current_value']:.2%})\n"
+
+            # Historical values timeline
+            prompt += "\nHistorical Values Timeline:\n"
             for point in historical_trendline.trend_points[-5:]:
                 prompt += f"  - {point.year}: {point.value:.2%}\n"
-        
+
         prompt += """
 Provide a reasoned suggestion for this forward-looking assumption considering:
-1. Historical trends and momentum
+1. Historical trends and momentum (CAGR, average, recent performance)
 2. Industry benchmarks and peer comparisons
 3. Current market conditions
 4. Company-specific factors
+5. Volatility and risk profile
 
 Return JSON with: value (decimal), reasoning (string), confidence (low/medium/high)"""
-        
+
         return prompt
-    
+
     def _build_historical_trendline_sync(
         self,
         metric: str,
         step6_data: Dict[str, Any],
         step7_data: Optional[Dict[str, Any]] = None
     ) -> Optional[HistoricalTrendline]:
-        """Synchronous version of _build_historical_trendline for prompt building"""
+        """Synchronous version of _build_historical_trendline for prompt building
+
+        Now uses statistical_utils to calculate comprehensive statistics including:
+        - CAGR, Average, Median, Min/Max
+        - Standard Deviation (Volatility)
+        - Year-over-Year Growth rates
+        """
         try:
             historical_data = step6_data.get("dcf_historical_metrics", {})
             metric_mapping = {
@@ -631,10 +680,36 @@ Return JSON with: value (decimal), reasoning (string), confidence (low/medium/hi
             }
             data_key = metric_mapping.get(metric, metric.lower().replace(" ", "_").replace("%", "").replace("/", "_"))
             values = historical_data.get(data_key, {})
-            
+
             if not values:
                 return None
-            
+
+            # Convert raw values to DataField format for statistical analysis
+            from app.schemas.unified_schema import DataField
+            data_fields = []
+            for year, value in sorted(values.items()):
+                if isinstance(year, str) and year.isdigit():
+                    year = int(year)
+                if isinstance(value, (int, float)) and value is not None:
+                    data_fields.append(DataField(
+                        label=f"{metric} - {year}",
+                        value=float(value),
+                        unit="%" if "%" in metric else "USD",
+                        year=int(year),
+                        source="Step 6 Historical",
+                        confidence=1.0
+                    ))
+
+            if not data_fields:
+                return None
+
+            # Use statistical utilities to generate comprehensive statistics
+            stats = generate_historical_statistics(data_fields, metric)
+
+            if stats.get("status") == "insufficient_data":
+                return None
+
+            # Build trend points from raw values
             trend_points = []
             numeric_values = []
             for year, value in sorted(values.items()):
@@ -643,48 +718,57 @@ Return JSON with: value (decimal), reasoning (string), confidence (low/medium/hi
                 if isinstance(value, (int, float)) and value is not None:
                     trend_points.append(HistoricalTrendPoint(year=int(year), value=float(value)))
                     numeric_values.append(float(value))
-            
+
             if not trend_points:
                 return None
-            
+
+            # Calculate basic metrics (already done in stats, but keeping for backward compatibility)
             average = sum(numeric_values) / len(numeric_values) if numeric_values else 0.0
-            cagr = None
-            if len(numeric_values) >= 2:
-                first_value = numeric_values[0]
-                last_value = numeric_values[-1]
-                n_years = len(numeric_values) - 1
-                if first_value > 0 and n_years > 0:
-                    cagr = ((last_value / first_value) ** (1 / n_years)) - 1
-            
+            cagr = stats.get("cagr")
+
+            # Determine trend direction
             trend_direction = "stable"
             if len(numeric_values) >= 2:
                 if numeric_values[-1] > numeric_values[0] * 1.1:
                     trend_direction = "increasing"
                 elif numeric_values[-1] < numeric_values[0] * 0.9:
                     trend_direction = "decreasing"
-            
+
+            # Map volatility from standard deviation
             volatility = "low"
-            if len(numeric_values) >= 2:
+            std_dev = stats.get("volatility")
+            if std_dev is not None:
                 avg_val = average
-                variance = sum((v - avg_val) ** 2 for v in numeric_values) / len(numeric_values)
-                std_dev = variance ** 0.5
                 cv = std_dev / abs(avg_val) if avg_val != 0 else 0
                 if cv > 0.3:
                     volatility = "high"
                 elif cv > 0.15:
                     volatility = "medium"
-            
+
+            # Return enhanced HistoricalTrendline with all statistical context
             return HistoricalTrendline(
                 metric=metric,
                 trend_points=trend_points,
                 average=average,
                 cagr=cagr,
                 trend_direction=trend_direction,
-                volatility=volatility
+                volatility=volatility,
+                # Enhanced statistics from statistical_utils
+                median=stats.get("median"),
+                min_value=stats.get("min"),
+                max_value=stats.get("max"),
+                standard_deviation=stats.get("volatility"),
+                average_yoy_growth=stats.get("average_yoy_growth"),
+                yoy_growth_details=stats.get("yoy_growth_details"),
+                year_range=stats.get("year_range"),
+                periods=stats.get("periods"),
+                latest_value=stats.get("latest_value"),
+                oldest_value=stats.get("oldest_value")
             )
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Error building historical trendline for {metric}: {e}")
             return None
-    
+
     def _generate_deterministic_dcf_fallback(
         self,
         metric: str,
@@ -695,7 +779,7 @@ Return JSON with: value (decimal), reasoning (string), confidence (low/medium/hi
         """Generate deterministic fallback value for DCF assumption"""
         try:
             historical_data = step6_data.get("dcf_historical_metrics", {})
-            
+
             # Metric-specific fallback logic
             if "Growth" in metric or "Increase" in metric:
                 # Use historical average growth
@@ -709,7 +793,7 @@ Return JSON with: value (decimal), reasoning (string), confidence (low/medium/hi
                         if growth_rates:
                             avg_growth = sum(growth_rates) / len(growth_rates)
                             return max(validation_rules.get("min", 0), min(validation_rules.get("max", 1), avg_growth))
-            
+
             elif "%" in metric or "Rate" in metric:
                 # Use historical average percentage
                 key = metric.lower().replace(" ", "_").replace("%", "").replace("/", "_")
@@ -718,18 +802,18 @@ Return JSON with: value (decimal), reasoning (string), confidence (low/medium/hi
                     if values:
                         avg = sum(v for v in values if isinstance(v, (int, float))) / len(values)
                         return max(validation_rules.get("min", 0), min(validation_rules.get("max", 1), avg))
-            
+
             # Default to middle of validation range
             min_val = validation_rules.get("min", 0.0)
             max_val = validation_rules.get("max", 1.0)
             return (min_val + max_val) / 2
-            
+
         except Exception:
             # Ultimate fallback: middle of range
             min_val = validation_rules.get("min", 0.0)
             max_val = validation_rules.get("max", 1.0)
             return (min_val + max_val) / 2
-    
+
     async def apply_user_override(
         self,
         category: AssumptionCategory,
@@ -745,18 +829,18 @@ Return JSON with: value (decimal), reasoning (string), confidence (low/medium/hi
                 if assumption_def["metric"] == metric:
                     validation_rules = assumption_def["validation"]
                     break
-        
+
         is_valid = True
         validation_message = None
         warning_message = None
-        
+
         if validation_rules:
             if user_value < validation_rules.get("min", float("-inf")) or user_value > validation_rules.get("max", float("inf")):
                 is_valid = False
                 validation_message = f"Value {user_value} is outside valid range [{validation_rules.get('min')}, {validation_rules.get('max')}]"
             elif user_value < validation_rules.get("warning_min", float("-inf")) or user_value > validation_rules.get("warning_max", float("inf")):
                 warning_message = f"Value {user_value} is outside recommended range [{validation_rules.get('warning_min')}, {validation_rules.get('warning_max')}]"
-        
+
         # Update assumption
         updated = AssumptionInput(
             metric=existing_assumption.metric,
@@ -774,9 +858,9 @@ Return JSON with: value (decimal), reasoning (string), confidence (low/medium/hi
             is_multi_year=existing_assumption.is_multi_year,
             year_values=existing_assumption.year_values
         )
-        
+
         return updated
-    
+
     async def validate_all_assumptions(
         self,
         categories: Dict[str, AssumptionCategoryResponse]
@@ -784,7 +868,7 @@ Return JSON with: value (decimal), reasoning (string), confidence (low/medium/hi
         """Validate all DCF assumptions"""
         all_valid = True
         errors = []
-        
+
         for category_response in categories.values():
             for assumption in category_response.assumptions:
                 if not assumption.is_valid:
@@ -794,9 +878,9 @@ Return JSON with: value (decimal), reasoning (string), confidence (low/medium/hi
                 elif assumption.final_value is None and assumption.ai_suggestion is None:
                     all_valid = False
                     errors.append(f"{assumption.metric}: No value provided")
-        
+
         return all_valid, errors
-    
+
     def _get_validation_rules(self, metric: str) -> Optional[Dict[str, float]]:
         """Get validation rules for a specific metric"""
         for config in self.DCF_CATEGORIES.values():
