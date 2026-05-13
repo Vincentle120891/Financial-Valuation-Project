@@ -4,8 +4,6 @@
 __pycache__/
 
 # Dependencies
-.venv/
-venv/
 node_modules/
 dist/
 build/
@@ -23,4 +21,36 @@ build/
 # Editors
 .vscode/
 .idea/
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+.venv/
+.env
+.env.local
+.env.*
+.env~*
+# Build artifacts
+dist/
+build/
+*.egg-info/
+.coverage
+htmlcov/
+.mypy_cache/
+.pytest_cache/
+.tox/
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+# Logs
+*.log
+# OS
+.DS_Store
+Thumbs.db
 ```
