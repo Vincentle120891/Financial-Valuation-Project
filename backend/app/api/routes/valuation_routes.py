@@ -50,7 +50,7 @@ from app.api.schemas.unified_step_schemas import (
 )
 from app.services.international.step8_manual_overrides import FullAssumptionsResponse
 from app.services.international.step5_required_inputs_processor import Step5RequiredInputsProcessor
-from app.services.international.step4_selected_models_processor import Step4SelectedModelsProcessor
+from app.services.international.step3_selected_models_processor import Step3SelectedModelsProcessor
 from app.services.international.step6_data_review import Step6DataReviewProcessor
 from app.services.international.step6_unified_transformer import Step6UnifiedTransformer
 from app.services.international.step7_historical_data_processor import Step7HistoricalDataProcessor
@@ -61,7 +61,7 @@ from app.services.international.step10_valuation_processor import Step10Valuatio
 from app.services.international.yfinance_service import YFinanceService
 from app.services.international.valuation_orchestrator import orchestrator
 from app.services.international.peer_discovery_service import PeerDiscoveryService, PeerDiscoveryRequest
-from app.services.international.step3_peer_management_service import Step3PeerManagementService
+from app.services.international.step4_peer_management_service import Step4PeerManagementService
 from app.services.international.step7_data_enrichment_service import Step7DataEnrichmentService
 
 logger = get_logger(__name__)
@@ -69,8 +69,8 @@ logger = get_logger(__name__)
 router = APIRouter(tags=["Valuation"])
 
 # Initialize processors and services
-step3_service = Step3PeerManagementService()
-step4_processor = Step4SelectedModelsProcessor(market="international")
+step3_processor = Step3SelectedModelsProcessor(market="international")
+step4_service = Step4PeerManagementService()
 step5_processor = Step5RequiredInputsProcessor()
 step6_processor = Step6DataReviewProcessor()
 step7_processor = Step7HistoricalDataProcessor()
@@ -96,15 +96,15 @@ class SavePeersResponse(BaseModel):
     peer_data: Optional[Dict[str, Any]] = None
 
 
-@router.post("/step-3-save-peers", response_model=SavePeersResponse)
+@router.post("/step-4-save-peers", response_model=SavePeersResponse)
 async def save_peers(request: SavePeersRequest):
     """
-    Step 3: Save selected peer companies to session.
-    Delegates to Step3PeerManagementService for all business logic.
+    Step 4: Save selected peer companies to session.
+    Delegates to Step4PeerManagementService for all business logic.
     """
     try:
         # Delegate to service layer
-        result = step3_service.save_peers_and_fetch_data(
+        result = step4_service.save_peers_and_fetch_data(
             session_id=request.session_id,
             peers=request.peers
         )
@@ -122,10 +122,10 @@ async def save_peers(request: SavePeersRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/step-3-discover-peers", response_model=Dict[str, Any])
+@router.post("/step-4-discover-peers", response_model=Dict[str, Any])
 async def discover_peers_endpoint(session_id: str, ticker: str, max_peers: int = 10, market: str = "international"):
     """
-    Step 3: Discover peer companies automatically.
+    Step 4: Discover peer companies automatically.
     Delegates to PeerDiscoveryService for peer discovery logic.
     """
     try:
@@ -170,11 +170,11 @@ async def discover_peers_endpoint(session_id: str, ticker: str, max_peers: int =
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/step-4-select-models", response_model=UnifiedStep4Response)
+@router.post("/step-3-select-models", response_model=UnifiedStep4Response)
 async def select_models(request: UnifiedStep4Request):
     """
-    Step 4: Select valuation model (DCF, DuPont, or Trading Comps).
-    Delegates to Step4SelectedModelsProcessor for model validation.
+    Step 3: Select valuation model (DCF, DuPont, or Trading Comps).
+    Delegates to Step3SelectedModelsProcessor for model validation.
     Uses SessionService for session management with unified schema support.
 
     MATRIX WORKFLOW:
@@ -209,9 +209,8 @@ async def select_models(request: UnifiedStep4Request):
         else:
             raise HTTPException(status_code=400, detail="Either custom_peers or suggested_peers must be provided")
 
-        # Delegate to Step4SelectedModelsProcessor for model validation
-        processor = Step4SelectedModelsProcessor(market=market)
-        model_result = processor.process_model_selection([method])
+        # Delegate to Step3SelectedModelsProcessor for model validation
+        model_result = step3_processor.process_model_selection([method])
         
         if not model_result['is_valid']:
             raise HTTPException(status_code=400, detail=f"Invalid model selected: {model_result['invalid_models']}")
@@ -402,7 +401,7 @@ async def fetch_api_data(request: FetchDataRequest):
 
         method = request.method.upper()
 
-        # Retrieve peer data and other assumptions from session (saved in Step 3)
+        # Retrieve peer data and other assumptions from session (saved in Step 4)
         retrieved_assumptions = session_service.get_session_value(
             request.session_id,
             "retrieved_assumptions",

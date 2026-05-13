@@ -1,13 +1,13 @@
 """
-Step 4: Selected Models Processor
+Step 3: Selected Models Processor
 Handles model selection (DCF, DuPont, Comps) for valuation workflow.
-This is the CORRECT Step 4 implementation.
+This is the CORRECT Step 3 implementation.
 """
 
 from typing import List, Dict, Any
 
 
-class Step4SelectedModelsProcessor:
+class Step3SelectedModelsProcessor:
     """Processes selected valuation models from user input."""
     
     def __init__(self, market: str):

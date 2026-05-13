@@ -30,7 +30,7 @@ export const searchCompanies = async (query, market = 'international') => {
 
 // Step 3: Suggest Peers
 export const suggestPeers = async (ticker, market = 'international', maxPeers = 10) => {
-  const response = await api.post('/step-3-suggest-peers', { ticker, market, max_peers: maxPeers });
+  const response = await api.post('/step-4-suggest-peers', { ticker, market, max_peers: maxPeers });
   return response.data;
 };
 
@@ -42,13 +42,13 @@ export const selectCompany = async (sessionId, ticker, market = 'international')
 
 // Step 3: Save Selected Peers
 export const savePeers = async (sessionId, peers) => {
-  const response = await api.post('/step-3-save-peers', { session_id: sessionId, peers });
+  const response = await api.post('/step-4-save-peers', { session_id: sessionId, peers });
   return response.data;
 };
 
-// Step 3: Validate Manual Peer Tickers
+// Step 5: Validate Manual Peer Tickers
 export const validateManualPeers = async (sessionId, tickers, market = 'international') => {
-  const response = await api.post('/validate-manual-peers', { 
+  const response = await api.post('/step-5-validate-manual-peers', { 
     session_id: sessionId, 
     tickers,
     market 
@@ -66,7 +66,7 @@ export const selectModels = async (sessionId, method, market = 'international', 
     ? customPeers.map(p => p.ticker || p.symbol) 
     : [];
   
-  const response = await api.post('/step-4-select-models', { 
+  const response = await api.post('/step-3-select-models', { 
     session_id: sessionId,
     method: method.toUpperCase(),
     market: market.toLowerCase(),
