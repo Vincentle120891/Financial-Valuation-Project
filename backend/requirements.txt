@@ -7,10 +7,10 @@
 # -----------------------------------------------------------------------------
 # WEB FRAMEWORK
 # -----------------------------------------------------------------------------
-fastapi>=0.116.0
-uvicorn[standard]>=0.35.0
-pydantic>=2.0.0
-pydantic-settings>=2.0.0
+fastapi>=0.136.1
+uvicorn[standard]>=0.46.0
+pydantic>=2.13.4
+pydantic-settings>=2.14.1
 
 # -----------------------------------------------------------------------------
 # HTTP CLIENTS (for Alpha Vantage API and external requests)
