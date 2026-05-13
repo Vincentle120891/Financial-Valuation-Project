@@ -805,7 +805,16 @@ const ValuationFlow = () => {
 
     } catch (err) {
       console.error('Retrieve data error:', err);
-      setError('Failed to retrieve data');
+      // Provide more specific error message based on the error type
+      const errorMessage = err.response?.data?.detail || err.message || 'Failed to retrieve data';
+      setError(errorMessage);
+      
+      // Log additional debug info
+      console.error('Error details:', {
+        message: err.message,
+        response: err.response?.data,
+        status: err.response?.status
+      });
     } finally {
       setLoading(false);
     }
