@@ -55,22 +55,23 @@ const useDebounce = (callback, delay) => {
 /**
  * ValuationFlow - Main Container Component
  *
- * Orchestrates the 11-step valuation workflow:
+ * Orchestrates the 10-step valuation workflow (ALIGNED WITH BACKEND):
  * 1. Search Company (Input ticker/name)
- * 2-3. Select Company (get session_id) - Merged
- * 4. Select Valuation Model (DCF/DuPont/Comps)
- * 5. Review Required Inputs (Show data requirements + Retrieve button)
- * 6. Review Retrieved Financial Data (Display all API-fetched inputs)
- * 7. Review AI-Generated Assumptions (AI suggestions with manual override)
- * 8. Modify Forecast Drivers (Fine-tune growth rates, margins, scenarios)
- * 9. Review & Confirm All Assumptions (Final confirmation before calculation)
- * 10. Run Valuation Calculation (Execute DCF/DuPont/Comps models)
- * 11. View Valuation Results & Analysis (Intrinsic value, sensitivity, charts)
+ * 2. Company Overview & Market Confirmation (get session_id)
+ * 3. Select Valuation Method (DCF/DuPont/Comps) - MOVED FROM STEP 4
+ * 4. Select Peer Companies (For Comps & WACC) - MOVED FROM STEP 3
+ * 5. Assumptions Preparation (Show data requirements + AI generation)
+ * 6. Fetch API Data (Retrieve all financial inputs)
+ * 7. Historical Data Processing (AI extraction & trendlines)
+ * 8. Manual Overrides (Forecast Drivers & DCF Inputs adjustment)
+ * 9. Confirm Assumptions (Final confirmation before calculation)
+ * 10. Execute Valuation & View Results (Run models + display results)
  *
  * Architecture:
  * - Container component managing state and business logic
  * - Delegated rendering to specialized step components
  * - Centralized API communication via services/valuationApi.js
+ * - Aligned with backend unified schemas (Steps 1-10)
  */
 const ValuationFlow = () => {
   // ==================== STATE MANAGEMENT ====================
@@ -296,8 +297,8 @@ const ValuationFlow = () => {
 
         console.log(`Auto-selected ${topPeers.length} peers with highest scores:`, topPeers.map(p => p.symbol));
 
-        // Move to Step 3: Peer Selection
-        setCurrentStep(3);
+        // Move to Step 4: Peer Selection (NEW STEP NUMBER AFTER SWAP)
+        setCurrentStep(4);
       } else {
         setError('No peers found for this company. Try a different company or manually add peers later.');
       }
@@ -309,7 +310,7 @@ const ValuationFlow = () => {
     }
   }, [market]);
 
-  // ==================== STEP 3: TOGGLE PEER SELECTION ====================
+  // ==================== STEP 4: TOGGLE PEER SELECTION ====================
   const handleTogglePeer = useCallback((peer) => {
     setSelectedPeers(prev => {
       // Use ticker or symbol as the unique identifier for consistency
@@ -323,7 +324,7 @@ const ValuationFlow = () => {
     });
   }, []);
 
-  // ==================== STEP 3: CONTINUE TO MODEL SELECTION ====================
+  // ==================== STEP 4: CONTINUE TO MODEL SELECTION ====================
   const handleContinueToModelSelection = useCallback(async () => {
     if (!sessionId || selectedPeers.length === 0) {
       setError('No session or peers selected');
@@ -344,7 +345,7 @@ const ValuationFlow = () => {
           setPeerData(saveResponse.peer_data);
         }
         
-        setCurrentStep(4);
+        setCurrentStep(5);  // Move to Step 5: Model Selection (NEW STEP NUMBER AFTER SWAP)
       } else {
         setError('Failed to save peers');
       }
@@ -356,7 +357,7 @@ const ValuationFlow = () => {
     }
   }, [sessionId, selectedPeers]);
 
-  // ==================== STEP 1: SELECT COMPANY ====================
+  // ==================== STEP 2: SELECT COMPANY ====================
   const handleSelectCompany = useCallback(async (company) => {
     setLoading(true);
 
@@ -431,14 +432,14 @@ const ValuationFlow = () => {
     }
   }, [market]);
 
-  // ==================== HANDLE MODEL SWITCH (Preserve all models' data) ====================
+  // ==================== STEP 3: SELECT MODEL ====================
   const handleSelectModel = useCallback(async (modelType) => {
     // GAP 2 & GAP 3 FIX: Update selected model first, then deep merge to preserve other models' data
     // Single selection (radio button behavior) - modelType is a string, not array
     
     // Client-side validation: Ensure peers are selected before model selection
     if (!selectedPeers || selectedPeers.length === 0) {
-      alert('⚠️ No peers selected! Please go back to Step 3 and select at least one peer company.');
+      alert('⚠️ No peers selected! Please go back to Step 4 and select at least one peer company.');
       return;
     }
     
