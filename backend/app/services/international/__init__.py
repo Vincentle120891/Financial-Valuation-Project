@@ -41,7 +41,7 @@ from app.services.international.shared_context_service import (
 from app.services.international.step1_ticker_processor import Step1TickerProcessor
 from app.services.international.step2_market_data_processor import Step2MarketDataProcessor
 from app.services.international.historical_data import HistoricalDataProcessor as Step3HistoricalProcessor
-from app.services.international.peer_selection import Step4ForecastProcessor
+from app.services.international.peer_selection import PeerSelectionProcessor
 from app.services.international.step5_required_inputs_processor import Step5RequiredInputsProcessor
 from app.services.international.step6_data_review import Step6DataReviewProcessor
 # Step 6 Specialized Processors - Individual Valuation Method Processors
@@ -90,7 +90,7 @@ __all__ = [
     "Step1TickerProcessor",
     "Step2MarketDataProcessor",
     "Step3HistoricalProcessor",
-    "Step4ForecastProcessor",
+    "PeerSelectionProcessor",
     "Step5RequiredInputsProcessor",
     "Step6DataReviewProcessor",
     "DCFDataReviewProcessor",  # Step 6 DCF-specific processor alias

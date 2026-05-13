@@ -1,4 +1,4 @@
-"""Step 4: Forecast Drivers Processor - Model Selection Point
+"""Step 4: Peer Selection Processor
 
 Refactored to use Unified Schemas with DataField wrappers for consistent API contracts.
 """
@@ -19,7 +19,7 @@ from app.api.schemas.unified_step_schemas import (
 logger = logging.getLogger(__name__)
 
 
-class Step4ForecastProcessor:
+class PeerSelectionProcessor:
     """
     Processor for Step 4: Peer Company Selection.
     
