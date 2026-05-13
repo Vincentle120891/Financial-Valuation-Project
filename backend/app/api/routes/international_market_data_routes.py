@@ -147,7 +147,7 @@ async def search_vietnamese_stocks_unified(request: UnifiedStep1Request):
     try:
         # Validate market is vietnamese/vietnam
         market_str = request.market.value if isinstance(request.market, MarketType) else request.market
-        if market_str.lower() not in ["vietnamese", "vietnam"]:
+        if market_str.lower() not in ["vietnam", "vietnam"]:
             return UnifiedStep1Response(
                 status="error",
                 query=request.query,
@@ -164,7 +164,7 @@ async def search_vietnamese_stocks_unified(request: UnifiedStep1Request):
             return UnifiedStep1Response(
                 status="no_results",
                 query=request.query,
-                market="vietnamese",
+                market="vietnam",
                 results=[],
                 total_results=0,
                 message="No tickers found. Try exact symbol or company name."
@@ -181,14 +181,14 @@ async def search_vietnamese_stocks_unified(request: UnifiedStep1Request):
                 industry=stock.get("industry"),
                 currency="VND",
                 country="Vietnam",
-                market="vietnamese"
+                market="vietnam"
             ))
         
         logger.info(f"Found {len(formatted_results)} Vietnamese ticker(s) for query='{request.query}'")
         return UnifiedStep1Response(
             status="success",
             query=request.query,
-            market="vietnamese",
+            market="vietnam",
             results=formatted_results,
             total_results=len(formatted_results),
             message=f"Found {len(formatted_results)} matching companies"
@@ -207,7 +207,7 @@ async def search_vietnamese_stocks_legacy(q: str = Query(..., description="Searc
     """
     import warnings
     warnings.warn(
-        "The GET /vietnam/search endpoint is deprecated. Use POST /step-1-search with market='vietnamese'.",
+        "The GET /vietnam/search endpoint is deprecated. Use POST /step-1-search with market='vietnam'.",
         DeprecationWarning,
         stacklevel=2
     )
@@ -224,13 +224,13 @@ async def search_vietnamese_stocks_legacy(q: str = Query(..., description="Searc
             "company_name": stock.get("name", stock.get("company_name", "")),
             "exchange": stock.get("market", "VN"),
             "sector": stock.get("sector"),
-            "market": "vietnamese"
+            "market": "vietnam"
         })
     
     return {
         "status": "success",
         "query": q,
-        "market": "vietnamese",
+        "market": "vietnam",
         "results": formatted_results,
         "total_results": len(formatted_results),
         "message": f"Found {len(formatted_results)} matching companies"

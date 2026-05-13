@@ -322,7 +322,7 @@ const HistoricalDataExtractionStep = ({
 
   // Determine rendering based on model type and market
   // ALL models use this step for historical gap filling
-  const isVietnamMarket = market === 'vietnamese' || market === 'Vietnam';
+  const isVietnamMarket = market === 'vietnam' || market === 'Vietnam';
 
   return (
     <div className="step-container">

@@ -155,7 +155,7 @@ class Step2MarketDataProcessor:
         
         # Get currency from ticker info
         currency = ticker_info.get('currency', 'USD')
-        if market == "vietnamese" or market == "vietnam":
+        if market == "vietnam" or market == "vietnam":
             currency = 'VND'
         
         # Current Price
@@ -346,19 +346,19 @@ class Step2MarketDataProcessor:
     
     def _get_risk_free_rate(self, market: str) -> float:
         """Get risk-free rate based on market."""
-        if market == "vietnamese":
+        if market == "vietnam":
             return 6.8  # Vietnam 10-year government bond
         return self.DEFAULT_RISK_FREE_RATE
     
     def _get_market_premium(self, market: str) -> float:
         """Get market risk premium based on market."""
-        if market == "vietnamese":
+        if market == "vietnam":
             return 7.5  # Higher premium for emerging market
         return self.DEFAULT_MARKET_PREMIUM
     
     def _get_country_risk_premium(self, market: str) -> Optional[float]:
         """Get country risk premium."""
-        if market == "vietnamese":
+        if market == "vietnam":
             return 2.5  # Additional CRP for Vietnam
         return None
     

@@ -330,17 +330,17 @@ async def list_sources():
         "report_types": [
             {
                 "type": "annual_report",
-                "vietnamese": "Báo cáo thường niên",
+                "vietnam": "Báo cáo thường niên",
                 "description": "Annual report with comprehensive financial data"
             },
             {
                 "type": "financial_statement",
-                "vietnamese": "Báo cáo tài chính",
+                "vietnam": "Báo cáo tài chính",
                 "description": "Quarterly or annual financial statements"
             },
             {
                 "type": "prospectus",
-                "vietnamese": "Bản cáo bạch",
+                "vietnam": "Bản cáo bạch",
                 "description": "IPO prospectus with detailed company information"
             }
         ],

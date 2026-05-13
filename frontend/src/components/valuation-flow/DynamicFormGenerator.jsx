@@ -24,7 +24,7 @@ const DynamicFormGenerator = ({
     return null;
   }
 
-  const currency = market === 'vietnamese' ? 'VND' : 'USD';
+  const currency = market === 'vietnam' ? 'VND' : 'USD';
 
   // Render individual field based on type
   const renderField = (fieldConfig) => {

@@ -456,7 +456,7 @@ def build_dcf_inputs_from_confirmed_assumptions(
     
     dcf_inputs = DCFInputs(
         valuation_date=date.today().isoformat(),
-        currency="VND" if market == "vietnamese" else profile.get('currency', 'USD'),
+        currency="VND" if market == "vietnam" else profile.get('currency', 'USD'),
         historical_fy_minus_1=hist_fy_minus_1,
         historical_fy_minus_2=hist_fy_minus_2,
         historical_fy_minus_3=hist_fy_minus_3,

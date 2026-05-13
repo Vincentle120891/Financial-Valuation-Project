@@ -41,7 +41,7 @@ const CompanySelectionStep = ({
 
       setChartLoading(true);
       try {
-        const marketCode = market === 'vietnamese' ? 'VN' : 'US';
+        const marketCode = market === 'vietnam' ? 'VN' : 'US';
         const response = await fetch(`/api/market-data/${ticker}/price-history?market_code=${marketCode}`);
         if (response.ok) {
           const data = await response.json();
@@ -173,7 +173,7 @@ const CompanySelectionStep = ({
         {/* Market-Specific Data Display */}
         {marketData && (
           <div className="mt-6">
-            {market === 'vietnamese' ? (
+            {market === 'vietnam' ? (
               <VietnameseMarketData vietnamData={marketData} />
             ) : (
               <InternationalMarketData internationalData={marketData} />

@@ -430,7 +430,7 @@ class VietnamDataAggregator:
         
         # Add currency and market info
         merged['currency'] = 'VND'
-        merged['market'] = result.get('market', 'vietnamese')
+        merged['market'] = result.get('market', 'vietnam')
         
         return merged
     

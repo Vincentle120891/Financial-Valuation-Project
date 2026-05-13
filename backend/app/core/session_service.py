@@ -105,7 +105,7 @@ class SessionService:
         
         Args:
             ticker: Stock ticker symbol
-            market: Market identifier (e.g., 'international', 'vietnamese', 'vietnam')
+            market: Market identifier (e.g., 'international', 'vietnam', 'vietnam')
             
         Returns:
             Session ID string
