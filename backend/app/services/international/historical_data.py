@@ -1,6 +1,6 @@
 """
-Step 3: Historical Financial Data Processor - Refactored to Use Unified Schema
-Handles historical financials retrieval, currency conversion, and gap filling.
+Historical Data Processor - Handles historical financials retrieval, currency conversion, and gap filling.
+Previously named: mismatch_historical_processor.py
 """
 
 import logging
@@ -61,9 +61,9 @@ class Step3Response(BaseModel):
     data_quality_score: float = 0.0
 
 
-class Step3HistoricalProcessor:
+class HistoricalDataProcessor:
     """
-    Processor for Step 3: Historical Financial Data.
+    Processor for Historical Financial Data.
 
     Responsibilities:
     - Fetch historical financials (3-5 years)
