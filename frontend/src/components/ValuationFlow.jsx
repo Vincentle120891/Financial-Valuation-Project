@@ -788,8 +788,37 @@ const ValuationFlow = () => {
           };
         }
       } else {
-        // International format - use data field directly
-        financialData = fetchDataResponse.data;
+        // International format - UnifiedStep6Response returns fields at root level
+        // Structure: { status, session_id, ticker, market, method, historical_financials, forecast_drivers, market_data, ... }
+        financialData = {
+          historical_financials: fetchDataResponse.historical_financials,
+          forecast_drivers: fetchDataResponse.forecast_drivers,
+          market_data: fetchDataResponse.market_data,
+          dupont_metrics: fetchDataResponse.dupont_metrics,
+          comps_multiples: fetchDataResponse.comps_multiples,
+          peer_comparables: fetchDataResponse.peer_comparables,
+          dcf_inputs: fetchDataResponse.dcf_inputs,
+          dupont_ratios: fetchDataResponse.dupont_ratios,
+          comps_results: fetchDataResponse.comps_results,
+          calculated_metrics: {
+            dataRetrieved: true,
+            source: fetchDataResponse.data_source,
+            periodsCovered: fetchDataResponse.periods_covered,
+            cache_used: fetchDataResponse.cache_used,
+            missing_data_summary: fetchDataResponse.missing_data_summary
+          },
+          metadata: {
+            ticker: fetchDataResponse.ticker,
+            market: fetchDataResponse.market,
+            method: fetchDataResponse.method,
+            data_source: fetchDataResponse.data_source,
+            fetch_timestamp: fetchDataResponse.fetch_timestamp,
+            status: fetchDataResponse.status,
+            message: fetchDataResponse.message,
+            warnings: fetchDataResponse.warnings,
+            data_quality_flags: fetchDataResponse.data_quality_flags
+          }
+        };
       }
 
       // Set financial data first - handle both old and new backend formats
@@ -1155,7 +1184,7 @@ const ValuationFlow = () => {
         const valuationData = getValuationData(selectedModels);
         return (
           <ApiDataStep
-            historicalData={valuationData?.historical_financials}
+            historicalData={valuationData}
             forecastDrivers={valuationData?.forecast_drivers}
             peerData={peerData}
             dcfInputs={getDcfInputs(selectedModels)}

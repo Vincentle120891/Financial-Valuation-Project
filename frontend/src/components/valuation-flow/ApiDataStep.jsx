@@ -1,4 +1,5 @@
 import React from 'react';
+import DataFieldDisplay, { DataFieldGrid } from './DataFieldDisplay';
 
 /**
  * ApiDataStep Component
@@ -26,7 +27,8 @@ const ApiDataStep = ({
   loading
 }) => {
   // Check if data has been retrieved - improved check to include peerData with companies
-  const hasRetrievedData = historicalData ||
+  // FIXED: Check for historical_financials object directly, not nested inside historicalData
+  const hasRetrievedData = (historicalData && historicalData.historical_financials) ||
                            (peerData && peerData.companies && peerData.companies.length > 0) ||
                            dcfInputs ||
                            dupontResults ||
@@ -181,7 +183,8 @@ const ApiDataStep = ({
               <div style={{ display: 'grid', gap: '12px' }}>
                 {categoryInputs.map(input => {
                   // Get full field object from unified schema: historical_financials.{field}
-                  const fieldData = historicalData.historical_financials?.[input.key];
+                  // FIXED: Access historicalData.historical_financials correctly
+                  const fieldData = historicalData?.historical_financials?.[input.key];
 
                   const hasData = fieldData && (
                     (Array.isArray(fieldData.value) && fieldData.value.some(pv => pv.value !== null && pv.value !== undefined)) ||
