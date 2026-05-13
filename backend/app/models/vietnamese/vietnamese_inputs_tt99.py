@@ -1,7 +1,7 @@
 """
 Vietnamese Financial Report Inputs Model
 Thông Tư 99/2025/TT-BTC (TT99) Standard Format
-Used when market selection is 'vietnamese'
+Used when market selection is 'vietnam'
 Currency: VND (in billions - tỷ đồng)
 """
 

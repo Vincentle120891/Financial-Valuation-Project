@@ -263,7 +263,7 @@ class vn_Step1TickerProcessor:
                 'sector': result.get('sector'),
                 'industry': result.get('industry'),
                 'market_cap': result.get('marketCap'),
-                'market': 'vietnamese',
+                'market': 'vietnam',
                 'market_code': market_code
             })
 
@@ -329,7 +329,7 @@ class vn_Step1TickerProcessor:
         results = []
         for ticker in sector_tickers:
             try:
-                info = self._validate_and_fetch_ticker(ticker, 'vietnamese')
+                info = self._validate_and_fetch_ticker(ticker, 'vietnam')
                 if info.is_valid:
                     results.append(info)
             except Exception as e:

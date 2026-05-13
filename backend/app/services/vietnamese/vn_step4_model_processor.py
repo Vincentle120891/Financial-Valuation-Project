@@ -66,7 +66,7 @@ class vn_ModelSelectionOutput(BaseModel):
                     "comps": {
                         "currency": "VND",
                         "default_peer_count": 5,
-                        "market": "vietnamese"
+                        "market": "vietnam"
                     }
                 },
                 "available_models": ["dcf", "dupont", "comps"],
@@ -112,7 +112,7 @@ class vn_Step4ModelProcessor:
             "currency": "VND",
             "currency_symbol": "₫",
             "default_peer_count": 5,
-            "market": "vietnamese",
+            "market": "vietnam",
             "exchange_filters": ["HOSE", "HNX", "UPCOM"],
             "multiples": ["P/E", "P/B", "EV/EBITDA", "P/S", "PEG"],
             "liquidity_filter_days": 60,  # 60-day average volume for VN market
@@ -234,7 +234,7 @@ class vn_Step4ModelProcessor:
             await self.session_service.update_session(session_id, {
                 "selected_models": models,
                 "model_configurations": configs,
-                "market": "vietnamese",
+                "market": "vietnam",
                 "current_step": 4,
                 "step_4_completed": True
             })

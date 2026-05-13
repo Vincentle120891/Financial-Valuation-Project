@@ -80,7 +80,7 @@ class AlphaVantageService:
             logger.info(f"Fetching AlphaVantage data for ticker='{ticker_symbol}', market='{market}'")
             
             # For Vietnamese market, AlphaVantage may not have coverage
-            if market == "vietnamese":
+            if market == "vietnam":
                 logger.info(f"AlphaVantage does not support Vietnamese market, skipping")
                 return {}
             

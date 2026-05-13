@@ -196,12 +196,12 @@ async def get_report_types():
     return {
         "types": {
             "annual": {
-                "vietnamese": "Báo cáo thường niên",
+                "vietnam": "Báo cáo thường niên",
                 "description": "Annual report with full financial statements",
                 "includes": ["B01 (Balance Sheet)", "B02 (Income Statement)", "B03 (Cash Flow)"]
             },
             "quarterly": {
-                "vietnamese": "Báo cáo tài chính quý",
+                "vietnam": "Báo cáo tài chính quý",
                 "description": "Quarterly financial statements",
                 "includes": ["B01", "B02", "B03 (optional)"]
             }

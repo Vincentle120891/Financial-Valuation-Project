@@ -115,7 +115,7 @@ class Step1TickerProcessor:
             TickerInfo with validation results
         """
         # Format ticker for Vietnamese market
-        if market == "vietnamese":
+        if market == "vietnam":
             if not ticker.endswith(".VN"):
                 ticker = f"{ticker}.VN"
         

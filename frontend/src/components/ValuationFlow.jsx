@@ -225,10 +225,10 @@ const ValuationFlow = () => {
     if (!searchQuery.trim()) return;
 
     // Validate market selection before search
-    if (!['international', 'vietnamese'].includes(market)) {
+    if (!['international', 'vietnam'].includes(market)) {
       setMarketValidation({
         isValid: false,
-        message: 'Invalid market selection. Please select either International or Vietnamese market.',
+        message: 'Invalid market selection. Please select either International or Vietnam market.',
         selectedMarket: market
       });
       setError('Invalid market selection');
@@ -271,10 +271,10 @@ const ValuationFlow = () => {
     setError(null);
 
     // Validate market selection before finding peers
-    if (!['international', 'vietnamese'].includes(market)) {
+    if (!['international', 'vietnam'].includes(market)) {
       setMarketValidation({
         isValid: false,
-        message: 'Invalid market selection. Please select either International or Vietnamese market.',
+        message: 'Invalid market selection. Please select either International or Vietnam market.',
         selectedMarket: market
       });
       setError('Invalid market selection');
@@ -361,10 +361,10 @@ const ValuationFlow = () => {
     setLoading(true);
 
     // Validate market selection before selecting company
-    if (!['international', 'vietnamese'].includes(market)) {
+    if (!['international', 'vietnam'].includes(market)) {
       setMarketValidation({
         isValid: false,
-        message: 'Invalid market selection. Please select either International or Vietnamese market.',
+        message: 'Invalid market selection. Please select either International or Vietnam market.',
         selectedMarket: market
       });
       setError('Invalid market selection');
@@ -757,7 +757,7 @@ const ValuationFlow = () => {
 
       let financialData = null;
 
-      if (market && (market.toLowerCase() === 'vietnamese' || market.toLowerCase() === 'vietnam')) {
+      if (market && (market.toLowerCase() === 'vietnam')) {
         // Vietnamese response format - wrap raw data in expected structure
         if (fetchDataResponse.success) {
           // Vietnamese returns flat structure with periods_fetched, source_provider, etc.
