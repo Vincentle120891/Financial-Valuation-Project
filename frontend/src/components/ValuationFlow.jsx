@@ -63,7 +63,7 @@ const useDebounce = (callback, delay) => {
  * 5. Assumptions Preparation (Show data requirements + AI generation)
  * 6. Fetch API Data (Retrieve all financial inputs)
  * 7. Historical Data Processing (AI extraction & trendlines)
- * 8. Manual Overrides (Forecast Drivers & DCF Inputs adjustment)
+ * 8. Manual Overrides (Assumption & AI Suggestion adjustment)
  * 9. Confirm Assumptions (Final confirmation before calculation)
  * 10. Execute Valuation & View Results (Run models + display results)
  *
@@ -132,7 +132,7 @@ const ValuationFlow = () => {
   const [selectedScenario, setSelectedScenario] = useState('base_case');
   const [validationErrors, setValidationErrors] = useState([]);
 
-  // Step 8-9: Forecast Drivers & DCF Inputs - Matrix structure: forecastDriversData[market][method]
+  // Step 8-9: Assumption & AI Suggestion - Matrix structure: forecastDriversData[market][method]
   // This enables "3 Valuation Methods × 2 Market Versions" architecture
   const [forecastDriversData, setForecastDriversData] = useState({
     international: {
@@ -1276,7 +1276,7 @@ const ValuationFlow = () => {
              currentStep === 5 ? 'Review Requirements' :
              currentStep === 6 ? 'View Retrieved Inputs' :
              currentStep === 7 ? 'Historical Data Extraction' :
-             currentStep === 8 ? 'Forecast Drivers & DCF Inputs' :
+             currentStep === 8 ? 'Assumption & AI Suggestion' :
              currentStep === 9 ? 'Confirm Assumptions' :
              currentStep === 10 ? 'Run Valuation' :
              currentStep === 11 ? 'Results & Export' : 'In Progress'}
