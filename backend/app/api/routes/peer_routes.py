@@ -1,0 +1,112 @@
+"""
+Peer Routes - Step 3 and Step 4
+
+Handles peer suggestion and validation functionality using Step2 processor with PeerDiscoveryService.
+Uses unified schemas for consistent API contracts.
+
+Single Responsibility: 
+- Step 3: Suggest peers for a given ticker
+- Step 4: Validate manually selected peers
+"""
+
+import logging
+from fastapi import APIRouter, HTTPException
+
+from app.core.logging_config import get_logger
+from app.services.international.step2_market_data_processor import Step2MarketDataProcessor
+
+logger = get_logger(__name__)
+
+router = APIRouter(tags=["Step 3-4 - Peer Selection"])
+
+# Initialize processor
+step2_processor = Step2MarketDataProcessor()
+
+
+@router.post("/step-3-suggest-peers")
+async def suggest_peers_endpoint(request: dict):
+    """
+    Step 3: Suggest peer companies for a given ticker.
+    Uses Step2MarketDataProcessor with PeerDiscoveryService.
+    
+    Args:
+        ticker: Target ticker symbol (required)
+        max_peers: Maximum number of peers to suggest (default: 10)
+        market: Market type (default: international)
+        session_id: Optional session ID for session tracking
+    
+    Returns:
+        List of peer candidates with similarity scores
+    """
+    ticker = request.get("ticker")
+    max_peers = request.get("max_peers", 10)
+    market = request.get("market", "international")
+    session_id = request.get("session_id")
+    
+    # Validate required parameters
+    if not ticker:
+        raise HTTPException(status_code=400, detail="Missing required parameter: ticker")
+    
+    # Log session info if provided
+    if session_id:
+        logger.info(f"Suggesting peers for ticker='{ticker}', session_id='{session_id}', market={market}")
+    else:
+        logger.warning(f"Suggesting peers for ticker='{ticker}' without session_id. Consider adding session tracking.")
+    
+    try:
+        result = await step2_processor.suggest_peers(
+            ticker=ticker,
+            max_peers=max_peers,
+            market=market
+        )
+        
+        # Add session validation warning if no session_id provided
+        if not session_id and result.get("status") == "success":
+            result["warnings"] = result.get("warnings", [])
+            result["warnings"].append("No session_id provided. For better tracking, include session_id in requests.")
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Failed to suggest peers: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Peer suggestion failed: {str(e)}")
+
+
+@router.post("/step-4-validate-manual-peers")
+async def validate_manual_peers(request: dict):
+    """
+    Step 4: Validate manually entered peer tickers.
+    
+    Args:
+        session_id: Session identifier (required)
+        tickers: List of ticker symbols to validate (required)
+        market: Market type (default: international)
+    
+    Returns:
+        Dictionary with validated peers and any errors
+    """
+    from app.api.schemas import ManualPeerRequest
+    
+    session_id = request.get("session_id")
+    tickers = request.get("tickers", [])
+    market = request.get("market", "international")
+    
+    # Validate required parameters
+    if not session_id:
+        raise HTTPException(status_code=400, detail="Missing required parameter: session_id")
+    if not tickers:
+        raise HTTPException(status_code=400, detail="Missing required parameter: tickers")
+    
+    logger.info(f"Validating {len(tickers)} manual peers for session='{session_id}', market={market}")
+    
+    try:
+        result = await step2_processor.validate_manual_peers(
+            tickers=tickers,
+            market=market
+        )
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Failed to validate manual peers: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Manual peer validation failed: {str(e)}")
