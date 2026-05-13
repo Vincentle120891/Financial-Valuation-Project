@@ -1,12 +1,12 @@
 """
-Peer Routes - Step 3 and Step 4
+Peer Routes - Step 4 and Step 5
 
 Handles peer suggestion and validation functionality using Step2 processor with PeerDiscoveryService.
 Uses unified schemas for consistent API contracts.
 
 Single Responsibility: 
-- Step 3: Suggest peers for a given ticker
-- Step 4: Validate manually selected peers
+- Step 4: Suggest peers for a given ticker
+- Step 5: Validate manually selected peers
 """
 
 import logging
@@ -17,16 +17,16 @@ from app.services.international.step2_market_data_processor import Step2MarketDa
 
 logger = get_logger(__name__)
 
-router = APIRouter(tags=["Step 3-4 - Peer Selection"])
+router = APIRouter(tags=["Step 4-5 - Peer Selection"])
 
 # Initialize processor
 step2_processor = Step2MarketDataProcessor()
 
 
-@router.post("/step-3-suggest-peers")
+@router.post("/step-4-suggest-peers")
 async def suggest_peers_endpoint(request: dict):
     """
-    Step 3: Suggest peer companies for a given ticker.
+    Step 4: Suggest peer companies for a given ticker.
     Uses Step2MarketDataProcessor with PeerDiscoveryService.
     
     Args:
@@ -72,10 +72,10 @@ async def suggest_peers_endpoint(request: dict):
         raise HTTPException(status_code=500, detail=f"Peer suggestion failed: {str(e)}")
 
 
-@router.post("/step-4-validate-manual-peers")
+@router.post("/step-5-validate-manual-peers")
 async def validate_manual_peers(request: dict):
     """
-    Step 4: Validate manually entered peer tickers.
+    Step 5: Validate manually entered peer tickers.
     
     Args:
         session_id: Session identifier (required)

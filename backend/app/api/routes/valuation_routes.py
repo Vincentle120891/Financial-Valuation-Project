@@ -96,10 +96,10 @@ class SavePeersResponse(BaseModel):
     peer_data: Optional[Dict[str, Any]] = None
 
 
-@router.post("/step-3-save-peers", response_model=SavePeersResponse)
+@router.post("/step-4-save-peers", response_model=SavePeersResponse)
 async def save_peers(request: SavePeersRequest):
     """
-    Step 3: Save selected peer companies to session.
+    Step 4: Save selected peer companies to session.
     Delegates to Step3PeerManagementService for all business logic.
     """
     try:
@@ -122,10 +122,10 @@ async def save_peers(request: SavePeersRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/step-3-discover-peers", response_model=Dict[str, Any])
+@router.post("/step-4-discover-peers", response_model=Dict[str, Any])
 async def discover_peers_endpoint(session_id: str, ticker: str, max_peers: int = 10, market: str = "international"):
     """
-    Step 3: Discover peer companies automatically.
+    Step 4: Discover peer companies automatically.
     Delegates to PeerDiscoveryService for peer discovery logic.
     """
     try:
@@ -170,10 +170,10 @@ async def discover_peers_endpoint(session_id: str, ticker: str, max_peers: int =
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/step-4-select-models", response_model=UnifiedStep4Response)
+@router.post("/step-3-select-models", response_model=UnifiedStep4Response)
 async def select_models(request: UnifiedStep4Request):
     """
-    Step 4: Select valuation model (DCF, DuPont, or Trading Comps).
+    Step 3: Select valuation model (DCF, DuPont, or Trading Comps).
     Delegates to Step4SelectedModelsProcessor for model validation.
     Uses SessionService for session management with unified schema support.
 
@@ -402,7 +402,7 @@ async def fetch_api_data(request: FetchDataRequest):
 
         method = request.method.upper()
 
-        # Retrieve peer data and other assumptions from session (saved in Step 3)
+        # Retrieve peer data and other assumptions from session (saved in Step 4)
         retrieved_assumptions = session_service.get_session_value(
             request.session_id,
             "retrieved_assumptions",
