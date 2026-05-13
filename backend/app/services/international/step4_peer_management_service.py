@@ -1,5 +1,5 @@
 """
-Step 3 Peer Management Service
+Step 4 Peer Management Service
 
 Handles peer company selection, validation, and market data fetching.
 Keeps routes thin by encapsulating all business logic here.
@@ -24,9 +24,9 @@ class PeerDataResult:
         self.error = error
 
 
-class Step3PeerManagementService:
+class Step4PeerManagementService:
     """
-    Service for managing peer companies in Step 3.
+    Service for managing peer companies in Step 4.
     
     Responsibilities:
     - Save selected peers to session

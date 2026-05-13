@@ -40,8 +40,8 @@ from app.services.international.shared_context_service import (
 # Step Processors - Complete 10-Step Workflow
 from app.services.international.step1_ticker_processor import Step1TickerProcessor
 from app.services.international.step2_market_data_processor import Step2MarketDataProcessor
-from app.services.international.step3_peer_management_service import Step3PeerManagementService
-from app.services.international.step4_selected_models_processor import Step4SelectedModelsProcessor
+from app.services.international.step3_selected_models_processor import Step3SelectedModelsProcessor
+from app.services.international.step4_peer_management_service import Step4PeerManagementService
 from app.services.international.step5_required_inputs_processor import Step5RequiredInputsProcessor
 from app.services.international.step6_data_review import Step6DataReviewProcessor
 # Step 6 Specialized Processors - Individual Valuation Method Processors
@@ -89,8 +89,8 @@ __all__ = [
     # Step Processors - Complete 10-Step Workflow
     "Step1TickerProcessor",
     "Step2MarketDataProcessor",
-    "Step3PeerManagementService",
-    "Step4SelectedModelsProcessor",
+    "Step3SelectedModelsProcessor",
+    "Step4PeerManagementService",
     "Step5RequiredInputsProcessor",
     "Step6DataReviewProcessor",
     "DCFDataReviewProcessor",  # Step 6 DCF-specific processor alias
