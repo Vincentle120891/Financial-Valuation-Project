@@ -7,7 +7,7 @@ import re
 from typing import Dict, Any, Optional, List
 from app.services.international.ai_engine import AIFallbackEngine
 from app.core.logging_config import get_logger
-from backend.services.step7 import analyze_web_search_results, validate_and_clean_financial_data
+from app.services.step7 import analyze_web_search_results, validate_and_clean_financial_data
 
 logger = get_logger(__name__)
 

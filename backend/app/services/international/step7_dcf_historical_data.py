@@ -23,7 +23,7 @@ from app.services.pdf_extraction_service import (
     ExtractedFinancialData
 )
 from app.services.international.ai_engine import AIFallbackEngine
-from backend.services.step7 import extract_financial_metric_from_text, analyze_web_search_results, validate_and_clean_financial_data
+from app.services.step7 import extract_financial_metric_from_text, analyze_web_search_results, validate_and_clean_financial_data
 
 logger = logging.getLogger(__name__)
 
