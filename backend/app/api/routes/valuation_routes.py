@@ -53,6 +53,7 @@ from app.services.international.step5_required_inputs_processor import Step5Requ
 from app.services.international.step3_selected_models_processor import Step3SelectedModelsProcessor
 from app.services.international.step6_data_review import Step6DataReviewProcessor
 from app.services.international.step6_unified_transformer import Step6UnifiedTransformer
+from app.services.international.step6_view_model_transformer import Step6ViewModelTransformer
 from app.services.international.step7_historical_data_processor import Step7HistoricalDataProcessor
 from app.services.international.step7_unified_transformer import Step7UnifiedTransformer
 from app.services.international.step8_manual_overrides import Step8ManualOverridesProcessor
@@ -425,7 +426,11 @@ async def fetch_api_data(request: FetchDataRequest):
             response=legacy_result,
             valuation_model=method
         )
-
+        
+        # OPTION 3: Create flattened ViewModel for frontend consumption
+        # This decouples the internal unified schema from UI presentation
+        view_model_dict = Step6ViewModelTransformer.transform_to_dict(unified_response)
+        
         # Store results in session using SessionService (with JSON serialization)
         # Store in the specific valuation track
         result_dict = unified_response.model_dump(mode='json') if hasattr(unified_response, 'model_dump') else unified_response
@@ -433,6 +438,15 @@ async def fetch_api_data(request: FetchDataRequest):
             request.session_id,
             "financial_data",
             result_dict,
+            market=market,
+            method=method.lower()
+        )
+        
+        # ALSO store the flattened ViewModel for easy frontend access
+        session_service.update_session_data(
+            request.session_id,
+            "step6_view_model",
+            view_model_dict,
             market=market,
             method=method.lower()
         )
@@ -444,7 +458,12 @@ async def fetch_api_data(request: FetchDataRequest):
             method=method.lower()
         )
 
-        return unified_response
+        # Return BOTH unified response AND flattened view model
+        # Frontend can use view_model field for direct binding
+        response_with_viewmodel = unified_response.model_dump(mode='json') if hasattr(unified_response, 'model_dump') else {}
+        response_with_viewmodel['view_model'] = view_model_dict
+        
+        return response_with_viewmodel
 
     except Exception as e:
         logger.error(f"Fetch API data error: {e}")
