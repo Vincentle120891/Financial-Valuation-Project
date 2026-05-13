@@ -53,17 +53,22 @@
 
 ## Overview
 
+**⚠️ CURRENT STATUS: INTERNATIONAL MARKET ONLY**  
+Vietnamese market support is planned for **Version 2** (future release). All active development focuses on International markets.
+
 This backend provides dual-market stock valuation capabilities with **strict separation** between:
-- **International Markets** (IFRS/US GAAP) - US, EU, Asia ex-Vietnam
-- **Vietnamese Market** (TT99 accounting standards) - HOSE, HNX, UPCOM exchanges
+- ✅ **International Markets** (IFRS/US GAAP) - US, EU, Asia ex-Vietnam - **CURRENTLY ACTIVE**
+- ⏳ **Vietnamese Market** (TT99 accounting standards) - HOSE, HNX, UPCOM exchanges - **Version 2 (Future)**
 
-## 3×2 Workflow Matrix
+## 3×2 Workflow Matrix (Target Architecture)
 
-| | **International** | **Vietnam** |
+**Current Focus**: International market implementation complete. Vietnamese market in development for Version 2.
+
+| | **International (Current)** | **Vietnam (Version 2 - Future)** |
 |---|---|---|
-| **DCF** | `services/international/dcf_engine.py` + 10 step processors | `services/vietnamese/vietnamese_dcf_engine.py` + 10 step processors |
-| **DuPont** | `services/international/dupont_engine.py` + 10 step processors | `services/vietnamese/vietnamese_dupont_engine.py` + 10 step processors |
-| **Comps** | `services/international/comps_engine.py` + 10 step processors | `services/vietnamese/vietnamese_comps_engine.py` (sector_valuation_models.py) |
+| **DCF** | ✅ `services/international/dcf_engine.py` + 10 step processors | ⏳ `services/vietnamese/vietnamese_dcf_engine.py` + 10 step processors |
+| **DuPont** | ✅ `services/international/dupont_engine.py` + 10 step processors | ⏳ `services/vietnamese/vietnamese_dupont_engine.py` + 10 step processors |
+| **Comps** | ✅ `services/international/comps_engine.py` + 10 step processors | ⏳ `services/vietnamese/vietnamese_comps_engine.py` (sector_valuation_models.py) |
 
 ### Critical Workflow Principles
 

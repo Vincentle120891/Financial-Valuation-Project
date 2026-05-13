@@ -188,13 +188,16 @@ function ValuationFlow() {
 
 ## 6. 3×2 Matrix Architecture
 
-### System Supports: 3 Valuation Methods × 2 Markets
+### Target Architecture: 3 Valuation Methods × 2 Markets
+**⚠️ CURRENT STATUS: INTERNATIONAL MARKET ONLY** - Vietnam is Version 2 (future release)
 
-| | **International** | **Vietnam** |
+| | **International (Current)** | **Vietnam (Version 2 - Future)** |
 |---|---|---|
-| **DCF** | `services/international/dcf_engine.py` | `services/vietnamese/vietnamese_dcf_engine.py` |
-| **DuPont** | `services/international/dupont_engine.py` | `services/vietnamese/vietnamese_dupont_engine.py` |
-| **Comps** | `services/international/comps_engine.py` | `services/vietnamese/vietnamese_comps_engine.py` |
+| **DCF** | ✅ `services/international/dcf_engine.py` | ⏳ `services/vietnamese/vietnamese_dcf_engine.py` |
+| **DuPont** | ✅ `services/international/dupont_engine.py` | ⏳ `services/vietnamese/vietnamese_dupont_engine.py` |
+| **Comps** | ✅ `services/international/comps_engine.py` | ⏳ `services/vietnamese/vietnamese_comps_engine.py` |
+
+**Development Focus**: All active development, testing, and production deployment targets International markets (IFRS/US GAAP). Vietnamese market support with TT99 standards is planned for Version 2.
 
 **Implementation:**
 ```python
