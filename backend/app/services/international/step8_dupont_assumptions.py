@@ -276,7 +276,7 @@ class DuPontStep8Processor:
                 return None
             
             # Convert to DataField format for statistical_utils
-            from app.schemas.unified_schema import DataField
+            from app.api.schemas.unified_step_schemas import DataField
             data_fields = []
             for year, value in sorted(values.items()):
                 if isinstance(year, str) and year.isdigit():
@@ -534,7 +534,7 @@ Return JSON with: value (decimal), reasoning (string), confidence (low/medium/hi
                 return None
             
             # Convert to DataField format for statistical_utils
-            from app.schemas.unified_schema import DataField
+            from app.api.schemas.unified_step_schemas import DataField
             data_fields = []
             for year, value in sorted(values.items()):
                 if isinstance(year, str) and year.isdigit():

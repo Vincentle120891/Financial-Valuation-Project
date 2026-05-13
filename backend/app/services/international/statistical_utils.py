@@ -4,7 +4,7 @@ Calculates CAGR, Averages, Growth Rates, and Volatility for Step 8 AI Context
 """
 import math
 from typing import List, Dict, Any, Optional
-from app.schemas.unified_schema import DataField
+from app.api.schemas.unified_step_schemas import DataField
 
 
 def calculate_cagr(start_value: float, end_value: float, periods: int) -> Optional[float]:

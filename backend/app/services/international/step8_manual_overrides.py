@@ -561,7 +561,7 @@ class Step8ManualOverridesProcessor:
                 return None
             
             # Convert to DataField format for statistical_utils
-            from app.schemas.unified_schema import DataField
+            from app.api.schemas.unified_step_schemas import DataField
             data_fields = []
             for year in years[-5:]:  # Last 5 years max
                 value = hist_financials.get(field, {}).get(year)
