@@ -7,6 +7,7 @@ import re
 from typing import Dict, Any, Optional, List
 from app.services.international.ai_engine import AIFallbackEngine
 from app.core.logging_config import get_logger
+from backend.services.step7 import analyze_web_search_results, validate_and_clean_financial_data
 
 logger = get_logger(__name__)
 
@@ -100,7 +101,9 @@ Return ONLY the cleaned JSON object.
         try:
             logger.info(f"Starting AI web search for {ticker} ({market}) using Groq/Gemini/Qwen")
 
-            # Step 1: Search and Extract
+            # Step 1: Search and Extract using the new service function
+            # Note: This requires search_results from a search API (e.g., Tavily, SerpAPI)
+            # For now, we'll use the existing generate_analysis approach as a fallback
             search_prompt = self._build_search_prompt(ticker, company_name, market, metrics)
 
             # Use the existing fallback engine which tries Groq -> Gemini -> Qwen
@@ -145,8 +148,14 @@ Return ONLY the cleaned JSON object.
                     "raw_response": cleaned_json_str[:500]
                 }
 
-            # Step 3: Format for Frontend
-            formatted_data = self._format_for_frontend(extracted_data, ticker, context_data)
+            # Step 3: Validate and clean using the new service function
+            validated_data = await validate_and_clean_financial_data(
+                raw_data=extracted_data,
+                ticker=ticker
+            )
+
+            # Step 4: Format for Frontend
+            formatted_data = self._format_for_frontend(validated_data, ticker, context_data)
 
             return {
                 "success": True,
@@ -154,9 +163,9 @@ Return ONLY the cleaned JSON object.
                 "metadata": {
                     "extraction_method": "AI Web Search",
                     "provider_used": extraction_result.get("metadata", {}).get("provider"),
-                    "confidence_score": extracted_data.get("confidence_score", 0.8),
-                    "sources": extracted_data.get("source_urls", []),
-                    "notes": extracted_data.get("notes", ""),
+                    "confidence_score": validated_data.get("confidence_score", 0.8),
+                    "sources": validated_data.get("source_urls", []),
+                    "notes": validated_data.get("notes", ""),
                     "timestamp": formatted_data["timestamp"]
                 },
                 "message": f"Successfully extracted data using {extraction_result.get('metadata', {}).get('provider', 'AI')}"

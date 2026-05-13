@@ -23,6 +23,7 @@ from app.services.pdf_extraction_service import (
     ExtractedFinancialData
 )
 from app.services.international.ai_engine import AIFallbackEngine
+from backend.services.step7 import extract_financial_metric_from_text, analyze_web_search_results, validate_and_clean_financial_data
 
 logger = logging.getLogger(__name__)
 
@@ -464,15 +465,15 @@ class DCFStep7Processor:
                 extracted_text = await self._extract_dcf_text_from_file(pdf_path)
                 
                 # Use AI to extract specific metric from text
-                ai_extracted = await self.ai_fallback.extract_financial_metric(
+                ai_extracted = await extract_financial_metric_from_text(
                     text=extracted_text,
                     metric=metric,
                     fiscal_year=fiscal_year,
                     company_name=company_name
                 )
                 
-                if ai_extracted is not None:
-                    return (ai_extracted, f"PDF_Annual_Report_{fiscal_year}", f"AI-extracted from PDF report")
+                if ai_extracted.get("success") and ai_extracted.get("value") is not None:
+                    return (ai_extracted["value"], f"PDF_Annual_Report_{fiscal_year}", f"AI-extracted from PDF report (confidence: {ai_extracted['confidence']})")
         except Exception as e:
             logger.debug(f"Step 7 DCF: PDF extraction failed for {metric} {fiscal_year}: {e}")
         
@@ -480,15 +481,15 @@ class DCFStep7Processor:
         try:
             filing_text = await self._download_dcf_sec_filing(ticker, fiscal_year)
             if filing_text:
-                ai_extracted = await self.ai_fallback.extract_financial_metric(
+                ai_extracted = await extract_financial_metric_from_text(
                     text=filing_text,
                     metric=metric,
                     fiscal_year=fiscal_year,
                     company_name=company_name
                 )
                 
-                if ai_extracted is not None:
-                    return (ai_extracted, f"SEC_Filing_{fiscal_year}", f"AI-extracted from SEC filing")
+                if ai_extracted.get("success") and ai_extracted.get("value") is not None:
+                    return (ai_extracted["value"], f"SEC_Filing_{fiscal_year}", f"AI-extracted from SEC filing (confidence: {ai_extracted['confidence']})")
         except Exception as e:
             logger.debug(f"Step 7 DCF: SEC filing extraction failed for {metric} {fiscal_year}: {e}")
         
