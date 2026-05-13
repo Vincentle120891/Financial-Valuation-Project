@@ -297,7 +297,7 @@ const ValuationFlow = () => {
 
         console.log(`Auto-selected ${topPeers.length} peers with highest scores:`, topPeers.map(p => p.symbol));
 
-        // Move to Step 3: Peer Selection
+        // Move to Step 3: Model Selection (peers already auto-selected)
         setCurrentStep(3);
       } else {
         setError('No peers found for this company. Try a different company or manually add peers later.');
@@ -324,7 +324,7 @@ const ValuationFlow = () => {
     });
   }, []);
 
-  // ==================== STEP 3: CONTINUE TO MODEL SELECTION ====================
+  // ==================== STEP 4: CONTINUE TO REQUIREMENTS REVIEW ====================
   const handleContinueToModelSelection = useCallback(async () => {
     if (!sessionId || selectedPeers.length === 0) {
       setError('No session or peers selected');
@@ -345,7 +345,7 @@ const ValuationFlow = () => {
           setPeerData(saveResponse.peer_data);
         }
         
-        setCurrentStep(4);  // Move to Step 4: Model Selection
+        setCurrentStep(5);  // Move to Step 5: Requirements Review
       } else {
         setError('Failed to save peers');
       }
@@ -437,9 +437,9 @@ const ValuationFlow = () => {
     // GAP 2 & GAP 3 FIX: Update selected model first, then deep merge to preserve other models' data
     // Single selection (radio button behavior) - modelType is a string, not array
     
-    // Client-side validation: Ensure peers are selected before model selection (peers selected in Step 3)
+    // Client-side validation: Ensure peers are selected before continuing (peers auto-selected in Step 2)
     if (!selectedPeers || selectedPeers.length === 0) {
-      alert('⚠️ No peers selected! Please go back to Step 3 and select at least one peer company.');
+      alert('⚠️ No peers selected! Please go back to Step 2 and find peers.');
       return;
     }
     
@@ -452,7 +452,7 @@ const ValuationFlow = () => {
       const data = await selectModels(sessionId, modelType, market, [], selectedPeers);
       console.log('Select model response:', data);
       if (data.message) {
-        setCurrentStep(5);  // Move to Step 5: Requirements Review
+        setCurrentStep(4);  // Move to Step 4: Peer Selection (to review/adjust peers)
       }
     } catch (err) {
       console.error('Select model error:', err);
@@ -1120,18 +1120,18 @@ const ValuationFlow = () => {
           />
         );
       case 3:
+        return <ModelSelectionStep onSelectModel={handleSelectModel} selectedModels={selectedModels} selectedPeers={selectedPeers} />;
+      case 4:
         return (
           <PeerSelectionStep
             suggestedPeers={suggestedPeers}
             selectedPeers={selectedPeers}
             onTogglePeer={handleTogglePeer}
             onContinue={handleContinueToModelSelection}
-            onBack={() => setCurrentStep(2)}  // Go back to Step 2 (Company Overview)
+            onBack={() => setCurrentStep(3)}  // Go back to Step 3 (Model Selection)
             loading={loading}
           />
         );
-      case 4:
-        return <ModelSelectionStep onSelectModel={handleSelectModel} selectedModels={selectedModels} selectedPeers={selectedPeers} />;
       case 5:
         return (
           <RequirementsStep
