@@ -29,7 +29,7 @@ class Step4ForecastProcessor:
     - Return unified schema response with DataField wrappers
     
     Note: This processor is now method-agnostic and focuses on peer selection only.
-    Forecast drivers are handled in Step 5 (Assumptions Preparation).
+    Forecast drivers are handled in Step 8 (Assumptions Preparation).
     """
     
     def process_peer_selection(

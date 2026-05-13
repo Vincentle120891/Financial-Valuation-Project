@@ -418,7 +418,7 @@ class SessionService:
         
         Args:
             session_id: The session identifier
-            key: Context key (company_overview, peer_selection, historical_data, market_data)
+            key: Context key (company_overview, peer_selection, historical_data, market_data, retrieved_assumptions)
             value: Value to store
             
         Returns:
@@ -430,7 +430,8 @@ class SessionService:
         
         session = self._migrate_legacy_session(session)
         
-        valid_keys = ["company_overview", "peer_selection", "historical_data", "market_data"]
+        # Allow retrieved_assumptions in addition to standard keys
+        valid_keys = ["company_overview", "peer_selection", "historical_data", "market_data", "retrieved_assumptions"]
         if key not in valid_keys:
             return False
         
