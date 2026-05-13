@@ -3,7 +3,7 @@ import { generateAISuggestion } from '../../services/api';
 
 /**
  * ForecastDriversStep Component
- * Step 8: Modify Forecast Drivers and DCF Inputs with AI Suggestions
+ * Step 8: Assumption & AI Suggestion Studio
  * 
  * Features:
  * - Edit all forecast driver assumptions (Revenue Growth, Volume vs Price, Inflation, etc.)
@@ -390,7 +390,7 @@ const ForecastDriversStep = ({
     <div className="step-container">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
         <div>
-          <h2>Step 8: Modify Forecast Drivers & DCF Inputs</h2>
+          <h2>Step 8: Assumption & AI Suggestion</h2>
           <p style={{ color: '#666', marginTop: '8px' }}>Fine-tune revenue growth rates, margins, and other forecast drivers. Adjust assumptions for Bull/Base/Bear scenarios.</p>
         </div>
         <button onClick={onBackToRequirements} className="btn-secondary">
