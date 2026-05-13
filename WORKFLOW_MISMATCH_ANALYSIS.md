@@ -75,11 +75,17 @@ Backend is already correct with 10 unified step schemas:
 - No changes needed to backend schemas
 - Step 11 will be frontend-only for export functionality
 
-## Notes
+## Current Development Status
 
-- Vietnam market remains Version 2 (separate implementation)
-- International market is current focus
-- Unified schemas prevent backend/frontend miss-mapping
+**⚠️ INTERNATIONAL MARKET ONLY - CURRENT FOCUS**
+
+- ✅ **International Market**: Active development and production-ready
+- ⏳ **Vietnamese Market**: Planned for Version 2 (future release)
+- Unified schemas prevent backend/frontend miss-mapping across both markets
 - Never simplify calculations or reduce inputs unless specifically asked
 - Step 11 export functionality to be implemented in future iteration
+
+### Version Roadmap
+- **Version 1.0**: International markets (IFRS/US GAAP) - DCF, DuPont, Trading Comps
+- **Version 2.0**: Vietnamese market (TT99 standards) - Full localization with VND currency
 

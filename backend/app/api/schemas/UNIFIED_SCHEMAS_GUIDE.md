@@ -1,7 +1,11 @@
 **Unified Schemas Implementation Guide**  
+
+**⚠️ CURRENT STATUS: INTERNATIONAL MARKET ONLY**  
+Vietnamese market support is planned for **Version 2** (future release). All current development focuses on International markets (IFRS/US GAAP). The unified schema architecture supports both markets, but only International is production-ready.
+
 **Overview**  
 This directory now contains the **single source of truth** for all API request/response schemas across the entire valuation platform.  
-**Architecture: 3 Valuation Methods × 2 Market Versions**  
+**Target Architecture: 3 Valuation Methods × 2 Market Versions**  
                     International          Vietnam  
  DCF            ┌─────────────────────┬──────────────────┐  
                 │  UnifiedStep6       │  UnifiedStep6    │  

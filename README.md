@@ -1,6 +1,9 @@
 **📊 Financial Valuation Platform**  
 ***Professional-grade company valuation platform*** * implementing a comprehensive 11-step guided workflow for DCF, DuPont Analysis, and Trading Comps valuations.*  
-***Version 2.0*** * - Now with AI-powered peer company suggestions for WACC calculation and trading comparables.*  
+***Version 2.0 - International Market Focus*** * - Now with AI-powered peer company suggestions for WACC calculation and trading comparables.*  
+
+**⚠️ CURRENT FOCUS: INTERNATIONAL MARKET ONLY**  
+Vietnamese market support is planned for **Version 2** (future release). All current development prioritizes International markets (IFRS/US GAAP).  
 ![](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAFYAAAAUCAYAAAAXxsqQAAAABmJLR0QA/wD/AP+gvaeTAAAACXBIWXMAAA7EAAAOxAGVKw4bAAAAzElEQVR4nO3ZMQ6CMBTG8e81ODQmEA/hkZjZ3HTiGt6BO3gwA4lh8znQDlZcTF8ayfcLCw0pL//AAtK27c57fwXQAagBQFWRStdyXZNjr9vxFFfikV74vpaer66t7BXu930vmSAyYH/oqxD1/DE1/UBrqF7wuMNheVIpJ312DuH1p4xUG1d6hq1iWCMMa4RhjTCsEYY1wrBGGNYIwxphWCMMa4RhjTCsEQdgKj3E5oiMDsBQeo6NUYgbqnmee+89sHzwbgoP9edkjL9mXtdJTeoaUYmxAAAAAElFTkSuQmCC)  
    
  ![](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGYAAAAUCAYAAAB/NUioAAAABmJLR0QA/wD/AP+gvaeTAAAACXBIWXMAAA7EAAAOxAGVKw4bAAAA00lEQVR4nO3ZMQrCQBBG4bdLLLbQ4H28Rmp7QSuv4R1yCO8liUUqHYsooi6iiGbA/2sCyyaZ8EiahKqqRimlDTAHJgBmRs4769+6xrPzZ4stYOS35NYN6w8v7e3v89nex/XrWgi0IVKPp6yLc5Rl7lHkt8yY2IHVfgeR/k0RR45H5pHz50scMco49AySpzBOKYxTCuOUwjilME4pjFMK45TCOKUwTimMUwrjlMI4FYF26CHkTqCJQD30HHLDYqQuuq5bp5Sg/2FWDjzUXwuB5vJr+QQGHlEG9VCLFgAAAABJRU5ErkJggg==)  
@@ -25,28 +28,32 @@ We are utilizing **AI tools** for valuation logic generation (Steps 7-9). This a
 - User switches to DuPont → System reuses SAME cached data (NO re-fetch)  
 - User switches to Comps → System reuses SAME cached data (NO re-fetch)  
 4. **Benefit:** Eliminates redundant API calls, prevents rate limiting, ensures data consistency.  
-**🔄 3 Valuation Methods × 2 Market Versions**  
-| | | |  
-|-|-|-|  
-|   | **International** | **Vietnam** |   
-| **DCF** | services/international/dcf_engine.py + 10 step processors | services/vietnamese/vietnamese_dcf_engine.py + 10 step processors |   
-| **DuPont** | services/international/dupont_engine.py + 10 step processors | services/vietnamese/vietnamese_dupont_engine.py + 10 step processors |   
-| **Comps** | services/international/comps_engine.py + 10 step processors | services/vietnamese/vietnamese_comps_engine.py (sector_valuation_models.py) |   
-   
-**See **[ **BACKEND_WORKFLOW_DOCUMENTATION.md** ** for complete architectural guidelines.**](./backend/docs/ARCHITECTURE.md "./backend/docs/ARCHITECTURE.md")  
+**🔄 3 Valuation Methods × 2 Market Versions (Architecture)**
+**⚠️ CURRENT STATUS: INTERNATIONAL MARKET ONLY** - Vietnam is Version 2 (future release)
+
+| | | |
+|-|-|-|
+|   | **International (Current Focus)** | **Vietnam (Version 2 - Future)** |
+| **DCF** | ✅ services/international/dcf_engine.py + 10 step processors | ⏳ services/vietnamese/vietnamese_dcf_engine.py + 10 step processors |
+| **DuPont** | ✅ services/international/dupont_engine.py + 10 step processors | ⏳ services/vietnamese/vietnamese_dupont_engine.py + 10 step processors |
+| **Comps** | ✅ services/international/comps_engine.py + 10 step processors | ⏳ services/vietnamese/vietnamese_comps_engine.py (sector_valuation_models.py) |
+
 ![](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAnEAAAACCAYAAAA3pIp+AAAABmJLR0QA/wD/AP+gvaeTAAAACXBIWXMAAA7EAAAOxAGVKw4bAAAANUlEQVR4nO3OMQ2AABAAsSNBCUpfEJ5YGBDBgAU2QtIq6DIzW7UHAMBfHGt1V+fXEwAAXrseHDYF+yOk59sAAAAASUVORK5CYII=)  
 **🎯 Overview**  
 This platform enables financial analysts, investors, and students to perform institutional-quality company valuations through an intuitive, step-by-step guided workflow. It combines **live market data**,  **AI-powered assumptions**, and  **industry-standard valuation methodologies** to deliver comprehensive valuation analysis with full audit trails.  
 **⚠️ Model Integrity Commitment**  
 **This platform adheres to strict model completeness principles.** We never remove inputs, calculations, or outputs to "simplify" the model. Every component exists for a reason and contributes to accurate, transparent valuations.  
 See [MODEL_INTEGRITY_CONFIG.md for our complete guidelines.](./backend/MODEL_INTEGRITY_CONFIG.md "./backend/MODEL_INTEGRITY_CONFIG.md")  
-**Core Valuation Models: 3×2 Matrix**  
-| | | | |  
-|-|-|-|-|  
-| **Model** | **International Market** | **Vietnamese Market** | **Key Output** |   
-| **DCF** | ✅ services/international/dcf_engine.py | ✅ services/vietnamese/vietnamese_dcf_engine.py | Implied Share Price, Enterprise Value |   
-| **DuPont Analysis** | ✅ services/international/dupont_engine.py | ✅ services/vietnamese/vietnamese_dupont_engine.py | ROE Drivers, Financial Efficiency Metrics |   
-| **Trading Comps** | ✅ services/international/comps_engine.py | ✅ services/vietnamese/vietnamese_comps_engine.py | Comparable Valuation Multiples |   
+**Core Valuation Models: 3×2 Matrix**
+**⚠️ CURRENT FOCUS: INTERNATIONAL MARKET ONLY** - Vietnam is Version 2 (future release)
+
+| | | | |
+|-|-|-|-|
+| **Model** | **International (Current)** | **Vietnamese (Version 2 - Future)** | **Key Output** |
+| **DCF** | ✅ services/international/dcf_engine.py | ⏳ services/vietnamese/vietnamese_dcf_engine.py | Implied Share Price, Enterprise Value |
+| **DuPont Analysis** | ✅ services/international/dupont_engine.py | ⏳ services/vietnamese/vietnamese_dupont_engine.py | ROE Drivers, Financial Efficiency Metrics |
+| **Trading Comps** | ✅ services/international/comps_engine.py | ⏳ services/vietnamese/vietnamese_comps_engine.py | Comparable Valuation Multiples |
+
    
 **Market-Specific Parameters:**  
 - **International**: Variable tax rates by country, local risk-free rates (10Y Treasury), IFRS/US GAAP standards  
@@ -93,14 +100,17 @@ See [MODEL_INTEGRITY_CONFIG.md for our complete guidelines.](./backend/MODEL_INT
 | **5** | Required Inputs Display | step5_required_inputs_processor.py | step5_assumptions_processor.py |   
    
 - **Rule:** If a file name suggests a different purpose than its step number, rename it with mismatch_ prefix to prevent accidental usage.  
-***4. 3×2 Matrix Architecture***  
-The system supports **3 Valuation Methods × 2 Market Versions**:  
-| | | |  
-|-|-|-|  
-|   | **International** | **Vietnam** |   
-| **DCF** | services/international/dcf_engine.py + processors | services/vietnamese/vietnamese_dcf_engine.py + processors |   
-| **DuPont** | services/international/dupont_engine.py + processors | services/vietnamese/vietnamese_dupont_engine.py + processors |   
-| **Comps** | services/international/comps_engine.py + processors | services/vietnamese/vietnamese_comps_engine.py |   
+***4. 3×2 Matrix Architecture (CURRENT: INTERNATIONAL ONLY)***
+The system architecture supports **3 Valuation Methods × 2 Market Versions**:
+**⚠️ CURRENT DEVELOPMENT FOCUS: INTERNATIONAL MARKET** - Vietnam is Version 2 (future)
+
+| | | |
+|-|-|-|
+|   | **International (Active)** | **Vietnam (Version 2 - Future)** |
+| **DCF** | services/international/dcf_engine.py + processors | services/vietnamese/vietnamese_dcf_engine.py + processors |
+| **DuPont** | services/international/dupont_engine.py + processors | services/vietnamese/vietnamese_dupont_engine.py + processors |
+| **Comps** | services/international/comps_engine.py + processors | services/vietnamese/vietnamese_comps_engine.py |
+
    
 - **Implementation:** Data structure valuationsData[market][method] ensures strict separation while allowing unified orchestration.  
 - **Frontend:** Step 4 uses  **Radio Buttons** (single-select) to enforce one model at a time, preventing AI context hallucination.  
@@ -115,9 +125,11 @@ The system supports **3 Valuation Methods × 2 Market Versions**:
 - **groq** ≥0.11.0 - Groq LLM client (Llama 3) for AI assumptions  
 - **python-dotenv** ≥1.0.0 - Environment variable management  
 - **gunicorn** ≥21.0.0 - Production WSGI server  
-**Dual-Market Services:**  
-- services/international/ - 40+ processors for DCF, DuPont, Comps (IFRS/US GAAP)  
-- services/vietnamese/ - 30+ processors for VN-specific valuations (TT99 standards)  
+**Market-Specific Services:**  
+- ✅ **services/international/** - 40+ processors for DCF, DuPont, Comps (IFRS/US GAAP) - **CURRENTLY ACTIVE**  
+- ⏳ **services/vietnamese/** - 30+ processors for VN-specific valuations (TT99 standards) - **Version 2 (Future)**  
+
+**Note**: All current development and testing focuses on International markets. Vietnamese market support is planned for Version 2.  
 **Frontend (React)**  
 - **React 18** - Component-based UI with hooks  
 - **Axios** - HTTP client for API communication  

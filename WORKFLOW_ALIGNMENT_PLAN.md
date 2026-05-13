@@ -1,4 +1,8 @@
 **Workflow Alignment Decision Record**  
+
+**⚠️ CURRENT DEVELOPMENT STATUS: INTERNATIONAL MARKET ONLY**  
+Vietnamese market support is planned for **Version 2** (future release). All documentation references to the 3×2 matrix represent the target architecture, but current implementation focuses exclusively on International markets (IFRS/US GAAP).
+
 **Executive Summary**  
 **Decision**: Implement Option A - Align frontend to match backend's unified schema structure.  
 **UPDATE**: We will maintain  **11 steps in the frontend** for better UX granularity, with Step 11 reserved for future export/reporting functionality. The backend remains at 10 unified steps.  
