@@ -45,3 +45,4 @@ wheels/
 .DS_Store
 Thumbs.db
 ```
+Nothing should be ignored based on the provided file changes, as they consist only of Python source files (.py) and no build artifacts, dependencies, or temporary files.
