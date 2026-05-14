@@ -26,12 +26,13 @@ const RequirementsStep = ({
   aiData: historicalGapsData,
   aiError,
   onShowInputs,
-  requiredFields = [],
-  valuationData // NEW: Unified schema data from backend
+  requiredFields = []
+  // Note: valuationData prop removed - Step 5 only shows requirements before data fetch
+  // Unified schema data is only available after Step 6 retrieves it
 }) => {
   // FIX Issue #5: Backward compatibility layer for legacy aiData prop name
   const aiData = historicalGapsData;
-  
+
   // Status mapping function to convert backend statuses to frontend formats
   const mapStatus = (backendStatus) => {
     if (!backendStatus) return 'missing';
@@ -46,77 +47,11 @@ const RequirementsStep = ({
     return statusMap[backendStatus] || 'missing';
   };
 
-  // Group required fields by category
-  const getGroupedRequiredFields = () => {
-    if (!requiredFields || requiredFields.length === 0) return {};
+  // Group required fields by category - REMOVED: Not used anymore, using inline grouping in renderAllRequiredInputs
+  // const getGroupedRequiredFields = () => {...};
 
-    return requiredFields.reduce((groups, field) => {
-      const category = field.category || 'Other';
-      if (!groups[category]) {
-        groups[category] = [];
-      }
-      groups[category].push(field);
-      return groups;
-    }, {});
-  };
-
-  // Get data status from unified schema
-  const getDataStatus = (categoryKey, fieldKey) => {
-    if (!valuationData) return 'missing';
-    
-    // Map frontend category keys to backend response keys
-    const categoryMap = {
-      'historical_financials': 'historical_financials',
-      'market_data': 'market_data',
-      'balance_sheet_opening': 'historical_financials', // Opening balances derived from historical balance sheet
-      'peer_comparables_for_wacc': 'forecast_drivers' // Peer WACC data is in forecast_drivers (beta, cost_of_debt, wacc)
-    };
-    
-    const backendKey = categoryMap[categoryKey] || categoryKey;
-    const categoryData = valuationData[backendKey];
-    
-    if (!categoryData) {
-      return 'missing';
-    }
-    
-    // Handle peer comparables specially - they're in a different structure
-    if (categoryKey === 'peer_comparables_for_wacc') {
-      // Check for peer-related fields in forecast_drivers
-      const peerFields = ['beta', 'cost_of_debt', 'wacc', 'risk_free_rate', 'equity_risk_premium'];
-      if (peerFields.includes(fieldKey) && categoryData[fieldKey]) {
-        const fieldData = categoryData[fieldKey];
-        if (fieldData.status) {
-          return mapStatus(fieldData.status);
-        }
-        if (fieldData.value !== undefined && fieldData.value !== null) {
-          return 'retrieved';
-        }
-      }
-      return 'missing';
-    }
-    
-    const fieldData = categoryData[fieldKey];
-    
-    if (!fieldData) {
-      return 'missing';
-    }
-    
-    // Handle DataField object structure with status
-    if (fieldData.status) {
-      return mapStatus(fieldData.status);
-    }
-    
-    // Handle value presence (either single value or array of period values)
-    if (fieldData.value !== undefined && fieldData.value !== null) {
-      return 'retrieved';
-    }
-    
-    if (fieldData.values && Array.isArray(fieldData.values) && fieldData.values.length > 0) {
-      return 'retrieved';
-    }
-    
-    return 'missing';
-  };
+  // Get data status from unified schema - REMOVED: Not used in Step 5 (only used after data fetch in later steps)
+  // const getDataStatus = (categoryKey, fieldKey) => {...};
 
   // Render all required inputs from backend using DataFieldDisplay
   const renderAllRequiredInputs = () => {
@@ -144,29 +79,19 @@ const RequirementsStep = ({
             </div>
             <div className="divide-y divide-gray-100">
               {fields.map((field, fieldIdx) => {
-                // Get the actual field data from unified schema
-                const fieldData = valuationData?.historical_financials?.[field.fieldName] || 
-                                  valuationData?.market_data?.[field.fieldName] ||
-                                  valuationData?.forecast_drivers?.[field.fieldName];
-                
-                // Determine status
-                let status = field.status || 'MISSING';
-                if (fieldData && fieldData.status) {
-                  status = fieldData.status;
-                } else if (field.value !== null && field.value !== undefined) {
-                  status = 'RETRIEVED';
-                }
-                
+                // At Step 5, we don't have valuationData yet - only requiredFields from prepareAssumptions
+                // Use the status from requiredFields directly
+                const status = field.status || 'MISSING';
                 const mappedStatus = mapStatus(status);
-                
+
                 // Construct DataField object for consistent rendering
                 const dataFieldObj = {
                   label: field.name || field.fieldName,
-                  value: fieldData?.value || field.value,
+                  value: field.value,
                   status: status,
-                  source: fieldData?.source || (mappedStatus === 'fetched' ? 'yfinance' : 'manual_required'),
-                  confidence: fieldData?.confidence_score || (mappedStatus === 'fetched' ? 0.95 : 0),
-                  periods: fieldData?.periods || []
+                  source: mappedStatus === 'fetched' ? 'yfinance' : 'manual_required',
+                  confidence: mappedStatus === 'fetched' ? 0.95 : 0,
+                  periods: []
                 };
 
                 return (
@@ -188,13 +113,13 @@ const RequirementsStep = ({
                         )}
                       </div>
                     </div>
-                    
+
                     {/* Render Data Field */}
                     <div className="mt-2">
-                      {status === 'retrieved' ? (
-                        <DataFieldDisplay 
-                          data={dataFieldObj} 
-                          compact={true} 
+                      {mappedStatus === 'fetched' || mappedStatus === 'retrieved' ? (
+                        <DataFieldDisplay
+                          data={dataFieldObj}
+                          compact={true}
                         />
                       ) : (
                         <div className="text-sm text-red-600 flex items-center">
@@ -213,15 +138,7 @@ const RequirementsStep = ({
   };
 
   // Check if data has been retrieved
-  // Must verify actual data exists, not just that objects are non-null
-  // This prevents false positives when entering Step 5 for the first time
-  const hasRetrievedData = 
-    (historicalData && historicalData.historical_financials) || 
-    (peerData && (peerData.companies || peerData.length > 0)) || 
-    (dcfInputs && Object.keys(dcfInputs).length > 0) || 
-    (dupontResults && Object.keys(dupontResults).length > 0) || 
-    (compsResults && Object.keys(compsResults).length > 0) || 
-    (aiData && aiData.historical_financials && Object.keys(aiData.historical_financials).length > 0);
+  const hasRetrievedData = historicalData || peerData || dcfInputs || dupontResults || compsResults || (aiData && Object.keys(aiData).length > 0);
 
   // Helper function to extract values from unified schema format
   // Backend returns: { historical_financials: { revenue: DataField, ebitda: DataField, ... } }

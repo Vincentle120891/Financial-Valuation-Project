@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { generateAISuggestion } from '../../services/api';
+import { generateAISuggestion } from '../../services/valuationService';
 import DataFieldDisplay from './DataFieldDisplay';
 
 /**

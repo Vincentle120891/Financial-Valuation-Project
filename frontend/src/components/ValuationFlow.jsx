@@ -6,7 +6,6 @@ import {
   savePeers,
   validateManualPeers,
   selectModels,
-  generateAISuggestion,
   confirmAssumptions,
   runValuation,
   runValuationMulti
@@ -15,6 +14,9 @@ import {
   retrieveData,
   initializeAssumptions,
   prepareRequirements,
+  generateAISuggestion,
+  deepMergeMatrix,
+  // Deprecated aliases kept for backward compatibility
   deepMergeValuations,
   deepMergeForecastDrivers,
   deepMergeDcfInputs
@@ -343,12 +345,12 @@ const ValuationFlow = () => {
 
       if (saveResponse.status === 'success') {
         console.log(`✅ Saved ${saveResponse.peers_saved} peers to session with auto-fetched market data`);
-        
+
         // Store peer data from the response for later steps
         if (saveResponse.peer_data) {
           setPeerData(saveResponse.peer_data);
         }
-        
+
         setCurrentStep(5);  // Move to Step 5: Requirements Review
       } else {
         setError('Failed to save peers');
@@ -440,13 +442,13 @@ const ValuationFlow = () => {
   const handleSelectModel = useCallback(async (modelType) => {
     // GAP 2 & GAP 3 FIX: Update selected model first, then deep merge to preserve other models' data
     // Single selection (radio button behavior) - modelType is a string, not array
-    
+
     // Client-side validation: Ensure peers are selected before continuing (peers auto-selected in Step 2)
     if (!selectedPeers || selectedPeers.length === 0) {
       alert('⚠️ No peers selected! Please go back to Step 2 and find peers.');
       return;
     }
-    
+
     setSelectedModels(modelType);
 
     setLoading(true);
@@ -649,9 +651,12 @@ const ValuationFlow = () => {
     }
   }, [sessionId, selectedModels, market, marketValidation]);
 
-  // NOTE: Removed auto-fetch useEffect - Step 5 should NOT auto-fetch data
-  // Data retrieval should only happen when user explicitly clicks "Retrieve Data" button
-  // This ensures Step 5 shows requirements first, then user decides when to fetch
+  useEffect(() => {
+    const method = selectedModels;
+    if (method && currentStep === 5 && sessionId) {
+      fetchRequiredInputs(method);
+    }
+  }, [selectedModels, currentStep, sessionId, market, fetchRequiredInputs]);
 
   // ==================== STEP 6: RETRIEVE API DATA ONLY ====================
 
@@ -726,7 +731,7 @@ const ValuationFlow = () => {
       // Provide more specific error message based on the error type
       const errorMessage = err.response?.data?.detail || err.message || 'Failed to retrieve data';
       setError(errorMessage);
-      
+
       // Log additional debug info
       console.error('Error details:', {
         message: err.message,
@@ -1027,23 +1032,24 @@ const ValuationFlow = () => {
           />
         );
       case 5:
-        const valuationDataStep5 = getValuationData(selectedModels);
+        // Note: valuationData is not passed to Step 5 because data hasn't been fetched yet
+        // Step 5 only shows requirements from requiredFields (prepared by prepareAssumptions)
+        // Unified schema data (valuationData) is only available after Step 6 fetches it
         return (
           <RequirementsStep
             selectedModel={selectedModels}
             onBackToModelSelection={handleBackToModelSelection}
             onRetrieveData={handleRetrieveData}
             loading={loading}
-            historicalData={valuationDataStep5}
-            forecastDrivers={getForecastDrivers(selectedModels)}
-            peerData={peerData}
-            dcfInputs={getDcfInputs(selectedModels)}
-            dupontResults={getResult('DuPont')}
-            compsResults={getResult('COMPS')}
-            aiData={valuationDataStep5}
+            historicalData={null}
+            forecastDrivers={null}
+            peerData={null}
+            dcfInputs={null}
+            dupontResults={null}
+            compsResults={null}
+            aiData={null}
             aiError={aiError}
             requiredFields={requiredFields}
-            valuationData={valuationDataStep5}
             onShowInputs={handleShowApiData}
           />
         );
