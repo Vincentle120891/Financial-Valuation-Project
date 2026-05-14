@@ -278,7 +278,7 @@ const CompanySelectionStep = ({
 
         <div className="flex gap-4">
           {/* Find Peers Button - Only visible when showFindPeersButton is true (Step 4) */}
-          {showFindPeersButton && (
+          {showFindPeersButton && !hasPeers && (
             <button
               onClick={handleFindPeers}
               disabled={peerSearchLoading || loading || !onFindPeers || onFindPeers.toString().includes('() => {}')}
@@ -305,10 +305,10 @@ const CompanySelectionStep = ({
 
           <button
             onClick={onContinue}
-            disabled={loading}
+            disabled={loading || (showFindPeersButton && !hasPeers)}
             className="btn-success"
           >
-            Continue →
+            {showFindPeersButton && !hasPeers ? 'Find Peers First →' : 'Continue →'}
           </button>
         </div>
       </div>
