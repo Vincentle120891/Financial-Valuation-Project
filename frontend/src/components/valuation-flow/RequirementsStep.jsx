@@ -193,7 +193,15 @@ const RequirementsStep = ({
   };
 
   // Check if data has been retrieved
-  const hasRetrievedData = historicalData || peerData || dcfInputs || dupontResults || compsResults || (aiData && Object.keys(aiData).length > 0);
+  // Must verify actual data exists, not just that objects are non-null
+  // This prevents false positives when entering Step 5 for the first time
+  const hasRetrievedData = 
+    (historicalData && historicalData.historical_financials) || 
+    (peerData && (peerData.companies || peerData.length > 0)) || 
+    (dcfInputs && Object.keys(dcfInputs).length > 0) || 
+    (dupontResults && Object.keys(dupontResults).length > 0) || 
+    (compsResults && Object.keys(compsResults).length > 0) || 
+    (aiData && aiData.historical_financials && Object.keys(aiData.historical_financials).length > 0);
 
   // Helper function to extract values from unified schema format
   // Backend returns: { historical_financials: { revenue: DataField, ebitda: DataField, ... } }
