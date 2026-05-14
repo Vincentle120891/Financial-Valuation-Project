@@ -1,1 +1,1 @@
-Nothing should be ignored based on the provided file changes. The only modified file is a source code file (.jsx), which should not be added to .gitignore.
+(frontend/src/components/ValuationFlow.jsx, frontend/src/components/valuation-flow/ModelSelectionStep.jsx, frontend/src/components/valuation-flow/PeerSelectionStep.jsx)

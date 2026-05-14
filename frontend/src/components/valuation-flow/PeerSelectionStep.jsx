@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 
 /**
- * PeerSelectionStep - Step 3
+ * PeerSelectionStep - Step 4
  * Displays auto-discovered peer companies with similarity scores in table format
  * Allows users to select/deselect peers for valuation models
  * 
@@ -43,7 +43,7 @@ const PeerSelectionStep = ({
   if (!suggestedPeers || suggestedPeers.length === 0) {
     return (
       <div className="step-container">
-        <h2>Step 3: Peer Selection</h2>
+        <h2>Step 4: Peer Selection</h2>
         <p className="text-gray-600" style={{ marginBottom: '24px' }}>
           No peers discovered yet. Please go back to Step 2 and click "Auto-Find Peers".
         </p>
@@ -56,7 +56,7 @@ const PeerSelectionStep = ({
 
         <div className="mt-8">
           <button onClick={onBack} className="btn-secondary">
-            ← Back to Company Overview
+            ← Back to Model Selection
           </button>
         </div>
       </div>
@@ -65,7 +65,7 @@ const PeerSelectionStep = ({
 
   return (
     <div className="step-container">
-      <h2>Step 3: Select Peer Companies</h2>
+      <h2>Step 4: Review/Adjust Peer Companies</h2>
       <p style={{ marginBottom: '24px', color: '#666' }}>
         Review and select peer companies for comparable analysis. These peers will be used in DCF valuation for WACC calculation and trading multiples.
       </p>
@@ -259,7 +259,7 @@ const PeerSelectionStep = ({
           className="btn-secondary"
           disabled={loading}
         >
-          ← Back to Company Overview
+          ← Back to Model Selection
         </button>
 
         <button
@@ -267,7 +267,7 @@ const PeerSelectionStep = ({
           disabled={selectedPeers.length === 0 || loading}
           className="btn-success"
         >
-          Continue to Step 4: Model Selection →
+          Continue to Step 5: Requirements Review →
         </button>
       </div>
     </div>

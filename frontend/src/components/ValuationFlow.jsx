@@ -64,8 +64,8 @@ const useDebounce = (callback, delay) => {
  * Orchestrates the 10-step valuation workflow (ALIGNED WITH BACKEND):
  * 1. Search Company (Input ticker/name)
  * 2. Company Overview & Market Confirmation (get session_id)
- * 3. Select Peer Companies (For Comps & WACC)
- * 4. Select Valuation Method (DCF/DuPont/Comps)
+ * 3. Select Valuation Method (DCF/DuPont/Comps) - peers auto-selected from Step 2
+ * 4. Review/Adjust Peer Companies (Optional step to modify auto-selected peers)
  * 5. Assumptions Preparation (Show data requirements + AI generation)
  * 6. Fetch API Data (Retrieve all financial inputs)
  * 7. Historical Data Processing (AI extraction & trendlines)
@@ -438,7 +438,7 @@ const ValuationFlow = () => {
     }
   }, [market]);
 
-  // ==================== STEP 4: SELECT MODEL ====================
+  // ==================== STEP 3: SELECT MODEL ====================
   const handleSelectModel = useCallback(async (modelType) => {
     // GAP 2 & GAP 3 FIX: Update selected model first, then deep merge to preserve other models' data
     // Single selection (radio button behavior) - modelType is a string, not array
@@ -458,7 +458,9 @@ const ValuationFlow = () => {
       const data = await selectModels(sessionId, modelType, market, [], selectedPeers);
       console.log('Select model response:', data);
       if (data.message) {
-        setCurrentStep(4);  // Move to Step 4: Peer Selection (to review/adjust peers)
+        // Skip Step 4 (Peer Selection) since peers are already auto-selected in Step 2
+        // Directly proceed to Step 5: Requirements Review
+        setCurrentStep(5);
       }
     } catch (err) {
       console.error('Select model error:', err);
@@ -475,7 +477,7 @@ const ValuationFlow = () => {
     return handleRunValuation();
   }, []);
 
-  // ==================== BACK TO MODEL SELECTION (STEP 4) ====================
+  // ==================== BACK TO MODEL SELECTION (STEP 3) ====================
   const handleBackToModelSelection = () => {
     const currentMethod = selectedModels?.toLowerCase();
 
@@ -513,11 +515,11 @@ const ValuationFlow = () => {
       }
     }));
 
-    // Reset selection and navigation - go back to Step 4: Model Selection
+    // Reset selection and navigation - go back to Step 3: Model Selection
     setSelectedModels('');
     setRequiredFields([]);
     setConfirmedValues({});
-    setCurrentStep(4);  // Go back to Step 4: Model Selection
+    setCurrentStep(3);  // Go back to Step 3: Model Selection
     setError(null);
     // Keep market locked - user selected company already, just switching models
   };
