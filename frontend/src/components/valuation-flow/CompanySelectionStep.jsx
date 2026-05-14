@@ -24,7 +24,8 @@ const CompanySelectionStep = ({
   hasPeers = false,
   market = 'international',
   marketData = null,
-  showFindPeersButton = false // NEW: Controls visibility of Find Peers button
+  showFindPeersButton = false, // Controls visibility of Find Peers button
+  currentStep = 2 // Which step this is being rendered in (2 or 4)
 }) => {
   const [peerSearchLoading, setPeerSearchLoading] = useState(false);
   const [priceHistory, setPriceHistory] = useState(null);
@@ -85,9 +86,12 @@ const CompanySelectionStep = ({
 
   return (
     <div className="step-container">
-      <h2>Step 2: Company Overview</h2>
+      <h2>Step {currentStep}: {currentStep === 2 ? 'Company Overview' : 'Find Peers'}</h2>
       <p style={{ marginBottom: '24px', color: '#666' }}>
-        Review the selected company details before proceeding to peer selection.
+        {currentStep === 2 
+          ? 'Review the selected company details before proceeding to model selection.'
+          : 'Click "Auto-Find Peers" to discover comparable companies based on your selected valuation model.'
+        }
       </p>
 
       {/* Company Details Card */}
