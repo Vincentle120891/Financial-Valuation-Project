@@ -1,3 +1,4 @@
+/**
  * Data Utilities for Financial Valuation Platform
  *
  * Provides standardized utilities for:
@@ -514,7 +515,7 @@ export const calculateDataCompleteness = (dataObject) => {
   const entries = Object.entries(dataObject);
   const totalFields = entries.length;
 
-  const filledFields = entries.filter(([_, value]) => {
+  const filledFields = entries.filter(([, value]) => {
     const extracted = extractValue(value);
     return extracted !== null && extracted !== undefined;
   }).length;
