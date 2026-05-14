@@ -1,15 +1,16 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { Clock, CheckCircle, Database, ArrowRight, TrendingUp, PieChart, Briefcase, Users, Server } from 'lucide-react';
+import { motion } from 'framer-motion';
 
 /**
- * RequirementsStep Component
- * Step 5: Review Data Requirements BEFORE Retrieval
+ * RequirementsStep Component - Step 5: Review Data Requirements BEFORE Retrieval
  *
- * Features:
- * - Model-specific data requirements display in table format
- * - Clear "Pending Retrieval" status (not "MISSING" since we haven't fetched yet)
- * - Organized by category with color-coded headers
- * - Back navigation to model selection
- * - Continue button to trigger data retrieval
+ * PROFESSIONAL TABLE-BASED UI WITH:
+ * - Color-coded categories
+ * - Proper "Pending Retrieval" status (NOT "MISSING")
+ * - Clean table layout with proper alignment
+ * - API source badges
+ * - Modern gradient buttons
  */
 const RequirementsStep = ({
   selectedModel,
@@ -26,289 +27,354 @@ const RequirementsStep = ({
   aiError,
   onShowInputs,
   requiredFields = []
-  // Note: valuationData prop removed - Step 5 only shows requirements before data fetch
-  // Unified schema data is only available after Step 6 retrieves it
 }) => {
-  // FIX Issue #5: Backward compatibility layer for legacy aiData prop name
-  const aiData = historicalGapsData;
+  const [localStatus, setLocalStatus] = useState({});
 
-  // Check if data has already been retrieved (user is re-visiting or refreshing)
+  // FIX: Initialize all fields as 'pending' - they are NOT missing, just not fetched yet!
+  useEffect(() => {
+    if (requiredFields && requiredFields.length > 0) {
+      const initialStatus = {};
+      requiredFields.forEach(field => {
+        initialStatus[field.id || field.fieldName] = 'pending';
+      });
+      setLocalStatus(initialStatus);
+    }
+  }, [requiredFields]);
+
+  // Check if data has already been retrieved
   const hasRetrievedData = historicalData || peerData || dcfInputs || dupontResults || compsResults || (aiData && Object.keys(aiData).length > 0);
 
-  // Category color mapping for better visual organization
-  const getCategoryColor = (categoryName) => {
-    const colorMap = {
-      'historical_financials': { bg: 'bg-blue-50', border: 'border-blue-200', header: 'bg-blue-600' },
-      'market_data': { bg: 'bg-purple-50', border: 'border-purple-200', header: 'bg-purple-600' },
-      'balance_sheet_opening': { bg: 'bg-teal-50', border: 'border-teal-200', header: 'bg-teal-600' },
-      'peer_comparables_for_wacc': { bg: 'bg-indigo-50', border: 'border-indigo-200', header: 'bg-indigo-600' },
-      'forecast_drivers': { bg: 'bg-green-50', border: 'border-green-200', header: 'bg-green-600' }
-    };
-    return colorMap[categoryName] || { bg: 'bg-gray-50', border: 'border-gray-200', header: 'bg-gray-600' };
+  // Update status when data is retrieved
+  useEffect(() => {
+    if (hasRetrievedData && localStatus && Object.keys(localStatus).length > 0) {
+      const updatedStatus = { ...localStatus };
+      Object.keys(updatedStatus).forEach(key => {
+        updatedStatus[key] = 'retrieved';
+      });
+      setLocalStatus(updatedStatus);
+    }
+  }, [hasRetrievedData]);
+
+  const handleRetrieveData = () => {
+    // Set all to fetching state
+    const fetchingStatus = { ...localStatus };
+    Object.keys(fetchingStatus).forEach(key => {
+      fetchingStatus[key] = 'fetching';
+    });
+    setLocalStatus(fetchingStatus);
+
+    // Trigger actual data fetch
+    if (onRetrieveData) onRetrieveData();
   };
 
-  // Format category name for display
-  const formatCategoryName = (categoryName) => {
-    const nameMap = {
-      'historical_financials': '📊 Historical Financials',
-      'market_data': '🏛️ Market Data',
-      'balance_sheet_opening': '📋 Balance Sheet (Opening)',
-      'peer_comparables_for_wacc': '👥 Peer Comparables (for WACC)',
-      'forecast_drivers': '🔮 Forecast Drivers'
+  // Category color mapping with icons
+  const getCategoryConfig = (categoryName) => {
+    const configMap = {
+      'historical_financials': {
+        color: 'blue',
+        icon: <TrendingUp className="w-5 h-5" />,
+        label: 'Historical Financials',
+        gradient: 'from-blue-500 to-blue-600'
+      },
+      'market_data': {
+        color: 'purple',
+        icon: <PieChart className="w-5 h-5" />,
+        label: 'Market Data',
+        gradient: 'from-purple-500 to-purple-600'
+      },
+      'balance_sheet_opening': {
+        color: 'teal',
+        icon: <Briefcase className="w-5 h-5" />,
+        label: 'Balance Sheet (Opening)',
+        gradient: 'from-teal-500 to-teal-600'
+      },
+      'peer_comparables_for_wacc': {
+        color: 'indigo',
+        icon: <Users className="w-5 h-5" />,
+        label: 'Peer Comparables (for WACC)',
+        gradient: 'from-indigo-500 to-indigo-600'
+      },
+      'forecast_drivers': {
+        color: 'green',
+        icon: <TrendingUp className="w-5 h-5" />,
+        label: 'Forecast Drivers',
+        gradient: 'from-green-500 to-green-600'
+      }
     };
-    return nameMap[categoryName] || categoryName.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+    return configMap[categoryName] || {
+      color: 'gray',
+      icon: <Database className="w-5 h-5" />,
+      label: categoryName,
+      gradient: 'from-gray-500 to-gray-600'
+    };
   };
 
-  // Render all required inputs in a clean table format
-  const renderAllRequiredInputs = () => {
-    if (!requiredFields || requiredFields.length === 0) {
+  const getColorClasses = (color) => {
+    const colors = {
+      blue: 'bg-blue-50 border-blue-200 text-blue-900',
+      purple: 'bg-purple-50 border-purple-200 text-purple-900',
+      teal: 'bg-teal-50 border-teal-200 text-teal-900',
+      indigo: 'bg-indigo-50 border-indigo-200 text-indigo-900',
+      green: 'bg-green-50 border-green-200 text-green-900',
+      gray: 'bg-gray-50 border-gray-200 text-gray-900',
+    };
+    return colors[color] || colors.gray;
+  };
+
+  const getStatusBadge = (fieldId) => {
+    const status = localStatus[fieldId] || 'pending';
+
+    if (status === 'fetching') {
       return (
-        <div className="text-center py-12 bg-gray-50 rounded-lg">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading data requirements...</p>
-        </div>
+        <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 border border-yellow-200">
+          <Clock className="w-3 h-3 mr-1 animate-spin" />
+          Fetching...
+        </span>
       );
     }
 
-    // Group flat requiredFields array by category
-    const groupedFields = requiredFields.reduce((groups, field) => {
-      const categoryName = field.category || 'Other';
-      if (!groups[categoryName]) {
-        groups[categoryName] = [];
-      }
-      groups[categoryName].push(field);
-      return groups;
-    }, {});
+    if (status === 'retrieved') {
+      return (
+        <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 border border-green-200">
+          <CheckCircle className="w-3 h-3 mr-1" />
+          Retrieved
+        </span>
+      );
+    }
 
+    // CORRECT STATUS: Pending Retrieval (NOT MISSING!)
     return (
-      <div className="space-y-6">
-        {/* Info Banner */}
-        <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-r-lg">
-          <div className="flex items-start">
-            <div className="flex-shrink-0">
-              <span className="text-2xl">ℹ️</span>
-            </div>
-            <div className="ml-3">
-              <h3 className="text-sm font-medium text-blue-800">About This Step</h3>
-              <p className="mt-1 text-sm text-blue-700">
-                Below are all the data points that will be automatically retrieved from financial APIs (yfinance, Alpha Vantage) 
-                for your <strong>{selectedModel}</strong> analysis. Click <strong>"Retrieve Data"</strong> to fetch this information.
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {Object.entries(groupedFields).map(([categoryName, fields], catIdx) => {
-          const colors = getCategoryColor(categoryName);
-          
-          return (
-            <div key={catIdx} className={`rounded-lg shadow-sm border ${colors.border} overflow-hidden`}>
-              {/* Category Header */}
-              <div className={`${colors.header} px-4 py-3`}>
-                <h3 className="text-lg font-semibold text-white">{formatCategoryName(categoryName)}</h3>
-                <p className="text-sm text-blue-100">{fields.length} data point{fields.length !== 1 ? 's' : ''} required</p>
-              </div>
-              
-              {/* Data Table */}
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className={`${colors.bg}`}>
-                    <tr>
-                      <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                        Data Field
-                      </th>
-                      <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                        Description
-                      </th>
-                      <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                        API Source
-                      </th>
-                      <th scope="col" className="px-4 py-3 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">
-                        Status
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-100">
-                    {fields.map((field, fieldIdx) => (
-                      <tr key={fieldIdx} className="hover:bg-gray-50 transition-colors">
-                        {/* Field Name */}
-                        <td className="px-4 py-3 whitespace-nowrap">
-                          <div className="text-sm font-medium text-gray-900">{field.name || field.fieldName}</div>
-                          <div className="text-xs text-gray-500">Field: {field.fieldName}</div>
-                        </td>
-                        
-                        {/* Description */}
-                        <td className="px-4 py-3">
-                          <div className="text-sm text-gray-600 max-w-md">
-                            {field.description || 'Required for valuation calculation'}
-                          </div>
-                        </td>
-                        
-                        {/* API Source */}
-                        <td className="px-4 py-3 whitespace-nowrap">
-                          <div className="flex items-center">
-                            {field.fieldName.toLowerCase().includes('beta') || 
-                             field.fieldName.toLowerCase().includes('price') ||
-                             field.fieldName.toLowerCase().includes('market') ? (
-                              <>
-                                <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
-                                  📈 yfinance
-                                </span>
-                              </>
-                            ) : field.fieldName.toLowerCase().includes('peer') ? (
-                              <>
-                                <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-green-100 text-green-800">
-                                  🔍 AlphaVantage + yfinance
-                                </span>
-                              </>
-                            ) : (
-                              <>
-                                <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-blue-100 text-blue-800">
-                                  💰 yfinance
-                                </span>
-                              </>
-                            )}
-                          </div>
-                        </td>
-                        
-                        {/* Status */}
-                        <td className="px-4 py-3 whitespace-nowrap text-center">
-                          {hasRetrievedData ? (
-                            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                              ✓ Retrieved
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                              ⏳ Pending Retrieval
-                            </span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+      <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">
+        <Clock className="w-3 h-3 mr-1" />
+        Pending Retrieval
+      </span>
     );
   };
 
-  // Render AI error warning in Step 5 with detailed provider errors
-  const renderAiError = () => {
-    if (!aiError || !hasRetrievedData) return null;
+  const getApiSourceBadge = (fieldName) => {
+    const fieldNameLower = fieldName?.toLowerCase() || '';
 
-    // Try to parse detailed error info from aiError
-    let detailedErrors = null;
-    let fallbackReason = null;
-    try {
-      // Check if aiError contains JSON string with details
-      if (typeof aiError === 'string' && aiError.includes('{')) {
-        const errorObj = JSON.parse(aiError);
-        if (errorObj.errors) {
-          detailedErrors = errorObj.errors;
-        }
-        if (errorObj.fallback_reason) {
-          fallbackReason = errorObj.fallback_reason;
-        }
-      }
-    } catch (e) {
-      // Not a JSON string, use as is
+    if (fieldNameLower.includes('beta') || fieldNameLower.includes('price') || fieldNameLower.includes('market')) {
+      return (
+        <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium bg-yellow-100 text-yellow-800 border border-yellow-200">
+          <TrendingUp className="w-3 h-3 mr-1" />
+          yfinance
+        </span>
+      );
+    }
+
+    if (fieldNameLower.includes('peer')) {
+      return (
+        <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium bg-green-100 text-green-800 border border-green-200">
+          <Users className="w-3 h-3 mr-1" />
+          AlphaVantage + yfinance
+        </span>
+      );
     }
 
     return (
-      <div className="summary-box" style={{ background: 'linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%)', border: '2px solid #ff9800', marginTop: '20px' }}>
-        <h3 style={{ color: '#e65100' }}>⚠️ AI Suggestions Failed</h3>
-        <p style={{ marginBottom: '12px', color: '#e65100' }}>{fallbackReason || aiError}</p>
-
-        {/* Show detailed provider errors if available */}
-        {detailedErrors && Object.keys(detailedErrors).length > 0 && (
-          <div style={{ background: 'white', padding: '12px', borderRadius: '6px', marginTop: '12px', marginBottom: '12px' }}>
-            <strong>🔍 Detailed Error Information:</strong>
-            <div style={{ marginTop: '8px' }}>
-              {Object.entries(detailedErrors).map(([provider, error]) => (
-                <div key={provider} style={{
-                  padding: '8px',
-                  margin: '6px 0',
-                  background: '#ffebee',
-                  borderRadius: '4px',
-                  borderLeft: '3px solid #f44336'
-                }}>
-                  <strong>{provider.toUpperCase()}:</strong>
-                  <code style={{ display: 'block', marginTop: '4px', fontSize: '12px', color: '#c62828', wordBreak: 'break-word' }}>
-                    {error}
-                  </code>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        <div style={{ background: 'white', padding: '12px', borderRadius: '6px', marginTop: '12px' }}>
-          <strong>💡 What this means:</strong>
-          <p style={{ margin: '8px 0', color: '#333' }}>
-            Financial data was successfully loaded, but AI-powered suggestions could not be generated.
-            You can still proceed to view the retrieved data and manually enter your assumptions.
-          </p>
-          <strong>📋 Next Steps:</strong>
-          <ol style={{ margin: '8px 0', paddingLeft: '20px', color: '#333' }}>
-            <li>Click "View Retrieved Inputs" to see the loaded financial data</li>
-            <li>Manually enter your assumptions for WACC, Terminal Growth, etc.</li>
-            <li>Use historical trends and peer benchmarks to inform your inputs</li>
-            <li>Optionally click "Refresh Data" to retry AI generation</li>
-          </ol>
-        </div>
-      </div>
+      <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium bg-blue-100 text-blue-800 border border-blue-200">
+        <Server className="w-3 h-3 mr-1" />
+        yfinance
+      </span>
     );
   };
 
+  if (!requiredFields || requiredFields.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center p-12 text-gray-500">
+        <Clock className="w-16 h-16 mb-4 opacity-50" />
+        <p className="text-lg">Loading requirements...</p>
+      </div>
+    );
+  }
+
+  // Group fields by category
+  const groupedFields = requiredFields.reduce((groups, field) => {
+    const categoryName = field.category || 'Other';
+    if (!groups[categoryName]) {
+      groups[categoryName] = [];
+    }
+    groups[categoryName].push(field);
+    return groups;
+  }, {});
+
   return (
-    <div className="step-container">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-        <div>
-          <h2>Step 5: Review Required Inputs</h2>
-          <p style={{ color: '#666', marginTop: '8px' }}>Review the data points needed for {selectedModel} analysis. Click "Retrieve Data" to fetch from financial APIs.</p>
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4 }}
+      className="space-y-6"
+    >
+      {/* Header Section */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <div className="flex items-start justify-between">
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Review Required Inputs</h2>
+            <p className="text-gray-600 max-w-3xl">
+              The following data points are required for your <span className="font-semibold text-blue-600">{selectedModel}</span> analysis.
+              None of this data has been fetched yet. Click <span className="font-semibold">"Retrieve Data"</span> below to automatically pull these values from financial APIs.
+            </p>
+          </div>
+          <div className="hidden md:flex items-center justify-center w-16 h-16 rounded-full bg-blue-50 text-blue-600">
+            <Database className="w-8 h-8" />
+          </div>
         </div>
-        <button onClick={onBackToModelSelection} className="btn-secondary">
+      </div>
+
+      {/* Info Banner */}
+      <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-r-lg">
+        <div className="flex items-start">
+          <div className="flex-shrink-0">
+            <span className="text-2xl">ℹ️</span>
+          </div>
+          <div className="ml-3">
+            <h3 className="text-sm font-medium text-blue-800">About This Step</h3>
+            <p className="mt-1 text-sm text-blue-700">
+              All fields below show <strong>"Pending Retrieval"</strong> because we haven't fetched data yet.
+              This is expected behavior - click the button below to retrieve all data at once.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Requirements Table */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="bg-gray-50 border-b border-gray-200">
+                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider w-1/4">Category & Field</th>
+                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider w-1/3">Description</th>
+                <th className="px-6 py-4 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider w-1/6">API Source</th>
+                <th className="px-6 py-4 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider w-1/6">Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {Object.entries(groupedFields).map(([categoryName, fields], catIndex) => {
+                const config = getCategoryConfig(categoryName);
+                const colorClasses = getColorClasses(config.color);
+
+                return (
+                  <React.Fragment key={categoryName}>
+                    {/* Category Header Row */}
+                    <tr className={`bg-opacity-40 ${colorClasses.split(' ')[0]}`}>
+                      <td colSpan="4" className="px-6 py-3">
+                        <div className="flex items-center space-x-3">
+                          <div className={`p-2 rounded-lg bg-gradient-to-r ${config.gradient} text-white`}>
+                            {config.icon}
+                          </div>
+                          <span className={`font-bold text-sm ${colorClasses.split(' ')[2]}`}>
+                            {config.label}
+                          </span>
+                          <span className="text-xs text-gray-500 font-normal">({fields.length} fields)</span>
+                        </div>
+                      </td>
+                    </tr>
+
+                    {/* Field Rows */}
+                    {fields.map((field, fieldIndex) => (
+                      <tr key={field.id || fieldIndex} className="hover:bg-gray-50 transition-colors">
+                        <td className="px-6 py-4">
+                          <div className="flex flex-col">
+                            <span className="font-semibold text-gray-900 text-sm">{field.name || field.fieldName}</span>
+                            <span className="text-xs text-gray-500 font-mono mt-1">{field.fieldKey || field.fieldName}</span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <p className="text-sm text-gray-600 leading-relaxed">{field.description || 'Required for valuation calculation'}</p>
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          {getApiSourceBadge(field.fieldName)}
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          {getStatusBadge(field.id || field.fieldName)}
+                        </td>
+                      </tr>
+                    ))}
+                  </React.Fragment>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Action Bar */}
+      <div className="flex items-center justify-between pt-4">
+        <button
+          onClick={onBackToModelSelection}
+          disabled={loading}
+          className="px-6 py-3 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+        >
           ← Change Model
         </button>
-      </div>
 
-      {/* Render ALL required inputs from backend - comprehensive list */}
-      {renderAllRequiredInputs()}
-
-      {/* Show AI error warning if applicable */}
-      {renderAiError()}
-
-      <div style={{ marginTop: '20px', display: 'flex', gap: '10px' }}>
-        {!hasRetrievedData ? (
-          <button
-            onClick={onRetrieveData}
-            className="btn-primary"
-            disabled={loading}
-          >
-            {loading ? 'Retrieving Data...' : '📥 Retrieve Data'}
-          </button>
-        ) : (
-          <>
+        <div className="flex items-center space-x-4">
+          <div className="text-sm text-gray-500 hidden sm:block">
+            Ready to fetch <span className="font-bold text-gray-900">{requiredFields.length}</span> data points
+          </div>
+          {!hasRetrievedData ? (
             <button
-              onClick={onRetrieveData}
-              className="btn-secondary"
+              onClick={handleRetrieveData}
               disabled={loading}
+              className={`
+                flex items-center px-8 py-3 rounded-lg font-bold text-white shadow-lg
+                transform transition-all duration-200
+                ${loading
+                  ? 'bg-gray-400 cursor-not-allowed'
+                  : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 hover:-translate-y-0.5 hover:shadow-xl'
+                }
+                focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500
+              `}
             >
-              {loading ? '🔄 Refreshing Data...' : '🔄 Refresh Data'}
+              {loading ? (
+                <>
+                  <Clock className="w-5 h-5 mr-2 animate-spin" />
+                  Retrieving Data...
+                </>
+              ) : (
+                <>
+                  <Database className="w-5 h-5 mr-2" />
+                  Retrieve Data
+                  <ArrowRight className="w-5 h-5 ml-2" />
+                </>
+              )}
             </button>
-            <button
-              onClick={onShowInputs}
-              className="btn-primary"
-            >
-              Continue to Review Data →
-            </button>
-          </>
-        )}
+          ) : (
+            <>
+              <button
+                onClick={onRetrieveData}
+                disabled={loading}
+                className="px-6 py-3 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+              >
+                🔄 Refresh Data
+              </button>
+              <button
+                onClick={onShowInputs}
+                className="flex items-center px-8 py-3 rounded-lg font-bold text-white shadow-lg bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 hover:-translate-y-0.5 hover:shadow-xl transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+              >
+                Continue to Review Data →
+              </button>
+            </>
+          )}
+        </div>
       </div>
-    </div>
+
+      {/* AI Error Warning (if applicable) */}
+      {aiError && hasRetrievedData && (
+        <div className="bg-gradient-to-r from-orange-50 to-amber-50 border-2 border-orange-500 rounded-xl p-6">
+          <h3 className="text-lg font-bold text-orange-800 mb-2">⚠️ AI Suggestions Failed</h3>
+          <p className="text-orange-700 mb-4">{aiError}</p>
+          <div className="bg-white rounded-lg p-4">
+            <p className="text-sm text-gray-700">
+              <strong>💡 What this means:</strong> Financial data was successfully loaded, but AI-powered suggestions could not be generated.
+              You can still proceed to view the retrieved data and manually enter your assumptions.
+            </p>
+          </div>
+        </div>
+      )}
+    </motion.div>
   );
 };
 
