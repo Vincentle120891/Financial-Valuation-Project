@@ -186,8 +186,9 @@ const ApiDataStep = ({
                   // FIXED: Access historicalData.historical_financials correctly
                   const fieldData = historicalData?.historical_financials?.[input.key];
 
+                  // Check if data exists - handles both legacy format ({period, value}) and unified schema (scalar values)
                   const hasData = fieldData && (
-                    (Array.isArray(fieldData.value) && fieldData.value.some(pv => pv && pv.value !== null && pv.value !== undefined)) ||
+                    (Array.isArray(fieldData.value) && fieldData.value.some(val => val !== null && val !== undefined)) ||
                     (!Array.isArray(fieldData.value) && fieldData.value !== null && fieldData.value !== undefined)
                   );
 
