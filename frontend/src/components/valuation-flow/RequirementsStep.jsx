@@ -42,7 +42,7 @@ const RequirementsStep = ({
   }, [requiredFields]);
 
   // Check if data has already been retrieved
-  const hasRetrievedData = historicalData || peerData || dcfInputs || dupontResults || compsResults || (aiData && Object.keys(aiData).length > 0);
+  const hasRetrievedData = historicalData || peerData || dcfInputs || dupontResults || compsResults || (historicalGapsData && Object.keys(historicalGapsData).length > 0);
 
   // Update status when data is retrieved
   useEffect(() => {
