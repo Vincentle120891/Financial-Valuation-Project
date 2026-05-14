@@ -28,9 +28,14 @@ export const searchCompanies = async (query, market = 'international') => {
   return response.data;
 };
 
-// Step 3: Suggest Peers
-export const suggestPeers = async (ticker, market = 'international', maxPeers = 10) => {
-  const response = await api.post('/step-4-suggest-peers', { ticker, market, max_peers: maxPeers });
+// Step 4: Suggest Peers (after model selection)
+export const suggestPeers = async (ticker, market = 'international', maxPeers = 10, method = null) => {
+  const response = await api.post('/step-4-suggest-peers', { 
+    ticker, 
+    market, 
+    max_peers: maxPeers,
+    method: method // Pass selected valuation method for method-specific peer criteria
+  });
   return response.data;
 };
 
@@ -57,7 +62,7 @@ export const validateManualPeers = async (sessionId, tickers, market = 'internat
 };
 
 // Step 4: Select Models - Updated to use unified schema
-export const selectModels = async (sessionId, method, market = 'international', suggestedPeers = [], customPeers = []) => {
+export const selectModels = async (sessionId, method, market = 'international', suggestedPeers, customPeers) => {
   // Convert peer objects to ticker strings if needed
   const suggestedPeerTickers = suggestedPeers && suggestedPeers.length > 0 
     ? suggestedPeers.map(p => p.ticker || p.symbol) 
