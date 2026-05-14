@@ -2,7 +2,7 @@ import React from 'react';
 
 /**
  * ModelSelectionStep Component
- * Step 4: Select Valuation Model(s)
+ * Step 3: Select Valuation Model(s)
  * 
  * FIXED: Now uses Radio Buttons instead of checkboxes.
  * Per documentation: "MUST use Radio Buttons. Multi-select is forbidden."
@@ -35,7 +35,7 @@ const ModelSelectionStep = ({ onSelectModel, selectedModels, selectedPeers }) =>
   const handleSelectModel = (modelId) => {
     // Client-side validation: Prevent model selection without peers (Unified Schema Requirement)
     if (!selectedPeers || selectedPeers.length === 0) {
-      alert('⚠️ No peers selected! Please go back to Step 3 and select at least one peer company.');
+      alert('⚠️ No peers selected! Please go back to Step 4 and select at least one peer company.');
       return;
     }
     
