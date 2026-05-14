@@ -187,7 +187,7 @@ const ApiDataStep = ({
                   const fieldData = historicalData?.historical_financials?.[input.key];
 
                   const hasData = fieldData && (
-                    (Array.isArray(fieldData.value) && fieldData.value.some(pv => pv.value !== null && pv.value !== undefined)) ||
+                    (Array.isArray(fieldData.value) && fieldData.value.some(pv => pv && pv.value !== null && pv.value !== undefined)) ||
                     (!Array.isArray(fieldData.value) && fieldData.value !== null && fieldData.value !== undefined)
                   );
 
