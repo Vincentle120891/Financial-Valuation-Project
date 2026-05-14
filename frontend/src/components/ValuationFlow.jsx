@@ -58,23 +58,24 @@ const useDebounce = (callback, delay) => {
  *
  * Orchestrates the 11-step valuation workflow (ALIGNED WITH BACKEND):
  * Step 1: Search Company (Input ticker/name)
- * Step 2: Company Overview (View selected company data only - no peer finding)
- * Step 3: Select Valuation Model (DCF/DuPont/Comps) - Model selection BEFORE peers
- * Step 4: Find Peers (Click "Find Peers" → peers discovered using method-specific criteria)
- * Step 5: Review Requirements (Review requirements with auto-selected peers)
+ * Step 2: Company Overview (View selected company data ONLY - no peers, no models)
+ * Step 3: Select Valuation Model (DCF/DuPont/Comps) -> Determines peer criteria
+ * Step 4: Find & Review Peers (Click "Find Peers" using Model criteria -> Review & Select)
+ * Step 5: Requirements Review (Review required input fields based on Model + Peers)
  * Step 6: Fetch API Data (Retrieve all financial inputs - "Fetch Once, Use Many")
  * Step 7: Historical Data Processing (AI extraction & trendlines)
- * Step 8: Manual Overrides (Assumption & AI Suggestion adjustment)
+ * Step 8: Forecast Drivers (Manual overrides & assumption adjustment)
  * Step 9: Confirm Assumptions (Final confirmation before calculation)
- * Step 10: Execute Valuation & View Results (Run models + display results)
- * Step 11: Reserved for future export functionality
+ * Step 10: Execute Valuation (Run models)
+ * Step 11: View Results (Display valuation results)
  *
  * Architecture:
  * - Container component managing state and business logic
  * - Delegated rendering to specialized step components
  * - Centralized API communication via services/api.js
- * - Aligned with backend unified schemas (Steps 1-10)
+ * - Aligned with backend unified schemas (Steps 1-11)
  * - Single model execution enforced (radio buttons prevent multi-model race conditions)
+ * - MODEL FIRST, THEN PEERS: Peer discovery requires model selection to use method-specific criteria
  */
 const ValuationFlow = () => {
   // ==================== STATE MANAGEMENT ====================
@@ -269,19 +270,14 @@ const ValuationFlow = () => {
     }
   }, [searchQuery, market]);
 
-  // ==================== STEP 4: FIND PEERS (After Model Selection) ====================
+  // ==================== STEP 4: FIND PEERS (After Model Selection - Method Specific) ====================
   const handleFindPeers = useCallback(async (company) => {
     setLoading(true);
     setError(null);
 
-    // Validate that model is selected before finding peers
-    if (!selectedModels) {
-      setMarketValidation({
-        isValid: false,
-        message: 'Please select a valuation model first. Different models require different peer criteria.',
-        selectedMarket: market
-      });
-      setError('Model selection required before peer discovery');
+    // Validate model selection first - peer discovery requires model-specific criteria
+    if (!selectedModels || selectedModels.length === 0) {
+      setError('Please select a valuation model first before finding peers');
       setLoading(false);
       return;
     }
@@ -300,8 +296,8 @@ const ValuationFlow = () => {
 
     try {
       const ticker = company.ticker || company.symbol;
-      // Pass the selected model to backend for method-specific peer criteria
-      const data = await suggestPeers(ticker, company.market || market, 10, selectedModels);
+      // Pass the selected model for method-specific peer discovery
+      const data = await suggestPeers(ticker, company.market || market, 10, selectedModels[0]);
       console.log('Suggest peers response:', data);
       if (data.peers && data.peers.length > 0) {
         setSuggestedPeers(data.peers);
@@ -326,7 +322,7 @@ const ValuationFlow = () => {
     }
   }, [market, selectedModels]);
 
-  // ==================== STEP 4: TOGGLE PEER SELECTION ====================
+  // ==================== STEP 5: TOGGLE PEER SELECTION ====================
   const handleTogglePeer = useCallback((peer) => {
     setSelectedPeers(prev => {
       // Use ticker or symbol as the unique identifier for consistency
@@ -340,7 +336,7 @@ const ValuationFlow = () => {
     });
   }, []);
 
-  // ==================== STEP 4: CONTINUE TO REQUIREMENTS REVIEW (After peer selection) ====================
+  // ==================== STEP 5: CONTINUE TO REQUIREMENTS REVIEW (After peer selection) ====================
   const handleContinueToRequirementsReview = useCallback(async () => {
     if (!sessionId || selectedPeers.length === 0) {
       setError('No session or peers selected');
@@ -438,7 +434,7 @@ const ValuationFlow = () => {
           isLocked: true // Market is now locked - cannot be changed after Step 1
         });
 
-        setCurrentStep(3); // Move directly to Step 3: Model Selection (peer finding happens AFTER model selection)
+        setCurrentStep(2); // Move to Step 2: Company Overview (view company data before model selection)
       }
     } catch (err) {
       console.error('Select company error:', err);
@@ -458,13 +454,13 @@ const ValuationFlow = () => {
     setLoading(true);
     try {
       // Always use single model endpoint (multi-select is now forbidden per documentation)
-      // Pass undefined for peers - peers will be discovered in Step 4 based on the selected model
+      // Pass undefined for peers - peers have already been discovered in Step 3
       const data = await selectModels(sessionId, modelType, market, undefined, undefined);
       console.log('Select model response:', data);
       if (data.message) {
-        // After selecting model, move to Step 4: Company Overview with Peer Finding
-        // Peers will be found based on the selected model in Step 4
-        setCurrentStep(4);
+        // After selecting model, move to Step 5: Peer Review/Adjustment
+        // Peers were already found in Step 3, now user can adjust them for the specific model
+        setCurrentStep(5);
       }
     } catch (err) {
       console.error('Select model error:', err);
@@ -474,7 +470,7 @@ const ValuationFlow = () => {
     }
   }, [sessionId, market]);
 
-  // ==================== BACK TO MODEL SELECTION (STEP 3) ====================
+  // ==================== BACK TO MODEL SELECTION (STEP 4) ====================
   const handleBackToModelSelection = () => {
     const currentMethod = selectedModels?.toLowerCase();
 
@@ -503,8 +499,9 @@ const ValuationFlow = () => {
     }));
     setAiError(null); // Clear AI errors
     setPeerData(null);
-    setSuggestedPeers([]); // Clear peers when going back to model selection
-    setSelectedPeers([]);
+    // Keep peers when going back to model selection - they are method-agnostic
+    // setSuggestedPeers([]); 
+    // setSelectedPeers([]);
     // Reset only the current method's results, preserve others
     setValuationResults(prev => ({
       ...prev,
@@ -514,11 +511,11 @@ const ValuationFlow = () => {
       }
     }));
 
-    // Reset selection and navigation - go back to Step 3: Model Selection
+    // Reset selection and navigation - go back to Step 4: Model Selection
     setSelectedModels('');
     setRequiredFields([]);
     setConfirmedValues({});
-    setCurrentStep(3);  // Go back to Step 3: Model Selection
+    setCurrentStep(4);  // Go back to Step 4: Model Selection
     setError(null);
     // Keep market locked - user selected company already, just switching models
   };
@@ -1008,8 +1005,8 @@ const ValuationFlow = () => {
           />
         );
       case 2:
-        // Step 2: Company Overview - Only display company data, no peer finding yet
-        // Peer finding happens in Step 4 after model selection
+        // Step 2: Company Overview - Only display company data, no peers, no models
+        // User reviews company data, then clicks Continue to go to Step 3 (Model Selection)
         return (
           <CompanySelectionStep
             selectedCompany={selectedCompany}
@@ -1017,27 +1014,30 @@ const ValuationFlow = () => {
             onContinue={() => setCurrentStep(3)}
             onBack={() => setCurrentStep(1)}
             loading={loading}
-            hasPeers={false} // No peers yet - will be found in Step 4
+            hasPeers={false} // No peers yet - will be found in Step 4 after model selection
             market={market}
           />
         );
       case 3:
+        // Step 3: Model Selection - Select valuation model (DCF/DuPont/Comps)
+        // Model selection determines the criteria for peer discovery in Step 4
         return <ModelSelectionStep onSelectModel={handleSelectModel} selectedModels={selectedModels} />;
       case 4:
-        // Step 4: Company Overview with Peer Finding (after model selection)
-        // Now that model is selected, we can find appropriate peers based on the model
+        // Step 4: Find & Review Peers - Click "Find Peers" using model-specific criteria
+        // User discovers peers based on the selected model, then reviews and selects them
         return (
-          <CompanySelectionStep
-            selectedCompany={selectedCompany}
+          <PeerSelectionStep
+            suggestedPeers={suggestedPeers}
+            selectedPeers={selectedPeers}
+            onTogglePeer={handleTogglePeer}
             onFindPeers={handleFindPeers}
             onContinue={handleContinueToRequirementsReview}
             onBack={() => setCurrentStep(3)}
             loading={loading}
-            hasPeers={suggestedPeers.length > 0}
-            market={market}
           />
         );
       case 5:
+        // Step 5: Requirements Review
         // Note: valuationData is not passed to Step 5 because data hasn't been fetched yet
         // Step 5 only shows requirements from requiredFields (prepared by prepareAssumptions)
         // Unified schema data (valuationData) is only available after Step 6 fetches it
@@ -1179,15 +1179,15 @@ const ValuationFlow = () => {
           <span className="step-name">
             {currentStep === 1 ? 'Search Company' :
              currentStep === 2 ? 'Company Overview' :
-             currentStep === 3 ? 'Method Selection' :  // SWAPPED: Was Peer Selection
-             currentStep === 4 ? 'Peer Selection' :     // SWAPPED: Was Method Selection
-             currentStep === 5 ? 'Review Requirements' :
-             currentStep === 6 ? 'View Retrieved Inputs' :
+             currentStep === 3 ? 'Select Model' :
+             currentStep === 4 ? 'Find & Review Peers' :
+             currentStep === 5 ? 'Requirements Review' :
+             currentStep === 6 ? 'Fetch API Data' :
              currentStep === 7 ? 'Historical Data Extraction' :
-             currentStep === 8 ? 'Assumption & AI Suggestion' :
+             currentStep === 8 ? 'Forecast Drivers' :
              currentStep === 9 ? 'Confirm Assumptions' :
              currentStep === 10 ? 'Run Valuation' :
-             currentStep === 11 ? 'Results & Export' : 'In Progress'}
+             currentStep === 11 ? 'View Results' : 'In Progress'}
           </span>
           <span className="step-progress">{Math.round((currentStep / 11) * 100)}% Complete</span>
         </div>
