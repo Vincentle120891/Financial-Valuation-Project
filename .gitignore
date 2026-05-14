@@ -1,5 +1,41 @@
-Nothing should be ignored based on the provided file changes, as they only contain source code files (.jsx) without any build artifacts, dependencies, or temporary files.
 ```
-# Documentation
-*.md
+# Dependencies
+node_modules/
+
+# Logs and temp files
+*.log
+*.tmp
+
+# Environment
+.env
+.env.local
+.env.
+
+# Editors
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+.coverage
+htmlcov/
+.coverage.*
+.cache
+.pytest_cache/
+.mypy_cache/
+
+# Build outputs
+dist/
+build/
+*.egg-info/
+.eggs/
+
+# OS generated files
+.DS_Store
+Thumbs.db
 ```
