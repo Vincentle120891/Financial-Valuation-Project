@@ -297,7 +297,7 @@ const ValuationFlow = () => {
     try {
       const ticker = company.ticker || company.symbol;
       // Pass the selected model for method-specific peer discovery
-      const data = await suggestPeers(ticker, company.market || market, 10, selectedModels[0]);
+      const data = await suggestPeers(ticker, company.market || market, 10, selectedModels);
       console.log('Suggest peers response:', data);
       if (data.peers && data.peers.length > 0) {
         setSuggestedPeers(data.peers);
@@ -454,13 +454,13 @@ const ValuationFlow = () => {
     setLoading(true);
     try {
       // Always use single model endpoint (multi-select is now forbidden per documentation)
-      // Pass undefined for peers - peers have already been discovered in Step 3
+      // Pass undefined for peers - peers will be discovered in Step 4
       const data = await selectModels(sessionId, modelType, market, undefined, undefined);
       console.log('Select model response:', data);
       if (data.message) {
-        // After selecting model, move to Step 5: Peer Review/Adjustment
-        // Peers were already found in Step 3, now user can adjust them for the specific model
-        setCurrentStep(5);
+        // After selecting model, move to Step 4: Find & Review Peers
+        // User will click "Find Peers" button in Step 4 to discover peers using model-specific criteria
+        setCurrentStep(4);
       }
     } catch (err) {
       console.error('Select model error:', err);
