@@ -5,16 +5,7 @@
  * International and Vietnamese markets.
  */
 
-// Generic reusable components (Phase 2 - Component Simplification)
-export { default as GenericDataTable } from './GenericDataTable';
-export { default as MarketInfoCard } from './MarketInfoCard';
-export { default as DynamicFormGenerator } from './DynamicFormGenerator';
-
-// Legacy market-specific components (deprecated, use MarketInfoCard instead)
-// export { default as InternationalMarketData } from './InternationalMarketData';
-// export { default as VietnameseMarketData } from './VietnameseMarketData';
-
-// Step components (to be refactored in subsequent phases)
+// Step components (Phase 3 - DataFieldDisplay Integration)
 export { default as ApiDataStep } from './ApiDataStep';
 export { default as AssumptionsStep } from './AssumptionsStep';
 export { default as CompanySelectionStep } from './CompanySelectionStep';
