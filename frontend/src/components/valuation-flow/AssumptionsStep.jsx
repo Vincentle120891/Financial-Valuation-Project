@@ -1,4 +1,5 @@
 import React from 'react';
+import DataFieldDisplay from './DataFieldDisplay';
 import { 
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, 
   Tooltip, Legend, ResponsiveContainer, AreaChart, Area, 
@@ -382,7 +383,20 @@ const AssumptionsStep = ({
                 <>
                   <tr>
                     <td>WACC</td>
-                    <td>{aiData.wacc_percent ? (aiData.wacc_percent.value / 100).toFixed(2) + '%' : aiData.wacc ? (aiData.wacc * 100).toFixed(2) + '%' : 'N/A'}</td>
+                    <td>
+                      <DataFieldDisplay 
+                        dataField={{
+                          key: 'wacc',
+                          value: aiData.wacc_percent ? aiData.wacc_percent.value / 100 : aiData.wacc,
+                          status: 'AI_GENERATED',
+                          source: aiData.wacc_percent?.sources || aiData.wacc_sources || 'CAPM Formula',
+                          confidence_score: aiData.wacc_percent?.confidence_score || 0.85,
+                          rationale: aiData.wacc_percent?.rationale || aiData.wacc_rationale
+                        }}
+                        showMetadata={true}
+                        compact={true}
+                      />
+                    </td>
                     <td className="rationale-cell">
                       {aiData.wacc_percent?.rationale ? (
                         <div className="rationale-content">
@@ -415,7 +429,20 @@ const AssumptionsStep = ({
                   </tr>
                   <tr>
                     <td>Terminal Growth Rate</td>
-                    <td>{aiData.terminal_growth_rate_percent ? (aiData.terminal_growth_rate_percent.value / 100).toFixed(2) + '%' : aiData.terminal_growth ? (aiData.terminal_growth * 100).toFixed(2) + '%' : 'N/A'}</td>
+                    <td>
+                      <DataFieldDisplay 
+                        dataField={{
+                          key: 'terminal_growth_rate',
+                          value: aiData.terminal_growth_rate_percent ? aiData.terminal_growth_rate_percent.value / 100 : aiData.terminal_growth,
+                          status: 'AI_GENERATED',
+                          source: aiData.terminal_growth_rate_percent?.sources || aiData.terminal_growth_sources || 'Historical GDP',
+                          confidence_score: aiData.terminal_growth_rate_percent?.confidence_score || 0.80,
+                          rationale: aiData.terminal_growth_rate_percent?.rationale || aiData.terminal_growth_rationale
+                        }}
+                        showMetadata={true}
+                        compact={true}
+                      />
+                    </td>
                     <td className="rationale-cell">
                       {aiData.terminal_growth_rate_percent?.rationale ? (
                         <div className="rationale-content">
