@@ -222,8 +222,9 @@ class InternationalDataStrategy:
         effective_tax_rate = None
         cost_of_debt = None
         try:
-            income_stmt = ticker.financials
-            balance_sheet = ticker.balance_sheet
+            # Use get_income_stmt() and get_balance_sheet() for yfinance v1.3.0+ compatibility
+            income_stmt = ticker.get_income_stmt()
+            balance_sheet = ticker.get_balance_sheet()
             if income_stmt is not None and not income_stmt.empty:
                 latest_col = income_stmt.columns[0]
                 
@@ -286,7 +287,8 @@ class InternationalDataStrategy:
     def _fetch_income_statement(self, ticker) -> Dict[str, Any]:
         """Fetch income statement data."""
         try:
-            financials = ticker.financials
+            # Use get_income_stmt() for yfinance v1.3.0+ compatibility
+            financials = ticker.get_income_stmt()
             if financials is None or financials.empty:
                 return {}
             
@@ -315,7 +317,8 @@ class InternationalDataStrategy:
     def _fetch_balance_sheet(self, ticker) -> Dict[str, Any]:
         """Fetch balance sheet data."""
         try:
-            balance_sheet = ticker.balance_sheet
+            # Use get_balance_sheet() for yfinance v1.3.0+ compatibility
+            balance_sheet = ticker.get_balance_sheet()
             if balance_sheet is None or balance_sheet.empty:
                 return {}
             
@@ -343,7 +346,8 @@ class InternationalDataStrategy:
     def _fetch_cash_flow(self, ticker) -> Dict[str, Any]:
         """Fetch cash flow data."""
         try:
-            cashflow = ticker.cashflow
+            # Use get_cashflow() for yfinance v1.3.0+ compatibility
+            cashflow = ticker.get_cashflow()
             if cashflow is None or cashflow.empty:
                 return {}
             
@@ -597,8 +601,9 @@ class YFinanceService:
             effective_tax_rate = None
             cost_of_debt = None
             try:
-                income_stmt = yf_ticker.financials
-                balance_sheet = yf_ticker.balance_sheet
+                # Use get_income_stmt() and get_balance_sheet() for yfinance v1.3.0+ compatibility
+                income_stmt = yf_ticker.get_income_stmt()
+                balance_sheet = yf_ticker.get_balance_sheet()
                 if income_stmt is not None and not income_stmt.empty:
                     # Get the most recent column
                     latest_col = income_stmt.columns[0]
@@ -973,7 +978,8 @@ class YFinanceService:
     def _fetch_income_statement(self) -> Dict[str, Any]:
         """Fetch income statement data."""
         try:
-            stmt = self.ticker.financials
+            # Use get_income_stmt() for yfinance v1.3.0+ compatibility
+            stmt = self.ticker.get_income_stmt()
             if stmt.empty:
                 logger.warning("No income statement data available")
                 return {}
@@ -1041,7 +1047,8 @@ class YFinanceService:
     def _fetch_balance_sheet(self) -> Dict[str, Any]:
         """Fetch balance sheet data."""
         try:
-            bs = self.ticker.balance_sheet
+            # Use get_balance_sheet() for yfinance v1.3.0+ compatibility
+            bs = self.ticker.get_balance_sheet()
             if bs.empty:
                 logger.warning("No balance sheet data available")
                 return {}
@@ -1114,7 +1121,8 @@ class YFinanceService:
     def _fetch_cash_flow(self) -> Dict[str, Any]:
         """Fetch cash flow statement data."""
         try:
-            cf = self.ticker.cashflow
+            # Use get_cashflow() for yfinance v1.3.0+ compatibility
+            cf = self.ticker.get_cashflow()
             if cf.empty:
                 logger.warning("No cash flow data available")
                 return {}

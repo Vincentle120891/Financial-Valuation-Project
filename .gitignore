@@ -1,2 +1,1 @@
-Nothing needs to be added to .gitignore since only a Python source file was modified and no build artifacts, dependencies, or temporary files were detected in the changes.
-Nothing needs to be added to the .gitignore file based on the provided changes. The modified file is a Python source file that should be tracked in version control.
+Nothing should be ignored based on the provided file changes. The only modified file is a Python source file (`backend/app/services/international/yfinance_service.py`), which should not be added to .gitignore.
