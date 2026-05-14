@@ -1,16 +1,17 @@
 """
-API Routes for International & Vietnamese Tickers
+API Routes for International Market Data
 Refactored for granular, model-specific data retrieval supporting 94+ inputs across DCF, Comps, and DuPont models.
 
 Endpoint Organization:
-1. General Market Data (Common to all models) - 4 endpoints
+1. General Market Data (Common to all models) - 2 endpoints
 2. DCF Model Specific Inputs (~40 inputs) - 8 endpoints  
-3. Comps (Relative Valuation) Specific Inputs (~30 inputs) - 7 endpoints
-4. DuPont Analysis Specific Inputs (~24 inputs) - 6 endpoints
-5. Batch Operations - 3 endpoints
-6. Vietnamese Market Enhanced - 5 endpoints
+3. Comps (Relative Valuation) Specific Inputs (~30 inputs) - 5 endpoints
+4. DuPont Analysis Specific Inputs (~24 inputs) - 4 endpoints
+5. Batch Operations - 1 endpoint
 
-Total: ~33 granular endpoints for precise frontend integration
+Total: ~21 granular endpoints for precise frontend integration
+
+NOTE: Vietnamese Market routes have been moved to vietnamese_market_data_routes.py (Version 2)
 """
 
 from fastapi import APIRouter, HTTPException, Query, Path
@@ -20,72 +21,72 @@ from pydantic import BaseModel
 import logging
 
 from app.services.international import InternationalTickerService
-from app.services.vietnamese import VietnameseTickerService
 from app.services.international import MetricsCalculator
 from app.services.international.step5_required_inputs_processor import Step5RequiredInputsProcessor, ValuationModel
 from app.services.international.step6_data_review import Step6DataReviewProcessor
 from app.services.international.yfinance_service import YFinanceService
 from app.services.international.ai_engine import suggest_peer_companies
-from app.api.schemas import (
-    UnifiedStep1Request,
-    UnifiedStep1Response,
-    CompanySearchResult,
-    MarketType
-)
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(tags=["International & Vietnamese Tickers"])
+router = APIRouter(tags=["International Market Data"])
 
 # Initialize services
 intl_service = InternationalTickerService()
-vn_service = VietnameseTickerService()
 metrics_calc = MetricsCalculator()
 step5_processor = Step5RequiredInputsProcessor()
 step6_processor = Step6DataReviewProcessor()
 yfinance_service = YFinanceService()
 
-
 class TickerRequest(BaseModel):
     ticker: str
-    market_code: str = "VN"
+    market_code: str = "US"
     include_estimates: bool = True
     include_historical: bool = True
-
-
-class VietnamTickerRequest(BaseModel):
-    ticker: str
-    market_code: str = "VN"
-    include_peers: bool = True
-    include_index_data: bool = True
-    enhanced_mode: bool = True
-
 
 @router.get("/international/tickers")
 async def list_international_markets():
     """
     List all supported international markets and their suffixes
+    
+    Markets included:
+    - US: No suffix (e.g., AAPL)
+    - Japan: .T (e.g., 7203.T)
+    - UK: .L (e.g., HSBA.L)
+    - Germany: .DE (e.g., VOW3.DE)
+    - France: .PA (e.g., AIR.PA)
+    - Canada: .TO (e.g., RY.TO)
+    - Australia: .AX (e.g., BHP.AX)
+    - Hong Kong: .HK (e.g., 0700.HK)
+    - Singapore: .SI (e.g., D05.SI)
+    
+    NOTE: Vietnamese market (.VN) is handled separately in vietnamese_market_data_routes.py
     """
     return {
         "markets": intl_service.MARKET_SUFFIXES,
         "currencies": intl_service.MARKET_CURRENCIES,
-        "vietnam_markets": intl_service.VIETNAM_MARKETS,
-        "note": "Use market_code when fetching data for international tickers"
+        "note": "Use market_code when fetching data for international tickers. Vietnam is Version 2."
     }
-
 
 @router.get("/international/fetch")
 async def fetch_international_ticker(
-    ticker: str = Query(..., description="Base ticker symbol (e.g., 'VNM', '7203')"),
-    market_code: str = Query("VN", description="Market code (e.g., 'VN', 'T', 'L')")
+    ticker: str = Query(..., description="Base ticker symbol (e.g., 'AAPL', '7203', 'HSBA')"),
+    market_code: str = Query("US", description="Market code (e.g., 'US', 'T', 'L', 'DE')")
 ):
     """
-    Fetch data for any international ticker
+    Fetch data for any international ticker (NON-Vietnamese markets)
     
     Examples:
-    - Vietnam: ticker=VNM&market_code=VN → VNM.VN
+    - US: ticker=AAPL&market_code=US → AAPL
     - Japan: ticker=7203&market_code=T → 7203.T
     - UK: ticker=HSBA&market_code=L → HSBA.L
+    - Germany: ticker=VOW3&market_code=DE → VOW3.DE
+    
+    Returns:
+    - Company profile
+    - Financial statements (income, balance sheet, cash flow)
+    - Key statistics
+    - Calculated metrics (margins, growth rates, ratios)
     """
     try:
         result = intl_service.fetch_international_data(ticker, market_code)
@@ -112,254 +113,6 @@ async def fetch_international_ticker(
     except Exception as e:
         logger.error(f"Error fetching international ticker: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/vietnam/tickers")
-async def list_vietnamese_stocks():
-    """
-    List commonly tracked Vietnamese stocks
-    """
-    return {
-        "stocks": vn_service.list_available_vietnamese_stocks(),
-        "markets": [
-            {"code": "VN", "name": "HOSE", "description": "Ho Chi Minh Stock Exchange"},
-            {"code": "HA", "name": "HNX", "description": "Hanoi Stock Exchange"},
-            {"code": "VC", "name": "UPCOM", "description": "Unlisted Public Company Market"}
-        ]
-    }
-
-
-@router.post("/step-1-search")
-async def search_vietnamese_stocks_unified(request: UnifiedStep1Request):
-    """
-    FIX Issue #1 & #3: Unified POST endpoint for Vietnamese stock search.
-    Replaces legacy GET /vietnam/search with unified POST /step-1-search.
-    Returns unified format matching international search response.
-    
-    Args:
-        request: UnifiedStep1Request with query, market, and limit parameters
-        
-    Returns:
-        UnifiedStep1Response with search results and metadata
-    """
-    logger.info(f"Searching Vietnamese tickers with query='{request.query}', market='vietnam'")
-    
-    try:
-        # Validate market is vietnamese/vietnam
-        market_str = request.market.value if isinstance(request.market, MarketType) else request.market
-        if market_str.lower() not in ["vietnam", "vietnam"]:
-            return UnifiedStep1Response(
-                status="error",
-                query=request.query,
-                market=market_str,
-                results=[],
-                total_results=0,
-                message="Invalid market for Vietnamese search endpoint"
-            )
-        
-        results = vn_service.search_vietnamese_stocks(request.query)
-        
-        if not results:
-            logger.warning(f"No Vietnamese tickers found for query='{request.query}'")
-            return UnifiedStep1Response(
-                status="no_results",
-                query=request.query,
-                market="vietnam",
-                results=[],
-                total_results=0,
-                message="No tickers found. Try exact symbol or company name."
-            )
-        
-        # FIX Issue #2: Transform to match CompanySearchResult format (use 'ticker' and 'company_name')
-        formatted_results = []
-        for stock in results:
-            formatted_results.append(CompanySearchResult(
-                ticker=stock.get("ticker", stock.get("symbol", "")),
-                company_name=stock.get("name", stock.get("company_name", "")),
-                exchange=stock.get("market", "VN"),
-                sector=stock.get("sector"),
-                industry=stock.get("industry"),
-                currency="VND",
-                country="Vietnam",
-                market="vietnam"
-            ))
-        
-        logger.info(f"Found {len(formatted_results)} Vietnamese ticker(s) for query='{request.query}'")
-        return UnifiedStep1Response(
-            status="success",
-            query=request.query,
-            market="vietnam",
-            results=formatted_results,
-            total_results=len(formatted_results),
-            message=f"Found {len(formatted_results)} matching companies"
-        )
-        
-    except Exception as e:
-        logger.error(f"Failed to search Vietnamese tickers: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
-
-
-@router.get("/vietnam/search")
-async def search_vietnamese_stocks_legacy(q: str = Query(..., description="Search query")):
-    """
-    DEPRECATED: Use POST /step-1-search instead.
-    Legacy GET endpoint kept for backward compatibility only.
-    """
-    import warnings
-    warnings.warn(
-        "The GET /vietnam/search endpoint is deprecated. Use POST /step-1-search with market='vietnam'.",
-        DeprecationWarning,
-        stacklevel=2
-    )
-    logger.warning("DEPRECATED: Using legacy GET /vietnam/search. Migrate to POST /step-1-search.")
-    
-    results = vn_service.search_vietnamese_stocks(q)
-    
-    # Transform to match CompanySearchResult format used by frontend
-    # FIX Issue #2: Use consistent field names (ticker, company_name)
-    formatted_results = []
-    for stock in results:
-        formatted_results.append({
-            "ticker": stock.get("ticker", stock.get("symbol", "")),
-            "company_name": stock.get("name", stock.get("company_name", "")),
-            "exchange": stock.get("market", "VN"),
-            "sector": stock.get("sector"),
-            "market": "vietnam"
-        })
-    
-    return {
-        "status": "success",
-        "query": q,
-        "market": "vietnam",
-        "results": formatted_results,
-        "total_results": len(formatted_results),
-        "message": f"Found {len(formatted_results)} matching companies"
-    }
-
-
-@router.get("/vietnam/fetch")
-async def fetch_vietnamese_ticker_basic(
-    ticker: str = Query(..., description="Vietnamese ticker (e.g., 'VNM', 'VIC', 'HPG')"),
-    market_code: str = Query("VN", description="Market: VN=HOSE, HA=HNX, VC=UPCOM")
-):
-    """
-    Basic fetch for Vietnamese ticker (standard international format)
-    """
-    try:
-        result = vn_service.fetch_vietnamese_data(ticker, market_code)
-        
-        if not result['success']:
-            raise HTTPException(
-                status_code=404,
-                detail=result.get('vietnam_specific_error', result.get('error', 'Failed to fetch'))
-            )
-        
-        # Calculate metrics
-        if result.get('financials') is not None:
-            try:
-                metrics = metrics_calc.calculate_all_metrics(result)
-                result['calculated_metrics'] = metrics
-            except Exception as e:
-                logger.warning(f"Could not calculate metrics: {e}")
-        
-        return result
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error fetching Vietnamese ticker: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/vietnam/fetch-enhanced")
-async def fetch_vietnamese_ticker_enhanced(
-    ticker: str = Query(..., description="Vietnamese ticker (e.g., 'VNM', 'VIC', 'HPG')"),
-    market_code: str = Query("VN", description="Market: VN=HOSE, HA=HNX, VC=UPCOM"),
-    include_peers: bool = Query(True, description="Include sector peers"),
-    include_index_data: bool = Query(True, description="Include VNINDEX data")
-):
-    """
-    Enhanced fetch for Vietnamese ticker with local market context
-    
-    Includes:
-    - Sector peers
-    - VNINDEX/HNXINDEX performance
-    - Trading calendar
-    - Regulatory notes
-    - Foreign ownership status
-    - VND/USD conversions
-    - Data quality assessment
-    """
-    try:
-        result = vn_service.fetch_vietnamese_data_enhanced(
-            ticker,
-            market_code,
-            include_peers=include_peers,
-            include_index_data=include_index_data
-        )
-        
-        if not result['success']:
-            raise HTTPException(
-                status_code=404,
-                detail=result.get('vietnam_specific_error', result.get('error', 'Failed to fetch'))
-            )
-        
-        # Calculate metrics
-        if result.get('financials') is not None:
-            try:
-                metrics = metrics_calc.calculate_all_metrics(result)
-                result['calculated_metrics'] = metrics
-                
-                # Integrate with vietnam_metrics
-                if 'vietnam_metrics' in result:
-                    result['vietnam_metrics']['calculated_ratios'] = {
-                        'margins': metrics.get('margins', {}),
-                        'growth_rates': metrics.get('growth_rates', {}),
-                        'working_capital_days': metrics.get('working_capital_days', {}),
-                        'capex_ratios': metrics.get('capex_ratios', {}),
-                        'debt_ratios': metrics.get('debt_ratios', {}),
-                        'profitability': metrics.get('profitability', {}),
-                    }
-            except Exception as e:
-                logger.warning(f"Could not calculate metrics: {e}")
-        
-        return result
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error fetching enhanced Vietnamese ticker: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/vietnam/market-overview")
-async def get_vietnam_market_overview():
-    """
-    Get overview of Vietnamese stock market
-    """
-    return vn_service.get_vietnam_market_overview()
-
-
-@router.get("/vietnam/market-info/{market_code}")
-async def get_vietnam_market_info(market_code: str):
-    """
-    Get detailed information about a specific Vietnamese market
-    
-    Args:
-        market_code: VN, HA, or VC
-    """
-    if market_code.upper() not in ['VN', 'HA', 'VC']:
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid market code. Use VN (HOSE), HA (HNX), or VC (UPCOM)"
-        )
-    
-    return intl_service.get_market_info(market_code)
-
-
-# =============================================================================
-# SECTION 1: GENERAL MARKET DATA (Common to all models) - 3 endpoints
-# =============================================================================
 
 @router.get("/market-data/{ticker}/profile")
 async def get_company_profile(
@@ -398,7 +151,6 @@ async def get_company_profile(
     except Exception as e:
         logger.error(f"Error fetching company profile: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
 
 @router.get("/market-data/{ticker}/price-history")
 async def get_price_history(
@@ -496,8 +248,6 @@ async def get_price_history(
         logger.error(f"Error fetching price history for {ticker}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to fetch price history: {str(e)}")
 
-
-
 @router.get("/market-data/{ticker}/key-statistics")
 async def get_key_statistics(
     ticker: str = Path(..., description="Ticker symbol"),
@@ -545,7 +295,6 @@ async def get_key_statistics(
     except Exception as e:
         logger.error(f"Error fetching key statistics: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
 
 # =============================================================================
 # SECTION 2: DCF MODEL SPECIFIC INPUTS (~40 inputs) - 8 endpoints
@@ -615,7 +364,6 @@ async def get_dcf_historical_financials(
         logger.error(f"Error fetching DCF historical financials: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-
 @router.get("/models/dcf/{ticker}/growth-rates")
 async def get_dcf_growth_rates(
     ticker: str = Path(..., description="Ticker symbol"),
@@ -642,7 +390,6 @@ async def get_dcf_growth_rates(
     except Exception as e:
         logger.error(f"Error fetching DCF growth rates: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
 
 @router.get("/models/dcf/{ticker}/margins")
 async def get_dcf_margins(
@@ -671,7 +418,6 @@ async def get_dcf_margins(
         logger.error(f"Error fetching DCF margins: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-
 @router.get("/models/dcf/{ticker}/working-capital")
 async def get_dcf_working_capital(
     ticker: str = Path(..., description="Ticker symbol"),
@@ -698,7 +444,6 @@ async def get_dcf_working_capital(
     except Exception as e:
         logger.error(f"Error fetching DCF working capital: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
 
 @router.get("/models/dcf/{ticker}/capex-depreciation")
 async def get_dcf_capex_depreciation(
@@ -727,7 +472,6 @@ async def get_dcf_capex_depreciation(
         logger.error(f"Error fetching DCF capex/depreciation: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-
 @router.get("/models/dcf/{ticker}/peer-suggestions")
 async def get_dcf_peer_suggestions(
     ticker: str = Path(..., description="Ticker symbol"),
@@ -747,7 +491,6 @@ async def get_dcf_peer_suggestions(
     except Exception as e:
         logger.error(f"Error suggesting peers: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
 
 @router.get("/models/dcf/{ticker}/debt-cost")
 async def get_dcf_debt_cost(
@@ -777,7 +520,6 @@ async def get_dcf_debt_cost(
         logger.error(f"Error fetching debt cost: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-
 @router.get("/models/dcf/{ticker}/profitability")
 async def get_dcf_profitability(
     ticker: str = Path(..., description="Ticker symbol"),
@@ -806,7 +548,6 @@ async def get_dcf_profitability(
         logger.error(f"Error fetching profitability: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-
 # =============================================================================
 # SECTION 3: COMPS MODEL SPECIFIC INPUTS (~30 inputs) - 5 endpoints
 # =============================================================================
@@ -830,7 +571,6 @@ async def get_comps_peer_list(
     except Exception as e:
         logger.error(f"Error getting peer list: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
 
 @router.get("/models/comps/{ticker}/peer-metrics")
 async def get_comps_peer_metrics(
@@ -872,7 +612,6 @@ async def get_comps_peer_metrics(
         logger.error(f"Error fetching peer metrics: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-
 @router.get("/models/comps/{ticker}/target-metrics")
 async def get_comps_target_metrics(
     ticker: str = Path(..., description="Target ticker"),
@@ -904,7 +643,6 @@ async def get_comps_target_metrics(
     except Exception as e:
         logger.error(f"Error fetching target metrics: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
 
 @router.get("/models/comps/{ticker}/multiples-analysis")
 async def get_comps_multiples_analysis(
@@ -951,7 +689,6 @@ async def get_comps_multiples_analysis(
     except Exception as e:
         logger.error(f"Error in multiples analysis: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
 
 @router.get("/models/comps/{ticker}/implied-valuation")
 async def get_comps_implied_valuation(
@@ -1001,7 +738,6 @@ async def get_comps_implied_valuation(
         logger.error(f"Error calculating implied valuation: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-
 # =============================================================================
 # SECTION 4: DUPONT ANALYSIS SPECIFIC INPUTS (~24 inputs) - 4 endpoints
 # =============================================================================
@@ -1046,7 +782,6 @@ async def get_dupont_profitability_drivers(
         logger.error(f"Error fetching DuPont profitability: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-
 @router.get("/models/dupont/{ticker}/efficiency-drivers")
 async def get_dupont_efficiency_drivers(
     ticker: str = Path(..., description="Ticker symbol"),
@@ -1083,7 +818,6 @@ async def get_dupont_efficiency_drivers(
     except Exception as e:
         logger.error(f"Error fetching DuPont efficiency: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
 
 @router.get("/models/dupont/{ticker}/leverage-drivers")
 async def get_dupont_leverage_drivers(
@@ -1122,7 +856,6 @@ async def get_dupont_leverage_drivers(
     except Exception as e:
         logger.error(f"Error fetching DuPont leverage: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
 
 @router.get("/models/dupont/{ticker}/full-analysis")
 async def get_dupont_full_analysis(
@@ -1170,11 +903,9 @@ async def get_dupont_full_analysis(
         logger.error(f"Error in DuPont full analysis: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-
 # =============================================================================
 # SECTION 5: BATCH OPERATIONS (Existing endpoints preserved)
 # =============================================================================
-
 
 @router.post("/international/fetch-batch")
 async def fetch_batch_international(requests: list[TickerRequest]):
@@ -1225,117 +956,6 @@ async def fetch_batch_international(requests: list[TickerRequest]):
         'results': results
     }
 
-
-@router.post("/vietnam/fetch-batch")
-async def fetch_batch_vietnamese(requests: list[VietnamTickerRequest]):
-    """
-    Fetch multiple Vietnamese tickers in batch
-    
-    Body:
-    [
-        {"ticker": "VNM", "market_code": "VN", "include_peers": true},
-        {"ticker": "VIC", "market_code": "VN", "enhanced_mode": true},
-        {"ticker": "HPG", "market_code": "VN"}
-    ]
-    """
-    results = []
-    
-    for req in requests:
-        try:
-            if req.enhanced_mode:
-                data = vn_service.fetch_vietnamese_data_enhanced(
-                    req.ticker,
-                    req.market_code,
-                    include_peers=req.include_peers,
-                    include_index_data=req.include_index_data
-                )
-            else:
-                data = vn_service.fetch_vietnamese_data(req.ticker, req.market_code)
-            
-            if data['success']:
-                # Calculate metrics if possible
-                if data.get('financials') is not None:
-                    try:
-                        metrics = metrics_calc.calculate_all_metrics(data)
-                        data['calculated_metrics'] = metrics
-                    except Exception as e:
-                        data['metrics_error'] = str(e)
-            
-            results.append({
-                'request': {
-                    'ticker': req.ticker,
-                    'market_code': req.market_code,
-                    'enhanced_mode': req.enhanced_mode
-                },
-                'success': data['success'],
-                'data': data if data['success'] else None,
-                'error': data.get('vietnam_specific_error') or data.get('error') if not data['success'] else None
-            })
-            
-        except Exception as e:
-            results.append({
-                'request': {
-                    'ticker': req.ticker,
-                    'market_code': req.market_code,
-                    'enhanced_mode': req.enhanced_mode
-                },
-                'success': False,
-                'data': None,
-                'error': str(e)
-            })
-    
-    return {
-        'total_requests': len(requests),
-        'successful': sum(1 for r in results if r['success']),
-        'failed': sum(1 for r in results if not r['success']),
-        'results': results
-    }
-
-
-@router.get("/vietnam/sector/{sector_name}")
-async def get_vietnam_sector_stocks(sector_name: str):
-    """
-    Get all Vietnamese stocks in a specific sector
-    
-    Args:
-        sector_name: Banking, Real Estate, Consumer Staples, Materials, etc.
-    """
-    sector_mapping = {
-        'banking': 'Banking',
-        'real-estate': 'Real Estate',
-        'consumer-staples': 'Consumer Staples',
-        'materials': 'Materials',
-        'energy': 'Energy',
-        'technology': 'Technology',
-        'utilities': 'Utilities',
-        'healthcare': 'Healthcare',
-        'telecommunications': 'Telecommunications',
-    }
-    
-    normalized_sector = sector_mapping.get(sector_name.lower(), sector_name.title())
-    
-    stocks_in_sector = vn_service.VIETNAM_SECTORS.get(normalized_sector, [])
-    
-    if not stocks_in_sector:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Sector '{sector_name}' not found. Available sectors: {list(vn_service.VIETNAM_SECTORS.keys())}"
-        )
-    
-    return {
-        'sector': normalized_sector,
-        'stocks_count': len(stocks_in_sector),
-        'stocks': [
-            {'ticker': ticker, 'market': 'VN', 'sector': normalized_sector}
-            for ticker in stocks_in_sector
-        ]
-    }
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Granular Endpoints for DCF Model Inputs
-# ──────────────────────────────────────────────────────────────────────────────
-
 @router.get("/data/{ticker}/dcf/historical-financials")
 async def get_dcf_historical_financials(
     ticker: str = Path(..., description="Ticker symbol"),
@@ -1374,7 +994,6 @@ async def get_dcf_historical_financials(
         logger.error(f"Error fetching DCF historical financials: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-
 @router.get("/data/{ticker}/dcf/growth-rates")
 async def get_dcf_growth_rates(
     ticker: str = Path(..., description="Ticker symbol"),
@@ -1406,7 +1025,6 @@ async def get_dcf_growth_rates(
     except Exception as e:
         logger.error(f"Error calculating growth rates: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
 
 @router.get("/data/{ticker}/dcf/margins")
 async def get_dcf_margins(
@@ -1440,7 +1058,6 @@ async def get_dcf_margins(
     except Exception as e:
         logger.error(f"Error calculating margins: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
 
 @router.get("/data/{ticker}/dcf/working-capital")
 async def get_dcf_working_capital(
@@ -1476,7 +1093,6 @@ async def get_dcf_working_capital(
         logger.error(f"Error calculating working capital: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-
 @router.get("/data/{ticker}/dcf/capex")
 async def get_dcf_capex(
     ticker: str = Path(..., description="Ticker symbol"),
@@ -1509,7 +1125,6 @@ async def get_dcf_capex(
     except Exception as e:
         logger.error(f"Error calculating capex ratios: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
 
 @router.get("/data/{ticker}/dcf/debt-metrics")
 async def get_dcf_debt_metrics(
@@ -1544,7 +1159,6 @@ async def get_dcf_debt_metrics(
     except Exception as e:
         logger.error(f"Error calculating debt metrics: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
 
 @router.get("/data/{ticker}/dcf/wacc-inputs")
 async def get_dcf_wacc_inputs(
@@ -1593,7 +1207,6 @@ async def get_dcf_wacc_inputs(
         logger.error(f"Error fetching WACC inputs: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-
 # ──────────────────────────────────────────────────────────────────────────────
 # Granular Endpoints for Comps Model Inputs
 # ──────────────────────────────────────────────────────────────────────────────
@@ -1620,12 +1233,9 @@ async def get_comps_peer_list(
         profile = result.get('profile', {})
         company_sector = sector or profile.get('sector', 'Unknown')
         
-        # Get peers from sector
-        if market_code == "VN":
-            sector_peers = vn_service.VIETNAM_SECTORS.get(company_sector, [])
-        else:
-            # For international, use basic sector matching
-            sector_peers = [ticker]  # Placeholder
+        # For international markets, use basic sector matching
+        # NOTE: Vietnamese market peer selection is handled in vietnamese_market_data_routes.py (Version 2)
+        sector_peers = [ticker]  # Placeholder for international
         
         return {
             "success": True,
@@ -1645,7 +1255,6 @@ async def get_comps_peer_list(
     except Exception as e:
         logger.error(f"Error fetching peer list: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
 
 @router.get("/data/{ticker}/comps/peer-multiples")
 async def get_comps_peer_multiples(
@@ -1719,7 +1328,6 @@ async def get_comps_peer_multiples(
         logger.error(f"Error fetching peer multiples: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-
 @router.get("/data/{ticker}/comps/target-metrics")
 async def get_comps_target_metrics(
     ticker: str = Path(..., description="Ticker symbol"),
@@ -1764,7 +1372,6 @@ async def get_comps_target_metrics(
         logger.error(f"Error fetching target metrics: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-
 # ──────────────────────────────────────────────────────────────────────────────
 # Granular Endpoints for DuPont Analysis Inputs
 # ──────────────────────────────────────────────────────────────────────────────
@@ -1806,7 +1413,6 @@ async def get_dupont_profitability(
     except Exception as e:
         logger.error(f"Error fetching profitability metrics: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
 
 @router.get("/data/{ticker}/dupont/efficiency")
 async def get_dupont_efficiency(
@@ -1855,7 +1461,6 @@ async def get_dupont_efficiency(
         logger.error(f"Error fetching efficiency metrics: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-
 @router.get("/data/{ticker}/dupont/leverage")
 async def get_dupont_leverage(
     ticker: str = Path(..., description="Ticker symbol"),
@@ -1900,7 +1505,6 @@ async def get_dupont_leverage(
     except Exception as e:
         logger.error(f"Error fetching leverage metrics: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
 
 @router.get("/data/{ticker}/dupont/roe-decomposition")
 async def get_dupont_roe_decomposition(
@@ -1954,7 +1558,6 @@ async def get_dupont_roe_decomposition(
     except Exception as e:
         logger.error(f"Error calculating ROE decomposition: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Combined Data Endpoints for Model Initialization
@@ -2015,7 +1618,6 @@ async def initialize_dcf_model(
         logger.error(f"Error initializing DCF model: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-
 @router.get("/data/{ticker}/initialize-comps")
 async def initialize_comps_model(
     ticker: str = Path(..., description="Ticker symbol"),
@@ -2038,11 +1640,9 @@ async def initialize_comps_model(
         financials = result.get('financials', {})
         company_sector = profile.get('sector', 'Unknown')
         
-        # Get sector peers
-        if market_code == "VN":
-            sector_peers = vn_service.VIETNAM_SECTORS.get(company_sector, [])
-        else:
-            sector_peers = [ticker]
+        # For international markets, use basic sector matching
+        # NOTE: Vietnamese market peer selection is handled in vietnamese_market_data_routes.py (Version 2)
+        sector_peers = [ticker]
         
         return {
             "success": True,
@@ -2071,7 +1671,6 @@ async def initialize_comps_model(
     except Exception as e:
         logger.error(f"Error initializing Comps model: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
 
 @router.get("/data/{ticker}/initialize-dupont")
 async def initialize_dupont_model(
