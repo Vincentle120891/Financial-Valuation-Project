@@ -1022,6 +1022,7 @@ const ValuationFlow = () => {
             loading={loading}
             hasPeers={false} // No peers yet - will be found in Step 4 after model selection
             market={market}
+            showFindPeersButton={false} // Hide Find Peers button in Step 2
           />
         );
       case 3:
@@ -1048,6 +1049,7 @@ const ValuationFlow = () => {
             loading={loading}
             hasPeers={suggestedPeers && suggestedPeers.length > 0}
             market={market}
+            showFindPeersButton={true} // Show Find Peers button in Step 4
           />
         );
       case 5:
