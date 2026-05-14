@@ -1112,6 +1112,138 @@ const ApiDataStep = ({
           </div>
         </>
       )}
+
+      {/* ============================================ */}
+      {/* RAW DATA DEBUG SECTION - FOR TROUBLESHOOTING */}
+      {/* ============================================ */}
+      <div style={{
+        marginTop: '40px',
+        padding: '20px',
+        background: '#263238',
+        borderRadius: '8px',
+        color: '#eceff1',
+        fontFamily: 'monospace',
+        fontSize: '11px'
+      }}>
+        <h3 style={{ color: '#80cbc4', marginTop: 0, borderBottom: '1px solid #455a64', paddingBottom: '10px' }}>
+          🔍 RAW DATA DEBUG (Backend Response)
+        </h3>
+        <p style={{ color: '#b0bec5', marginBottom: '15px' }}>
+          This section shows the exact data received from the backend API. Use this to debug mapping issues.
+        </p>
+
+        <details style={{ marginBottom: '15px' }}>
+          <summary style={{ cursor: 'pointer', color: '#4db6ac', fontWeight: 'bold', marginBottom: '10px' }}>
+            📊 Historical Data ({historicalData ? Object.keys(historicalData).length : 0} keys)
+          </summary>
+          <pre style={{
+            background: '#1e272e',
+            padding: '15px',
+            borderRadius: '4px',
+            overflow: 'auto',
+            maxHeight: '400px',
+            border: '1px solid #455a64'
+          }}>
+            {JSON.stringify(historicalData, null, 2)}
+          </pre>
+        </details>
+
+        <details style={{ marginBottom: '15px' }}>
+          <summary style={{ cursor: 'pointer', color: '#4db6ac', fontWeight: 'bold', marginBottom: '10px' }}>
+            📈 Forecast Drivers ({forecastDrivers ? Object.keys(forecastDrivers).length : 0} keys)
+          </summary>
+          <pre style={{
+            background: '#1e272e',
+            padding: '15px',
+            borderRadius: '4px',
+            overflow: 'auto',
+            maxHeight: '400px',
+            border: '1px solid #455a64'
+          }}>
+            {JSON.stringify(forecastDrivers, null, 2)}
+          </pre>
+        </details>
+
+        <details style={{ marginBottom: '15px' }}>
+          <summary style={{ cursor: 'pointer', color: '#4db6ac', fontWeight: 'bold', marginBottom: '10px' }}>
+            🏢 Peer Data ({peerData ? Object.keys(peerData).length : 0} keys)
+          </summary>
+          <pre style={{
+            background: '#1e272e',
+            padding: '15px',
+            borderRadius: '4px',
+            overflow: 'auto',
+            maxHeight: '400px',
+            border: '1px solid #455a64'
+          }}>
+            {JSON.stringify(peerData, null, 2)}
+          </pre>
+        </details>
+
+        <details style={{ marginBottom: '15px' }}>
+          <summary style={{ cursor: 'pointer', color: '#4db6ac', fontWeight: 'bold', marginBottom: '10px' }}>
+            💰 DCF Inputs ({dcfInputs ? Object.keys(dcfInputs).length : 0} keys)
+          </summary>
+          <pre style={{
+            background: '#1e272e',
+            padding: '15px',
+            borderRadius: '4px',
+            overflow: 'auto',
+            maxHeight: '400px',
+            border: '1px solid #455a64'
+          }}>
+            {JSON.stringify(dcfInputs, null, 2)}
+          </pre>
+        </details>
+
+        <details style={{ marginBottom: '15px' }}>
+          <summary style={{ cursor: 'pointer', color: '#4db6ac', fontWeight: 'bold', marginBottom: '10px' }}>
+            📐 DuPont Results ({dupontResults ? Object.keys(dupontResults).length : 0} keys)
+          </summary>
+          <pre style={{
+            background: '#1e272e',
+            padding: '15px',
+            borderRadius: '4px',
+            overflow: 'auto',
+            maxHeight: '400px',
+            border: '1px solid #455a64'
+          }}>
+            {JSON.stringify(dupontResults, null, 2)}
+          </pre>
+        </details>
+
+        <details style={{ marginBottom: '15px' }}>
+          <summary style={{ cursor: 'pointer', color: '#4db6ac', fontWeight: 'bold', marginBottom: '10px' }}>
+            📊 Comps Results ({compsResults ? Object.keys(compsResults).length : 0} keys)
+          </summary>
+          <pre style={{
+            background: '#1e272e',
+            padding: '15px',
+            borderRadius: '4px',
+            overflow: 'auto',
+            maxHeight: '400px',
+            border: '1px solid #455a64'
+          }}>
+            {JSON.stringify(compsResults, null, 2)}
+          </pre>
+        </details>
+
+        <details>
+          <summary style={{ cursor: 'pointer', color: '#4db6ac', fontWeight: 'bold', marginBottom: '10px' }}>
+            🧮 Calculated Metrics ({calculatedMetrics ? Object.keys(calculatedMetrics).length : 0} keys)
+          </summary>
+          <pre style={{
+            background: '#1e272e',
+            padding: '15px',
+            borderRadius: '4px',
+            overflow: 'auto',
+            maxHeight: '400px',
+            border: '1px solid #455a64'
+          }}>
+            {JSON.stringify(calculatedMetrics, null, 2)}
+          </pre>
+        </details>
+      </div>
     </div>
   );
 };
