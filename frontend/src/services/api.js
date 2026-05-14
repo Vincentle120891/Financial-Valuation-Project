@@ -62,7 +62,7 @@ export const validateManualPeers = async (sessionId, tickers, market = 'internat
 };
 
 // Step 4: Select Models - Updated to use unified schema
-export const selectModels = async (sessionId, method, market = 'international', suggestedPeers = [], customPeers = []) => {
+export const selectModels = async (sessionId, method, market = 'international', suggestedPeers, customPeers) => {
   // Convert peer objects to ticker strings if needed
   const suggestedPeerTickers = suggestedPeers && suggestedPeers.length > 0 
     ? suggestedPeers.map(p => p.ticker || p.symbol) 

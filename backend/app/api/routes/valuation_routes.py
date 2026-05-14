@@ -201,13 +201,13 @@ async def select_models(request: UnifiedStep4Request):
             raise HTTPException(status_code=400, detail="No ticker selected in session")
 
         # Determine peers to use (custom or suggested/discovered)
+        # NOTE: Peers are OPTIONAL in Step 3 - they will be discovered in Step 4
         selected_peers = []
         if request.custom_peers:
             selected_peers = request.custom_peers
         elif request.suggested_peers:
             selected_peers = request.suggested_peers
-        else:
-            raise HTTPException(status_code=400, detail="Either custom_peers or suggested_peers must be provided")
+        # else: No peers provided yet - this is OK for Step 3, peers will be discovered in Step 4
 
         # Delegate to Step3SelectedModelsProcessor for model validation
         model_result = step3_processor.process_model_selection([method])
@@ -215,10 +215,11 @@ async def select_models(request: UnifiedStep4Request):
         if not model_result['is_valid']:
             raise HTTPException(status_code=400, detail=f"Invalid model selected: {model_result['invalid_models']}")
 
-        # Save peer tickers to session
-        session_service.update_session_data(request.session_id, "peer_tickers", selected_peers)
+        # Save peer tickers to session (may be empty if peers not yet discovered)
+        if selected_peers:
+            session_service.update_session_data(request.session_id, "peer_tickers", selected_peers)
         
-        # Build peer company objects with available data
+        # Build peer company objects with available data (only if peers were provided)
         peer_companies = []
         for peer_ticker in selected_peers:
             peer_info = {
@@ -231,8 +232,9 @@ async def select_models(request: UnifiedStep4Request):
             }
             peer_companies.append(peer_info)
 
-        # Store detailed peer info for Step 6 retrieval
-        session_service.update_session_data(request.session_id, "selected_peers", peer_companies)
+        # Store detailed peer info for Step 6 retrieval (only if peers exist)
+        if peer_companies:
+            session_service.update_session_data(request.session_id, "selected_peers", peer_companies)
 
         session_service.update_session_step(
             request.session_id,
@@ -247,9 +249,9 @@ async def select_models(request: UnifiedStep4Request):
             method=method,
             market=market,
             target_company=ticker,
-            suggested_peers=[PeerCompany(**p) for p in peer_companies],
+            suggested_peers=[PeerCompany(**p) for p in peer_companies] if peer_companies else [],
             selected_peers=selected_peers,
-            message=f"Selected {method} valuation model with {len(selected_peers)} peer companies"
+            message=f"Selected {method} valuation model. Proceed to Step 4 to discover peers." if not selected_peers else f"Selected {method} valuation model with {len(selected_peers)} peer companies"
         )
     except HTTPException:
         raise
