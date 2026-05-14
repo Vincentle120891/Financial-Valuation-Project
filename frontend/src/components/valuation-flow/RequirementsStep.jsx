@@ -124,28 +124,48 @@ const RequirementsStep = ({
       return <div className="text-center py-8 text-gray-500">Loading requirements...</div>;
     }
 
+    // Group flat requiredFields array by category
+    const groupedFields = requiredFields.reduce((groups, field) => {
+      const categoryName = field.category || 'Other';
+      if (!groups[categoryName]) {
+        groups[categoryName] = [];
+      }
+      groups[categoryName].push(field);
+      return groups;
+    }, {});
+
     return (
       <div className="space-y-6">
-        {requiredFields.map((category, catIdx) => (
+        {Object.entries(groupedFields).map(([categoryName, fields], catIdx) => (
           <div key={catIdx} className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
             <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-800">{category.category_name}</h3>
-              <p className="text-sm text-gray-600">{category.description}</p>
+              <h3 className="text-lg font-semibold text-gray-800">{categoryName}</h3>
+              <p className="text-sm text-gray-600">Required data points for this category</p>
             </div>
             <div className="divide-y divide-gray-100">
-              {category.fields.map((field, fieldIdx) => {
-                const status = getDataStatus(category.category_key, field.key);
-                
+              {fields.map((field, fieldIdx) => {
                 // Get the actual field data from unified schema
-                const fieldData = valuationData?.[category.category_key]?.[field.key];
+                const fieldData = valuationData?.historical_financials?.[field.fieldName] || 
+                                  valuationData?.market_data?.[field.fieldName] ||
+                                  valuationData?.forecast_drivers?.[field.fieldName];
+                
+                // Determine status
+                let status = field.status || 'MISSING';
+                if (fieldData && fieldData.status) {
+                  status = fieldData.status;
+                } else if (field.value !== null && field.value !== undefined) {
+                  status = 'RETRIEVED';
+                }
+                
+                const mappedStatus = mapStatus(status);
                 
                 // Construct DataField object for consistent rendering
                 const dataFieldObj = {
-                  label: field.label,
-                  value: fieldData?.value || fieldData?.values || [],
-                  status: status === 'retrieved' ? (fieldData?.status || 'RETRIEVED') : 'MISSING',
-                  source: status === 'retrieved' ? (fieldData?.source || 'yfinance') : 'manual_required',
-                  confidence: fieldData?.confidence_score || (status === 'retrieved' ? 0.95 : 0),
+                  label: field.name || field.fieldName,
+                  value: fieldData?.value || field.value,
+                  status: status,
+                  source: fieldData?.source || (mappedStatus === 'fetched' ? 'yfinance' : 'manual_required'),
+                  confidence: fieldData?.confidence_score || (mappedStatus === 'fetched' ? 0.95 : 0),
                   periods: fieldData?.periods || []
                 };
 
@@ -153,11 +173,11 @@ const RequirementsStep = ({
                   <div key={fieldIdx} className="p-4 hover:bg-gray-50 transition-colors">
                     <div className="flex items-start justify-between mb-2">
                       <div className="flex-1">
-                        <h4 className="font-medium text-gray-900">{field.label}</h4>
-                        <p className="text-sm text-gray-600 mt-1">{field.description}</p>
+                        <h4 className="font-medium text-gray-900">{field.name || field.fieldName}</h4>
+                        <p className="text-sm text-gray-600 mt-1">Field: {field.fieldName}</p>
                       </div>
                       <div className="ml-4 flex-shrink-0">
-                        {status === 'retrieved' ? (
+                        {mappedStatus === 'fetched' || mappedStatus === 'retrieved' ? (
                           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
                             ✓ Auto-Fetched
                           </span>
