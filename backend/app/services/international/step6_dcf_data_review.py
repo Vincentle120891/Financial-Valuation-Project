@@ -195,18 +195,23 @@ class DCFStep6Processor:
             balance_sheet_dict = all_data.get('balance_sheet', {})
             cash_flow_dict = all_data.get('cash_flow', {})
 
-            # Convert to DataFrame and transpose to match expected format
-            financials_df = pd.DataFrame(income_stmt_dict).T if income_stmt_dict else None
-            balance_sheet_df = pd.DataFrame(balance_sheet_dict).T if balance_sheet_dict else None
-            cashflow_df = pd.DataFrame(cash_flow_dict).T if cash_flow_dict else None
-
-            # Convert column strings to datetime for proper year extraction
-            if financials_df is not None:
-                financials_df.columns = pd.to_datetime(financials_df.columns)
-            if balance_sheet_df is not None:
-                balance_sheet_df.columns = pd.to_datetime(balance_sheet_df.columns)
-            if cashflow_df is not None:
-                cashflow_df.columns = pd.to_datetime(cashflow_df.columns)
+            # FIX: Properly construct DataFrames using 'periods' as index, then transpose
+            # This prevents the "1970" year issue caused by converting integer column indices to datetime
+            def build_financials_df(data_dict):
+                """Build DataFrame from yfinance dict format with periods as columns"""
+                if not data_dict:
+                    return None
+                periods = data_dict.get('periods', [])
+                data_rows = {k: v for k, v in data_dict.items() if k != 'periods' and isinstance(v, list)}
+                if not data_rows or not periods:
+                    return None
+                df = pd.DataFrame(data_rows, index=periods).T
+                df.columns = pd.to_datetime(df.columns)
+                return df
+            
+            financials_df = build_financials_df(income_stmt_dict)
+            balance_sheet_df = build_financials_df(balance_sheet_dict)
+            cashflow_df = build_financials_df(cash_flow_dict)
 
             historical_data = historical_data or {
                 'financials': financials_df,
