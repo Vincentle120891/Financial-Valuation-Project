@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { generateAISuggestion } from '../../services/api';
+import DataFieldDisplay from './DataFieldDisplay';
 
 /**
  * ForecastDriversStep Component
@@ -294,7 +295,7 @@ const ForecastDriversStep = ({
   // Generate array of years for forecast (5-10 years)
   const forecastYears = Array.from({ length: 5 }, (_, i) => `Year ${i + 1}`);
 
-  // Render forecast driver input row with AI suggestions
+  // Render forecast driver input row with AI suggestions using DataFieldDisplay
   const renderForecastDriverRow = (scenario, field, label, step = 0.01, isPercentage = true) => {
     const values = localForecastDrivers[scenario]?.[field] || [];
     
@@ -309,6 +310,15 @@ const ForecastDriversStep = ({
           {forecastYears.map((year, idx) => {
             const aiSuggestion = values[idx];
             const displayValue = aiSuggestion !== undefined ? (isPercentage ? (aiSuggestion * 100).toFixed(2) : aiSuggestion.toFixed(2)) : '';
+            
+            // Create DataField object for DataFieldDisplay
+            const dataFieldObj = {
+              value: aiSuggestion !== undefined ? aiSuggestion : null,
+              status: aiSuggestion !== undefined ? 'AI_GENERATED' : 'MISSING',
+              source: 'ai_suggestion',
+              confidence: aiSuggestion?.confidence || 0.8,
+              periods: [{ period: year, value: aiSuggestion }]
+            };
             
             return (
               <div key={idx}>
@@ -327,16 +337,13 @@ const ForecastDriversStep = ({
                     fontSize: '13px'
                   }}
                 />
-                {aiSuggestion?.rationale && (
-                  <div style={{ fontSize: '10px', color: '#667eea', marginTop: '4px', fontStyle: 'italic' }}>
-                    💡 {aiSuggestion.rationale}
-                  </div>
-                )}
-                {aiSuggestion?.sources && (
-                  <div style={{ fontSize: '9px', color: '#999', marginTop: '2px' }}>
-                    Source: {aiSuggestion.sources}
-                  </div>
-                )}
+                {/* Use DataFieldDisplay to show metadata below input */}
+                <DataFieldDisplay 
+                  label=""
+                  data={dataFieldObj}
+                  isPercentage={isPercentage}
+                  compact={true}
+                />
               </div>
             );
           })}
@@ -345,11 +352,20 @@ const ForecastDriversStep = ({
     );
   };
 
-  // Render DCF input field with AI suggestions
+  // Render DCF input field with AI suggestions using DataFieldDisplay
   const renderDcfInputField = (field, label, step = 0.001, isPercentage = true, min = 0, max = 1) => {
     const valueObj = localDcfInputs[field];
     const value = typeof valueObj === 'object' && valueObj !== null ? valueObj.value : valueObj;
     const displayValue = isPercentage ? (value * 100).toFixed(2) : value.toFixed(2);
+    
+    // Create DataField object for DataFieldDisplay
+    const dataFieldObj = {
+      value: value !== undefined ? value : null,
+      status: typeof valueObj === 'object' && valueObj !== null ? 'AI_GENERATED' : 'MANUAL',
+      source: typeof valueObj === 'object' && valueObj !== null ? 'ai_suggestion' : 'user_input',
+      confidence: typeof valueObj === 'object' && valueObj !== null ? (valueObj.confidence || 0.85) : 1.0,
+      periods: []
+    };
     
     return (
       <div key={field} className="dcf-input-row" style={{ marginBottom: '12px' }}>
@@ -372,16 +388,13 @@ const ForecastDriversStep = ({
             fontSize: '14px'
           }}
         />
-        {typeof valueObj === 'object' && valueObj !== null && valueObj.rationale && (
-          <div style={{ fontSize: '11px', color: '#667eea', marginTop: '6px', fontStyle: 'italic' }}>
-            💡 {valueObj.rationale}
-          </div>
-        )}
-        {typeof valueObj === 'object' && valueObj !== null && valueObj.sources && (
-          <div style={{ fontSize: '10px', color: '#999', marginTop: '3px' }}>
-            Source: {valueObj.sources}
-          </div>
-        )}
+        {/* Use DataFieldDisplay to show metadata below input */}
+        <DataFieldDisplay 
+          label=""
+          data={dataFieldObj}
+          isPercentage={isPercentage}
+          compact={true}
+        />
       </div>
     );
   };

@@ -1,4 +1,5 @@
 import React from 'react';
+import DataFieldDisplay from './DataFieldDisplay';
 
 /**
  * RequirementsStep Component
@@ -29,6 +30,21 @@ const RequirementsStep = ({
 }) => {
   // FIX Issue #5: Backward compatibility layer for legacy aiData prop name
   const aiData = historicalGapsData;
+  
+  // Status mapping function to convert backend statuses to frontend formats
+  const mapStatus = (backendStatus) => {
+    if (!backendStatus) return 'missing';
+    const statusMap = {
+      'RETRIEVED': 'fetched',
+      'CALCULATED': 'calculated',
+      'AI_GENERATED': 'ai_generated',
+      'MANUAL': 'manual',
+      'ESTIMATED': 'estimated',
+      'MISSING': 'missing'
+    };
+    return statusMap[backendStatus] || 'missing';
+  };
+
   // Group required fields by category
   const getGroupedRequiredFields = () => {
     if (!requiredFields || requiredFields.length === 0) return {};
@@ -43,7 +59,7 @@ const RequirementsStep = ({
     }, {});
   };
 
-  // Render all required inputs from backend
+  // Render all required inputs from backend using DataFieldDisplay
   const renderAllRequiredInputs = () => {
     const groupedFields = getGroupedRequiredFields();
 
@@ -61,34 +77,53 @@ const RequirementsStep = ({
               {category}
             </h4>
             <div style={{ display: 'grid', gap: '8px' }}>
-              {fields.map((field, idx) => (
-                <div
-                  key={idx}
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    padding: '10px 14px',
-                    background: field.requiresInput ? '#fff3e0' : '#e8f5e9',
-                    borderRadius: '6px',
-                    borderLeft: field.requiresInput ? '4px solid #ff9800' : '4px solid #4caf50'
-                  }}
-                >
-                  <span style={{ fontWeight: field.requiresInput ? 600 : 400, color: '#333' }}>
-                    {field.name}
-                  </span>
-                  <span style={{
-                    fontSize: '12px',
-                    padding: '4px 8px',
-                    borderRadius: '4px',
-                    background: field.requiresInput ? '#ff9800' : '#4caf50',
-                    color: 'white',
-                    fontWeight: 600
-                  }}>
-                    {field.requiresInput ? '⚠ User Input Required' : '✓ Auto-Fetched'}
-                  </span>
-                </div>
-              ))}
+              {fields.map((field, idx) => {
+                // Convert field to DataField format for DataFieldDisplay
+                const dataFieldObj = {
+                  value: field.value !== undefined ? field.value : null,
+                  status: field.requiresInput ? 'MANUAL' : 'RETRIEVED',
+                  source: field.source || 'user_input',
+                  confidence: field.confidence || (field.requiresInput ? 0.5 : 1.0),
+                  periods: field.periods ? field.periods.map(p => ({ period: p, value: field.value })) : []
+                };
+
+                return (
+                  <div
+                    key={idx}
+                    style={{
+                      padding: '10px 14px',
+                      background: field.requiresInput ? '#fff3e0' : '#e8f5e9',
+                      borderRadius: '6px',
+                      borderLeft: field.requiresInput ? '4px solid #ff9800' : '4px solid #4caf50'
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontWeight: field.requiresInput ? 600 : 400, color: '#333' }}>
+                        {field.name}
+                      </span>
+                      <span style={{
+                        fontSize: '12px',
+                        padding: '4px 8px',
+                        borderRadius: '4px',
+                        background: field.requiresInput ? '#ff9800' : '#4caf50',
+                        color: 'white',
+                        fontWeight: 600
+                      }}>
+                        {field.requiresInput ? '⚠ User Input Required' : '✓ Auto-Fetched'}
+                      </span>
+                    </div>
+                    {/* Use DataFieldDisplay to show field details */}
+                    <div style={{ marginTop: '8px' }}>
+                      <DataFieldDisplay 
+                        label=""
+                        data={dataFieldObj}
+                        isPercentage={field.isPercentage || false}
+                        compact={true}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         ))}
