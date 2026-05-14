@@ -4,7 +4,8 @@ nohup: ignoring input
 > vite
 
 
-  VITE v6.4.2  ready in 440 ms
+  VITE v8.0.13  ready in 560 ms
 
   ➜  Local:   http://localhost:3000/
-  ➜  Network: http://21.0.4.185:3000/
+  ➜  Network: http://21.0.4.148:3000/
+4:36:34 PM [vite] (client) [optimizer] bundling dependencies...
