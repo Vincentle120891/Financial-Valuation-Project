@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import DataFieldDisplay from './DataFieldDisplay';
 
 /**
  * HistoricalDataExtractionStep Component
@@ -279,16 +280,18 @@ const HistoricalDataExtractionStep = ({
                     </td>
                     <td style={{ padding: '12px', color: '#666', fontSize: '13px' }}>{gap.data_source}</td>
                     <td style={{ padding: '12px', textAlign: 'center' }}>
-                      <span style={{
-                        padding: '4px 8px',
-                        borderRadius: '4px',
-                        fontSize: '12px',
-                        background: gap.confidence_score >= 0.8 ? '#e8f5e9' : gap.confidence_score >= 0.6 ? '#fff3e0' : '#ffebee',
-                        color: gap.confidence_score >= 0.8 ? '#2e7d32' : gap.confidence_score >= 0.6 ? '#e65100' : '#c62828',
-                        fontWeight: 600
-                      }}>
-                        {(gap.confidence_score * 100).toFixed(0)}%
-                      </span>
+                      <DataFieldDisplay 
+                        dataField={{
+                          key: `${gap.metric}_${gap.fiscal_year}`,
+                          value: gap.extracted_value,
+                          status: 'RETRIEVED',
+                          source: gap.data_source,
+                          confidence_score: gap.confidence_score,
+                          periods: [gap.fiscal_year]
+                        }}
+                        showMetadata={true}
+                        compact={true}
+                      />
                     </td>
                   </tr>
                 ))}

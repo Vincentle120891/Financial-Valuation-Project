@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import DataFieldDisplay from './DataFieldDisplay';
 import { 
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, 
   Tooltip, Legend, ResponsiveContainer 
@@ -110,7 +111,37 @@ const ResultsStep = ({
                     } else if (model === 'COMPS' && results?.comps_outputs?.implied_share_price_median) {
                       price = `$${results.comps_outputs.implied_share_price_median.toFixed(2)}`;
                     }
-                    return <td key={model} style={{ padding: '12px', textAlign: 'center' }}>{price}</td>;
+                    return (
+                      <td key={model} style={{ padding: '12px', textAlign: 'center' }}>
+                        {model === 'DCF' && results?.dcf_outputs?.implied_share_price ? (
+                          <DataFieldDisplay 
+                            dataField={{
+                              key: `${model}_share_price`,
+                              value: results.dcf_outputs.implied_share_price,
+                              status: 'CALCULATED',
+                              source: 'DCF Model',
+                              confidence_score: 0.90
+                            }}
+                            showMetadata={false}
+                            compact={true}
+                          />
+                        ) : model === 'COMPS' && results?.comps_outputs?.implied_share_price_median ? (
+                          <DataFieldDisplay 
+                            dataField={{
+                              key: `${model}_share_price`,
+                              value: results.comps_outputs.implied_share_price_median,
+                              status: 'CALCULATED',
+                              source: 'Trading Comps',
+                              confidence_score: 0.85
+                            }}
+                            showMetadata={false}
+                            compact={true}
+                          />
+                        ) : (
+                          price
+                        )}
+                      </td>
+                    );
                   })}
                 </tr>
                 <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.2)' }}>
@@ -123,7 +154,27 @@ const ResultsStep = ({
                     } else if (model === 'COMPS' && results?.comps_outputs?.upside_downside_pct !== undefined) {
                       upside = `${results.comps_outputs.upside_downside_pct.toFixed(1)}%`;
                     }
-                    return <td key={model} style={{ padding: '12px', textAlign: 'center' }}>{upside}</td>;
+                    return (
+                      <td key={model} style={{ padding: '12px', textAlign: 'center' }}>
+                        {(model === 'DCF' && results?.dcf_outputs?.upside_downside !== undefined) || 
+                         (model === 'COMPS' && results?.comps_outputs?.upside_downside_pct !== undefined) ? (
+                          <DataFieldDisplay 
+                            dataField={{
+                              key: `${model}_upside`,
+                              value: model === 'DCF' ? results.dcf_outputs.upside_downside / 100 : results.comps_outputs.upside_downside_pct / 100,
+                              status: 'CALCULATED',
+                              source: model === 'DCF' ? 'DCF Model' : 'Trading Comps',
+                              confidence_score: 0.85
+                            }}
+                            showMetadata={false}
+                            compact={true}
+                            formatAsPercentage={true}
+                          />
+                        ) : (
+                          upside
+                        )}
+                      </td>
+                    );
                   })}
                 </tr>
               </tbody>
