@@ -286,9 +286,7 @@ class DCFStep6Processor:
         historical_data: Dict,
         user_overrides: Dict
     ) -> HistoricalFinancialsDisplay:
-        """Process DCF historical financials (11 fields)"""
-        # Implementation extracted from original step6_data_review.py
-        # This would contain the exact logic from the original _process_dcf_historical method
+        """Process DCF historical financials (comprehensive field list)"""
         financials_df = historical_data.get('financials')
         balance_sheet_df = historical_data.get('balance_sheet')
         cashflow_df = historical_data.get('cashflow')
@@ -300,19 +298,51 @@ class DCFStep6Processor:
         if financials_df is not None and not financials_df.empty:
             years = [str(col.year) if hasattr(col, 'year') else str(col) for col in financials_df.columns[-5:]]
 
-        # DCF-specific historical fields (11 fields)
+        # COMPREHENSIVE DCF historical fields (40+ fields to match frontend expectations)
         dcf_historical_fields = [
+            # Income Statement
             ("revenue", "Total Revenue", True),
+            ("cogs", "Cost of Revenue (COGS)", True),
+            ("gross_profit", "Gross Profit", True),
+            ("operating_expenses", "Operating Expenses", True),
+            ("research_development", "Research & Development", False),
             ("ebitda", "EBITDA", True),
             ("ebit", "EBIT / Operating Income", True),
+            ("interest_expense", "Interest Expense", True),
+            ("other_income", "Other Income/Expense", False),
+            ("pretax_income", "Pre-Tax Income", True),
+            ("tax_provision", "Tax Provision", True),
             ("net_income", "Net Income", True),
             ("depreciation_amortization", "Depreciation & Amortization", True),
-            ("capex", "Capital Expenditures", True),
-            ("change_in_nwc", "Change in Net Working Capital", True),
+            
+            # Cash Flow
+            ("capex", "Capital Expenditures (CapEx)", True),
+            ("operating_cash_flow", "Operating Cash Flow", True),
             ("free_cash_flow", "Free Cash Flow", True),
+            ("working_capital_changes", "Working Capital Changes", False),
+            
+            # Balance Sheet - Working Capital
+            ("accounts_receivable", "Accounts Receivable", True),
+            ("inventory", "Inventory", True),
+            ("accounts_payable", "Accounts Payable", True),
+            ("cash_and_equivalents", "Cash & Equivalents", True),
+            
+            # Balance Sheet - Long-term
+            ("total_assets", "Total Assets", True),
+            ("total_debt", "Total Debt", True),
+            ("shareholders_equity", "Shareholders Equity", True),
+            ("retained_earnings", "Retained Earnings", False),
+            ("shares_outstanding", "Shares Outstanding", True),
+            
+            # Margins (calculated)
             ("gross_margin", "Gross Margin", False),
             ("operating_margin", "Operating Margin", False),
-            ("net_margin", "Net Margin", False)
+            ("net_margin", "Net Margin", False),
+            
+            # Additional metrics
+            ("ebit_margin", "EBIT Margin", False),
+            ("tax_rate", "Effective Tax Rate", False),
+            ("change_in_nwc", "Change in Net Working Capital", True)
         ]
 
         for field_name, display_name, is_critical in dcf_historical_fields:
@@ -335,7 +365,7 @@ class DCFStep6Processor:
                 field_name=field_name,
                 display_name=display_name,
                 value=value,
-                unit="USD" if "margin" not in field_name else "%",
+                unit="USD" if "margin" not in field_name and "rate" not in field_name else "%",
                 status=status,
                 source=source,
                 is_critical=is_critical,
