@@ -6,15 +6,19 @@ import {
   savePeers,
   validateManualPeers,
   selectModels,
-  prepareAssumptions,
-  fetchApiData,
-  retrieveHistoricalData,
-  initializeStep8Assumptions,
   generateAISuggestion,
   confirmAssumptions,
   runValuation,
   runValuationMulti
 } from '../services/api';
+import {
+  retrieveData,
+  initializeAssumptions,
+  prepareRequirements,
+  deepMergeValuations,
+  deepMergeForecastDrivers,
+  deepMergeDcfInputs
+} from '../services/valuationService';
 import SearchStep from './valuation-flow/SearchStep';
 import CompanySelectionStep from './valuation-flow/CompanySelectionStep';
 import PeerSelectionStep from './valuation-flow/PeerSelectionStep';
@@ -462,38 +466,6 @@ const ValuationFlow = () => {
     }
   }, [sessionId, market, selectedPeers]);
 
-  // ==================== DEEP MERGE UTILITY FOR MATRIX STATE ====================
-  // Prevents data loss when switching between models by preserving all models' data
-  const deepMergeValuations = (prev, market, method, newData) => {
-    return {
-      ...prev,
-      [market]: {
-        ...prev[market],
-        [method?.toLowerCase()]: newData
-      }
-    };
-  };
-
-  const deepMergeForecastDrivers = (prev, market, method, newData) => {
-    return {
-      ...prev,
-      [market]: {
-        ...prev[market],
-        [method?.toLowerCase()]: newData
-      }
-    };
-  };
-
-  const deepMergeDcfInputs = (prev, market, method, newData) => {
-    return {
-      ...prev,
-      [market]: {
-        ...prev[market],
-        [method?.toLowerCase()]: newData
-      }
-    };
-  };
-
   // ==================== HANDLE MULTI-METHOD VALUATION ====================
   const handleRunMultiMethodValuation = useCallback(async () => {
     // Multi-select is now forbidden per documentation - this function is deprecated
@@ -572,56 +544,30 @@ const ValuationFlow = () => {
     }
 
     try {
-      // Retrieve historical data using AI extraction when user explicitly clicks to go to Step 7
-      console.log('📊 Starting historical data retrieval with AI extraction...');
-      const historicalDataResponse = await retrieveHistoricalData(sessionId, method, market);
-      console.log('Historical data response:', historicalDataResponse);
+      // Use valuationService.retrieveData with AI gap-filling enabled
+      const result = await retrieveData({
+        sessionId,
+        method,
+        market,
+        includeHistoricalAI: true
+      });
 
-      if (historicalDataResponse.suggestions) {
+      console.log('Historical data retrieval result:', result);
+
+      if (result.success && result.data) {
         // Store historical gap-filling results in matrix structure
-        setValuationData(method, historicalDataResponse.suggestions);
+        setValuationData(method, result.data);
 
-        // Check for timeout status
-        if (historicalDataResponse.status === 'historical_data_timeout') {
-          setAiError('⏱️ Historical data extraction timed out. Using available API data only.');
+        // Handle AI metadata for user feedback
+        const aiMetadata = result.data.ai_metadata || {};
+        
+        if (aiMetadata.error) {
+          setAiError(aiMetadata.error);
+        } else if (aiMetadata.gaps_filled > 0) {
+          setAiError(`✅ Successfully filled ${aiMetadata.gaps_filled} historical data gaps with ${(aiMetadata.completeness_score * 100).toFixed(0)}% completeness.`);
         } else {
-          // Extract gap-filling information from response
-          const gapsFilled = historicalDataResponse.suggestions.total_gaps_filled || 0;
-          const completeness = historicalDataResponse.suggestions.data_completeness_score || 1.0;
-
-          if (gapsFilled > 0) {
-            setAiError(`✅ Successfully filled ${gapsFilled} historical data gaps with ${(completeness * 100).toFixed(0)}% completeness.`);
-          } else {
-            // No gaps found - API data was complete
-            setAiError(null);
-          }
-
-          // Check for fallback metadata
-          const metadata = historicalDataResponse.metadata || {};
-          if (metadata?.used_fallback) {
-            let errorMsg = '';
-            if (metadata.fallback_reason) {
-              errorMsg += `Reason: ${metadata.fallback_reason}. `;
-            }
-
-            if (metadata.provider_errors && Object.keys(metadata.provider_errors).length > 0) {
-              errorMsg += 'Provider errors: ';
-              const errorDetails = Object.entries(metadata.provider_errors)
-                .map(([provider, error]) => `${provider}: ${error}`)
-                .join('; ');
-              errorMsg += errorDetails;
-            } else if (!metadata.available_providers || metadata.available_providers.length === 0) {
-              errorMsg += 'No AI providers configured. Please add API keys for Groq, Gemini, or Qwen.';
-            }
-
-            errorMsg += ' Using deterministic fallback - assumptions generated from CAPM formula and historical averages.';
-            setAiError(errorMsg);
-          } else {
-            setAiError(null); // Clear any previous AI error
-          }
+          setAiError(null);
         }
-      } else if (historicalDataResponse.detail) {
-        setAiError(historicalDataResponse.detail);
       }
     } catch (aiErr) {
       console.error('AI generation failed:', aiErr);
@@ -630,7 +576,7 @@ const ValuationFlow = () => {
       setLoading(false);
       setCurrentStep(7);
     }
-  }, [sessionId, selectedModels, market]);
+  }, [sessionId, selectedModels, market, marketValidation]);
 
   // ==================== CONTINUE TO FORECAST DRIVERS (STEP 8) ====================
   const handleContinueToForecastDrivers = useCallback(async () => {
@@ -644,12 +590,13 @@ const ValuationFlow = () => {
     }
 
     try {
-      // Initialize Step 8 with historical trendlines before showing the step
-      console.log('📊 Initializing Step 8 assumptions with historical data...');
-      const step8Response = await initializeStep8Assumptions(sessionId, method, market);
-      console.log('Step 8 initialization response:', step8Response);
+      // Use valuationService.initializeAssumptions wrapper
+      const result = await initializeAssumptions(sessionId, method, market);
+      console.log('Step 8 initialization response:', result);
 
-      if (step8Response && step8Response.categories) {
+      if (result.success && result.data) {
+        const step8Response = result.data;
+        
         // Store the initialized assumptions in matrix structure
         setValuationData(method, step8Response);
 
@@ -690,36 +637,17 @@ const ValuationFlow = () => {
       }
 
       const targetMethod = method || selectedModels;
-      // FIX: Call prepareAssumptions (the correct API function) instead of non-existent prepareInputs
-      const data = await prepareAssumptions(sessionId, targetMethod, market);
-      console.log('Required inputs response:', data);
+      // Use valuationService.prepareRequirements instead of direct API call
+      const result = await prepareRequirements(sessionId, targetMethod, market);
+      console.log('Required inputs response:', result);
 
-      // FIX: Transform unified schema categories into requiredFields format
-      if (data.status && data.categories) {
-        const transformedFields = [];
-
-        data.categories.forEach(category => {
-          if (category.assumptions) {
-            Object.entries(category.assumptions).forEach(([key, field]) => {
-              transformedFields.push({
-                category: category.category_name,
-                name: field.description || key,
-                fieldName: key,
-                requiresInput: category.requires_user_input,
-                status: field.status,
-                value: field.value,
-                isMissing: field.is_missing
-              });
-            });
-          }
-        });
-
-        setRequiredFields(transformedFields);
+      if (result.success && result.fields) {
+        setRequiredFields(result.fields);
       }
     } catch (err) {
       console.error('Prepare inputs error:', err);
     }
-  }, [sessionId, selectedModels, market]);
+  }, [sessionId, selectedModels, market, marketValidation]);
 
   useEffect(() => {
     const method = selectedModels;
@@ -748,82 +676,20 @@ const ValuationFlow = () => {
     }
 
     try {
-      // Only fetch API data - do NOT generate AI yet
-      const fetchDataResponse = await fetchApiData(sessionId, method, market);
-      console.log('Fetch API data response:', fetchDataResponse);
+      // Use valuationService.retrieveData - handles all transformation logic internally
+      const result = await retrieveData({
+        sessionId,
+        method,
+        market,
+        includeHistoricalAI: false // Only fetch API data, no AI gap-filling yet
+      });
+      
+      console.log('Retrieve data result:', result);
 
-      // Handle both International and Vietnamese response formats
-      // International format: { status, data: { historical_financials, ... }, message }
-      // Vietnamese format: { session_id, status, ticker, success, source_provider, ..., periods_fetched, ... }
+      if (result.success && result.data) {
+        const financialData = result.data;
 
-      let financialData = null;
-
-      if (market && (market.toLowerCase() === 'vietnam')) {
-        // Vietnamese response format - wrap raw data in expected structure
-        if (fetchDataResponse.success) {
-          // Vietnamese returns flat structure with periods_fetched, source_provider, etc.
-          // Frontend needs to adapt this to the expected format
-          financialData = {
-            historical_financials: {
-              years: fetchDataResponse.periods_fetched || [],
-              data_fields: [], // Will be populated from cached session data on next step
-              source: fetchDataResponse.source_provider,
-              currency: fetchDataResponse.currency_unit
-            },
-            metadata: {
-              ticker: fetchDataResponse.ticker,
-              source_provider: fetchDataResponse.source_provider,
-              fetch_timestamp: fetchDataResponse.fetch_timestamp,
-              currency_unit: fetchDataResponse.currency_unit,
-              periods_fetched: fetchDataResponse.periods_fetched,
-              missing_periods: fetchDataResponse.missing_periods,
-              data_quality_flags: fetchDataResponse.data_quality_flags,
-              pdf_sources_used: fetchDataResponse.pdf_sources_used
-            },
-            calculated_metrics: {
-              dataRetrieved: true,
-              source: fetchDataResponse.source_provider,
-              periodsCovered: fetchDataResponse.periods_fetched
-            }
-          };
-        }
-      } else {
-        // International format - UnifiedStep6Response returns fields at root level
-        // Structure: { status, session_id, ticker, market, method, historical_financials, forecast_drivers, market_data, ... }
-        financialData = {
-          historical_financials: fetchDataResponse.historical_financials,
-          forecast_drivers: fetchDataResponse.forecast_drivers,
-          market_data: fetchDataResponse.market_data,
-          dupont_metrics: fetchDataResponse.dupont_metrics,
-          comps_multiples: fetchDataResponse.comps_multiples,
-          peer_comparables: fetchDataResponse.peer_comparables,
-          dcf_inputs: fetchDataResponse.dcf_inputs,
-          dupont_ratios: fetchDataResponse.dupont_ratios,
-          comps_results: fetchDataResponse.comps_results,
-          calculated_metrics: {
-            dataRetrieved: true,
-            source: fetchDataResponse.data_source,
-            periodsCovered: fetchDataResponse.periods_covered,
-            cache_used: fetchDataResponse.cache_used,
-            missing_data_summary: fetchDataResponse.missing_data_summary
-          },
-          metadata: {
-            ticker: fetchDataResponse.ticker,
-            market: fetchDataResponse.market,
-            method: fetchDataResponse.method,
-            data_source: fetchDataResponse.data_source,
-            fetch_timestamp: fetchDataResponse.fetch_timestamp,
-            status: fetchDataResponse.status,
-            message: fetchDataResponse.message,
-            warnings: fetchDataResponse.warnings,
-            data_quality_flags: fetchDataResponse.data_quality_flags
-          }
-        };
-      }
-
-      // Set financial data first - handle both old and new backend formats
-      if (financialData) {
-        // Store in matrix structure
+        // Store in matrix structure using imported helper
         setValuationData(method, financialData);
 
         // Also store in individual state variables for backward compatibility
@@ -854,6 +720,8 @@ const ValuationFlow = () => {
 
         // Auto-navigate to Step 6 to show retrieved data
         setCurrentStep(6);
+      } else if (!result.success) {
+        setError(result.error || 'Failed to retrieve data');
       }
 
     } catch (err) {
@@ -871,7 +739,7 @@ const ValuationFlow = () => {
     } finally {
       setLoading(false);
     }
-  }, [sessionId, selectedModels, market]);
+  }, [sessionId, selectedModels, market, marketValidation]);
 
   // ==================== MANUAL INPUT HANDLER (with auto-save) ====================
   const handleManualInput = (field, value) => {
