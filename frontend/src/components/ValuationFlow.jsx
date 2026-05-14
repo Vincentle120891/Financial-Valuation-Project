@@ -358,7 +358,7 @@ const ValuationFlow = () => {
           setPeerData(saveResponse.peer_data);
         }
 
-        setCurrentStep(5);  // Move to Step 5: Requirements Review
+        setCurrentStep(6);  // Move to Step 6: Requirements Review
       } else {
         setError('Failed to save peers');
       }
