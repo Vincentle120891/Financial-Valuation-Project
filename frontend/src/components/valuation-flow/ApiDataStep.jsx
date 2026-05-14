@@ -187,7 +187,7 @@ const ApiDataStep = ({
                   const fieldData = historicalData?.historical_financials?.[input.key];
 
                   const hasData = fieldData && (
-                    (Array.isArray(fieldData.value) && fieldData.value.some(pv => pv.value !== null && pv.value !== undefined)) ||
+                    (Array.isArray(fieldData.value) && fieldData.value.some(pv => pv && pv.value !== null && pv.value !== undefined)) ||
                     (!Array.isArray(fieldData.value) && fieldData.value !== null && fieldData.value !== undefined)
                   );
 
@@ -206,11 +206,20 @@ const ApiDataStep = ({
                   const statusInfo = getStatusInfo();
 
                   // Extract years/periods from the field data
+                  // FIXED: Backend returns scalar values in DataField.value, not arrays of period objects
                   const getPeriods = () => {
                     if (!fieldData?.value) return [];
+                    // Check if it's actually an array of period objects (legacy format)
                     if (Array.isArray(fieldData.value)) {
-                      return fieldData.value.map(pv => pv.period).filter(Boolean);
+                      // Handle both formats: {period, value} objects OR scalar values
+                      const firstItem = fieldData.value[0];
+                      if (firstItem && typeof firstItem === 'object' && 'period' in firstItem) {
+                        return fieldData.value.map(pv => pv.period).filter(Boolean);
+                      }
+                      // It's just an array of scalar values - return year indices
+                      return fieldData.value.map((_, idx) => `Year ${idx + 1}`);
                     }
+                    // Scalar value - return single period
                     return ['Current'];
                   };
 
@@ -241,8 +250,11 @@ const ApiDataStep = ({
                       {hasData ? (
                         <>
                           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: '6px', marginBottom: '8px' }}>
-                            {(Array.isArray(fieldData.value) ? fieldData.value : [{ period: 'Current', value: fieldData.value }])
-                              .filter(pv => pv.value !== null && pv.value !== undefined)
+                            {(Array.isArray(fieldData.value) ? fieldData.value.map((val, idx) => ({
+                              period: calculatedMetrics?.periodsCovered?.[idx] || `Year ${idx + 1}`,
+                              value: val
+                            })) : [{ period: 'Current', value: fieldData.value }])
+                              .filter(pv => pv && pv.value !== null && pv.value !== undefined)
                               .map((periodValue, idx) => {
                                 const year = periodValue.period || 'Value';
 
