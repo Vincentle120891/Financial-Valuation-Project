@@ -19,6 +19,7 @@ import {
 import SearchStep from './valuation-flow/SearchStep';
 import CompanySelectionStep from './valuation-flow/CompanySelectionStep';
 import ModelSelectionStep from './valuation-flow/ModelSelectionStep';
+import PeerSelectionStep from './valuation-flow/PeerSelectionStep';
 import RequirementsStep from './valuation-flow/RequirementsStep';
 import ApiDataStep from './valuation-flow/ApiDataStep';
 import HistoricalDataExtractionStep from './valuation-flow/HistoricalDataExtractionStep';
