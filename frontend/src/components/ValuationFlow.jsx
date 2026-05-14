@@ -6,7 +6,6 @@ import {
   savePeers,
   validateManualPeers,
   selectModels,
-  generateAISuggestion,
   confirmAssumptions,
   runValuation,
   runValuationMulti
@@ -15,6 +14,9 @@ import {
   retrieveData,
   initializeAssumptions,
   prepareRequirements,
+  generateAISuggestion,
+  deepMergeMatrix,
+  // Deprecated aliases kept for backward compatibility
   deepMergeValuations,
   deepMergeForecastDrivers,
   deepMergeDcfInputs
