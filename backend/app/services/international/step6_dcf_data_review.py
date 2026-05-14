@@ -14,7 +14,7 @@ import logging
 from typing import Dict, List, Optional, Any
 from pydantic import BaseModel
 from enum import Enum
-from datetime import datetime
+from datetime import datetime, timedelta
 import pandas as pd
 
 from .yfinance_service import YFinanceService
@@ -176,7 +176,6 @@ class DCFStep6Processor:
             # Check if cache is valid (not older than 5 minutes)
             cache_timestamp = cached_data.get('timestamp')
             if cache_timestamp:
-                from datetime import datetime, timedelta
                 cache_age = datetime.now() - cache_timestamp
                 if cache_age < timedelta(minutes=5):
                     logger.info(f"Using cached market data for {ticker} (age: {cache_age.seconds}s)")
@@ -255,7 +254,6 @@ class DCFStep6Processor:
 
         # GAP 1 FIX: Store fetched data in session cache for "Fetch Once, Use Many"
         if session_cache is not None:
-            from datetime import datetime
             session_cache['international_market_data'] = {
                 'timestamp': datetime.now(),
                 'historical_data': historical_data,
