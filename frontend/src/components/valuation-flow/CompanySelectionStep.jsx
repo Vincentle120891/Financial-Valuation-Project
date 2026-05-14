@@ -12,8 +12,8 @@ import InternationalMarketData from './InternationalMarketData';
  * STYLED TO MATCH: ResultsStep.jsx (Step 8)
  * 
  * Usage:
- * - Step 2: Show company data only (peer finding disabled)
- * - Step 4: Show company data with peer finding enabled (after model selection)
+ * - Step 2: Show company data only (peer finding disabled) - Continue button goes to Step 3
+ * - Step 4: Show company data with peer finding enabled - Continue button goes to Step 5
  */
 const CompanySelectionStep = ({
   selectedCompany,
@@ -32,7 +32,7 @@ const CompanySelectionStep = ({
   const handleFindPeers = async () => {
     // Check if onFindPeers is a valid function (not disabled)
     if (!onFindPeers || typeof onFindPeers !== 'function' || onFindPeers.toString().includes('() => {}')) {
-      alert('Peer discovery is only available after selecting a valuation model in Step 3.');
+      alert('Peer discovery is only available in Step 4 after selecting a valuation model in Step 3.');
       return;
     }
     
@@ -268,7 +268,7 @@ const CompanySelectionStep = ({
           className="btn-secondary"
           disabled={loading}
         >
-          ← Back to Search
+          ← Back
         </button>
 
         <div className="flex gap-4">
@@ -297,10 +297,10 @@ const CompanySelectionStep = ({
 
           <button
             onClick={onContinue}
-            disabled={!hasPeers || loading}
+            disabled={loading}
             className="btn-success"
           >
-            Continue to Requirements Review →
+            Continue →
           </button>
         </div>
       </div>

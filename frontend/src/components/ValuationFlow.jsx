@@ -18,7 +18,6 @@ import {
 } from '../services/valuationService';
 import SearchStep from './valuation-flow/SearchStep';
 import CompanySelectionStep from './valuation-flow/CompanySelectionStep';
-import PeerSelectionStep from './valuation-flow/PeerSelectionStep';
 import ModelSelectionStep from './valuation-flow/ModelSelectionStep';
 import RequirementsStep from './valuation-flow/RequirementsStep';
 import ApiDataStep from './valuation-flow/ApiDataStep';
@@ -56,24 +55,25 @@ const useDebounce = (callback, delay) => {
 /**
  * ValuationFlow - Main Container Component
  *
- * Orchestrates the 11-step valuation workflow (ALIGNED WITH BACKEND):
+ * Orchestrates the 12-step valuation workflow (ALIGNED WITH BACKEND):
  * Step 1: Search Company (Input ticker/name)
  * Step 2: Company Overview (View selected company data ONLY - no peers, no models)
  * Step 3: Select Valuation Model (DCF/DuPont/Comps) -> Determines peer criteria
- * Step 4: Find & Review Peers (Click "Find Peers" using Model criteria -> Review & Select)
- * Step 5: Requirements Review (Review required input fields based on Model + Peers)
- * Step 6: Fetch API Data (Retrieve all financial inputs - "Fetch Once, Use Many")
- * Step 7: Historical Data Processing (AI extraction & trendlines)
- * Step 8: Forecast Drivers (Manual overrides & assumption adjustment)
- * Step 9: Confirm Assumptions (Final confirmation before calculation)
- * Step 10: Execute Valuation (Run models)
- * Step 11: View Results (Display valuation results)
+ * Step 4: Find Peers (Click "Find Peers" using model-specific criteria)
+ * Step 5: Select Peers (Review peer table with similarity scores, toggle selections)
+ * Step 6: Requirements Review (Review required input fields based on Model + Peers)
+ * Step 7: Fetch API Data (Retrieve all financial inputs - "Fetch Once, Use Many")
+ * Step 8: Historical Data Processing (AI extraction & trendlines)
+ * Step 9: Forecast Drivers (Manual overrides & assumption adjustment)
+ * Step 10: Confirm Assumptions (Final confirmation before calculation)
+ * Step 11: Execute Valuation (Run models)
+ * Step 12: View Results (Display valuation results)
  *
  * Architecture:
  * - Container component managing state and business logic
  * - Delegated rendering to specialized step components
  * - Centralized API communication via services/api.js
- * - Aligned with backend unified schemas (Steps 1-11)
+ * - Aligned with backend unified schemas (Steps 1-12)
  * - Single model execution enforced (radio buttons prevent multi-model race conditions)
  * - MODEL FIRST, THEN PEERS: Peer discovery requires model selection to use method-specific criteria
  */
@@ -276,8 +276,8 @@ const ValuationFlow = () => {
     setError(null);
 
     // Validate model selection first - peer discovery requires model-specific criteria
-    if (!selectedModels || selectedModels.length === 0) {
-      setError('Please select a valuation model first before finding peers');
+    if (!selectedModels) {
+      setError('Please select a valuation model in Step 3 first before finding peers');
       setLoading(false);
       return;
     }
@@ -619,12 +619,17 @@ const ValuationFlow = () => {
 
   // ==================== BACK TO REQUIREMENTS (FROM STEP 6/8) ====================
   const handleBackToRequirements = useCallback(() => {
-    setCurrentStep(5);
+    setCurrentStep(6);
   }, []);
 
-  // ==================== BACK TO API DATA (FROM STEP 7) ====================
+  // ==================== BACK TO API DATA (FROM STEP 8) ====================
   const handleBackToApiData = useCallback(() => {
-    setCurrentStep(6);
+    setCurrentStep(7);
+  }, []);
+
+  // ==================== BACK TO FORECAST DRIVERS (FROM STEP 10) ====================
+  const handleBackToForecastDrivers = useCallback(() => {
+    setCurrentStep(9);
   }, []);
 
   // ==================== FETCH REQUIRED INPUTS ====================
@@ -1021,30 +1026,51 @@ const ValuationFlow = () => {
       case 3:
         // Step 3: Model Selection - Select valuation model (DCF/DuPont/Comps)
         // Model selection determines the criteria for peer discovery in Step 4
-        return <ModelSelectionStep onSelectModel={handleSelectModel} selectedModels={selectedModels} />;
+        // Auto-advance to Step 4 after model selection
+        return (
+          <ModelSelectionStep 
+            onSelectModel={handleSelectModel} 
+            selectedModels={selectedModels} 
+          />
+        );
       case 4:
         // Step 4: Find & Review Peers - Click "Find Peers" using model-specific criteria
         // User discovers peers based on the selected model, then reviews and selects them
+        // Reuse CompanySelectionStep with peer finding ENABLED (hasPeers shows success message after finding)
+        // After clicking Continue, user goes to Step 5 to review/select peers in table format
+        return (
+          <CompanySelectionStep
+            selectedCompany={selectedCompany}
+            onFindPeers={handleFindPeers}
+            onContinue={() => setCurrentStep(5)}
+            onBack={() => setCurrentStep(3)}
+            loading={loading}
+            hasPeers={suggestedPeers && suggestedPeers.length > 0}
+            market={market}
+          />
+        );
+      case 5:
+        // Step 5: Peer Selection Table - Review and select/deselect individual peers
+        // User sees peer table with similarity scores and can toggle selections
         return (
           <PeerSelectionStep
             suggestedPeers={suggestedPeers}
             selectedPeers={selectedPeers}
             onTogglePeer={handleTogglePeer}
-            onFindPeers={handleFindPeers}
             onContinue={handleContinueToRequirementsReview}
-            onBack={() => setCurrentStep(3)}
+            onBack={() => setCurrentStep(4)}
             loading={loading}
           />
         );
-      case 5:
-        // Step 5: Requirements Review
-        // Note: valuationData is not passed to Step 5 because data hasn't been fetched yet
-        // Step 5 only shows requirements from requiredFields (prepared by prepareAssumptions)
-        // Unified schema data (valuationData) is only available after Step 6 fetches it
+      case 6:
+        // Step 6: Requirements Review
+        // Note: valuationData is not passed to Step 6 because data hasn't been fetched yet
+        // Step 6 only shows requirements from requiredFields (prepared by prepareAssumptions)
+        // Unified schema data (valuationData) is only available after Step 7 fetches it
         return (
           <RequirementsStep
             selectedModel={selectedModels}
-            onBackToModelSelection={handleBackToModelSelection}
+            onBackToPeerSelection={() => setCurrentStep(5)}
             onRetrieveData={handleRetrieveData}
             loading={loading}
             historicalData={null}
@@ -1059,7 +1085,7 @@ const ValuationFlow = () => {
             onShowInputs={handleShowApiData}
           />
         );
-      case 6:
+      case 7:
         const valuationData = getValuationData(selectedModels);
         return (
           <ApiDataStep
@@ -1075,7 +1101,7 @@ const ValuationFlow = () => {
             loading={loading}
           />
         );
-      case 7:
+      case 8:
         return (
           <HistoricalDataExtractionStep
             sessionId={sessionId}
@@ -1094,7 +1120,7 @@ const ValuationFlow = () => {
             loading={loading}
           />
         );
-      case 8:
+      case 9:
         return (
           <ForecastDriversStep
             sessionId={sessionId}
@@ -1107,12 +1133,12 @@ const ValuationFlow = () => {
             onManualInput={handleManualInput}
             onAutoSave={handleAutoSaveForecastDrivers}
             onConfirmDrivers={handleConfirmAssumptions}
-            onBackToRequirements={handleBackToRequirements}
+            onBackToApiData={handleBackToApiData}
             onContinueToAssumptions={handleContinueToAssumptions}
             loading={loading}
           />
         );
-      case 9:
+      case 10:
         return (
           <AssumptionsStep
             historicalData={getValuationData(selectedModels)}
@@ -1124,11 +1150,11 @@ const ValuationFlow = () => {
             onManualInput={handleManualInput}
             onUseAI={handleUseAI}
             onConfirmAssumptions={handleConfirmAssumptions}
-            onBackToRequirements={handleBackToRequirements}
+            onBackToForecastDrivers={handleBackToForecastDrivers}
             loading={loading}
           />
         );
-      case 10:
+      case 11:
         return (
           <RunValuationStep
             selectedCompany={selectedCompany}
@@ -1136,11 +1162,11 @@ const ValuationFlow = () => {
             selectedScenario={selectedScenario}
             confirmedValues={confirmedValues}
             loading={loading}
-            onBackToModelSelection={handleBackToModelSelection}
+            onBackToAssumptions={() => setCurrentStep(10)}
             onRunValuation={handleRunValuation}
           />
         );
-      case 11:
+      case 12:
         return (
           <ResultsStep
             valuationMatrix={valuationsData}
@@ -1162,8 +1188,8 @@ const ValuationFlow = () => {
         <h1>Unified Valuation Platform</h1>
 
         {/* Progress Indicator with Step Counter */}
-        <div className="progress-indicator" role="progressbar" aria-valuenow={currentStep} aria-valuemin="1" aria-valuemax="11">
-          {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map(step => (
+        <div className="progress-indicator" role="progressbar" aria-valuenow={currentStep} aria-valuemin="1" aria-valuemax="12">
+          {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(step => (
             <div
               key={step}
               className={`step-dot ${currentStep >= step ? 'active' : ''} ${currentStep === step ? 'current' : ''}`}
@@ -1175,21 +1201,22 @@ const ValuationFlow = () => {
 
         {/* Enhanced Step Label with Progress */}
         <div className="step-label">
-          <span className="step-counter">Step {currentStep} of 11</span>
+          <span className="step-counter">Step {currentStep} of 12</span>
           <span className="step-name">
             {currentStep === 1 ? 'Search Company' :
              currentStep === 2 ? 'Company Overview' :
              currentStep === 3 ? 'Select Model' :
-             currentStep === 4 ? 'Find & Review Peers' :
-             currentStep === 5 ? 'Requirements Review' :
-             currentStep === 6 ? 'Fetch API Data' :
-             currentStep === 7 ? 'Historical Data Extraction' :
-             currentStep === 8 ? 'Forecast Drivers' :
-             currentStep === 9 ? 'Confirm Assumptions' :
-             currentStep === 10 ? 'Run Valuation' :
-             currentStep === 11 ? 'View Results' : 'In Progress'}
+             currentStep === 4 ? 'Find Peers' :
+             currentStep === 5 ? 'Select Peers' :
+             currentStep === 6 ? 'Requirements Review' :
+             currentStep === 7 ? 'Fetch API Data' :
+             currentStep === 8 ? 'Historical Data Extraction' :
+             currentStep === 9 ? 'Forecast Drivers' :
+             currentStep === 10 ? 'Confirm Assumptions' :
+             currentStep === 11 ? 'Run Valuation' :
+             currentStep === 12 ? 'View Results' : 'In Progress'}
           </span>
-          <span className="step-progress">{Math.round((currentStep / 11) * 100)}% Complete</span>
+          <span className="step-progress">{Math.round((currentStep / 12) * 100)}% Complete</span>
         </div>
       </header>
 
