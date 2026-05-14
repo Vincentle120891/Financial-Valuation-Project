@@ -4,12 +4,16 @@ import VietnameseMarketData from './VietnameseMarketData';
 import InternationalMarketData from './InternationalMarketData';
 
 /**
- * CompanySelectionStep - Step 2
+ * CompanySelectionStep - Step 2 & Step 4
  * Displays selected company details with sector, industry, and market cap information
  * Provides "Find Peers" button to trigger automatic peer discovery
  * Uses market-specific components for Vietnamese and International markets
  * 
  * STYLED TO MATCH: ResultsStep.jsx (Step 8)
+ * 
+ * Usage:
+ * - Step 2: Show company data only (peer finding disabled)
+ * - Step 4: Show company data with peer finding enabled (after model selection)
  */
 const CompanySelectionStep = ({
   selectedCompany,
@@ -26,6 +30,12 @@ const CompanySelectionStep = ({
   const [chartLoading, setChartLoading] = useState(false);
 
   const handleFindPeers = async () => {
+    // Check if onFindPeers is a valid function (not disabled)
+    if (!onFindPeers || typeof onFindPeers !== 'function' || onFindPeers.toString().includes('() => {}')) {
+      alert('Peer discovery is only available after selecting a valuation model in Step 3.');
+      return;
+    }
+    
     setPeerSearchLoading(true);
     try {
       await onFindPeers(selectedCompany);
@@ -264,7 +274,7 @@ const CompanySelectionStep = ({
         <div className="flex gap-4">
           <button
             onClick={handleFindPeers}
-            disabled={peerSearchLoading || loading}
+            disabled={peerSearchLoading || loading || !onFindPeers || onFindPeers.toString().includes('() => {}')}
             className="btn-primary"
           >
             {peerSearchLoading ? (
@@ -290,7 +300,7 @@ const CompanySelectionStep = ({
             disabled={!hasPeers || loading}
             className="btn-success"
           >
-            Continue to Peer Selection →
+            Continue to Requirements Review →
           </button>
         </div>
       </div>

@@ -272,10 +272,22 @@ const ValuationFlow = () => {
     }
   }, [searchQuery, market]);
 
-  // ==================== STEP 2: FIND PEERS ====================
+  // ==================== STEP 4: FIND PEERS (After Model Selection) ====================
   const handleFindPeers = useCallback(async (company) => {
     setLoading(true);
     setError(null);
+
+    // Validate that model is selected before finding peers
+    if (!selectedModels) {
+      setMarketValidation({
+        isValid: false,
+        message: 'Please select a valuation model first. Different models require different peer criteria.',
+        selectedMarket: market
+      });
+      setError('Model selection required before peer discovery');
+      setLoading(false);
+      return;
+    }
 
     // Validate market selection before finding peers
     if (!['international', 'vietnam'].includes(market)) {
@@ -291,6 +303,7 @@ const ValuationFlow = () => {
 
     try {
       const ticker = company.ticker || company.symbol;
+      // Backend will be updated to use method-specific peer criteria
       const data = await suggestPeers(ticker, company.market || market, 10);
       console.log('Suggest peers response:', data);
       if (data.peers && data.peers.length > 0) {
@@ -303,8 +316,8 @@ const ValuationFlow = () => {
 
         console.log(`Auto-selected ${topPeers.length} peers with highest scores:`, topPeers.map(p => p.symbol));
 
-        // Move to Step 3: Model Selection (peers already auto-selected)
-        setCurrentStep(3);
+        // Move to Step 5: Requirements Review (peers now selected based on model)
+        setCurrentStep(5);
       } else {
         setError('No peers found for this company. Try a different company or manually add peers later.');
       }
@@ -314,7 +327,7 @@ const ValuationFlow = () => {
     } finally {
       setLoading(false);
     }
-  }, [market]);
+  }, [market, selectedModels]);
 
   // ==================== STEP 4: TOGGLE PEER SELECTION ====================
   const handleTogglePeer = useCallback((peer) => {
@@ -330,7 +343,7 @@ const ValuationFlow = () => {
     });
   }, []);
 
-  // ==================== STEP 4: CONTINUE TO REQUIREMENTS REVIEW ====================
+  // ==================== STEP 4: CONTINUE TO REQUIREMENTS REVIEW (After peer selection) ====================
   const handleContinueToModelSelection = useCallback(async () => {
     if (!sessionId || selectedPeers.length === 0) {
       setError('No session or peers selected');
@@ -363,7 +376,10 @@ const ValuationFlow = () => {
     }
   }, [sessionId, selectedPeers]);
 
-  // ==================== STEP 2: SELECT COMPANY ====================
+  // Note: handleContinueToModelSelection is now used in Step 4 (CompanySelectionStep) when user clicks Continue after finding peers
+  // The function name is kept for backward compatibility but it actually continues to Requirements Review
+
+  // ==================== STEP 2: SELECT COMPANY (No peer finding yet) ====================
   const handleSelectCompany = useCallback(async (company) => {
     setLoading(true);
 
@@ -428,7 +444,7 @@ const ValuationFlow = () => {
           isLocked: true // Market is now locked - cannot be changed after Step 1
         });
 
-        setCurrentStep(2); // Move to Step 2: Company Overview
+        setCurrentStep(3); // Move directly to Step 3: Model Selection (peer finding happens AFTER model selection)
       }
     } catch (err) {
       console.error('Select company error:', err);
@@ -443,12 +459,6 @@ const ValuationFlow = () => {
     // GAP 2 & GAP 3 FIX: Update selected model first, then deep merge to preserve other models' data
     // Single selection (radio button behavior) - modelType is a string, not array
 
-    // Client-side validation: Ensure peers are selected before continuing (peers auto-selected in Step 2)
-    if (!selectedPeers || selectedPeers.length === 0) {
-      alert('⚠️ No peers selected! Please go back to Step 2 and find peers.');
-      return;
-    }
-
     setSelectedModels(modelType);
 
     setLoading(true);
@@ -458,9 +468,9 @@ const ValuationFlow = () => {
       const data = await selectModels(sessionId, modelType, market, [], selectedPeers);
       console.log('Select model response:', data);
       if (data.message) {
-        // Skip Step 4 (Peer Selection) since peers are already auto-selected in Step 2
-        // Directly proceed to Step 5: Requirements Review
-        setCurrentStep(5);
+        // After selecting model, move to Step 4: Company Overview with Peer Finding
+        // Peers will be found based on the selected model in Step 4
+        setCurrentStep(4);
       }
     } catch (err) {
       console.error('Select model error:', err);
@@ -506,6 +516,8 @@ const ValuationFlow = () => {
     }));
     setAiError(null); // Clear AI errors
     setPeerData(null);
+    setSuggestedPeers([]); // Clear peers when going back to model selection
+    setSelectedPeers([]);
     // Reset only the current method's results, preserve others
     setValuationResults(prev => ({
       ...prev,
@@ -1009,28 +1021,33 @@ const ValuationFlow = () => {
           />
         );
       case 2:
+        // Step 2: Company Overview - Only display company data, no peer finding yet
+        // Peer finding happens in Step 4 after model selection
         return (
           <CompanySelectionStep
             selectedCompany={selectedCompany}
-            onFindPeers={handleFindPeers}
+            onFindPeers={() => {}} // Disabled in Step 2 - peer finding moved to Step 4
             onContinue={() => setCurrentStep(3)}
             onBack={() => setCurrentStep(1)}
             loading={loading}
-            hasPeers={suggestedPeers.length > 0}
+            hasPeers={false} // No peers yet - will be found in Step 4
             market={market}
           />
         );
       case 3:
         return <ModelSelectionStep onSelectModel={handleSelectModel} selectedModels={selectedModels} selectedPeers={selectedPeers} />;
       case 4:
+        // Step 4: Company Overview with Peer Finding (after model selection)
+        // Now that model is selected, we can find appropriate peers based on the model
         return (
-          <PeerSelectionStep
-            suggestedPeers={suggestedPeers}
-            selectedPeers={selectedPeers}
-            onTogglePeer={handleTogglePeer}
+          <CompanySelectionStep
+            selectedCompany={selectedCompany}
+            onFindPeers={handleFindPeers}
             onContinue={handleContinueToModelSelection}
-            onBack={() => setCurrentStep(3)}  // Go back to Step 3 (Model Selection)
+            onBack={() => setCurrentStep(3)}
             loading={loading}
+            hasPeers={suggestedPeers.length > 0}
+            market={market}
           />
         );
       case 5:
