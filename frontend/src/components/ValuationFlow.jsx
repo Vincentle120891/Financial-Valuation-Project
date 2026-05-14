@@ -7,19 +7,14 @@ import {
   validateManualPeers,
   selectModels,
   confirmAssumptions,
-  runValuation,
-  runValuationMulti
+  runValuation
 } from '../services/api';
 import {
   retrieveData,
   initializeAssumptions,
   prepareRequirements,
   generateAISuggestion,
-  deepMergeMatrix,
-  // Deprecated aliases kept for backward compatibility
-  deepMergeValuations,
-  deepMergeForecastDrivers,
-  deepMergeDcfInputs
+  deepMergeMatrix
 } from '../services/valuationService';
 import SearchStep from './valuation-flow/SearchStep';
 import CompanySelectionStep from './valuation-flow/CompanySelectionStep';
@@ -61,23 +56,25 @@ const useDebounce = (callback, delay) => {
 /**
  * ValuationFlow - Main Container Component
  *
- * Orchestrates the 10-step valuation workflow (ALIGNED WITH BACKEND):
- * 1. Search Company (Input ticker/name)
- * 2. Company Overview & Market Confirmation (get session_id)
- * 3. Select Valuation Method (DCF/DuPont/Comps) - peers auto-selected from Step 2
- * 4. Review/Adjust Peer Companies (Optional step to modify auto-selected peers)
- * 5. Assumptions Preparation (Show data requirements + AI generation)
- * 6. Fetch API Data (Retrieve all financial inputs)
- * 7. Historical Data Processing (AI extraction & trendlines)
- * 8. Manual Overrides (Assumption & AI Suggestion adjustment)
- * 9. Confirm Assumptions (Final confirmation before calculation)
- * 10. Execute Valuation & View Results (Run models + display results)
+ * Orchestrates the 11-step valuation workflow (ALIGNED WITH BACKEND):
+ * Step 1: Search Company (Input ticker/name)
+ * Step 2: Company Overview (View selected company data only - no peer finding)
+ * Step 3: Select Valuation Model (DCF/DuPont/Comps) - Model selection BEFORE peers
+ * Step 4: Find Peers (Click "Find Peers" → peers discovered using method-specific criteria)
+ * Step 5: Review Requirements (Review requirements with auto-selected peers)
+ * Step 6: Fetch API Data (Retrieve all financial inputs - "Fetch Once, Use Many")
+ * Step 7: Historical Data Processing (AI extraction & trendlines)
+ * Step 8: Manual Overrides (Assumption & AI Suggestion adjustment)
+ * Step 9: Confirm Assumptions (Final confirmation before calculation)
+ * Step 10: Execute Valuation & View Results (Run models + display results)
+ * Step 11: Reserved for future export functionality
  *
  * Architecture:
  * - Container component managing state and business logic
  * - Delegated rendering to specialized step components
- * - Centralized API communication via services/valuationApi.js
+ * - Centralized API communication via services/api.js
  * - Aligned with backend unified schemas (Steps 1-10)
+ * - Single model execution enforced (radio buttons prevent multi-model race conditions)
  */
 const ValuationFlow = () => {
   // ==================== STATE MANAGEMENT ====================
@@ -127,7 +124,7 @@ const ValuationFlow = () => {
   };
 
   const setValuationData = (method, data) => {
-    setValuationsData(prev => deepMergeValuations(prev, market, method, data));
+    setValuationsData(prev => deepMergeMatrix(prev, market, method, data));
   };
 
   // Note: aiAssumptions was never a separate state - it's part of the matrix structure via getValuationData()
@@ -172,7 +169,7 @@ const ValuationFlow = () => {
   };
 
   const setForecastDrivers = (method, data) => {
-    setForecastDriversData(prev => deepMergeForecastDrivers(prev, market, method, data));
+    setForecastDriversData(prev => deepMergeMatrix(prev, market, method, data));
   };
 
   // Helper to get/set DCF inputs for current market + method
@@ -181,7 +178,7 @@ const ValuationFlow = () => {
   };
 
   const setDcfInputs = (method, data) => {
-    setDcfInputsData(prev => deepMergeDcfInputs(prev, market, method, data));
+    setDcfInputsData(prev => deepMergeMatrix(prev, market, method, data));
   };
 
   // All data access should use getForecastDrivers(method) or getDcfInputs(method) directly
@@ -476,13 +473,6 @@ const ValuationFlow = () => {
       setLoading(false);
     }
   }, [sessionId, market]);
-
-  // ==================== HANDLE MULTI-METHOD VALUATION ====================
-  const handleRunMultiMethodValuation = useCallback(async () => {
-    // Multi-select is now forbidden per documentation - this function is deprecated
-    // Fall back to single method valuation
-    return handleRunValuation();
-  }, []);
 
   // ==================== BACK TO MODEL SELECTION (STEP 3) ====================
   const handleBackToModelSelection = () => {
@@ -923,7 +913,7 @@ const ValuationFlow = () => {
     } finally {
       setLoading(false);
     }
-  }, [sessionId, selectedModels, selectedScenario, market, handleRunMultiMethodValuation]);
+  }, [sessionId, selectedModels, selectedScenario, market]);
 
   // ==================== RESET ALL ====================
   const handleReset = () => {

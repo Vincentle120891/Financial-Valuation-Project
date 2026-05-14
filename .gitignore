@@ -1,1 +1,1 @@
-Nothing should be ignored since the changes only include source code files (.py, .jsx, .js) and there are no build artifacts, dependencies, or temporary files in the change list.
+Nothing needs to be added to the .gitignore file since only a source code file (frontend/src/components/ValuationFlow.jsx) was modified and no build artifacts, dependencies, or temporary files were included in the changes.
