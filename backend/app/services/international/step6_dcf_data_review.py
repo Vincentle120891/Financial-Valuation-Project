@@ -209,7 +209,7 @@ class DCFStep6Processor:
                 # DO NOT convert columns to datetime - periods are already date strings like '2023-12-31'
                 # Keep them as strings to avoid Timestamp conversion issues
                 return df
-            
+
             financials_df = build_financials_df(income_stmt_dict)
             balance_sheet_df = build_financials_df(balance_sheet_dict)
             cashflow_df = build_financials_df(cash_flow_dict)
@@ -314,31 +314,31 @@ class DCFStep6Processor:
             ("tax_provision", "Tax Provision", True),
             ("net_income", "Net Income", True),
             ("depreciation_amortization", "Depreciation & Amortization", True),
-            
+
             # Cash Flow
             ("capex", "Capital Expenditures (CapEx)", True),
             ("operating_cash_flow", "Operating Cash Flow", True),
             ("free_cash_flow", "Free Cash Flow", True),
             ("working_capital_changes", "Working Capital Changes", False),
-            
+
             # Balance Sheet - Working Capital
             ("accounts_receivable", "Accounts Receivable", True),
             ("inventory", "Inventory", True),
             ("accounts_payable", "Accounts Payable", True),
             ("cash_and_equivalents", "Cash & Equivalents", True),
-            
+
             # Balance Sheet - Long-term
             ("total_assets", "Total Assets", True),
             ("total_debt", "Total Debt", True),
             ("shareholders_equity", "Shareholders Equity", True),
             ("retained_earnings", "Retained Earnings", False),
             ("shares_outstanding", "Shares Outstanding", True),
-            
+
             # Margins (calculated)
             ("gross_margin", "Gross Margin", False),
             ("operating_margin", "Operating Margin", False),
             ("net_margin", "Net Margin", False),
-            
+
             # Additional metrics
             ("ebit_margin", "EBIT Margin", False),
             ("tax_rate", "Effective Tax Rate", False),
@@ -382,50 +382,52 @@ class DCFStep6Processor:
         cashflow_df: Optional[pd.DataFrame]
     ) -> Optional[List[float]]:
         """Extract specific metric from financial statements - returns array of values for all periods
-        
+
         Returns a list of values (one per period) instead of a single value to match DataField.value format.
         """
         # COMPREHENSIVE mapping of field names to financial statement keys
         # Covers Income Statement, Balance Sheet, and Cash Flow items
+        # Note: yfinance v1.3.0+ returns CamelCase without spaces (e.g., TotalRevenue)
+        # but our service converts them to snake_case (e.g., total_revenue)
         income_mapping = {
-            "revenue": ["Total Revenue", "Revenue", "Total Revenues"],
-            "cogs": ["Cost Of Revenue", "Cost of Revenue", "COGS"],
-            "gross_profit": ["Gross Profit"],
-            "operating_expenses": ["Operating Expense", "Operating Expenses", "Total Operating Expenses"],
-            "research_development": ["Research And Development", "R&D", "Research & Development"],
-            "ebitda": ["EBITDA", "Ebitda"],
-            "ebit": ["EBIT", "Operating Income", "Operating income"],
-            "interest_expense": ["Interest Expense", "Interest And Debt Expense"],
-            "other_income": ["Other Income Expense", "Other Income/Expense"],
-            "pretax_income": ["Pretax Income", "Pre-Tax Income"],
-            "tax_provision": ["Tax Provision", "Income Tax Expense"],
-            "net_income": ["Net Income", "Net Income Common Stockholders", "Net Income Including Noncontrolling Interests"],
-            "depreciation_amortization": ["Depreciation And Amortization", "Depreciation, Depletion And Amortization"]
+            "revenue": ["total_revenue", "TotalRevenue", "OperatingRevenue"],
+            "cogs": ["cost_of_revenue", "CostOfRevenue", "ReconciledCostOfRevenue"],
+            "gross_profit": ["gross_profit", "GrossProfit"],
+            "operating_expenses": ["operating_expenses", "OperatingExpense", "TotalOperatingExpenses"],
+            "research_development": ["research_development", "ResearchAndDevelopment", "R&D"],
+            "ebitda": ["ebitda", "EBITDA", "NormalizedEBITDA"],
+            "ebit": ["ebit", "OperatingIncome", "EBIT"],
+            "interest_expense": ["interest_expense", "InterestExpense", "InterestAndDebtExpense"],
+            "other_income": ["other_income", "OtherIncomeExpense", "OtherIncome/Expense"],
+            "pretax_income": ["pretax_income", "PretaxIncome", "Pre-TaxIncome"],
+            "tax_provision": ["tax_provision", "TaxProvision", "IncomeTaxExpense"],
+            "net_income": ["net_income", "NetIncome", "NetIncomeCommonStockholders"],
+            "depreciation_amortization": ["depreciation_amortization", "ReconciledDepreciation", "DepreciationAndAmortization"]
         }
-        
+
         balance_sheet_mapping = {
-            "accounts_receivable": ["Accounts Receivable", "Receivables"],
-            "inventory": ["Inventory", "Inventories"],
-            "accounts_payable": ["Accounts Payable", "Payables"],
-            "cash_and_equivalents": ["Cash And Cash Equivalents", "Cash", "CashEquivalents"],
-            "total_assets": ["Total Assets", "Assets"],
-            "total_debt": ["Total Debt", "Debt"],
-            "shareholders_equity": ["Total Equity Gross Minority Interest", "Stockholders Equity", "Shareholders Equity"],
-            "retained_earnings": ["Retained Earnings"],
-            "shares_outstanding": ["Ordinary Shares Number", "Shares Outstanding"]
+            "accounts_receivable": ["accounts_receivable", "AccountsReceivable", "Receivables"],
+            "inventory": ["inventory", "Inventory", "Inventories"],
+            "accounts_payable": ["accounts_payable", "AccountsPayable", "Payables"],
+            "cash_and_equivalents": ["cash_and_equivalents", "CashAndCashEquivalents", "Cash"],
+            "total_assets": ["total_assets", "TotalAssets", "Assets"],
+            "total_debt": ["total_debt", "TotalDebt", "Debt"],
+            "shareholders_equity": ["shareholders_equity", "TotalEquityGrossMinorityInterest", "StockholdersEquity"],
+            "retained_earnings": ["retained_earnings", "RetainedEarnings"],
+            "shares_outstanding": ["shares_outstanding", "OrdinarySharesNumber", "SharesOutstanding"]
         }
-        
+
         cash_flow_mapping = {
-            "capex": ["Capital Expenditure", "Capex", "Purchase Of Property Plant And Equipment"],
-            "operating_cash_flow": ["Operating Cash Flow", "Cash Flow From Continuing Operating Activities"],
-            "free_cash_flow": ["Free Cash Flow"],
-            "working_capital_changes": ["Change In Working Capital", "Working Capital Changes"]
+            "capex": ["capex", "capital_expenditure", "CapitalExpenditure", "PurchaseOfPropertyPlantAndEquipment"],
+            "operating_cash_flow": ["operating_cash_flow", "OperatingCashFlow", "CashFlowFromContinuingOperatingActivities"],
+            "free_cash_flow": ["free_cash_flow", "FreeCashFlow"],
+            "working_capital_changes": ["working_capital_changes", "ChangeInWorkingCapital", "WorkingCapitalChanges"]
         }
-        
+
         # Determine which DataFrame to use based on field name
         df_to_use = None
         field_mapping = None
-        
+
         if field_name in income_mapping:
             df_to_use = financials_df
             field_mapping = income_mapping
@@ -438,11 +440,11 @@ class DCFStep6Processor:
         else:
             # Try all DataFrames for unknown fields
             pass
-        
+
         # Extract values for all periods (not just latest)
         if df_to_use is not None and not df_to_use.empty:
             keys_to_try = field_mapping.get(field_name, [field_name]) if field_mapping else [field_name]
-            
+
             for key in keys_to_try:
                 if key in df_to_use.index:
                     # Get all values across all periods
@@ -455,7 +457,7 @@ class DCFStep6Processor:
                         else:
                             values.append(None)
                     return values if values else None
-        
+
         # Handle calculated fields
         if field_name == "free_cash_flow":
             # FCF = Operating Cash Flow - CapEx (calculate for each period)
@@ -469,37 +471,37 @@ class DCFStep6Processor:
                     else:
                         fcf_values.append(None)
                 return fcf_values if fcf_values else None
-        
+
         if field_name == "change_in_nwc":
             # Change in NWC = (Current Assets - Current Liabilities) change year over year
             # Simplified: return None for now, will be calculated later
             return None
-        
+
         # Calculate margins if requested
         if field_name == "gross_margin":
             revenue = self._extract_metric_from_financials("revenue", financials_df, balance_sheet_df, cashflow_df)
             gross_profit = self._extract_metric_from_financials("gross_profit", financials_df, balance_sheet_df, cashflow_df)
             if revenue and gross_profit:
                 return [(gp / rev * 100) if rev and gp else None for gp, rev in zip(gross_profit, revenue)]
-        
+
         if field_name == "operating_margin" or field_name == "ebit_margin":
             revenue = self._extract_metric_from_financials("revenue", financials_df, balance_sheet_df, cashflow_df)
             ebit = self._extract_metric_from_financials("ebit", financials_df, balance_sheet_df, cashflow_df)
             if revenue and ebit:
                 return [(e / r * 100) if r and e else None for e, r in zip(ebit, revenue)]
-        
+
         if field_name == "net_margin":
             revenue = self._extract_metric_from_financials("revenue", financials_df, balance_sheet_df, cashflow_df)
             net_income = self._extract_metric_from_financials("net_income", financials_df, balance_sheet_df, cashflow_df)
             if revenue and net_income:
                 return [(ni / r * 100) if r and ni else None for ni, r in zip(net_income, revenue)]
-        
+
         if field_name == "tax_rate":
             pretax = self._extract_metric_from_financials("pretax_income", financials_df, balance_sheet_df, cashflow_df)
             tax = self._extract_metric_from_financials("tax_provision", financials_df, balance_sheet_df, cashflow_df)
             if pretax and tax:
                 return [(t / p * 100) if p and t else None for t, p in zip(tax, pretax)]
-        
+
         return None
 
     def _process_dcf_market_data(
