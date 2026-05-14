@@ -15,7 +15,8 @@ import {
   fetchApiData,
   retrieveHistoricalData,
   initializeStep8Assumptions,
-  prepareAssumptions
+  prepareAssumptions,
+  generateAISuggestion as generateAISuggestionApi
 } from './api';
 
 /**
@@ -237,9 +238,30 @@ export const prepareRequirements = async (sessionId, method, market = 'internati
 };
 
 /**
- * Helper: Deep merge valuations data into matrix structure
+ * Generate AI suggestion for a specific category
+ * Wrapper around generateAISuggestion API call - ensures service layer consistency
  */
-export const deepMergeValuations = (prev, market, method, data) => {
+export const generateAISuggestion = async (sessionId, category, method, market = 'international') => {
+  try {
+    const response = await generateAISuggestionApi(sessionId, category, method, market);
+    return {
+      success: true,
+      data: response
+    };
+  } catch (error) {
+    console.error('Failed to generate AI suggestion:', error);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+};
+
+/**
+ * Helper: Generic deep merge for matrix structure (market -> method -> data)
+ * Replaces the three separate deep merge functions with a single reusable utility
+ */
+export const deepMergeMatrix = (prev, market, method, data) => {
   return {
     ...prev,
     [market]: {
@@ -249,37 +271,19 @@ export const deepMergeValuations = (prev, market, method, data) => {
   };
 };
 
-/**
- * Helper: Deep merge forecast drivers into matrix structure
- */
-export const deepMergeForecastDrivers = (prev, market, method, data) => {
-  return {
-    ...prev,
-    [market]: {
-      ...prev[market],
-      [method?.toLowerCase()]: data
-    }
-  };
-};
-
-/**
- * Helper: Deep merge DCF inputs into matrix structure
- */
-export const deepMergeDcfInputs = (prev, market, method, data) => {
-  return {
-    ...prev,
-    [market]: {
-      ...prev[market],
-      [method?.toLowerCase()]: data
-    }
-  };
-};
+// Backward compatibility aliases - deprecated but kept for existing code
+export const deepMergeValuations = deepMergeMatrix;
+export const deepMergeForecastDrivers = deepMergeMatrix;
+export const deepMergeDcfInputs = deepMergeMatrix;
 
 // Default export for convenience
 export default {
   retrieveData,
   initializeAssumptions,
   prepareRequirements,
+  generateAISuggestion,
+  deepMergeMatrix,
+  // Deprecated aliases for backward compatibility
   deepMergeValuations,
   deepMergeForecastDrivers,
   deepMergeDcfInputs
