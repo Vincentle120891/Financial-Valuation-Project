@@ -1,1 +1,4 @@
-Nothing needs to be added to the .gitignore file since only a source code file (frontend/src/components/ValuationFlow.jsx) was modified and no build artifacts, dependencies, or temporary files were included in the changes.
+```
+# Documentation
+*.md
+```
