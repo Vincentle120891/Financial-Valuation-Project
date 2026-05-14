@@ -250,8 +250,11 @@ const ApiDataStep = ({
                       {hasData ? (
                         <>
                           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: '6px', marginBottom: '8px' }}>
-                            {(Array.isArray(fieldData.value) ? fieldData.value : [{ period: 'Current', value: fieldData.value }])
-                              .filter(pv => pv.value !== null && pv.value !== undefined)
+                            {(Array.isArray(fieldData.value) ? fieldData.value.map((val, idx) => ({
+                              period: calculatedMetrics?.periodsCovered?.[idx] || `Year ${idx + 1}`,
+                              value: val
+                            })) : [{ period: 'Current', value: fieldData.value }])
+                              .filter(pv => pv && pv.value !== null && pv.value !== undefined)
                               .map((periodValue, idx) => {
                                 const year = periodValue.period || 'Value';
 
