@@ -26,7 +26,8 @@ const RequirementsStep = ({
   aiData: historicalGapsData,
   aiError,
   onShowInputs,
-  requiredFields = []
+  requiredFields = [],
+  valuationData // NEW: Unified schema data from backend
 }) => {
   // FIX Issue #5: Backward compatibility layer for legacy aiData prop name
   const aiData = historicalGapsData;
@@ -59,67 +60,127 @@ const RequirementsStep = ({
     }, {});
   };
 
+  // Get data status from unified schema
+  const getDataStatus = (categoryKey, fieldKey) => {
+    if (!valuationData) return 'missing';
+    
+    // Map frontend category keys to backend response keys
+    const categoryMap = {
+      'historical_financials': 'historical_financials',
+      'market_data': 'market_data',
+      'balance_sheet_opening': 'historical_financials', // Opening balances derived from historical balance sheet
+      'peer_comparables_for_wacc': 'forecast_drivers' // Peer WACC data is in forecast_drivers (beta, cost_of_debt, wacc)
+    };
+    
+    const backendKey = categoryMap[categoryKey] || categoryKey;
+    const categoryData = valuationData[backendKey];
+    
+    if (!categoryData) {
+      return 'missing';
+    }
+    
+    // Handle peer comparables specially - they're in a different structure
+    if (categoryKey === 'peer_comparables_for_wacc') {
+      // Check for peer-related fields in forecast_drivers
+      const peerFields = ['beta', 'cost_of_debt', 'wacc', 'risk_free_rate', 'equity_risk_premium'];
+      if (peerFields.includes(fieldKey) && categoryData[fieldKey]) {
+        const fieldData = categoryData[fieldKey];
+        if (fieldData.status) {
+          return mapStatus(fieldData.status);
+        }
+        if (fieldData.value !== undefined && fieldData.value !== null) {
+          return 'retrieved';
+        }
+      }
+      return 'missing';
+    }
+    
+    const fieldData = categoryData[fieldKey];
+    
+    if (!fieldData) {
+      return 'missing';
+    }
+    
+    // Handle DataField object structure with status
+    if (fieldData.status) {
+      return mapStatus(fieldData.status);
+    }
+    
+    // Handle value presence (either single value or array of period values)
+    if (fieldData.value !== undefined && fieldData.value !== null) {
+      return 'retrieved';
+    }
+    
+    if (fieldData.values && Array.isArray(fieldData.values) && fieldData.values.length > 0) {
+      return 'retrieved';
+    }
+    
+    return 'missing';
+  };
+
   // Render all required inputs from backend using DataFieldDisplay
   const renderAllRequiredInputs = () => {
-    const groupedFields = getGroupedRequiredFields();
-
-    if (Object.keys(groupedFields).length === 0) {
-      return null;
+    if (!requiredFields || requiredFields.length === 0) {
+      return <div className="text-center py-8 text-gray-500">Loading requirements...</div>;
     }
 
     return (
-      <div className="summary-box" style={{ background: 'linear-gradient(135deg, #f5f5f5 0%, #e0e0e0 100%)', marginTop: '20px' }}>
-        <h3>📋 All Required Inputs ({requiredFields.length} total)</h3>
-
-        {Object.entries(groupedFields).map(([category, fields]) => (
-          <div key={category} style={{ marginBottom: '20px' }}>
-            <h4 style={{ color: '#1976d2', marginBottom: '12px', borderBottom: '2px solid #1976d2', paddingBottom: '6px' }}>
-              {category}
-            </h4>
-            <div style={{ display: 'grid', gap: '8px' }}>
-              {fields.map((field, idx) => {
-                // Convert field to DataField format for DataFieldDisplay
+      <div className="space-y-6">
+        {requiredFields.map((category, catIdx) => (
+          <div key={catIdx} className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+            <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-800">{category.category_name}</h3>
+              <p className="text-sm text-gray-600">{category.description}</p>
+            </div>
+            <div className="divide-y divide-gray-100">
+              {category.fields.map((field, fieldIdx) => {
+                const status = getDataStatus(category.category_key, field.key);
+                
+                // Get the actual field data from unified schema
+                const fieldData = valuationData?.[category.category_key]?.[field.key];
+                
+                // Construct DataField object for consistent rendering
                 const dataFieldObj = {
-                  value: field.value !== undefined ? field.value : null,
-                  status: field.requiresInput ? 'MANUAL' : 'RETRIEVED',
-                  source: field.source || 'user_input',
-                  confidence: field.confidence || (field.requiresInput ? 0.5 : 1.0),
-                  periods: field.periods ? field.periods.map(p => ({ period: p, value: field.value })) : []
+                  label: field.label,
+                  value: fieldData?.value || fieldData?.values || [],
+                  status: status === 'retrieved' ? (fieldData?.status || 'RETRIEVED') : 'MISSING',
+                  source: status === 'retrieved' ? (fieldData?.source || 'yfinance') : 'manual_required',
+                  confidence: fieldData?.confidence_score || (status === 'retrieved' ? 0.95 : 0),
+                  periods: fieldData?.periods || []
                 };
 
                 return (
-                  <div
-                    key={idx}
-                    style={{
-                      padding: '10px 14px',
-                      background: field.requiresInput ? '#fff3e0' : '#e8f5e9',
-                      borderRadius: '6px',
-                      borderLeft: field.requiresInput ? '4px solid #ff9800' : '4px solid #4caf50'
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontWeight: field.requiresInput ? 600 : 400, color: '#333' }}>
-                        {field.name}
-                      </span>
-                      <span style={{
-                        fontSize: '12px',
-                        padding: '4px 8px',
-                        borderRadius: '4px',
-                        background: field.requiresInput ? '#ff9800' : '#4caf50',
-                        color: 'white',
-                        fontWeight: 600
-                      }}>
-                        {field.requiresInput ? '⚠ User Input Required' : '✓ Auto-Fetched'}
-                      </span>
+                  <div key={fieldIdx} className="p-4 hover:bg-gray-50 transition-colors">
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="flex-1">
+                        <h4 className="font-medium text-gray-900">{field.label}</h4>
+                        <p className="text-sm text-gray-600 mt-1">{field.description}</p>
+                      </div>
+                      <div className="ml-4 flex-shrink-0">
+                        {status === 'retrieved' ? (
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                            ✓ Auto-Fetched
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                            ⚠ User Input Required
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    {/* Use DataFieldDisplay to show field details */}
-                    <div style={{ marginTop: '8px' }}>
-                      <DataFieldDisplay 
-                        label=""
-                        data={dataFieldObj}
-                        isPercentage={field.isPercentage || false}
-                        compact={true}
-                      />
+                    
+                    {/* Render Data Field */}
+                    <div className="mt-2">
+                      {status === 'retrieved' ? (
+                        <DataFieldDisplay 
+                          data={dataFieldObj} 
+                          compact={true} 
+                        />
+                      ) : (
+                        <div className="text-sm text-red-600 flex items-center">
+                          <span className="mr-1">⚠</span> MISSING - No data available
+                        </div>
+                      )}
                     </div>
                   </div>
                 );
@@ -127,14 +188,6 @@ const RequirementsStep = ({
             </div>
           </div>
         ))}
-
-        <div style={{ marginTop: '16px', padding: '12px', background: '#e3f2fd', borderRadius: '6px' }}>
-          <p style={{ margin: 0, fontSize: '14px', color: '#1565c0' }}>
-            <strong>Legend:</strong>
-            <span style={{ marginLeft: '12px' }}>🟠 Orange = Requires manual input/confirmation</span>
-            <span style={{ marginLeft: '12px' }}>🟢 Green = Automatically fetched from data sources</span>
-          </p>
-        </div>
       </div>
     );
   };

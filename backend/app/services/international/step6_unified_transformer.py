@@ -118,6 +118,7 @@ class Step6UnifiedTransformer:
         result = HistoricalFinancialsData()
         
         # Income Statement fields
+        # Note: DCF service uses 'depreciation_amortization' but unified schema expects 'depreciation'
         income_fields = [
             ("revenue", "Total Revenue"),
             ("cogs", "Cost of Goods Sold"),
@@ -125,7 +126,6 @@ class Step6UnifiedTransformer:
             ("net_income", "Net Income"),
             ("operating_expenses", "Operating Expenses"),
             ("sg_and_a", "SG&A"),
-            ("depreciation", "Depreciation & Amortization"),
         ]
         
         for field_name, _ in income_fields:
@@ -135,7 +135,15 @@ class Step6UnifiedTransformer:
                     legacy_field, currency="USD", reporting_period=reporting_period
                 ))
         
+        # Special handling for depreciation_amortization -> depreciation mapping
+        if "depreciation_amortization" in field_map:
+            legacy_field = field_map["depreciation_amortization"]
+            setattr(result, "depreciation", Step6UnifiedTransformer.transform_legacy_datafield_to_unified(
+                legacy_field, currency="USD", reporting_period=reporting_period
+            ))
+        
         # Cash Flow fields
+        # Note: DCF service uses 'capex' and 'free_cash_flow' which match unified schema
         cashflow_fields = ["capex", "free_cash_flow", "operating_cash_flow"]
         for field_name in cashflow_fields:
             if field_name in field_map:

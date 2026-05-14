@@ -1162,21 +1162,23 @@ const ValuationFlow = () => {
           />
         );
       case 5:
+        const valuationDataStep5 = getValuationData(selectedModels);
         return (
           <RequirementsStep
             selectedModel={selectedModels}
             onBackToModelSelection={handleBackToModelSelection}
             onRetrieveData={handleRetrieveData}
             loading={loading}
-            historicalData={getValuationData(selectedModels)}
+            historicalData={valuationDataStep5}
             forecastDrivers={getForecastDrivers(selectedModels)}
             peerData={peerData}
             dcfInputs={getDcfInputs(selectedModels)}
             dupontResults={getResult('DuPont')}
             compsResults={getResult('COMPS')}
-            aiData={getValuationData(selectedModels)}
+            aiData={valuationDataStep5}
             aiError={aiError}
             requiredFields={requiredFields}
+            valuationData={valuationDataStep5}
             onShowInputs={handleShowApiData}
           />
         );
