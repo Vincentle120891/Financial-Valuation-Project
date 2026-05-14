@@ -721,12 +721,9 @@ const ValuationFlow = () => {
     }
   }, [sessionId, selectedModels, market]);
 
-  useEffect(() => {
-    const method = selectedModels;
-    if (method && currentStep === 5 && sessionId) {
-      fetchRequiredInputs(method);
-    }
-  }, [selectedModels, currentStep, sessionId, market, fetchRequiredInputs]);
+  // NOTE: Removed auto-fetch useEffect - Step 5 should NOT auto-fetch data
+  // Data retrieval should only happen when user explicitly clicks "Retrieve Data" button
+  // This ensures Step 5 shows requirements first, then user decides when to fetch
 
   // ==================== STEP 6: RETRIEVE API DATA ONLY ====================
 
