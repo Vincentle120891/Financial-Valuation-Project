@@ -1,18 +1,19 @@
 import React from 'react';
 
 /**
- * ModelSelectionStep Component
- * Step 3: Select Valuation Model(s)
+ * ModelSelectionStep - Step 3
+ * Select Valuation Model(s)
  * 
  * FIXED: Now uses Radio Buttons instead of checkboxes.
  * Per documentation: "MUST use Radio Buttons. Multi-select is forbidden."
  * This prevents AI context hallucination from multiple simultaneous model selections.
  * 
- * UNIFIED SCHEMA REQUIREMENT:
- * Requires selectedPeers prop to ensure peers are selected before model selection.
- * UnifiedStep4Request schema requires either suggested_peers or custom_peers.
+ * WORKFLOW CORRECTION:
+ * Model selection happens FIRST (Step 3), then peers are discovered in Step 4
+ * based on the selected model's specific criteria.
+ * No peer requirement at this stage - peers will be auto-selected in Step 4.
  */
-const ModelSelectionStep = ({ onSelectModel, selectedModels, selectedPeers }) => {
+const ModelSelectionStep = ({ onSelectModel, selectedModels }) => {
   const models = [
     { 
       id: 'DCF', 
@@ -33,13 +34,8 @@ const ModelSelectionStep = ({ onSelectModel, selectedModels, selectedPeers }) =>
 
   // GAP 2 FIX: Use single selection (radio button behavior) instead of array-based multi-select
   const handleSelectModel = (modelId) => {
-    // Client-side validation: Prevent model selection without peers (Unified Schema Requirement)
-    if (!selectedPeers || selectedPeers.length === 0) {
-      alert('⚠️ No peers selected! Please go back to Step 4 and select at least one peer company.');
-      return;
-    }
-    
     // Single selection - just pass the model ID directly (not an array)
+    // Peers will be discovered in Step 4 based on the selected model
     onSelectModel(modelId);
   };
 

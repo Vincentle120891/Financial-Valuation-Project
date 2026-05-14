@@ -303,8 +303,8 @@ const ValuationFlow = () => {
 
     try {
       const ticker = company.ticker || company.symbol;
-      // Backend will be updated to use method-specific peer criteria
-      const data = await suggestPeers(ticker, company.market || market, 10);
+      // Pass the selected model to backend for method-specific peer criteria
+      const data = await suggestPeers(ticker, company.market || market, 10, selectedModels);
       console.log('Suggest peers response:', data);
       if (data.peers && data.peers.length > 0) {
         setSuggestedPeers(data.peers);
@@ -316,8 +316,8 @@ const ValuationFlow = () => {
 
         console.log(`Auto-selected ${topPeers.length} peers with highest scores:`, topPeers.map(p => p.symbol));
 
-        // Move to Step 5: Requirements Review (peers now selected based on model)
-        setCurrentStep(5);
+        // Stay on Step 4 to review peers - user clicks Continue to go to Step 5
+        // Do NOT auto-advance to Step 5
       } else {
         setError('No peers found for this company. Try a different company or manually add peers later.');
       }
@@ -344,7 +344,7 @@ const ValuationFlow = () => {
   }, []);
 
   // ==================== STEP 4: CONTINUE TO REQUIREMENTS REVIEW (After peer selection) ====================
-  const handleContinueToModelSelection = useCallback(async () => {
+  const handleContinueToRequirementsReview = useCallback(async () => {
     if (!sessionId || selectedPeers.length === 0) {
       setError('No session or peers selected');
       return;
@@ -375,9 +375,6 @@ const ValuationFlow = () => {
       setLoading(false);
     }
   }, [sessionId, selectedPeers]);
-
-  // Note: handleContinueToModelSelection is now used in Step 4 (CompanySelectionStep) when user clicks Continue after finding peers
-  // The function name is kept for backward compatibility but it actually continues to Requirements Review
 
   // ==================== STEP 2: SELECT COMPANY (No peer finding yet) ====================
   const handleSelectCompany = useCallback(async (company) => {
@@ -464,8 +461,8 @@ const ValuationFlow = () => {
     setLoading(true);
     try {
       // Always use single model endpoint (multi-select is now forbidden per documentation)
-      // Pass the selected peers as custom_peers to the backend
-      const data = await selectModels(sessionId, modelType, market, [], selectedPeers);
+      // Pass empty peers array - peers will be discovered in Step 4 based on the selected model
+      const data = await selectModels(sessionId, modelType, market, [], []);
       console.log('Select model response:', data);
       if (data.message) {
         // After selecting model, move to Step 4: Company Overview with Peer Finding
@@ -478,7 +475,7 @@ const ValuationFlow = () => {
     } finally {
       setLoading(false);
     }
-  }, [sessionId, market, selectedPeers]);
+  }, [sessionId, market]);
 
   // ==================== HANDLE MULTI-METHOD VALUATION ====================
   const handleRunMultiMethodValuation = useCallback(async () => {
@@ -1035,7 +1032,7 @@ const ValuationFlow = () => {
           />
         );
       case 3:
-        return <ModelSelectionStep onSelectModel={handleSelectModel} selectedModels={selectedModels} selectedPeers={selectedPeers} />;
+        return <ModelSelectionStep onSelectModel={handleSelectModel} selectedModels={selectedModels} />;
       case 4:
         // Step 4: Company Overview with Peer Finding (after model selection)
         // Now that model is selected, we can find appropriate peers based on the model
@@ -1043,7 +1040,7 @@ const ValuationFlow = () => {
           <CompanySelectionStep
             selectedCompany={selectedCompany}
             onFindPeers={handleFindPeers}
-            onContinue={handleContinueToModelSelection}
+            onContinue={handleContinueToRequirementsReview}
             onBack={() => setCurrentStep(3)}
             loading={loading}
             hasPeers={suggestedPeers.length > 0}
