@@ -1,1 +1,40 @@
-Nothing should be ignored in this case, as the changes only include Python source files (.py) which are legitimate source code files that should be tracked in version control.
+```
+# Dependencies
+node_modules/
+
+# Build artifacts
+dist/
+build/
+*.js.map
+*.css.map
+
+# Environment
+.env
+.env.local
+.env.*
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs and temp files
+*.log
+*.tmp
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Coverage
+coverage/
+htmlcov/
+.coverage
+
+# OS
+.DS_Store
+Thumbs.db
+```

@@ -1,4 +1,5 @@
 import React from 'react';
+import { DataFieldDisplay } from '@/components/valuation/DataFieldDisplay';
 
 /**
  * ApiDataStep Component
@@ -26,7 +27,7 @@ const ApiDataStep = ({
   loading
 }) => {
   // Check if data has been retrieved - improved check to include peerData with companies
-  const hasRetrievedData = historicalData ||
+  const hasRetrievedData = historicalData?.historical_financials ||
                            (peerData && peerData.companies && peerData.companies.length > 0) ||
                            dcfInputs ||
                            dupontResults ||
@@ -181,109 +182,46 @@ const ApiDataStep = ({
               <div style={{ display: 'grid', gap: '12px' }}>
                 {categoryInputs.map(input => {
                   // Get full field object from unified schema: historical_financials.{field}
-                  const fieldData = historicalData.historical_financials?.[input.key];
+                  const fieldData = historicalData?.historical_financials?.[input.key];
 
-                  const hasData = fieldData && (
-                    (Array.isArray(fieldData.value) && fieldData.value.some(pv => pv.value !== null && pv.value !== undefined)) ||
-                    (!Array.isArray(fieldData.value) && fieldData.value !== null && fieldData.value !== undefined)
-                  );
-
-                  // Determine overall status for this input
-                  const getStatusInfo = () => {
-                    if (!hasData || fieldData?.is_missing) return { status: 'MISSING', label: '⚠ MISSING', color: '#ff9800', bg: '#fff3e0' };
-
-                    if (fieldData.status === 'RETRIEVED') {
-                      return { status: 'RETRIEVED', label: '✓ FETCHED', color: '#4caf50', bg: '#e8f5e9' };
-                    } else if (fieldData.status === 'CALCULATED') {
-                      return { status: 'CALCULATED', label: '📊 CALCULATED', color: '#2196f3', bg: '#e3f2fd' };
-                    }
-                    return { status: 'UNKNOWN', label: '? UNKNOWN', color: '#9e9e9e', bg: '#f5f5f5' };
+                  // Map backend status to frontend status format
+                  const mapStatus = (backendStatus) => {
+                    if (!backendStatus) return undefined;
+                    if (backendStatus === 'RETRIEVED') return 'fetched';
+                    if (backendStatus === 'CALCULATED') return 'calculated';
+                    if (backendStatus === 'ESTIMATED') return 'estimated';
+                    if (backendStatus === 'MISSING') return 'missing';
+                    return undefined;
                   };
 
-                  const statusInfo = getStatusInfo();
-
-                  // Extract years/periods from the field data
-                  const getPeriods = () => {
-                    if (!fieldData?.value) return [];
-                    if (Array.isArray(fieldData.value)) {
-                      return fieldData.value.map(pv => pv.period).filter(Boolean);
+                  // Convert periods array to the format expected by DataFieldDisplay
+                  const convertPeriods = (value) => {
+                    if (!value) return [];
+                    if (Array.isArray(value)) {
+                      return value.map(pv => ({
+                        period: pv.period || 'N/A',
+                        value: pv.value
+                      }));
                     }
-                    return ['Current'];
+                    return [];
                   };
 
-                  const periods = getPeriods();
+                  // Create dataField object for DataFieldDisplay component
+                  const dataField = fieldData ? {
+                    value: Array.isArray(fieldData.value) ? fieldData.value[0]?.value : fieldData.value,
+                    unit: fieldData.unit,
+                    status: mapStatus(fieldData.status),
+                    source: fieldData.source,
+                    confidence: fieldData.confidence,
+                    periods: convertPeriods(fieldData.value)
+                  } : undefined;
 
                   return (
-                    <div key={input.key} style={{
-                      background: 'white',
-                      padding: '12px',
-                      borderRadius: '6px',
-                      border: hasData ? `2px solid ${statusInfo.color}` : '2px dashed #ff9800',
-                      opacity: hasData ? 1 : 0.7
-                    }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                        <strong style={{ color: hasData ? statusInfo.color : '#f57c00' }}>
-                          {input.name}
-                        </strong>
-                        <span style={{
-                          background: statusInfo.color,
-                          color: 'white',
-                          padding: '2px 8px',
-                          borderRadius: '4px',
-                          fontSize: '11px',
-                          fontWeight: 600
-                        }}>{statusInfo.label}</span>
-                      </div>
-
-                      {hasData ? (
-                        <>
-                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: '6px', marginBottom: '8px' }}>
-                            {(Array.isArray(fieldData.value) ? fieldData.value : [{ period: 'Current', value: fieldData.value }])
-                              .filter(pv => pv.value !== null && pv.value !== undefined)
-                              .map((periodValue, idx) => {
-                                const year = periodValue.period || 'Value';
-
-                                return (
-                                  <div key={idx} style={{ textAlign: 'center', padding: '6px', background: statusInfo.bg, borderRadius: '4px', border: `1px solid ${statusInfo.color}33` }}>
-                                    <small style={{ color: '#999', display: 'block', fontSize: '11px' }}>{year}</small>
-                                    <span style={{
-                                      color: typeof periodValue.value === 'number' && periodValue.value < 0 ? '#f44336' : statusInfo.color,
-                                      fontWeight: 600,
-                                      fontSize: '12px'
-                                    }}>
-                                      {fieldData.unit === '%' ? `${(periodValue.value * 100).toFixed(2)}%` :
-                                       fieldData.unit === 'USD' ? formatCurrency(periodValue.value) :
-                                       periodValue.value}
-                                    </span>
-                                    {fieldData.source && (
-                                      <div style={{ fontSize: '9px', color: '#666', marginTop: '2px' }} title={fieldData.source}>
-                                        {fieldData.status === 'CALCULATED' ? '📊 ' : '✓ '}{fieldData.source.replace('yfinance', 'Yahoo').replace('Calculated from', 'Calc:')}
-                                      </div>
-                                    )}
-                                  </div>
-                                );
-                              })}
-                          </div>
-                          {/* Show formula for calculated fields */}
-                          {fieldData.formula && (
-                            <div style={{ fontSize: '11px', color: '#666', fontStyle: 'italic', borderTop: '1px dashed #ddd', paddingTop: '6px' }}>
-                              Formula: {fieldData.formula}
-                            </div>
-                          )}
-                        </>
-                      ) : (
-                        <div style={{
-                          textAlign: 'center',
-                          padding: '12px',
-                          background: '#fff3e0',
-                          borderRadius: '4px',
-                          color: '#e65100',
-                          fontSize: '13px'
-                        }}>
-                          ⚠️ This data point was not retrieved from the API. You may need to manually input it in the next step.
-                        </div>
-                      )}
-                    </div>
+                    <DataFieldDisplay
+                      key={input.key}
+                      label={input.name}
+                      dataField={dataField}
+                    />
                   );
                 })}
               </div>
