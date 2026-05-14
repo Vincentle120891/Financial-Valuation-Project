@@ -204,8 +204,10 @@ class DCFStep6Processor:
                 data_rows = {k: v for k, v in data_dict.items() if k != 'periods' and isinstance(v, list)}
                 if not data_rows or not periods:
                     return None
+                # Create DataFrame with metrics as rows and periods as columns
                 df = pd.DataFrame(data_rows, index=periods).T
-                df.columns = pd.to_datetime(df.columns)
+                # DO NOT convert columns to datetime - periods are already date strings like '2023-12-31'
+                # Keep them as strings to avoid Timestamp conversion issues
                 return df
             
             financials_df = build_financials_df(income_stmt_dict)
@@ -378,45 +380,126 @@ class DCFStep6Processor:
         financials_df: pd.DataFrame,
         balance_sheet_df: Optional[pd.DataFrame],
         cashflow_df: Optional[pd.DataFrame]
-    ) -> Optional[float]:
-        """Extract specific metric from financial statements"""
-        # Mapping of field names to financial statement keys
-        mapping = {
+    ) -> Optional[List[float]]:
+        """Extract specific metric from financial statements - returns array of values for all periods
+        
+        Returns a list of values (one per period) instead of a single value to match DataField.value format.
+        """
+        # COMPREHENSIVE mapping of field names to financial statement keys
+        # Covers Income Statement, Balance Sheet, and Cash Flow items
+        income_mapping = {
             "revenue": ["Total Revenue", "Revenue", "Total Revenues"],
+            "cogs": ["Cost Of Revenue", "Cost of Revenue", "COGS"],
+            "gross_profit": ["Gross Profit"],
+            "operating_expenses": ["Operating Expense", "Operating Expenses", "Total Operating Expenses"],
+            "research_development": ["Research And Development", "R&D", "Research & Development"],
             "ebitda": ["EBITDA", "Ebitda"],
             "ebit": ["EBIT", "Operating Income", "Operating income"],
-            "net_income": ["Net Income", "Net Income Common Stockholders"],
-            "depreciation_amortization": ["Depreciation And Amortization", "Depreciation, Depletion And Amortization"],
-            "capex": ["Capital Expenditure", "Capex", "Purchase Of Property Plant And Equipment"],
-            "gross_margin": ["Gross Margin", "Gross Profit Margin"],
-            "operating_margin": ["Operating Margin", "Operating Income Margin"],
-            "net_margin": ["Net Margin", "Net Profit Margin"]
+            "interest_expense": ["Interest Expense", "Interest And Debt Expense"],
+            "other_income": ["Other Income Expense", "Other Income/Expense"],
+            "pretax_income": ["Pretax Income", "Pre-Tax Income"],
+            "tax_provision": ["Tax Provision", "Income Tax Expense"],
+            "net_income": ["Net Income", "Net Income Common Stockholders", "Net Income Including Noncontrolling Interests"],
+            "depreciation_amortization": ["Depreciation And Amortization", "Depreciation, Depletion And Amortization"]
         }
-
-        # Get most recent year's data
-        if financials_df is not None and not financials_df.empty:
-            latest_col = financials_df.columns[-1]
-
-            for key in mapping.get(field_name, [field_name]):
-                if key in financials_df.index:
-                    value = financials_df.loc[key, latest_col]
-                    if pd.notna(value):
-                        return float(value)
-
-        # Special calculations
+        
+        balance_sheet_mapping = {
+            "accounts_receivable": ["Accounts Receivable", "Receivables"],
+            "inventory": ["Inventory", "Inventories"],
+            "accounts_payable": ["Accounts Payable", "Payables"],
+            "cash_and_equivalents": ["Cash And Cash Equivalents", "Cash", "CashEquivalents"],
+            "total_assets": ["Total Assets", "Assets"],
+            "total_debt": ["Total Debt", "Debt"],
+            "shareholders_equity": ["Total Equity Gross Minority Interest", "Stockholders Equity", "Shareholders Equity"],
+            "retained_earnings": ["Retained Earnings"],
+            "shares_outstanding": ["Ordinary Shares Number", "Shares Outstanding"]
+        }
+        
+        cash_flow_mapping = {
+            "capex": ["Capital Expenditure", "Capex", "Purchase Of Property Plant And Equipment"],
+            "operating_cash_flow": ["Operating Cash Flow", "Cash Flow From Continuing Operating Activities"],
+            "free_cash_flow": ["Free Cash Flow"],
+            "working_capital_changes": ["Change In Working Capital", "Working Capital Changes"]
+        }
+        
+        # Determine which DataFrame to use based on field name
+        df_to_use = None
+        field_mapping = None
+        
+        if field_name in income_mapping:
+            df_to_use = financials_df
+            field_mapping = income_mapping
+        elif field_name in balance_sheet_mapping:
+            df_to_use = balance_sheet_df
+            field_mapping = balance_sheet_mapping
+        elif field_name in cash_flow_mapping:
+            df_to_use = cashflow_df
+            field_mapping = cash_flow_mapping
+        else:
+            # Try all DataFrames for unknown fields
+            pass
+        
+        # Extract values for all periods (not just latest)
+        if df_to_use is not None and not df_to_use.empty:
+            keys_to_try = field_mapping.get(field_name, [field_name]) if field_mapping else [field_name]
+            
+            for key in keys_to_try:
+                if key in df_to_use.index:
+                    # Get all values across all periods
+                    series = df_to_use.loc[key]
+                    # Convert to list, handling NaN values
+                    values = []
+                    for v in series.values:
+                        if pd.notna(v):
+                            values.append(float(v))
+                        else:
+                            values.append(None)
+                    return values if values else None
+        
+        # Handle calculated fields
         if field_name == "free_cash_flow":
-            # FCF = Operating Cash Flow - CapEx
-            op_cf = self._extract_metric_from_financials("operating_cash_flow", financials_df, balance_sheet_df, cashflow_df)
-            capex = self._extract_metric_from_financials("capex", financials_df, balance_sheet_df, cashflow_df)
-            if op_cf is not None and capex is not None:
-                return op_cf - abs(capex)
-
+            # FCF = Operating Cash Flow - CapEx (calculate for each period)
+            op_cf_values = self._extract_metric_from_financials("operating_cash_flow", financials_df, balance_sheet_df, cashflow_df)
+            capex_values = self._extract_metric_from_financials("capex", financials_df, balance_sheet_df, cashflow_df)
+            if op_cf_values and capex_values:
+                fcf_values = []
+                for i in range(min(len(op_cf_values), len(capex_values))):
+                    if op_cf_values[i] is not None and capex_values[i] is not None:
+                        fcf_values.append(op_cf_values[i] - abs(capex_values[i]))
+                    else:
+                        fcf_values.append(None)
+                return fcf_values if fcf_values else None
+        
         if field_name == "change_in_nwc":
-            # Requires balance sheet data
-            if balance_sheet_df is not None and not balance_sheet_df.empty:
-                # Simplified calculation
-                pass
-
+            # Change in NWC = (Current Assets - Current Liabilities) change year over year
+            # Simplified: return None for now, will be calculated later
+            return None
+        
+        # Calculate margins if requested
+        if field_name == "gross_margin":
+            revenue = self._extract_metric_from_financials("revenue", financials_df, balance_sheet_df, cashflow_df)
+            gross_profit = self._extract_metric_from_financials("gross_profit", financials_df, balance_sheet_df, cashflow_df)
+            if revenue and gross_profit:
+                return [(gp / rev * 100) if rev and gp else None for gp, rev in zip(gross_profit, revenue)]
+        
+        if field_name == "operating_margin" or field_name == "ebit_margin":
+            revenue = self._extract_metric_from_financials("revenue", financials_df, balance_sheet_df, cashflow_df)
+            ebit = self._extract_metric_from_financials("ebit", financials_df, balance_sheet_df, cashflow_df)
+            if revenue and ebit:
+                return [(e / r * 100) if r and e else None for e, r in zip(ebit, revenue)]
+        
+        if field_name == "net_margin":
+            revenue = self._extract_metric_from_financials("revenue", financials_df, balance_sheet_df, cashflow_df)
+            net_income = self._extract_metric_from_financials("net_income", financials_df, balance_sheet_df, cashflow_df)
+            if revenue and net_income:
+                return [(ni / r * 100) if r and ni else None for ni, r in zip(net_income, revenue)]
+        
+        if field_name == "tax_rate":
+            pretax = self._extract_metric_from_financials("pretax_income", financials_df, balance_sheet_df, cashflow_df)
+            tax = self._extract_metric_from_financials("tax_provision", financials_df, balance_sheet_df, cashflow_df)
+            if pretax and tax:
+                return [(t / p * 100) if p and t else None for t, p in zip(tax, pretax)]
+        
         return None
 
     def _process_dcf_market_data(
