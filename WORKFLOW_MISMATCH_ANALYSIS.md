@@ -14,15 +14,15 @@
 | Old Step | New Step | Name | Backend Match | Notes |
 |----------|----------|------|---------------|-------|
 | 1 | 1 | Search Company | ✅ Step 1 | |
-| 2 | 2 | Company Overview/Market Confirmation | ✅ Step 2 | |
-| 3 | **4** | Peer Selection | ✅ Step 4 | **SWAPPED** |
+| 2 | 2 | Company Overview (NO Find Peers button) | ✅ Step 2 | |
+| 3 | **4** | Find Peers (click → auto-fetch) | ✅ Step 4 | **SWAPPED** |
 | 4 | **3** | Model/Method Selection | ✅ Step 3 | **SWAPPED** |
-| 5 | 5 | Review Requirements → Assumptions Prep | ✅ Step 5 | |
-| 6 | 6 | View Retrieved Inputs → Fetch Data | ✅ Step 6 | |
+| 5 | 5 | Requirements Review (click "Retrieve Data" → fetch silently) | ✅ Step 5 | |
+| 6 | 6 | API Data Review (AUTO-DISPLAY: retrieved + calculated + missing) | ✅ Step 6 | |
 | 7 | 7 | Historical Data Extraction | ✅ Step 7 | |
-| 8 | 8 | Forecast Drivers → Manual Overrides | ✅ Step 8 | |
+| 8 | 8 | Assumption & AI Suggestion | ✅ Step 8 | |
 | 9 | 9 | Confirm Assumptions | ✅ Step 9 | |
-| 10 | 10 | Run Valuation → Execute | ✅ Step 10 | |
+| 10 | 10 | Run Valuation | ✅ Step 10 | |
 | 11 | 11 | Results & Export | N/A | Reserved for Report Export |
 
 ## Rationale

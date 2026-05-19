@@ -188,7 +188,7 @@
    
  | **1** | Search Company | Text input + market toggle (VN/International) | Query yfinance (Int'l) or VNStockDatabase (VN) for ticker matches | /step-1-search |  
    
- | **2** | Company Overview | Display selected company details | Create session with UUID, fetch basic info from market-specific service | /step-2-confirm-market |  
+ | **2** | Company Overview | Display selected company details (NO Find Peers button) | Create session with UUID, fetch basic info from market-specific service | /step-2-confirm-market |  
    
  | **3** |  **Select Model** |  **Single select** (DCF, DuPont, Comps) - Radio buttons | Validate model compatibility, store in session | /step-3-select-method |  
 ***⚠️ Critical Change***  *: Model selection (Step 3) now comes BEFORE peer selection (Step 4). This ensures the backend knows which valuation method to use when fetching peer-relevant data.*  
@@ -201,9 +201,9 @@
    
  | **Step** |  **Action** |  **User Interface** |  **Backend Process** |  **Backend Endpoint** |  
    
- | **4** | Peer Selection | AI-suggested peers with auto-select top 5 | Peer discovery service with scoring (market-specific logic) | /step-4-select-models |  
+ | **4** | Find Peers | Click button → Auto-fetch & save top 5 peers | Peer discovery service with scoring (market-specific logic) | /step-4-select-models |  
    
- | **5** | Review Requirements | Table showing required fields per model | Load schema definitions from step5 processor (market-specific) | /step-5-prepare-assumptions |  
+ | **5** | Review Requirements | Click "Retrieve Data" button (fetch silently, no display) | Fetch data silently, auto-advance to Step 6 | /step-5-prepare-assumptions |  
 **Phase 3: Data Retrieval & Review (Steps 6-7)**  
    
  | | | | | |  
@@ -212,9 +212,9 @@
    
  | **Step** |  **Action** |  **User Interface** |  **Backend Process** |  **Backend Endpoint** |  
    
- | **6** | View Retrieved Inputs | Display all API-fetched financial data |  **Fetch Once, Use Many**: Step6DataReviewProcessor fetches ALL data for ANY model into shared cache | /step-6-fetch-api-data |  
+ | **6** | API Data Review | **AUTO-DISPLAY**: All retrieved data + calculated inputs + identified missing inputs | **Automatic Calculation**: Calculate all possible inputs from API data, identify missing inputs that cannot be retrieved/calculated | /step-6-fetch-api-data |  
    
- | **7** | Historical Data Retrieval | Display missing historical data fetched from alternative sources | Step7HistoricalDataProcessor fetches data gaps not available via standard APIs (AI extraction from PDFs for VN market) | /step-7-retrieve-historical |  
+ | **7** | Historical Data Extraction | Display/review historical trends, fill remaining gaps | Step7HistoricalDataProcessor fetches data gaps not available via standard APIs (AI extraction from PDFs for VN market) | /step-7-retrieve-historical |  
 **Phase 4: Assumption & AI Suggestion (Steps 8-9)**  
    
  | | | | | |  
