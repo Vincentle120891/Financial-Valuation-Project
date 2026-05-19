@@ -421,7 +421,6 @@ class DCFStep6Processor:
         income_mapping = {
             "revenue": ["total_revenue", "TotalRevenue", "OperatingRevenue"],
             "cogs": ["cost_of_revenue", "CostOfRevenue", "ReconciledCostOfRevenue"],
-            "gross_profit": ["gross_profit", "GrossProfit"],
             "operating_expenses": ["operating_expenses", "OperatingExpense", "TotalOperatingExpenses"],
             "research_development": ["research_development", "ResearchAndDevelopment", "R&D"],
             "ebitda": ["ebitda", "EBITDA", "NormalizedEBITDA"],
@@ -453,41 +452,8 @@ class DCFStep6Processor:
             "working_capital_changes": ["working_capital_changes", "ChangeInWorkingCapital", "WorkingCapitalChanges"]
         }
 
-        # Determine which DataFrame to use based on field name
-        df_to_use = None
-        field_mapping = None
-
-        if field_name in income_mapping:
-            df_to_use = financials_df
-            field_mapping = income_mapping
-        elif field_name in balance_sheet_mapping:
-            df_to_use = balance_sheet_df
-            field_mapping = balance_sheet_mapping
-        elif field_name in cash_flow_mapping:
-            df_to_use = cashflow_df
-            field_mapping = cash_flow_mapping
-        else:
-            # Try all DataFrames for unknown fields
-            pass
-
-        # Extract values for all periods (not just latest)
-        if df_to_use is not None and not df_to_use.empty:
-            keys_to_try = field_mapping.get(field_name, [field_name]) if field_mapping else [field_name]
-
-            for key in keys_to_try:
-                if key in df_to_use.index:
-                    # Get all values across all periods
-                    series = df_to_use.loc[key]
-                    # Convert to list, handling NaN values
-                    values = []
-                    for v in series.values:
-                        if pd.notna(v):
-                            values.append(float(v))
-                        else:
-                            values.append(None)
-                    return values if values else None
-
-        # Handle calculated fields
+        # STEP 1: Handle calculated fields FIRST (before trying to extract from DataFrames)
+        # This ensures calculations work even if the field exists in mappings
         if field_name == "gross_profit":
             # Gross Profit = Revenue - COGS (calculate for each period)
             revenue_values = self._extract_metric_from_financials("revenue", financials_df, balance_sheet_df, cashflow_df)
@@ -662,6 +628,41 @@ class DCFStep6Processor:
             tax = self._extract_metric_from_financials("tax_provision", financials_df, balance_sheet_df, cashflow_df)
             if pretax and tax:
                 return [(t / p * 100) if p and t else None for t, p in zip(tax, pretax)]
+
+        # If we reach here, try to extract from DataFrames using mappings
+        # Determine which DataFrame to use based on field name
+        df_to_use = None
+        field_mapping = None
+
+        if field_name in income_mapping:
+            df_to_use = financials_df
+            field_mapping = income_mapping
+        elif field_name in balance_sheet_mapping:
+            df_to_use = balance_sheet_df
+            field_mapping = balance_sheet_mapping
+        elif field_name in cash_flow_mapping:
+            df_to_use = cashflow_df
+            field_mapping = cash_flow_mapping
+        else:
+            # Try all DataFrames for unknown fields
+            pass
+
+        # Extract values for all periods (not just latest)
+        if df_to_use is not None and not df_to_use.empty:
+            keys_to_try = field_mapping.get(field_name, [field_name]) if field_mapping else [field_name]
+
+            for key in keys_to_try:
+                if key in df_to_use.index:
+                    # Get all values across all periods
+                    series = df_to_use.loc[key]
+                    # Convert to list, handling NaN values
+                    values = []
+                    for v in series.values:
+                        if pd.notna(v):
+                            values.append(float(v))
+                        else:
+                            values.append(None)
+                    return values if values else None
 
         return None
 
