@@ -182,9 +182,19 @@ const ApiDataStep = ({
 
               <div style={{ display: 'grid', gap: '12px' }}>
                 {categoryInputs.map(input => {
-                  // Get full field object from unified schema: historical_financials.{field}
-                  // FIXED: Access historicalData.historical_financials correctly
-                  const fieldData = historicalData?.historical_financials?.[input.key];
+                  // Get full field object from unified schema based on category
+                  // FIXED: Check market_data, historical_financials, and balance_sheet_opening separately
+                  let fieldData;
+                  if (input.category === 'market_data') {
+                    fieldData = historicalData?.market_data?.[input.key];
+                  } else if (input.category === 'balance_sheet_opening') {
+                    fieldData = historicalData?.balance_sheet_opening?.[input.key];
+                  } else if (input.category === 'peer_comparables') {
+                    fieldData = historicalData?.peer_comparables?.[input.key];
+                  } else {
+                    // Default to historical_financials
+                    fieldData = historicalData?.historical_financials?.[input.key];
+                  }
 
                   // Check if data exists - handles both legacy format ({period, value}) and unified schema (scalar values)
                   const hasData = fieldData && (
