@@ -421,7 +421,6 @@ class DCFStep6Processor:
         income_mapping = {
             "revenue": ["total_revenue", "TotalRevenue", "OperatingRevenue"],
             "cogs": ["cost_of_revenue", "CostOfRevenue", "ReconciledCostOfRevenue"],
-            "gross_profit": ["gross_profit", "GrossProfit"],
             "operating_expenses": ["operating_expenses", "OperatingExpense", "TotalOperatingExpenses"],
             "research_development": ["research_development", "ResearchAndDevelopment", "R&D"],
             "ebitda": ["ebitda", "EBITDA", "NormalizedEBITDA"],
@@ -453,7 +452,7 @@ class DCFStep6Processor:
             "working_capital_changes": ["working_capital_changes", "ChangeInWorkingCapital", "WorkingCapitalChanges"]
         }
 
-        # Handle calculated fields FIRST (before trying to extract from DataFrames)
+        # STEP 1: Handle calculated fields FIRST (before trying to extract from DataFrames)
         # This ensures calculations work even if the field exists in mappings
         if field_name == "gross_profit":
             # Gross Profit = Revenue - COGS (calculate for each period)
