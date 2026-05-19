@@ -30,12 +30,12 @@ This directory now contains the **single source of truth** for all API request/r
 Contains ALL unified schemas for Steps 1-10:  
 - **Core Types**: DataField, DataStatus, ValuationMethod, MarketType, MissingDataSummary  
 - **Step 1**: Company Search (UnifiedStep1Request, UnifiedStep1Response)  
-- **Step 2**: Market Confirmation (UnifiedStep2Request, UnifiedStep2Response)  
+- **Step 2**: Company Overview - Display details (NO Find Peers button) (UnifiedStep2Request, UnifiedStep2Response)  
 - **Step 3**: Method Selection (UnifiedStep3Request, UnifiedStep3Response)  
-- **Step 4**: Peer Selection (UnifiedStep4Request, UnifiedStep4Response)  
-- **Step 5**: Assumptions Preparation (UnifiedStep5Request, UnifiedStep5Response)  
-- **Step 6**: Data Fetching (UnifiedStep6Request, UnifiedStep6Response) ⭐ CRITICAL  
-- **Step 7**: Historical Processing (UnifiedStep7Request, UnifiedStep7Response)  
+- **Step 4**: Find Peers - Click button → Auto-fetch & save top 5 peers (UnifiedStep4Request, UnifiedStep4Response)  
+- **Step 5**: Requirements Review - Click "Retrieve Data" button (fetch silently) (UnifiedStep5Request, UnifiedStep5Response)  
+- **Step 6**: API Data Review - Auto-calculates all possible inputs, identifies missing inputs (UnifiedStep6Request, UnifiedStep6Response) ⭐ CRITICAL  
+- **Step 7**: Historical Data Extraction - Display/review trends, fill remaining gaps (UnifiedStep7Request, UnifiedStep7Response)  
 - **Step 8**: Manual Overrides (UnifiedStep8Request, UnifiedStep8Response)  
 - **Step 9**: Assumptions Confirmation (UnifiedStep9Request, UnifiedStep9Response)  
 - **Step 10**: Valuation Execution (UnifiedStep10Request, UnifiedStep10Response)  
@@ -102,7 +102,7 @@ Both International and Vietnamese markets return THE EXACT SAME structure:
 - Tax rates: Different values, same field names  
 **Implementation Checklist**  
 **For Backend Developers**  
-***Step 6 Implementation (Most Critical)***  
+***Step 6 Implementation - API Data Review (Most Critical)***  
 **International Market** (/workspace/backend/app/api/routes/international_market_data_routes.py):  
 @router.post("/step-6-fetch-api-data", response_model=UnifiedStep6Response)  
  async def fetch_api_data(request: UnifiedStep6Request):  
@@ -161,7 +161,7 @@ Both International and Vietnamese markets return THE EXACT SAME structure:
    
 **Key Point**: Vietnamese backend MUST transform its raw data into the unified structure. Do NOT return raw bundles!  
 **For Frontend Developers**  
-***Step 6 Integration***  
+***Step 6 Integration - API Data Review***  
 // BEFORE (Broken - different handling per market)  
  if (market === 'vietnam') {  
    const data = await fetch('/vietnamese/vn-step-6-fetch-data', {...});  
@@ -288,7 +288,7 @@ For questions or issues:
 - ✅ **Phase 1.2a**: International Step 6 transformer (DCF/DuPont/Comps)  
 - ✅ **Phase 1.2b**: International Step 7 transformer (DCF/DuPont/Comps)  
 **Key Features Implemented**  
-- **Step 6**: Unified response with 94+ data fields wrapped in DataField structures  
+- **Step 6**: API Data Review - Unified response with 94+ data fields, auto-calculated metrics, and identified missing inputs  
 - **Step 7**: Historical data processing with automatic trend analysis (CAGR, growth rates)  
 - **Data Quality**: MissingDataSummary with completeness scoring  
 - **Backward Compatibility**: Legacy processors preserved, transformation layer added  

@@ -17,16 +17,8 @@ const RequirementsStep = ({
   onBackToModelSelection,
   onRetrieveData,
   loading,
-  historicalData,
-  forecastDrivers,
-  peerData,
-  dcfInputs,
-  dupontResults,
-  compsResults,
-  aiData: historicalGapsData,
-  aiError,
-  onShowInputs,
-  requiredFields = []
+  requiredFields = [],
+  calculatedMetrics // Added to track if data was retrieved (parent passes this after successful fetch)
 }) => {
   const [localStatus, setLocalStatus] = useState({});
 
@@ -41,19 +33,9 @@ const RequirementsStep = ({
     }
   }, [requiredFields]);
 
-  // Check if data has already been retrieved
-  const hasRetrievedData = historicalData || peerData || dcfInputs || dupontResults || compsResults || (historicalGapsData && Object.keys(historicalGapsData).length > 0);
-
-  // Update status when data is retrieved
-  useEffect(() => {
-    if (hasRetrievedData && localStatus && Object.keys(localStatus).length > 0) {
-      const updatedStatus = { ...localStatus };
-      Object.keys(updatedStatus).forEach(key => {
-        updatedStatus[key] = 'retrieved';
-      });
-      setLocalStatus(updatedStatus);
-    }
-  }, [hasRetrievedData]);
+  // Check if data has already been retrieved - using calculatedMetrics as the indicator
+  // The parent component passes calculatedMetrics only after successful data retrieval
+  const hasRetrievedData = false; // Always show "Retrieve Data" button - navigation is handled by parent after fetch
 
   const handleRetrieveData = () => {
     // Set all to fetching state
@@ -63,7 +45,7 @@ const RequirementsStep = ({
     });
     setLocalStatus(fetchingStatus);
 
-    // Trigger actual data fetch
+    // Trigger actual data fetch - parent handles navigation after success
     if (onRetrieveData) onRetrieveData();
   };
 
@@ -314,66 +296,34 @@ const RequirementsStep = ({
           <div className="text-sm text-gray-500 hidden sm:block">
             Ready to fetch <span className="font-bold text-gray-900">{requiredFields.length}</span> data points
           </div>
-          {!hasRetrievedData ? (
-            <button
-              onClick={handleRetrieveData}
-              disabled={loading}
-              className={`
-                flex items-center px-8 py-3 rounded-lg font-bold text-white shadow-lg
-                transform transition-all duration-200
-                ${loading
-                  ? 'bg-gray-400 cursor-not-allowed'
-                  : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 hover:-translate-y-0.5 hover:shadow-xl'
-                }
-                focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500
-              `}
-            >
-              {loading ? (
-                <>
-                  <Clock className="w-5 h-5 mr-2 animate-spin" />
-                  Retrieving Data...
-                </>
-              ) : (
-                <>
-                  <Database className="w-5 h-5 mr-2" />
-                  Retrieve Data
-                  <ArrowRight className="w-5 h-5 ml-2" />
-                </>
-              )}
-            </button>
-          ) : (
-            <>
-              <button
-                onClick={onRetrieveData}
-                disabled={loading}
-                className="px-6 py-3 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-              >
-                🔄 Refresh Data
-              </button>
-              <button
-                onClick={onShowInputs}
-                className="flex items-center px-8 py-3 rounded-lg font-bold text-white shadow-lg bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 hover:-translate-y-0.5 hover:shadow-xl transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
-              >
-                Continue to Review Data →
-              </button>
-            </>
-          )}
+          <button
+            onClick={handleRetrieveData}
+            disabled={loading}
+            className={`
+              flex items-center px-8 py-3 rounded-lg font-bold text-white shadow-lg
+              transform transition-all duration-200
+              ${loading
+                ? 'bg-gray-400 cursor-not-allowed'
+                : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 hover:-translate-y-0.5 hover:shadow-xl'
+              }
+              focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500
+            `}
+          >
+            {loading ? (
+              <>
+                <Clock className="w-5 h-5 mr-2 animate-spin" />
+                Retrieving Data...
+              </>
+            ) : (
+              <>
+                <Database className="w-5 h-5 mr-2" />
+                Retrieve Data
+                <ArrowRight className="w-5 h-5 ml-2" />
+              </>
+            )}
+          </button>
         </div>
       </div>
-
-      {/* AI Error Warning (if applicable) */}
-      {aiError && hasRetrievedData && (
-        <div className="bg-gradient-to-r from-orange-50 to-amber-50 border-2 border-orange-500 rounded-xl p-6">
-          <h3 className="text-lg font-bold text-orange-800 mb-2">⚠️ AI Suggestions Failed</h3>
-          <p className="text-orange-700 mb-4">{aiError}</p>
-          <div className="bg-white rounded-lg p-4">
-            <p className="text-sm text-gray-700">
-              <strong>💡 What this means:</strong> Financial data was successfully loaded, but AI-powered suggestions could not be generated.
-              You can still proceed to view the retrieved data and manually enter your assumptions.
-            </p>
-          </div>
-        </div>
-      )}
     </motion.div>
   );
 };

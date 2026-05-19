@@ -56,14 +56,14 @@ const useDebounce = (callback, delay) => {
 /**
  * ValuationFlow - Main Container Component
  *
- * Orchestrates the 12-step valuation workflow (ALIGNED WITH BACKEND):
+ * Orchestrates the 11-step valuation workflow (ALIGNED WITH BACKEND):
  * Step 1: Search Company (Input ticker/name)
  * Step 2: Company Overview (View selected company data ONLY - no peers, no models)
  * Step 3: Select Valuation Model (DCF/DuPont/Comps) -> Determines peer criteria
  * Step 4: Find Peers (Click "Find Peers" using model-specific criteria)
  * Step 5: Select Peers (Review peer table with similarity scores, toggle selections)
- * Step 6: Requirements Review (Review required input fields based on Model + Peers)
- * Step 7: Fetch API Data (Retrieve all financial inputs - "Fetch Once, Use Many")
+ * Step 6: Requirements Review (Review required input fields based on Model + Peers) -> Click "Retrieve Data" (fetches silently, auto-advances)
+ * Step 7: API Data Review (Display ALL retrieved data + calculated inputs + identify missing inputs)
  * Step 8: Historical Data Processing (AI extraction & trendlines)
  * Step 9: Forecast Drivers (Manual overrides & assumption adjustment)
  * Step 10: Confirm Assumptions (Final confirmation before calculation)
@@ -521,9 +521,10 @@ const ValuationFlow = () => {
     // Keep market locked - user selected company already, just switching models
   };
 
-  // ==================== SHOW API DATA (STEP 6) ====================
+  // ==================== SHOW API DATA (STEP 7 - ApiDataStep) ====================
   const handleShowApiData = useCallback(() => {
-    setCurrentStep(6);
+    // Navigate to Step 7 (ApiDataStep) to display retrieved data
+    setCurrentStep(7);
   }, []);
 
   // ==================== CONTINUE TO HISTORICAL DATA RETRIEVAL (STEP 7) ====================
@@ -724,8 +725,9 @@ const ValuationFlow = () => {
           setCalculatedMetrics(financialData.calculated_metrics);
         }
 
-        // Auto-navigate to Step 6 to show retrieved data
-        setCurrentStep(6);
+        // Auto-navigate to Step 7 (ApiDataStep) to show retrieved data
+        // Step 6 is Requirements Review (before fetch), Step 7 is ApiDataStep (after fetch)
+        setCurrentStep(7);
       } else if (!result.success) {
         setError(result.error || 'Failed to retrieve data');
       }
@@ -1075,19 +1077,11 @@ const ValuationFlow = () => {
         return (
           <RequirementsStep
             selectedModel={selectedModels}
-            onBackToPeerSelection={() => setCurrentStep(5)}
+            onBackToModelSelection={() => setCurrentStep(3)}
             onRetrieveData={handleRetrieveData}
             loading={loading}
-            historicalData={null}
-            forecastDrivers={null}
-            peerData={null}
-            dcfInputs={null}
-            dupontResults={null}
-            compsResults={null}
-            aiData={null}
-            aiError={aiError}
             requiredFields={requiredFields}
-            onShowInputs={handleShowApiData}
+            calculatedMetrics={calculatedMetrics}
           />
         );
       case 7:
