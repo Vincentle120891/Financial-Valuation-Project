@@ -1208,7 +1208,7 @@ const ValuationFlow = () => {
              currentStep === 4 ? 'Find Peers' :
              currentStep === 5 ? 'Select Peers' :
              currentStep === 6 ? 'Requirements Review' :
-             currentStep === 7 ? 'Fetch API Data' :
+             currentStep === 7 ? 'API Data Review' :
              currentStep === 8 ? 'Historical Data Extraction' :
              currentStep === 9 ? 'Forecast Drivers' :
              currentStep === 10 ? 'Confirm Assumptions' :

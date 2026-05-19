@@ -3,7 +3,7 @@ import DataFieldDisplay, { DataFieldGrid } from './DataFieldDisplay';
 
 /**
  * ApiDataStep Component
- * Step 6: Review Data Retrieved from APIs
+ * Step 7: API Data Review - Display all retrieved data + calculated inputs + identify missing inputs
  *
  * Features:
  * - Display historical financials retrieved from API with detailed numbers
@@ -12,7 +12,7 @@ import DataFieldDisplay, { DataFieldGrid } from './DataFieldDisplay';
  * - Show DCF inputs (WACC, terminal growth) from API
  * - Display DuPont analysis results with detailed ratios
  * - Show Comps analysis results with all multiples
- * - Navigate to Step 7 (AI Assumptions) or back to Step 5
+ * - Navigate to Step 8 (Historical Data Extraction) or back to Step 6 (Requirements Review)
  */
 const ApiDataStep = ({
   historicalData,
@@ -1084,7 +1084,7 @@ const ApiDataStep = ({
     <div className="step-container">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
         <div>
-          <h2>Step 6: Review Retrieved Financial Data</h2>
+          <h2>Step 7: API Data Review</h2>
           <p style={{ color: '#666', marginTop: '8px' }}>Review all financial data fetched from yfinance and AlphaVantage APIs. Verify accuracy before proceeding.</p>
         </div>
         <button onClick={onBackToRequirements} className="btn-secondary">
@@ -1120,7 +1120,7 @@ const ApiDataStep = ({
               className="btn-primary"
               disabled={loading}
             >
-              Continue to AI Assumptions →
+              Continue to Historical Data Extraction →
             </button>
           </div>
         </>
