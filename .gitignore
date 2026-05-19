@@ -1,1 +1,72 @@
-Nothing should be ignored based on the provided file changes. The only modified file is a source code file (`frontend/src/components/valuation-flow/ApiDataStep.jsx`), which should not be added to .gitignore.
+```
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.log
+.git/modules/
+.DS_Store
+.hg/
+.svn/
+.well-known/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+/node_modules
+/.pnp
+.pnp.js
+
+# Build outputs
+dist/
+build/
+target/
+out/
+output/
+coverage/
+htmlcov/
+.mypy_cache/
+.pytest_cache/
+.hypothesis/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Environment variables
+.env
+.env.local
+.env.*
+!.env.example
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+```

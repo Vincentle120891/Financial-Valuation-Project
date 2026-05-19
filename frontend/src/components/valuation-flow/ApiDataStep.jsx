@@ -206,10 +206,10 @@ const ApiDataStep = ({
                   const getStatusInfo = () => {
                     if (!hasData || fieldData?.is_missing) return { status: 'MISSING', label: '⚠ MISSING', color: '#ff9800', bg: '#fff3e0' };
 
-                    if (fieldData.status === 'RETRIEVED') {
-                      return { status: 'RETRIEVED', label: '✓ FETCHED', color: '#4caf50', bg: '#e8f5e9' };
-                    } else if (fieldData.status === 'CALCULATED') {
+                    if (fieldData.status === 'CALCULATED') {
                       return { status: 'CALCULATED', label: '📊 CALCULATED', color: '#2196f3', bg: '#e3f2fd' };
+                    } else if (fieldData.status === 'RETRIEVED') {
+                      return { status: 'RETRIEVED', label: '✓ FETCHED', color: '#4caf50', bg: '#e8f5e9' };
                     }
                     return { status: 'UNKNOWN', label: '? UNKNOWN', color: '#9e9e9e', bg: '#f5f5f5' };
                   };

@@ -349,17 +349,45 @@ class DCFStep6Processor:
             value = None
             status = DataStatus.MISSING
             source = "yfinance"
+            formula = None
 
             # Try to extract from financial statements
             if financials_df is not None:
                 value = self._extract_metric_from_financials(field_name, financials_df, balance_sheet_df, cashflow_df)
                 if value is not None:
-                    status = DataStatus.RETRIEVED
+                    # Check if this was calculated (not directly retrieved) and set formula
+                    if field_name == "gross_profit":
+                        status = DataStatus.CALCULATED
+                        source = "Calculated from API data"
+                        formula = "Revenue - COGS"
+                    elif field_name == "free_cash_flow":
+                        status = DataStatus.CALCULATED
+                        source = "Calculated from API data"
+                        formula = "Operating Cash Flow - CapEx"
+                    elif field_name == "change_in_nwc":
+                        status = DataStatus.CALCULATED
+                        source = "Calculated from API data"
+                        formula = "Δ(AR + Inventory - AP)"
+                    elif field_name == "ebit":
+                        status = DataStatus.CALCULATED
+                        source = "Calculated from API data"
+                        formula = "EBITDA - Depreciation & Amortization"
+                    elif field_name == "operating_expenses":
+                        status = DataStatus.CALCULATED
+                        source = "Calculated from API data"
+                        formula = "Gross Profit - EBIT"
+                    elif field_name in ["pretax_income", "interest_expense", "other_income", "tax_provision", 
+                                        "working_capital_changes", "retained_earnings", "shares_outstanding"]:
+                        status = DataStatus.CALCULATED
+                        source = "Calculated from API data"
+                    else:
+                        status = DataStatus.RETRIEVED
 
             # Check for user override
             if field_name in user_overrides:
                 value = user_overrides[field_name]
                 status = DataStatus.MANUAL_OVERRIDE
+                formula = None  # User override takes precedence
 
             data_fields.append(DataField(
                 field_name=field_name,
@@ -368,6 +396,7 @@ class DCFStep6Processor:
                 unit="USD" if "margin" not in field_name and "rate" not in field_name else "%",
                 status=status,
                 source=source,
+                formula=formula,
                 is_critical=is_critical,
                 allow_override=True
             ))
