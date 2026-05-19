@@ -62,7 +62,7 @@ const ApiDataStep = ({
     { category: 'historical_financials', key: 'accounts_receivable', name: 'Accounts Receivable', patterns: ['Accounts Receivable', 'accounts_receivable', 'receivables', 'Account Receivable'] },
     { category: 'historical_financials', key: 'inventory', name: 'Inventory', patterns: ['Inventory', 'inventory', 'inventories'] },
     { category: 'historical_financials', key: 'accounts_payable', name: 'Accounts Payable', patterns: ['Accounts Payable', 'accounts_payable', 'payables', 'Account Payable'] },
-    { category: 'historical_financials', key: 'cash_equivalents', name: 'Cash & Equivalents', patterns: ['Cash And Cash Equivalents', 'cash_and_cash_equivalents', 'Cash Cash Equivalents And Short Term Investments'] },
+    { category: 'historical_financials', key: 'cash_and_equivalents', name: 'Cash & Equivalents', patterns: ['Cash And Cash Equivalents', 'cash_and_cash_equivalents', 'Cash Cash Equivalents And Short Term Investments', 'cash_and_equivalents'] },
 
     // Historical Financials - Balance Sheet (Long-term)
     { category: 'historical_financials', key: 'total_assets', name: 'Total Assets', patterns: ['Total Assets', 'total_assets'] },
@@ -324,6 +324,7 @@ const ApiDataStep = ({
     const accountsReceivable = historicalData.historical_financials?.accounts_receivable || getFieldValues(historicalData, 'accounts_receivable');
     const inventory = historicalData.historical_financials?.inventory || getFieldValues(historicalData, 'inventory');
     const accountsPayable = historicalData.historical_financials?.accounts_payable || getFieldValues(historicalData, 'accounts_payable');
+    const cashAndEquivalents = historicalData.historical_financials?.cash_and_equivalents || getFieldValues(historicalData, 'cash_and_equivalents');
     const shareholdersEquity = historicalData.historical_financials?.shareholders_equity || getFieldValues(historicalData, 'shareholders_equity');
     const totalAssets = historicalData.historical_financials?.total_assets || getFieldValues(historicalData, 'total_assets');
     const totalDebt = historicalData.historical_financials?.total_debt || getFieldValues(historicalData, 'total_debt');
@@ -553,11 +554,11 @@ const ApiDataStep = ({
         )}
 
         {/* Cash & Equivalents Table */}
-        {historicalData.cash_and_equivalents && Object.keys(historicalData.cash_and_equivalents).length > 0 && (
+        {cashAndEquivalents && Object.keys(cashAndEquivalents).length > 0 && (
           <div style={{ marginTop: '16px' }}>
             <h4 style={{ color: '#1565c0', marginBottom: '8px' }}>Cash & Equivalents <span style={{ background: '#4caf50', color: 'white', padding: '2px 8px', borderRadius: '4px', fontSize: '12px', marginLeft: '8px' }}>✓ Auto-Fetched</span></h4>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '8px' }}>
-              {Object.entries(historicalData.cash_and_equivalents).map(([year, value]) => (
+              {Object.entries(cashAndEquivalents).map(([year, value]) => (
                 <div key={year} style={{ background: 'white', padding: '12px', borderRadius: '6px', textAlign: 'center' }}>
                   <strong style={{ display: 'block', marginBottom: '4px', color: '#666' }}>{year}</strong>
                   <span style={{ color: '#00acc1', fontWeight: 600 }}>{formatCurrency(value)}</span>
