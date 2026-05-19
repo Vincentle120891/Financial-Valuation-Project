@@ -459,6 +459,19 @@ class DCFStep6Processor:
                     return values if values else None
 
         # Handle calculated fields
+        if field_name == "gross_profit":
+            # Gross Profit = Revenue - COGS (calculate for each period)
+            revenue_values = self._extract_metric_from_financials("revenue", financials_df, balance_sheet_df, cashflow_df)
+            cogs_values = self._extract_metric_from_financials("cogs", financials_df, balance_sheet_df, cashflow_df)
+            if revenue_values and cogs_values:
+                gp_values = []
+                for i in range(min(len(revenue_values), len(cogs_values))):
+                    if revenue_values[i] is not None and cogs_values[i] is not None:
+                        gp_values.append(revenue_values[i] - cogs_values[i])
+                    else:
+                        gp_values.append(None)
+                return gp_values if gp_values else None
+
         if field_name == "free_cash_flow":
             # FCF = Operating Cash Flow - CapEx (calculate for each period)
             op_cf_values = self._extract_metric_from_financials("operating_cash_flow", financials_df, balance_sheet_df, cashflow_df)
@@ -474,7 +487,126 @@ class DCFStep6Processor:
 
         if field_name == "change_in_nwc":
             # Change in NWC = (Current Assets - Current Liabilities) change year over year
-            # Simplified: return None for now, will be calculated later
+            # Simplified: calculate from AR, Inventory, AP if available
+            ar_values = self._extract_metric_from_financials("accounts_receivable", financials_df, balance_sheet_df, cashflow_df)
+            inv_values = self._extract_metric_from_financials("inventory", financials_df, balance_sheet_df, cashflow_df)
+            ap_values = self._extract_metric_from_financials("accounts_payable", financials_df, balance_sheet_df, cashflow_df)
+            
+            if ar_values and inv_values and ap_values and len(ar_values) >= 2:
+                nwc_changes = []
+                for i in range(1, min(len(ar_values), len(inv_values), len(ap_values))):
+                    if all(v is not None for v in [ar_values[i], inv_values[i], ap_values[i], ar_values[i-1], inv_values[i-1], ap_values[i-1]]):
+                        nwc_current = ar_values[i] + inv_values[i] - ap_values[i]
+                        nwc_prior = ar_values[i-1] + inv_values[i-1] - ap_values[i-1]
+                        nwc_changes.append(nwc_current - nwc_prior)
+                    else:
+                        nwc_changes.append(None)
+                # Prepend None for the first period (no prior year to compare)
+                return [None] + nwc_changes if nwc_changes else None
+            return None
+
+        if field_name == "ebit":
+            # EBIT = Gross Profit - Operating Expenses (if Operating Expenses available)
+            # Or EBIT = EBITDA - Depreciation & Amortization
+            ebitda_values = self._extract_metric_from_financials("ebitda", financials_df, balance_sheet_df, cashflow_df)
+            d_and_a_values = self._extract_metric_from_financials("depreciation_amortization", financials_df, balance_sheet_df, cashflow_df)
+            if ebitda_values and d_and_a_values:
+                ebit_values = []
+                for i in range(min(len(ebitda_values), len(d_and_a_values))):
+                    if ebitda_values[i] is not None and d_and_a_values[i] is not None:
+                        ebit_values.append(ebitda_values[i] - d_and_a_values[i])
+                    else:
+                        ebit_values.append(None)
+                return ebit_values if ebit_values else None
+            return None
+
+        if field_name == "operating_expenses":
+            # Operating Expenses = Gross Profit - EBIT (if EBIT available)
+            # Or Operating Expenses = Revenue - COGS - EBIT
+            gross_profit_values = self._extract_metric_from_financials("gross_profit", financials_df, balance_sheet_df, cashflow_df)
+            ebit_values = self._extract_metric_from_financials("ebit", financials_df, balance_sheet_df, cashflow_df)
+            if gross_profit_values and ebit_values:
+                opex_values = []
+                for i in range(min(len(gross_profit_values), len(ebit_values))):
+                    if gross_profit_values[i] is not None and ebit_values[i] is not None:
+                        opex_values.append(gross_profit_values[i] - ebit_values[i])
+                    else:
+                        opex_values.append(None)
+                return opex_values if opex_values else None
+            return None
+
+        if field_name == "pretax_income":
+            # Pre-Tax Income = EBIT - Interest Expense + Other Income
+            ebit_values = self._extract_metric_from_financials("ebit", financials_df, balance_sheet_df, cashflow_df)
+            interest_values = self._extract_metric_from_financials("interest_expense", financials_df, balance_sheet_df, cashflow_df)
+            if ebit_values and interest_values:
+                pretax_values = []
+                for i in range(min(len(ebit_values), len(interest_values))):
+                    if ebit_values[i] is not None and interest_values[i] is not None:
+                        pretax_values.append(ebit_values[i] - interest_values[i])
+                    else:
+                        pretax_values.append(None)
+                return pretax_values if pretax_values else None
+            return None
+
+        if field_name == "interest_expense":
+            # Try to extract from cash flow or income statement
+            # Sometimes available as interest paid in cash flow
+            if cashflow_df is not None:
+                interest_keys = ["interest_paid", "InterestPaid", "cash_paid_for_interest"]
+                for key in interest_keys:
+                    if key in cashflow_df.index:
+                        series = cashflow_df.loc[key]
+                        values = [float(v) if pd.notna(v) else None for v in series.values]
+                        return values if values else None
+            return None
+
+        if field_name == "other_income":
+            # Other Income/Expense - try multiple keys
+            if financials_df is not None:
+                other_keys = ["other_income", "OtherIncomeExpense", "OtherIncome/Expense", "non_operating_income"]
+                for key in other_keys:
+                    if key in financials_df.index:
+                        series = financials_df.loc[key]
+                        values = [float(v) if pd.notna(v) else None for v in series.values]
+                        return values if values else None
+            return None
+
+        if field_name == "tax_provision":
+            # Tax Provision - try to extract from income statement
+            if financials_df is not None:
+                tax_keys = ["tax_provision", "TaxProvision", "IncomeTaxExpense", "income_tax"]
+                for key in tax_keys:
+                    if key in financials_df.index:
+                        series = financials_df.loc[key]
+                        values = [float(v) if pd.notna(v) else None for v in series.values]
+                        return values if values else None
+            return None
+
+        if field_name == "working_capital_changes":
+            # Working Capital Changes - same as change_in_nwc
+            return self._extract_metric_from_financials("change_in_nwc", financials_df, balance_sheet_df, cashflow_df)
+
+        if field_name == "retained_earnings":
+            # Retained Earnings from Balance Sheet
+            if balance_sheet_df is not None:
+                re_keys = ["retained_earnings", "RetainedEarnings", "accumulated_deficit"]
+                for key in re_keys:
+                    if key in balance_sheet_df.index:
+                        series = balance_sheet_df.loc[key]
+                        values = [float(v) if pd.notna(v) else None for v in series.values]
+                        return values if values else None
+            return None
+
+        if field_name == "shares_outstanding":
+            # Shares Outstanding - try balance sheet or market data
+            if balance_sheet_df is not None:
+                shares_keys = ["shares_outstanding", "OrdinarySharesNumber", "SharesOutstanding", "common_shares_outstanding"]
+                for key in shares_keys:
+                    if key in balance_sheet_df.index:
+                        series = balance_sheet_df.loc[key]
+                        values = [float(v) if pd.notna(v) else None for v in series.values]
+                        return values if values else None
             return None
 
         # Calculate margins if requested
@@ -512,7 +644,7 @@ class DCFStep6Processor:
         """Process DCF market data (6 fields)"""
         data_fields = []
 
-        # DCF market data fields
+        # DCF market data fields - handle both snake_case and camelCase keys
         market_fields = [
             ("current_stock_price", "Current Stock Price", True, ""),
             ("shares_outstanding", "Shares Outstanding", True, "shares"),
@@ -523,7 +655,23 @@ class DCFStep6Processor:
         ]
 
         for field_name, display_name, is_critical, unit in market_fields:
-            value = market_data.get(field_name) or market_data.get(field_name.replace("_", ""))
+            # Try multiple key variations
+            value = None
+            possible_keys = [
+                field_name,  # snake_case: current_stock_price
+                field_name.replace("_", ""),  # no underscore: currentstockprice
+                "".join(word.capitalize() if i > 0 else word for i, word in enumerate(field_name.split("_"))),  # camelCase: currentStockPrice
+            ]
+            
+            for key in possible_keys:
+                if key in market_data:
+                    value = market_data[key]
+                    break
+            
+            # Also check if the value is nested in a dict with 'value' key
+            if isinstance(value, dict) and 'value' in value:
+                value = value['value']
+            
             status = DataStatus.RETRIEVED if value is not None else DataStatus.MISSING
             source = "yfinance"
 
@@ -634,27 +782,50 @@ class DCFStep6Processor:
         companies = []
         data_fields = []
 
-        # Get peer list
+        # Get peer list - try multiple possible keys
         peers = retrieved_assumptions.get('peers', [])
+        
+        # If no peers found directly, check for nested structure
+        if not peers and 'peer_data' in retrieved_assumptions:
+            peers = retrieved_assumptions['peer_data'].get('peers', [])
 
         for peer_ticker in peers:
-            peer_info = retrieved_assumptions.get(f"peer_{peer_ticker}_info", {})
-
+            # Try multiple key patterns for peer info
+            peer_info = None
+            possible_keys = [
+                f"peer_{peer_ticker}_info",
+                f"peer_{peer_ticker}",
+                f"{peer_ticker}_info",
+                peer_ticker
+            ]
+            
+            for key in possible_keys:
+                if key in retrieved_assumptions:
+                    peer_info = retrieved_assumptions[key]
+                    break
+            
+            # Also check nested in peer_data
+            if not peer_info and 'peer_data' in retrieved_assumptions:
+                for key in possible_keys:
+                    if key in retrieved_assumptions['peer_data']:
+                        peer_info = retrieved_assumptions['peer_data'][key]
+                        break
+            
             if peer_info:
                 company = PeerCompany(
                     ticker=peer_ticker,
-                    name=peer_info.get('name'),
-                    market_cap=peer_info.get('marketCap'),
-                    enterprise_value=peer_info.get('enterpriseValue'),
-                    ev_ebitda=peer_info.get('evEbitda'),
-                    pe_ratio=peer_info.get('peRatio'),
-                    ev_revenue=peer_info.get('evRevenue'),
-                    pb_ratio=peer_info.get('pbRatio'),
+                    name=peer_info.get('name') or peer_info.get('longName'),
+                    market_cap=peer_info.get('marketCap') or peer_info.get('market_cap'),
+                    enterprise_value=peer_info.get('enterpriseValue') or peer_info.get('enterprise_value'),
+                    ev_ebitda=peer_info.get('evEbitda') or peer_info.get('ev_ebitda'),
+                    pe_ratio=peer_info.get('peRatio') or peer_info.get('pe_ratio'),
+                    ev_revenue=peer_info.get('evRevenue') or peer_info.get('ev_revenue'),
+                    pb_ratio=peer_info.get('pbRatio') or peer_info.get('pb_ratio'),
                     beta=peer_info.get('beta'),
-                    total_debt=peer_info.get('totalDebt'),
-                    cash=peer_info.get('cash'),
-                    tax_rate=peer_info.get('effectiveTaxRate'),
-                    cost_of_debt=peer_info.get('costOfDebt')
+                    total_debt=peer_info.get('totalDebt') or peer_info.get('total_debt'),
+                    cash=peer_info.get('cash') or peer_info.get('cashAndEquivalents'),
+                    tax_rate=peer_info.get('effectiveTaxRate') or peer_info.get('tax_rate'),
+                    cost_of_debt=peer_info.get('costOfDebt') or peer_info.get('cost_of_debt')
                 )
                 companies.append(company)
 
@@ -958,10 +1129,12 @@ class DCFStep6Processor:
         self,
         displays: List
     ) -> MissingDataSummary:
-        """Aggregate missing data from all displays"""
+        """Aggregate missing data from all displays and calculate statistics"""
         critical_missing = []
         optional_missing = []
-
+        retrieved_count = 0
+        calculated_count = 0
+        
         for display in displays:
             if hasattr(display, 'data_fields'):
                 for field in display.data_fields:
@@ -970,11 +1143,29 @@ class DCFStep6Processor:
                             critical_missing.append(field.display_name or field.field_name)
                         else:
                             optional_missing.append(field.display_name or field.field_name)
-
+                    elif field.status == DataStatus.RETRIEVED:
+                        retrieved_count += 1
+                    elif field.status == DataStatus.CALCULATED:
+                        calculated_count += 1
+        
+        total_fields = retrieved_count + calculated_count + len(critical_missing) + len(optional_missing)
+        completion_percentage = ((retrieved_count + calculated_count) / total_fields * 100) if total_fields > 0 else 0
+        data_quality_score = (retrieved_count * 1.0 + calculated_count * 0.8) / total_fields * 100 if total_fields > 0 else 0
+        
         return MissingDataSummary(
+            total_fields=total_fields,
+            retrieved_count=retrieved_count,
+            calculated_count=calculated_count,
+            missing_count=len(critical_missing) + len(optional_missing),
             critical_missing=critical_missing,
             optional_missing=optional_missing,
-            total_missing=len(critical_missing) + len(optional_missing)
+            completion_percentage=completion_percentage,
+            data_quality_score=data_quality_score,
+            valuation_ready=len(critical_missing) == 0,
+            estimated_count=0,
+            manual_override_count=0,
+            warnings=[],
+            recommendations=[]
         )
 
 
