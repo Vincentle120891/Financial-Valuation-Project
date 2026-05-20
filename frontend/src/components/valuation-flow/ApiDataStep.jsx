@@ -62,7 +62,8 @@ const ApiDataStep = ({
     { category: 'historical_financials', key: 'accounts_receivable', name: 'Accounts Receivable', patterns: ['Accounts Receivable', 'accounts_receivable', 'receivables', 'Account Receivable'] },
     { category: 'historical_financials', key: 'inventory', name: 'Inventory', patterns: ['Inventory', 'inventory', 'inventories'] },
     { category: 'historical_financials', key: 'accounts_payable', name: 'Accounts Payable', patterns: ['Accounts Payable', 'accounts_payable', 'payables', 'Account Payable'] },
-    { category: 'historical_financials', key: 'cash_and_equivalents', name: 'Cash & Equivalents', patterns: ['Cash And Cash Equivalents', 'cash_and_cash_equivalents', 'Cash Cash Equivalents And Short Term Investments', 'cash_and_equivalents'] },
+    { category: 'historical_financials', key: 'cash_and_equivalents_historical', name: 'Cash & Equivalents (Historical)', patterns: ['Cash And Cash Equivalents', 'cash_and_cash_equivalents', 'Cash Cash Equivalents And Short Term Investments', 'cash_and_equivalents'], note: 'Historical balance sheet data' },
+    { category: 'market_data', key: 'cash_current', name: 'Cash & Equivalents (Current)', patterns: ['cash', 'current_cash'], note: 'Current market data for WACC calculation' },
 
     // Historical Financials - Balance Sheet (Long-term)
     { category: 'historical_financials', key: 'total_assets', name: 'Total Assets', patterns: ['Total Assets', 'total_assets'] },
@@ -216,6 +217,14 @@ const ApiDataStep = ({
 
                   const statusInfo = getStatusInfo();
 
+                  // FIX #3: Add visual note for cash distinction (historical vs current)
+                  const renderCashNote = () => {
+                    if (input.note) {
+                      return <small style={{ color: '#666', fontStyle: 'italic', marginLeft: '8px' }}>{input.note}</small>;
+                    }
+                    return null;
+                  };
+
                   // Extract years/periods from the field data
                   // FIXED: Backend returns scalar values in DataField.value, not arrays of period objects
                   const getPeriods = () => {
@@ -245,9 +254,12 @@ const ApiDataStep = ({
                       opacity: hasData ? 1 : 0.7
                     }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                        <strong style={{ color: hasData ? statusInfo.color : '#f57c00' }}>
-                          {input.name}
-                        </strong>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <strong style={{ color: hasData ? statusInfo.color : '#f57c00' }}>
+                            {input.name}
+                          </strong>
+                          {renderCashNote()}
+                        </div>
                         <span style={{
                           background: statusInfo.color,
                           color: 'white',
@@ -261,11 +273,19 @@ const ApiDataStep = ({
                       {hasData ? (
                         <>
                           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: '6px', marginBottom: '8px' }}>
-                            {(Array.isArray(fieldData.value) ? fieldData.value.map((val, idx) => ({
-                              period: calculatedMetrics?.periodsCovered?.[idx] || `Year ${idx + 1}`,
-                              value: val
-                            })) : [{ period: 'Current', value: fieldData.value }])
-                              .filter(pv => pv && pv.value !== null && pv.value !== undefined)
+                            {(Array.isArray(fieldData.value) ? fieldData.value.map((val, idx) => {
+                              // FIX #1: Handle variable-length arrays correctly
+                              // Use reporting_period from DataField if available, otherwise use index-based fallback
+                              const periodLabel = fieldData.reporting_period 
+                                ? `${fieldData.reporting_period.split('-')[0]}${idx > 0 ? ` T${idx}` : ''}` 
+                                : (calculatedMetrics?.periodsCovered?.[idx] || `Year ${idx + 1}`);
+                              
+                              return {
+                                period: val !== null && val !== undefined ? periodLabel : null,
+                                value: val
+                              };
+                            }) : [{ period: 'Current', value: fieldData.value }])
+                              .filter(pv => pv && pv.period !== null && pv.value !== null && pv.value !== undefined)
                               .map((periodValue, idx) => {
                                 const year = periodValue.period || 'Value';
 
