@@ -542,6 +542,30 @@ class Step6UnifiedTransformer:
                     reporting_period="Current"
                 )
 
+            # CRITICAL FIX: Transform peer companies list to unified format
+            # The frontend expects comps_multiples.companies array to display peer data
+            if comps_response.peer_comparables.companies:
+                comps_multiples.companies = [
+                    {
+                        "ticker": company.ticker,
+                        "company_name": company.name or "",
+                        "sector": "",
+                        "industry": "",
+                        "market_cap": company.market_cap,
+                        "enterprise_value": company.enterprise_value,
+                        "ev_ebitda": company.ev_ebitda,
+                        "pe_ratio": company.pe_ratio,
+                        "ev_revenue": company.ev_revenue,
+                        "pb_ratio": company.pb_ratio,
+                        "beta": company.beta,
+                        "total_debt": company.total_debt,
+                        "cash": company.cash,
+                        "tax_rate": company.tax_rate,
+                        "cost_of_debt": company.cost_of_debt,
+                    }
+                    for company in comps_response.peer_comparables.companies
+                ]
+
         missing_summary = cls.transform_missing_data_summary(comps_response.missing_data_summary)
 
         return UnifiedStep6Response(
