@@ -52,7 +52,7 @@ class DataField(BaseModel):
     """
     Universal data field wrapper with status tracking.
     Used for ALL numerical and categorical values across all steps.
-    
+
     This ensures consistent handling of:
     - Data quality indicators
     - Source attribution
@@ -176,20 +176,20 @@ class UnifiedStep2Response(BaseModel):
     market: str = Field(..., description="Market type (international, vietnam)")
     company_name: str = Field(..., description="Company name")
     confirmed: bool = Field(..., description="Whether market selection is confirmed")
-    
+
     # Market data (detailed)
     market_data: List[MarketDataPoint] = Field(default_factory=list, description="Array of market data points")
     risk_metrics: Optional[MarketRiskMetrics] = Field(None, description="Market risk metrics")
-    
+
     # Vietnam-specific fields
     market_code: Optional[str] = Field(None, description="Vietnam market code (VN, HA, VC)")
     exchange_info: Optional[ExchangeInfo] = Field(None, description="Exchange information")
-    
+
     # Data quality
     missing_data: List[str] = Field(default_factory=list, description="List of missing data fields")
     warnings: List[str] = Field(default_factory=list, description="Data quality warnings")
     data_quality_score: float = Field(0.0, ge=0, le=100, description="Overall data quality score 0-100")
-    
+
     message: str = Field(..., description="Human-readable message")
 
 
@@ -299,12 +299,12 @@ class HistoricalFinancialsData(BaseModel):
     operating_expenses: Optional[DataField] = None
     sg_and_a: Optional[DataField] = None
     depreciation: Optional[DataField] = None
-    
+
     # Cash Flow
     capex: Optional[DataField] = None
     free_cash_flow: Optional[DataField] = None
     operating_cash_flow: Optional[DataField] = None
-    
+
     # Balance Sheet
     total_assets: Optional[DataField] = None
     total_debt: Optional[DataField] = None
@@ -313,7 +313,7 @@ class HistoricalFinancialsData(BaseModel):
     accounts_receivable: Optional[DataField] = None
     accounts_payable: Optional[DataField] = None
     shareholders_equity: Optional[DataField] = None
-    
+
     # Calculated Metrics
     revenue_cagr: Optional[DataField] = None
     avg_ebitda_margin: Optional[DataField] = None
@@ -326,21 +326,21 @@ class ForecastDriversData(BaseModel):
     # Revenue Growth
     revenue_growth_forecast: Optional[DataField] = None
     volume_growth_split: Optional[DataField] = None
-    
+
     # Margins
     ebitda_margin_forecast: Optional[DataField] = None
     tax_rate: Optional[DataField] = None
-    
+
     # Working Capital
     ar_days: Optional[DataField] = None
     inv_days: Optional[DataField] = None
     ap_days: Optional[DataField] = None
-    
+
     # CapEx & Depreciation
     capex_pct_of_revenue: Optional[DataField] = None
     useful_life_existing: Optional[DataField] = None
     useful_life_new: Optional[DataField] = None
-    
+
     # DCF Parameters
     risk_free_rate: Optional[DataField] = None
     equity_risk_premium: Optional[DataField] = None
@@ -371,12 +371,12 @@ class DuPontMetricsData(BaseModel):
     net_profit_margin: Optional[DataField] = None
     return_on_assets: Optional[DataField] = None
     return_on_equity: Optional[DataField] = None
-    
+
     # Efficiency
     asset_turnover: Optional[DataField] = None
     inventory_turnover: Optional[DataField] = None
     receivables_turnover: Optional[DataField] = None
-    
+
     # Leverage
     equity_multiplier: Optional[DataField] = None
     debt_to_equity: Optional[DataField] = None
@@ -392,10 +392,16 @@ class CompsMultiplesData(BaseModel):
     p_to_e: Optional[DataField] = None
     p_to_b: Optional[DataField] = None
     p_to_sales: Optional[DataField] = None
-    
+
     # Industry Specific
     ev_to_subscribers: Optional[DataField] = None
     p_to_ffo: Optional[DataField] = None
+
+    # Peer Companies List
+    companies: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="List of peer companies with their multiples and metrics"
+    )
 
 
 class UnifiedStep6Request(BaseModel):
@@ -415,7 +421,7 @@ class UnifiedStep6Response(BaseModel):
     """
     Step 6: Fetch API Data - UNIFIED RESPONSE
     BOTH markets MUST return this exact structure.
-    
+
     CRITICAL: This is the contract that prevents mapping issues.
     Vietnamese backend MUST transform its raw data into this structure.
     International backend MUST also conform to this structure.
@@ -425,10 +431,10 @@ class UnifiedStep6Response(BaseModel):
     ticker: str
     market: str
     method: str
-    
+
     # Core data structures (ALL fields optional but structure required)
     historical_financials: Optional[HistoricalFinancialsData] = Field(
-        None, 
+        None,
         description="Historical financial data - NESTED structure with DataField wrappers"
     )
     forecast_drivers: Optional[ForecastDriversData] = Field(
@@ -447,18 +453,18 @@ class UnifiedStep6Response(BaseModel):
         None,
         description="Trading comparables multiples - NESTED structure"
     )
-    
+
     # Metadata
     data_source: str = Field(..., description="Primary data source (yfinance, vietstock, pdf_extraction)")
     fetch_timestamp: datetime = Field(..., description="When data was fetched")
     cache_used: bool = Field(False, description="Whether cached data was used")
     periods_covered: List[str] = Field(default_factory=list, description="Reporting periods included")
-    
+
     # Quality indicators
     missing_data_summary: Optional[MissingDataSummary] = None
     data_quality_flags: List[str] = Field(default_factory=list)
     warnings: List[str] = Field(default_factory=list)
-    
+
     message: str
 
 
@@ -552,21 +558,21 @@ class AssumptionInput(BaseModel):
     category: AssumptionCategoryType = Field(..., description="Category this assumption belongs to")
     description: str = Field(..., description="Description of what this assumption represents")
     unit: str = Field("%", description="Unit of measurement (%, days, x, ratio, etc.)")
-    
+
     # Historical context
     historical_trendline: Optional[HistoricalTrendline] = Field(None, description="Historical trend data")
-    
+
     # Current state
     ai_suggestion: Optional[AISuggestion] = Field(None, description="AI-generated suggestion")
     user_value: Optional[float] = Field(None, description="User-provided override value")
     final_value: Optional[float] = Field(None, description="Final value after AI/user resolution")
     status: OverrideStatus = Field(OverrideStatus.DEFAULT, description="Current status of this assumption")
-    
+
     # Validation
     is_valid: bool = Field(True, description="Whether this assumption passes validation")
     validation_message: Optional[str] = Field(None, description="Validation error message if invalid")
     warning_message: Optional[str] = Field(None, description="Warning message if value is outside typical range")
-    
+
     # Multi-year support (for forecast years 1-5)
     is_multi_year: bool = Field(False, description="Whether this assumption has different values per forecast year")
     year_values: Dict[int, float] = Field(default_factory=dict, description="Year -> value mapping for multi-year assumptions")
@@ -589,13 +595,13 @@ class FullAssumptionsResponse(BaseModel):
     timestamp: datetime = Field(..., description="Response generation timestamp")
     valuation_model: str = Field(..., description="Valuation model: DCF, DUPONT, COMPS")
     categories: Dict[str, AssumptionCategoryResponse] = Field(..., description="All assumption categories")
-    
+
     # Summary and validation
     all_categories_complete: bool = Field(False, description="Whether all categories have been processed")
     all_validations_passed: bool = Field(True, description="Whether all assumptions pass validation")
     total_validation_errors: List[str] = Field(default_factory=list, description="List of all validation errors")
     ready_for_calculation: bool = Field(False, description="Whether assumptions are ready for valuation calculation")
-    
+
     # What-if preview
     sensitivity_preview: Optional[Dict[str, Any]] = Field(None, description="Mini sensitivity analysis preview")
     message: str = Field("", description="Overall message or instructions")
@@ -636,21 +642,21 @@ class UnifiedStep8Response(BaseModel):
     method: str = Field(..., description="Valuation method")
     market: str = Field(..., description="Market type")
     operation_type: str = Field(..., description="Type of operation: initialize, generate_ai, apply_override")
-    
+
     # Full assumptions data
     ticker: str = Field(..., description="Ticker symbol")
     valuation_model: str = Field(..., description="Valuation model")
     categories: Dict[str, AssumptionCategoryResponse] = Field(default_factory=dict, description="All assumption categories")
-    
+
     # For targeted responses (single category)
     targeted_category: Optional[AssumptionCategoryType] = Field(None, description="Category that was specifically requested")
-    
+
     # Data quality
     all_categories_complete: bool = Field(False, description="Whether all categories have been processed")
     all_validations_passed: bool = Field(True, description="Whether all assumptions pass validation")
     total_validation_errors: List[str] = Field(default_factory=list, description="List of all validation errors")
     ready_for_calculation: bool = Field(False, description="Whether assumptions are ready for valuation calculation")
-    
+
     # What-if preview
     sensitivity_preview: Optional[Dict[str, Any]] = Field(None, description="Mini sensitivity analysis preview")
     message: str = Field(..., description="Human-readable message")
@@ -721,20 +727,20 @@ class UnifiedStep10Response(BaseModel):
     market: str
     ticker: str
     company_name: str
-    
+
     # Results
     valuation_summary: ValuationResultSummary
     detailed_outputs: Dict[str, Any]
-    
+
     # Analysis
     sensitivity_analysis: Optional[SensitivityAnalysis] = None
     scenario_analysis: Optional[Dict[str, ValuationResultSummary]] = None
-    
+
     # Quality
     confidence_level: str
     key_assumptions_summary: Dict[str, Any]
     warnings: List[str] = Field(default_factory=list)
-    
+
     calculation_timestamp: datetime
     message: str
 
