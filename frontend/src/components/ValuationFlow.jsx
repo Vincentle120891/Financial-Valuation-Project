@@ -662,8 +662,18 @@ const ValuationFlow = () => {
         if (financialData.forecast_drivers) {
           setForecastDrivers(method, financialData.forecast_drivers);
         }
+        // FIX: Support both legacy peer_comparables and unified comps_multiples
         if (financialData.peer_comparables) {
           setPeerData(financialData.peer_comparables);
+        } else if (financialData.comps_multiples) {
+          // Unified schema stores peer data in comps_multiples.companies
+          setPeerData({
+            companies: financialData.comps_multiples.companies || [],
+            median_ev_ebitda: financialData.comps_multiples.ev_to_ebitda?.value,
+            median_pe: financialData.comps_multiples.p_to_e?.value,
+            median_ev_revenue: financialData.comps_multiples.ev_to_sales?.value,
+            median_pb: financialData.comps_multiples.p_to_b?.value,
+          });
         }
         if (financialData.dcf_inputs) {
           setDcfInputs(method, financialData.dcf_inputs);
