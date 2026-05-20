@@ -529,56 +529,10 @@ const ValuationFlow = () => {
 
   // ==================== CONTINUE TO HISTORICAL DATA RETRIEVAL (STEP 7) ====================
   const handleContinueToHistoricalDataRetrieval = useCallback(async () => {
-    setLoading(true);
-    // Use selected model (single string, not array)
-    const method = selectedModels;
-    if (!method) {
-      setError('No valuation method selected');
-      setLoading(false);
-      return;
-    }
-
-    // Market validation: Ensure market is locked and matches session
-    if (!marketValidation?.isLocked) {
-      setError('⚠️ Market must be locked before retrieving historical data. Please select a company first.');
-      setLoading(false);
-      return;
-    }
-
-    try {
-      // Use valuationService.retrieveData with AI gap-filling enabled
-      const result = await retrieveData({
-        sessionId,
-        method,
-        market,
-        includeHistoricalAI: true
-      });
-
-      console.log('Historical data retrieval result:', result);
-
-      if (result.success && result.data) {
-        // Store historical gap-filling results in matrix structure
-        setValuationData(method, result.data);
-
-        // Handle AI metadata for user feedback
-        const aiMetadata = result.data.ai_metadata || {};
-        
-        if (aiMetadata.error) {
-          setAiError(aiMetadata.error);
-        } else if (aiMetadata.gaps_filled > 0) {
-          setAiError(`✅ Successfully filled ${aiMetadata.gaps_filled} historical data gaps with ${(aiMetadata.completeness_score * 100).toFixed(0)}% completeness.`);
-        } else {
-          setAiError(null);
-        }
-      }
-    } catch (aiErr) {
-      console.error('AI generation failed:', aiErr);
-      setAiError(aiErr.message || 'AI suggestions could not be generated. You can still proceed with manual inputs.');
-    } finally {
-      setLoading(false);
-      setCurrentStep(7);
-    }
-  }, [sessionId, selectedModels, market, marketValidation]);
+    // Step 7 → Step 8: Navigate without fetching (data already retrieved with AI in Step 6)
+    // "Fetch Once, Use Many" principle: retrieveData() called once in handleRetrieveData with includeHistoricalAI: true
+    setCurrentStep(8);
+  }, []);
 
   // ==================== CONTINUE TO FORECAST DRIVERS (STEP 8) ====================
   const handleContinueToForecastDrivers = useCallback(async () => {
@@ -684,11 +638,12 @@ const ValuationFlow = () => {
 
     try {
       // Use valuationService.retrieveData - handles all transformation logic internally
+      // "Fetch Once, Use Many": Fetch with AI gap-filling enabled in single call
       const result = await retrieveData({
         sessionId,
         method,
         market,
-        includeHistoricalAI: false // Only fetch API data, no AI gap-filling yet
+        includeHistoricalAI: true // Enable AI gap-filling on first fetch
       });
       
       console.log('Retrieve data result:', result);
