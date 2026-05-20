@@ -421,10 +421,11 @@ class DCFStep6Processor:
         income_mapping = {
             "revenue": ["total_revenue", "TotalRevenue", "OperatingRevenue"],
             "cogs": ["cost_of_revenue", "CostOfRevenue", "ReconciledCostOfRevenue"],
+            # Note: gross_profit removed from mapping - it's now CALCULATED (Revenue - COGS)
             "operating_expenses": ["operating_expenses", "OperatingExpense", "TotalOperatingExpenses"],
             "research_development": ["research_development", "ResearchAndDevelopment", "R&D"],
             "ebitda": ["ebitda", "EBITDA", "NormalizedEBITDA"],
-            "ebit": ["ebit", "OperatingIncome", "EBIT"],
+            # Note: ebit removed from mapping - it's now CALCULATED (EBITDA - D&A)
             "interest_expense": ["interest_expense", "InterestExpense", "InterestAndDebtExpense"],
             "other_income": ["other_income", "OtherIncomeExpense", "OtherIncome/Expense"],
             "pretax_income": ["pretax_income", "PretaxIncome", "Pre-TaxIncome"],
