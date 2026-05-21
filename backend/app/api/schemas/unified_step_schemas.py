@@ -441,7 +441,7 @@ class UnifiedStep6Response(BaseModel):
         None,
         description="Forecast drivers and assumptions - NESTED structure"
     )
-    market_ Optional[MarketDataBase] = Field(
+    market_data: Optional[MarketDataBase] = Field(
         None,
         description="Current market data - NESTED structure"
     )
