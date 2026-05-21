@@ -16,6 +16,15 @@ from app.services.international import (
     YFinanceService,
     InternationalTickerService,
     MetricsCalculator,
+    # Enhanced Services - Mismatch Prevention Layer
+    APIAdapter,
+    process_multiple_tickers,
+    Step7Resolver,
+    AuditLogger,
+    get_audit_logger,
+    TransformationType,
+    DataVersioningService,
+    get_versioning_service,
 )
 
 from app.services.vietnamese import (
@@ -34,16 +43,26 @@ from .step7_web_search_analysis import (
 )
 
 __all__ = [
+    # Core Services
     "extract_financial_metric_from_text",
     "analyze_web_search_results",
-    "validate_and_clean_financial_data"
-]
-__all__ = [
+    "validate_and_clean_financial_data",
+    
     # International
     "DCFInputManager",
     "YFinanceService",
     "InternationalTickerService",
     "MetricsCalculator",
+    
+    # Enhanced Services - Mismatch Prevention Layer
+    "APIAdapter",
+    "process_multiple_tickers",
+    "Step7Resolver",
+    "AuditLogger",
+    "get_audit_logger",
+    "TransformationType",
+    "DataVersioningService",
+    "get_versioning_service",
     
     # Vietnamese
     "VietnameseInputManager",
