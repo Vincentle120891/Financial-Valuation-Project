@@ -9,6 +9,8 @@ Features:
 - DCF balance sheet opening balances (3 fields)
 - DCF peer comparables for WACC calculation (5 fields × N peers)
 - DCF intermediate metrics calculation (growth rates, margins - NOT final valuations)
+
+INTEGRATION: Uses APIAdapter with Audit Logging and Data Versioning
 """
 import logging
 from typing import Dict, List, Optional, Any
@@ -17,7 +19,10 @@ from enum import Enum
 from datetime import datetime, timedelta
 import pandas as pd
 
-from .yfinance_service import YFinanceService
+from app.services.api_adapter import APIAdapter
+from app.services.audit_logger import get_audit_logger
+from app.services.data_versioning import get_versioning_service
+from app.middleware.validation_middleware import ValidationMiddleware
 
 logger = logging.getLogger(__name__)
 
@@ -135,10 +140,15 @@ class DCFStep6Processor:
     - Opening Balances (Net Working Capital, Net PP&E, Total Debt)
     - Peer Comparables for WACC (Beta, Market Cap, Cost of Debt, Tax Rate)
     - Intermediate Metrics (Growth rates, Margins - NOT WACC/TV/Fair Value)
+    
+    INTEGRATION: Uses APIAdapter with audit logging and versioning support
     """
 
     def __init__(self):
-        self.yfinance_service = YFinanceService()
+        self.api_adapter = APIAdapter(provider="yfinance")
+        self._audit_logger = None
+        self._versioning_service = None
+        self._validator = ValidationMiddleware(method="DCF")
 
     async def process_dcf_data_review(
         self,
@@ -170,6 +180,12 @@ class DCFStep6Processor:
         Returns:
             DCFDataReviewResponse with aggregated DCF data
         """
+        # Initialize audit logger and versioning service if session_id is available
+        session_id = session_cache.get('session_id') if session_cache else None
+        if session_id:
+            self._audit_logger = get_audit_logger(session_id)
+            self._versioning_service = get_versioning_service(session_id)
+        
         # GAP 1 FIX: Check session cache before fetching - implements "Fetch Once, Use Many"
         if session_cache and 'international_market_data' in session_cache:
             cached_data = session_cache['international_market_data']
@@ -184,10 +200,25 @@ class DCFStep6Processor:
                     forecast_data = forecast_data or cached_data.get('forecast_data')
                     retrieved_assumptions = retrieved_assumptions or cached_data.get('retrieved_assumptions')
 
-        # If data is not provided (and not in cache), fetch it
+        # If data is not provided (and not in cache), fetch it using APIAdapter
         if historical_data is None or market_data is None or forecast_data is None or retrieved_assumptions is None:
-            logger.info(f"Fetching data for DCF analysis of {ticker}")
-            all_data = self.yfinance_service.fetch_all_data(ticker, market)
+            logger.info(f"Fetching data for DCF analysis of {ticker} using APIAdapter")
+            
+            # Get required metrics for DCF from metric registry
+            from app.core.metric_registry import get_required_metrics_for_method
+            required_metrics = get_required_metrics_for_method("DCF")
+            
+            # Fetch and map data using APIAdapter (includes audit logging + versioning)
+            raw_result = self.api_adapter.fetch_raw_data(ticker, required_metrics)
+            mapped_result = self.api_adapter.map_and_normalize(raw_result, ticker, session_id)
+            
+            all_data = {
+                'income_statement': mapped_result.get('mapped_data', {}),
+                'balance_sheet': {},
+                'cash_flow': {},
+                'key_stats': mapped_result.get('mapped_data', {}),
+                'analyst_estimates': forecast_data or {}
+            }
 
             # Convert dict format to DataFrame format expected by processors
             income_stmt_dict = all_data.get('income_statement', {})

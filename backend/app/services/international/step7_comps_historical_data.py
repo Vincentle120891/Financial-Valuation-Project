@@ -22,6 +22,7 @@ from app.services.pdf_extraction_service import (
     ExtractedFinancialData
 )
 from app.services.international.ai_engine import AIFallbackEngine
+from app.services.step7_pdf_extraction import extract_financial_metric_from_text
 
 logger = logging.getLogger(__name__)
 

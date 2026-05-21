@@ -61,6 +61,12 @@ from app.services.international.step8_manual_overrides import Step8ManualOverrid
 from app.services.international.step9_confirmation_processor import Step9ConfirmationProcessor as Step9FinalCalculationProcessor
 from app.services.international.step10_valuation_processor import Step10ValuationProcessor
 
+# Enhanced Services - Mismatch Prevention Layer
+from app.services.api_adapter import APIAdapter, process_multiple_tickers
+from app.services.step7_resolver import Step7Resolver
+from app.services.audit_logger import AuditLogger, get_audit_logger, TransformationType
+from app.services.data_versioning import DataVersioningService, get_versioning_service
+
 __all__ = [
     # Input Manager
     "DCFInputManager",
@@ -106,4 +112,14 @@ __all__ = [
     "CompsAssumptionsProcessor",  # Step 8 Comps-specific assumption processor alias
     "Step9FinalCalculationProcessor",
     "Step10ValuationProcessor",
+    
+    # Enhanced Services - Mismatch Prevention Layer
+    "APIAdapter",
+    "process_multiple_tickers",
+    "Step7Resolver",
+    "AuditLogger",
+    "get_audit_logger",
+    "TransformationType",
+    "DataVersioningService",
+    "get_versioning_service",
 ]
