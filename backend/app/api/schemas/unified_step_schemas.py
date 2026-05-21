@@ -476,7 +476,7 @@ class ProcessedHistoricalPeriod(BaseModel):
     """Processed historical period data"""
     period: str
     year: int
-     Dict[str, DataField]
+    values: Dict[str, DataField]
     growth_rates: Optional[Dict[str, DataField]] = None
     margins: Optional[Dict[str, DataField]] = None
 
