@@ -11,7 +11,7 @@ from datetime import datetime
 
 from app.core.session_service import session_service
 from app.services.international.yfinance_service import YFinanceService
-from app.services.international.peer_discovery_service import PeerDiscoveryService
+from app.services.international.peer_discovery_service import PeerDiscoveryService, PeerDiscoveryRequest
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +29,7 @@ class Step4PeerManagementService:
     Service for managing peer companies in Step 4.
     
     Responsibilities:
+    - Suggest peer companies based on industry and market cap
     - Save selected peers to session
     - Fetch market data for peers from yfinance
     - Validate peer tickers
@@ -43,6 +44,7 @@ class Step4PeerManagementService:
             yfinance_service: YFinance service instance (creates default if not provided)
         """
         self.yfinance_service = yfinance_service or YFinanceService()
+        self.peer_discovery_service = PeerDiscoveryService(self.yfinance_service)
     
     def save_peers_and_fetch_data(
         self,
@@ -228,3 +230,91 @@ class Step4PeerManagementService:
             "total_validated": len(validated),
             "total_invalid": len(errors)
         }
+
+    async def suggest_peers(
+        self,
+        ticker: str,
+        max_peers: int = 10,
+        market: str = "international",
+        method: Optional[str] = None  # NEW: valuation method
+    ) -> Dict:
+        """
+        Suggest peer companies for a given ticker.
+
+        Args:
+            ticker: Target ticker symbol
+            max_peers: Maximum number of peers to suggest
+            market: Market type
+            method: Valuation method (DCF, COMPS, DuPont) - affects peer criteria
+
+        Returns:
+            Dictionary with status and peer suggestions
+        """
+        logger.info(f"Suggesting peers for ticker='{ticker}', method='{method}'")
+
+        try:
+            # Get ticker info first
+            ticker_info = self.yfinance_service.get_ticker_info(ticker)
+
+            if not ticker_info:
+                return {
+                    "status": "failed",
+                    "message": f"Could not fetch data for {ticker}"
+                }
+
+            # Create peer discovery request with method
+            request = PeerDiscoveryRequest(
+                target_ticker=ticker,
+                target_sector=ticker_info.get('sector'),
+                target_industry=ticker_info.get('industry'),
+                target_market_cap=ticker_info.get('marketCap'),
+                max_peers=max_peers,
+                market=market,
+                method=method  # NEW: pass method
+            )
+
+            # Discover peers
+            response = await self.peer_discovery_service.discover_peers(request)
+
+            if response.total_found == 0:
+                return {
+                    "status": "partial",
+                    "message": f"No suitable peers found for {ticker}",
+                    "warnings": response.warnings,
+                    "peers": []
+                }
+
+            return {
+                "status": "success",
+                "message": f"Found {response.total_found} peer candidates for {ticker}",
+                "target_company": {
+                    "ticker": ticker,
+                    "name": ticker_info.get('longName', ticker),
+                    "sector": ticker_info.get('sector'),
+                    "industry": ticker_info.get('industry'),
+                    "marketCap": ticker_info.get('marketCap')
+                },
+                "peers": [
+                    {
+                        "ticker": peer.ticker,
+                        "symbol": peer.symbol,
+                        "company_name": peer.company_name,
+                        "name": peer.name,
+                        "sector": peer.sector,
+                        "industry": peer.industry,
+                        "marketCap": peer.marketCap,
+                        "score": peer.score,
+                        "match_reasons": peer.match_reasons
+                    }
+                    for peer in response.peers
+                ],
+                "search_criteria": response.search_criteria,
+                "warnings": response.warnings
+            }
+
+        except Exception as e:
+            logger.error(f"Error suggesting peers for {ticker}: {str(e)}")
+            return {
+                "status": "failed",
+                "message": f"Failed to suggest peers: {str(e)}"
+            }
