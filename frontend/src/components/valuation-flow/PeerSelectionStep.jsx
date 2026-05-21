@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 /**
  * PeerSelectionStep - Step 4
@@ -13,9 +13,23 @@ const PeerSelectionStep = ({
   onTogglePeer,
   onContinue,
   onBack,
-  loading
+  loading,
+  onFindPeers,
+  selectedCompany,
+  market
 }) => {
   const [localError, setLocalError] = useState(null);
+  const [hasFoundPeers, setHasFoundPeers] = useState(false);
+
+  // Auto-find peers when component mounts if no peers exist yet
+  useEffect(() => {
+    if (!suggestedPeers || suggestedPeers.length === 0) {
+      if (selectedCompany && onFindPeers && !loading && !hasFoundPeers) {
+        setHasFoundPeers(true);
+        onFindPeers(selectedCompany);
+      }
+    }
+  }, []);
 
   const handleTogglePeer = (peer) => {
     setLocalError(null);

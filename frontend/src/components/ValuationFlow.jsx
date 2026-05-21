@@ -1012,41 +1012,27 @@ const ValuationFlow = () => {
           />
         );
       case 4:
-        // Step 4: Find & Review Peers - Click "Find Peers" using model-specific criteria
-        // User discovers peers based on the selected model, then reviews and selects them
-        // Reuse CompanySelectionStep with peer finding ENABLED (hasPeers shows success message after finding)
-        // After clicking Continue, user goes to Step 5 to review/select peers in table format
-        return (
-          <CompanySelectionStep
-            selectedCompany={selectedCompany}
-            onFindPeers={handleFindPeers}
-            onContinue={() => setCurrentStep(5)}
-            onBack={() => setCurrentStep(3)}
-            loading={loading}
-            hasPeers={suggestedPeers && suggestedPeers.length > 0}
-            market={market}
-            showFindPeersButton={true} // Show Find Peers button in Step 4
-            currentStep={4}
-          />
-        );
-      case 5:
-        // Step 5: Peer Selection Table - Review and select/deselect individual peers
-        // User sees peer table with similarity scores and can toggle selections
+        // Step 4: Review/Adjust Peer Companies - Combined peer finding and selection
+        // User discovers peers based on the selected model, then reviews and selects them in the same step
+        // After clicking Continue, user goes to Step 5: Requirements Review
         return (
           <PeerSelectionStep
             suggestedPeers={suggestedPeers}
             selectedPeers={selectedPeers}
             onTogglePeer={handleTogglePeer}
             onContinue={handleContinueToRequirementsReview}
-            onBack={() => setCurrentStep(4)}
+            onBack={() => setCurrentStep(3)}
             loading={loading}
+            onFindPeers={handleFindPeers}
+            selectedCompany={selectedCompany}
+            market={market}
           />
         );
-      case 6:
-        // Step 6: Requirements Review
-        // Note: valuationData is not passed to Step 6 because data hasn't been fetched yet
-        // Step 6 only shows requirements from requiredFields (prepared by prepareAssumptions)
-        // Unified schema data (valuationData) is only available after Step 7 fetches it
+      case 5:
+        // Step 5: Requirements Review
+        // Note: valuationData is not passed to Step 5 because data hasn't been fetched yet
+        // Step 5 only shows requirements from requiredFields (prepared by prepareAssumptions)
+        // Unified schema data (valuationData) is only available after Step 6 fetches it
         return (
           <RequirementsStep
             selectedModel={selectedModels}
@@ -1057,7 +1043,7 @@ const ValuationFlow = () => {
             calculatedMetrics={calculatedMetrics}
           />
         );
-      case 7:
+      case 6:
         const valuationData = getValuationData(selectedModels);
         return (
           <ApiDataStep
@@ -1073,7 +1059,7 @@ const ValuationFlow = () => {
             loading={loading}
           />
         );
-      case 8:
+      case 7:
         return (
           <HistoricalDataExtractionStep
             sessionId={sessionId}
@@ -1092,7 +1078,7 @@ const ValuationFlow = () => {
             loading={loading}
           />
         );
-      case 9:
+      case 8:
         return (
           <ForecastDriversStep
             sessionId={sessionId}
@@ -1110,7 +1096,7 @@ const ValuationFlow = () => {
             loading={loading}
           />
         );
-      case 10:
+      case 9:
         return (
           <AssumptionsStep
             historicalData={getValuationData(selectedModels)}
@@ -1126,7 +1112,7 @@ const ValuationFlow = () => {
             loading={loading}
           />
         );
-      case 11:
+      case 10:
         return (
           <RunValuationStep
             selectedCompany={selectedCompany}
@@ -1134,11 +1120,11 @@ const ValuationFlow = () => {
             selectedScenario={selectedScenario}
             confirmedValues={confirmedValues}
             loading={loading}
-            onBackToAssumptions={() => setCurrentStep(10)}
+            onBackToAssumptions={() => setCurrentStep(9)}
             onRunValuation={handleRunValuation}
           />
         );
-      case 12:
+      case 11:
         return (
           <ResultsStep
             valuationMatrix={valuationsData}
@@ -1160,8 +1146,8 @@ const ValuationFlow = () => {
         <h1>Unified Valuation Platform</h1>
 
         {/* Progress Indicator with Step Counter */}
-        <div className="progress-indicator" role="progressbar" aria-valuenow={currentStep} aria-valuemin="1" aria-valuemax="12">
-          {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(step => (
+        <div className="progress-indicator" role="progressbar" aria-valuenow={currentStep} aria-valuemin="1" aria-valuemax="11">
+          {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map(step => (
             <div
               key={step}
               className={`step-dot ${currentStep >= step ? 'active' : ''} ${currentStep === step ? 'current' : ''}`}
@@ -1178,7 +1164,7 @@ const ValuationFlow = () => {
             {currentStep === 1 ? 'Search Company' :
              currentStep === 2 ? 'Company Overview' :
              currentStep === 3 ? 'Select Model' :
-             currentStep === 4 ? 'Peer Selection' :
+             currentStep === 4 ? 'Review/Adjust Peer Companies' :
              currentStep === 5 ? 'Requirements Review' :
              currentStep === 6 ? 'API Data Review' :
              currentStep === 7 ? 'Historical Data Extraction' :
