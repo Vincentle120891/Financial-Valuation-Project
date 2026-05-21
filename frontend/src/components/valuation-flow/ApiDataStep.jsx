@@ -634,7 +634,19 @@ const ApiDataStep = ({
 
   // Render forecast drivers with detailed period values
   const renderForecastDrivers = () => {
-    if (!forecastDrivers) return null;
+    if (!forecastDrivers || Object.keys(forecastDrivers).length === 0) {
+      return (
+        <div className="summary-box" style={{ background: 'linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%)', marginBottom: '20px' }}>
+          <h3>📈 Forecast Drivers (from API)</h3>
+          <div style={{ padding: '20px', textAlign: 'center', color: '#666' }}>
+            <p style={{ margin: 0, fontSize: '14px' }}>
+              ⚠️ No forecast drivers retrieved from the API. These will be generated in 
+              <strong> Step 8: AI-Generated Assumptions</strong>.
+            </p>
+          </div>
+        </div>
+      );
+    }
 
     return (
       <div className="summary-box" style={{ background: 'linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%)', marginBottom: '20px' }}>
@@ -778,7 +790,27 @@ const ApiDataStep = ({
 
   // Render peer data with detailed company information
   const renderPeerData = () => {
-    if (!peerData || (Array.isArray(peerData) && peerData.length === 0)) return null;
+    // Check if peerData exists and has companies array
+    const hasPeerData = peerData && (
+      (peerData.companies && peerData.companies.length > 0) ||
+      (Array.isArray(peerData) && peerData.length > 0)
+    );
+
+    if (!hasPeerData) {
+      return (
+        <div className="summary-box" style={{ background: 'linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%)', marginBottom: '20px' }}>
+          <h3>🏢 Peer Comparison Data (from API)</h3>
+          <div style={{ padding: '20px', textAlign: 'center', color: '#666' }}>
+            <p style={{ margin: 0, fontSize: '14px' }}>
+              ⚠️ No peer comparison data retrieved from the API. Peer data is fetched based on your peer selection in Step 4.
+            </p>
+            <p style={{ margin: '10px 0 0 0', fontSize: '13px', fontStyle: 'italic' }}>
+              💡 Tip: Check the RAW DATA DEBUG section below to see what peer data was received.
+            </p>
+          </div>
+        </div>
+      );
+    }
 
     const companies = peerData.companies || (Array.isArray(peerData) ? peerData : []);
 
@@ -878,7 +910,25 @@ const ApiDataStep = ({
 
   // Render DCF inputs with all components
   const renderDcfInputs = () => {
-    if (!dcfInputs) return null;
+    // NOTE: DCF inputs (WACC, terminal growth, etc.) are generated in Step 8 (AI Assumptions)
+    // Step 7 only shows raw API data and forecast drivers from the API
+    if (!dcfInputs || Object.keys(dcfInputs).length === 0) {
+      return (
+        <div className="summary-box" style={{ background: 'linear-gradient(135deg, #f3e5f5 0%, #e1bee7 100%)', marginBottom: '20px' }}>
+          <h3>💰 DCF Model Inputs</h3>
+          <div style={{ padding: '20px', textAlign: 'center', color: '#666' }}>
+            <p style={{ margin: '0 0 10px 0', fontWeight: 600 }}>⏳ DCF Inputs Not Yet Generated</p>
+            <p style={{ margin: 0, fontSize: '14px' }}>
+              DCF inputs (WACC, Terminal Growth Rate, Risk-Free Rate, etc.) will be generated in 
+              <strong> Step 8: AI-Generated Assumptions</strong> based on the historical data reviewed above.
+            </p>
+            <p style={{ margin: '10px 0 0 0', fontSize: '13px', fontStyle: 'italic' }}>
+              💡 Tip: Review the forecast drivers below to see what data was retrieved from the API.
+            </p>
+          </div>
+        </div>
+      );
+    }
 
     return (
       <div className="summary-box" style={{ background: 'linear-gradient(135deg, #f3e5f5 0%, #e1bee7 100%)', marginBottom: '20px' }}>
