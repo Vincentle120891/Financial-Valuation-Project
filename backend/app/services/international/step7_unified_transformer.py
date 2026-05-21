@@ -147,7 +147,7 @@ class Step7UnifiedTransformer:
             period = ProcessedHistoricalPeriod(
                 period=f"FY{year}",
                 year=year,
-                data=years_data[year],
+                values=years_data[year],
                 growth_rates={},  # Will be calculated in post-processing
                 margins={}  # Will be calculated in post-processing
             )
@@ -170,7 +170,7 @@ class Step7UnifiedTransformer:
         # Collect all metrics across all periods
         all_metrics = set()
         for period in periods:
-            all_metrics.update(period.data.keys())
+            all_metrics.update(period.values.keys())
 
         # Calculate trends for each metric
         for metric in all_metrics:
@@ -178,8 +178,8 @@ class Step7UnifiedTransformer:
             years = []
 
             for period in periods:
-                if metric in period.data and period.data[metric].value is not None:
-                    values.append(period.data[metric].value)
+                if metric in period.values and period.values[metric].value is not None:
+                    values.append(period.values[metric].value)
                     years.append(period.year)
 
             if len(values) >= 2:
