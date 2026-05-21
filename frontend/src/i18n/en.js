@@ -109,10 +109,17 @@ export default {
   use_ai_suggestion: 'Use AI',
   ai_rationale: 'AI Rationale',
   
-  // Steps
-  step_5_prepare_inputs: 'Step 5: Prepare Inputs',
+  // Steps - Aligned with Backend Unified Schema
+  step_1_search: 'Step 1: Company Search & Selection',
+  step_2_market_confirmation: 'Step 2: Market Confirmation & Market Data',
+  step_3_method_selection: 'Step 3: Valuation Method Selection',
+  step_4_peer_selection: 'Step 4: Peer Company Selection',
+  step_5_prepare_inputs: 'Step 5: Prepare Inputs/Assumptions',
   step_6_fetch_api_data: 'Step 6: Fetch API Data',
-  step_7_generate_ai_assumptions: 'Step 7: Generate AI Assumptions',
+  step_7_process_historical_data: 'Step 7: Process Historical Data',
+  step_8_assumptions_studio: 'Step 8: Assumptions & AI Suggestion Studio',
+  step_9_confirm_assumptions: 'Step 9: Confirm Assumptions',
+  step_10_execute_valuation: 'Step 10: Execute Valuation',
   
   // Valuation Models
   dcf_model: 'DCF Model',

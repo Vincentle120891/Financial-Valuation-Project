@@ -177,7 +177,6 @@
 - **@vitejs/plugin-react** ^6.0.1 - React plugin for Vite  
  ![](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAnEAAAACCAYAAAA3pIp+AAAABmJLR0QA/wD/AP+gvaeTAAAACXBIWXMAAA7EAAAOxAGVKw4bAAAANUlEQVR4nO3OMQ2AABAAsSPBCUZfDq7YGVDAgAU2QtIq6DIzW7UHAMBfHGt1V+fXEwAAXrseHCgGBJWaMWkAAAAASUVORK5CYII=)  
  **🔄 The 11-Step Workflow**  
- **IMPORTANT**: Frontend uses 11 steps for better UX granularity, while backend uses 10 unified steps. Step 11 is reserved for future export/reporting functionality.  
  **Phase 1: Company & Method Selection (Steps 1-3)**  
    
  | | | | | |  
@@ -191,7 +190,6 @@
  | **2** | Company Overview | Display selected company details (NO Find Peers button) | Create session with UUID, fetch basic info from market-specific service | /step-2-confirm-market |  
    
  | **3** |  **Select Model** |  **Single select** (DCF, DuPont, Comps) - Radio buttons | Validate model compatibility, store in session | /step-3-select-method |  
-***⚠️ Critical Change***  *: Model selection (Step 3) now comes BEFORE peer selection (Step 4). This ensures the backend knows which valuation method to use when fetching peer-relevant data.*  
    
  **Phase 2: Peer Selection & Requirements (Steps 4-5)**  
    
