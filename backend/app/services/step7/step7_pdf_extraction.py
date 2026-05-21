@@ -1,3 +1,4 @@
+../
 """
 Step 7 AI Service - PDF/Filing Text Extraction
 Extracts specific financial metrics from document text using AI with fallback chain.
