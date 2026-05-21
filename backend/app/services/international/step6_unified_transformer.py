@@ -334,84 +334,9 @@ class Step6UnifiedTransformer:
                         legacy_field, currency=None, reporting_period="Forecast"
                     ))
 
-        # DCF doesn't use dupont_metrics
+        # DCF doesn't use dupont_metrics or comps_multiples
         dupont_metrics = None
-        
-        # CRITICAL FIX: DCF needs peer comparables for WACC calculation
-        # Extract peer data from dcf_response.peer_comparables and populate comps_multiples
         comps_multiples = None
-        if dcf_response.peer_comparables and dcf_response.peer_comparables.companies:
-            comps_multiples = CompsMultiplesData()
-            comps_multiples.companies = [
-                {
-                    "ticker": company.ticker,
-                    "company_name": company.name or "",
-                    "sector": "",
-                    "industry": "",
-                    "market_cap": company.market_cap,
-                    "enterprise_value": company.enterprise_value,
-                    "ev_ebitda": company.ev_ebitda,
-                    "pe_ratio": company.pe_ratio,
-                    "ev_revenue": company.ev_revenue,
-                    "pb_ratio": company.pb_ratio,
-                    "beta": company.beta,
-                    "total_debt": company.total_debt,
-                    "cash": company.cash,
-                    "tax_rate": company.tax_rate,
-                    "cost_of_debt": company.cost_of_debt,
-                }
-                for company in dcf_response.peer_comparables.companies
-            ]
-            
-            # Set median multiples if available
-            if dcf_response.peer_comparables.median_ev_ebitda is not None:
-                comps_multiples.ev_to_ebitda = UnifiedDataField(
-                    value=dcf_response.peer_comparables.median_ev_ebitda,
-                    status=UnifiedDataStatus.CALCULATED,
-                    source="calculated_from_peers",
-                    formula="Median(Enterprise Value / EBITDA) across peer group",
-                    confidence_score=85.0,
-                    is_missing=False,
-                    can_override=True,
-                    unit="x",
-                    reporting_period="TTM"
-                )
-            if dcf_response.peer_comparables.median_pe is not None:
-                comps_multiples.p_to_e = UnifiedDataField(
-                    value=dcf_response.peer_comparables.median_pe,
-                    status=UnifiedDataStatus.CALCULATED,
-                    source="calculated_from_peers",
-                    formula="Median(Price / Earnings) across peer group",
-                    confidence_score=85.0,
-                    is_missing=False,
-                    can_override=True,
-                    unit="x",
-                    reporting_period="TTM"
-                )
-            if dcf_response.peer_comparables.median_ev_revenue is not None:
-                comps_multiples.ev_to_sales = UnifiedDataField(
-                    value=dcf_response.peer_comparables.median_ev_revenue,
-                    status=UnifiedDataStatus.CALCULATED,
-                    source="calculated_from_peers",
-                    formula="Median(Enterprise Value / Revenue) across peer group",
-                    confidence_score=85.0,
-                    is_missing=False,
-                    can_override=True,
-                    unit="x",
-                    reporting_period="TTM"
-                )
-            if dcf_response.peer_comparables.median_pb is not None:
-                comps_multiples.p_to_b = UnifiedDataField(
-                    value=dcf_response.peer_comparables.median_pb,
-                    status=UnifiedDataStatus.CALCULATED,
-                    source="calculated_from_peers",
-                    formula="Median(Price / Book Value) across peer group",
-                    confidence_score=85.0,
-                    is_missing=False,
-                    can_override=True,
-                    unit="x",
-                    reporting_period="Current"
-                )
 
         missing_summary = cls.transform_missing_data_summary(dcf_response.missing_data_summary)
 
