@@ -178,7 +178,7 @@ class UnifiedStep2Response(BaseModel):
     confirmed: bool = Field(..., description="Whether market selection is confirmed")
 
     # Market data (detailed)
-    market_data: List[MarketDataPoint] = Field(default_factory=list, description="Array of market data points")
+    market_ List[MarketDataPoint] = Field(default_factory=list, description="Array of market data points")
     risk_metrics: Optional[MarketRiskMetrics] = Field(None, description="Market risk metrics")
 
     # Vietnam-specific fields
@@ -186,7 +186,7 @@ class UnifiedStep2Response(BaseModel):
     exchange_info: Optional[ExchangeInfo] = Field(None, description="Exchange information")
 
     # Data quality
-    missing_data: List[str] = Field(default_factory=list, description="List of missing data fields")
+    missing_ List[str] = Field(default_factory=list, description="List of missing data fields")
     warnings: List[str] = Field(default_factory=list, description="Data quality warnings")
     data_quality_score: float = Field(0.0, ge=0, le=100, description="Overall data quality score 0-100")
 
@@ -441,7 +441,7 @@ class UnifiedStep6Response(BaseModel):
         None,
         description="Forecast drivers and assumptions - NESTED structure"
     )
-    market_data: Optional[MarketDataBase] = Field(
+    market_ Optional[MarketDataBase] = Field(
         None,
         description="Current market data - NESTED structure"
     )
@@ -476,7 +476,7 @@ class ProcessedHistoricalPeriod(BaseModel):
     """Processed historical period data"""
     period: str
     year: int
-    data: Dict[str, DataField]
+     Dict[str, DataField]
     growth_rates: Optional[Dict[str, DataField]] = None
     margins: Optional[Dict[str, DataField]] = None
 
