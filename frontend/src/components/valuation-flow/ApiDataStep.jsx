@@ -3,7 +3,7 @@ import DataFieldDisplay, { DataFieldGrid } from './DataFieldDisplay';
 
 /**
  * ApiDataStep Component
- * Step 7: API Data Review - Display all retrieved data + calculated inputs + identify missing inputs
+ * Step 6: Fetch API Data - Display all retrieved data + calculated inputs + identify missing inputs
  *
  * Features:
  * - Display historical financials retrieved from API with detailed numbers
@@ -12,7 +12,7 @@ import DataFieldDisplay, { DataFieldGrid } from './DataFieldDisplay';
  * - Show DCF inputs (WACC, terminal growth) from API
  * - Display DuPont analysis results with detailed ratios
  * - Show Comps analysis results with all multiples
- * - Navigate to Step 8 (Historical Data Extraction) or back to Step 6 (Requirements Review)
+ * - Navigate to Step 7 (Process Historical Data) or back to Step 5 (Prepare Inputs)
  */
 const ApiDataStep = ({
   historicalData,
@@ -641,7 +641,7 @@ const ApiDataStep = ({
           <div style={{ padding: '20px', textAlign: 'center', color: '#666' }}>
             <p style={{ margin: 0, fontSize: '14px' }}>
               ⚠️ No forecast drivers retrieved from the API. These will be generated in 
-              <strong> Step 8: AI-Generated Assumptions</strong>.
+              <strong> Step 7: Process Historical Data</strong>.
             </p>
           </div>
         </div>
@@ -920,7 +920,7 @@ const ApiDataStep = ({
             <p style={{ margin: '0 0 10px 0', fontWeight: 600 }}>⏳ DCF Inputs Not Yet Generated</p>
             <p style={{ margin: 0, fontSize: '14px' }}>
               DCF inputs (WACC, Terminal Growth Rate, Risk-Free Rate, etc.) will be generated in 
-              <strong> Step 8: AI-Generated Assumptions</strong> based on the historical data reviewed above.
+              <strong> Step 7: Process Historical Data</strong> based on the historical data reviewed above.
             </p>
             <p style={{ margin: '10px 0 0 0', fontSize: '13px', fontStyle: 'italic' }}>
               💡 Tip: Review the forecast drivers below to see what data was retrieved from the API.
@@ -1165,7 +1165,7 @@ const ApiDataStep = ({
     <div className="step-container">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
         <div>
-          <h2>Step 7: API Data Review</h2>
+          <h2>Step 6: Fetch API Data</h2>
           <p style={{ color: '#666', marginTop: '8px' }}>Review all financial data fetched from yfinance and AlphaVantage APIs. Verify accuracy before proceeding.</p>
         </div>
         <button onClick={onBackToRequirements} className="btn-secondary">

@@ -231,16 +231,18 @@ export const vi = {
       shares_outstanding: "Số cổ phiếu lưu hành",
     },
 
-    // Valuation Steps
+    // Valuation Steps - Aligned with Backend Unified Schema
     steps: {
-      step1: "Chọn mô hình",
-      step2: "Nhập mã cổ phiếu",
-      step3: "Yêu cầu dữ liệu",
-      step4: "Lấy dữ liệu API",
-      step5: "Giả định AI",
-      step6: "Kịch bản dự báo",
-      step7: "Tính toán định giá",
-      step8: "Kết quả",
+      step1: "Bước 1: Tìm kiếm & Chọn Công ty",
+      step2: "Bước 2: Xác nhận Thị trường & Dữ liệu Thị trường",
+      step3: "Bước 3: Chọn Phương pháp Định giá",
+      step4: "Bước 4: Chọn Công ty Peer",
+      step5: "Bước 5: Chuẩn bị Đầu vào/Giả định",
+      step6: "Bước 6: Lấy dữ liệu API",
+      step7: "Bước 7: Xử lý Dữ liệu Lịch sử",
+      step8: "Bước 8: Phòng thu Giả định & Đề xuất AI",
+      step9: "Bước 9: Xác nhận Giả định",
+      step10: "Bước 10: Thực hiện Định giá",
     },
 
     // AI Assumptions
