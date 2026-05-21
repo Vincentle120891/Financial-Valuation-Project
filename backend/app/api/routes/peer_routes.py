@@ -27,46 +27,40 @@ step4_processor = Step4PeerManagementService()
 async def suggest_peers_endpoint(request: dict):
     """
     Step 4: Suggest peer companies for a given ticker.
-    Uses Step2MarketDataProcessor with PeerDiscoveryService.
+    Uses Step4PeerManagementService with PeerDiscoveryService.
 
     Args:
         ticker: Target ticker symbol (required)
+        session_id: Session ID for session tracking (required)
         max_peers: Maximum number of peers to suggest (default: 10)
         market: Market type (default: international)
         method: Valuation method (DCF, COMPS, DuPont) - affects peer criteria
-        session_id: Optional session ID for session tracking
 
     Returns:
         List of peer candidates with similarity scores
     """
     ticker = request.get("ticker")
+    session_id = request.get("session_id")
     max_peers = request.get("max_peers", 10)
     market = request.get("market", "international")
     method = request.get("method")  # NEW: valuation method
-    session_id = request.get("session_id")
 
     # Validate required parameters
     if not ticker:
         raise HTTPException(status_code=400, detail="Missing required parameter: ticker")
+    if not session_id:
+        raise HTTPException(status_code=400, detail="Missing required parameter: session_id")
 
-    # Log session info if provided
-    if session_id:
-        logger.info(f"Suggesting peers for ticker='{ticker}', method='{method}', session_id='{session_id}', market={market}")
-    else:
-        logger.warning(f"Suggesting peers for ticker='{ticker}' without session_id. Consider adding session tracking.")
+    logger.info(f"Suggesting peers for ticker='{ticker}', method='{method}', session_id='{session_id}', market={market}")
 
     try:
         result = await step4_processor.suggest_peers(
             ticker=ticker,
+            session_id=session_id,
             max_peers=max_peers,
             market=market,
             method=method  # NEW: pass method
         )
-
-        # Add session validation warning if no session_id provided
-        if not session_id and result.get("status") == "success":
-            result["warnings"] = result.get("warnings", [])
-            result["warnings"].append("No session_id provided. For better tracking, include session_id in requests.")
 
         return result
 

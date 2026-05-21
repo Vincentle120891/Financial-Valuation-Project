@@ -234,15 +234,17 @@ class Step4PeerManagementService:
     async def suggest_peers(
         self,
         ticker: str,
+        session_id: str,
         max_peers: int = 10,
         market: str = "international",
         method: Optional[str] = None  # NEW: valuation method
     ) -> Dict:
         """
-        Suggest peer companies for a given ticker.
+        Suggest peer companies for a given ticker and save to session.
 
         Args:
             ticker: Target ticker symbol
+            session_id: Session identifier for storing suggestions
             max_peers: Maximum number of peers to suggest
             market: Market type
             method: Valuation method (DCF, COMPS, DuPont) - affects peer criteria
@@ -250,7 +252,7 @@ class Step4PeerManagementService:
         Returns:
             Dictionary with status and peer suggestions
         """
-        logger.info(f"Suggesting peers for ticker='{ticker}', method='{method}'")
+        logger.info(f"Suggesting peers for ticker='{ticker}', method='{method}', session_id='{session_id}'")
 
         try:
             # Get ticker info first
@@ -284,6 +286,31 @@ class Step4PeerManagementService:
                     "peers": []
                 }
 
+            # Build peer list
+            peers_list = [
+                {
+                    "ticker": peer.ticker,
+                    "symbol": peer.symbol,
+                    "company_name": peer.company_name,
+                    "name": peer.name,
+                    "sector": peer.sector,
+                    "industry": peer.industry,
+                    "marketCap": peer.marketCap,
+                    "score": peer.score,
+                    "match_reasons": peer.match_reasons
+                }
+                for peer in response.peers
+            ]
+
+            # CRUCIAL FIX: Save suggestions to session immediately to prevent re-fetching loop
+            if session_id:
+                session_service.update_session_data(
+                    session_id, 
+                    f"peer_suggestions_{ticker}", 
+                    peers_list
+                )
+                logger.info(f"Saved {len(peers_list)} peer suggestions to session for {ticker}")
+
             return {
                 "status": "success",
                 "message": f"Found {response.total_found} peer candidates for {ticker}",
@@ -294,20 +321,7 @@ class Step4PeerManagementService:
                     "industry": ticker_info.get('industry'),
                     "marketCap": ticker_info.get('marketCap')
                 },
-                "peers": [
-                    {
-                        "ticker": peer.ticker,
-                        "symbol": peer.symbol,
-                        "company_name": peer.company_name,
-                        "name": peer.name,
-                        "sector": peer.sector,
-                        "industry": peer.industry,
-                        "marketCap": peer.marketCap,
-                        "score": peer.score,
-                        "match_reasons": peer.match_reasons
-                    }
-                    for peer in response.peers
-                ],
+                "peers": peers_list,
                 "search_criteria": response.search_criteria,
                 "warnings": response.warnings
             }

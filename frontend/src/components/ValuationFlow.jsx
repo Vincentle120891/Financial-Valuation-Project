@@ -283,6 +283,13 @@ const ValuationFlow = () => {
       return;
     }
 
+    // Validate session exists
+    if (!sessionId) {
+      setError('No session found. Please select a company first.');
+      setLoading(false);
+      return;
+    }
+
     // Validate market selection before finding peers
     if (!['international', 'vietnam'].includes(market)) {
       setMarketValidation({
@@ -298,7 +305,8 @@ const ValuationFlow = () => {
     try {
       const ticker = company.ticker || company.symbol;
       // Pass the selected model for method-specific peer discovery
-      const data = await suggestPeers(ticker, company.market || market, 10, selectedModels);
+      // Include session_id to store suggestions and prevent re-fetching loop
+      const data = await suggestPeers(ticker, company.market || market, 10, selectedModels, sessionId);
       console.log('Suggest peers response:', data);
       if (data.peers && data.peers.length > 0) {
         setSuggestedPeers(data.peers);
@@ -321,7 +329,7 @@ const ValuationFlow = () => {
     } finally {
       setLoading(false);
     }
-  }, [market, selectedModels]);
+  }, [market, selectedModels, sessionId]);
 
   // ==================== STEP 5: TOGGLE PEER SELECTION ====================
   const handleTogglePeer = useCallback((peer) => {
