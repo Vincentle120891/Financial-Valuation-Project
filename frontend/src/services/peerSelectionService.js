@@ -24,14 +24,13 @@ import { suggestPeers, savePeers, validateManualPeers } from './api';
  * @param {string} params.market - Market type ('international' or 'vietnam')
  * @param {string} params.method - Valuation method (DCF, COMPS, DuPont)
  * @param {number} params.maxPeers - Maximum number of peers to suggest (default: 10)
+ * @param {string} params.sessionId - Session ID for storing suggestions (required)
  * 
  * @returns {Promise<Object>} Peer suggestion response with peers array
  */
-export const findPeers = async ({ ticker, market, method, maxPeers = 10 }) => {
+export const findPeers = async ({ ticker, market, method, maxPeers = 10, sessionId }) => {
   try {
-    // Note: Backend endpoint will be updated to accept method parameter
-    // For now, we pass method as additional context (backend may ignore it currently)
-    const response = await suggestPeers(ticker, market, maxPeers);
+    const response = await suggestPeers(ticker, market, maxPeers, method, sessionId);
     
     if (response.peers && response.peers.length > 0) {
       // Sort peers by score and return top candidates
