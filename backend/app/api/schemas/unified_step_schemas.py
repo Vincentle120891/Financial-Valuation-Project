@@ -178,7 +178,7 @@ class UnifiedStep2Response(BaseModel):
     confirmed: bool = Field(..., description="Whether market selection is confirmed")
 
     # Market data (detailed)
-    market_ List[MarketDataPoint] = Field(default_factory=list, description="Array of market data points")
+    market_data List[MarketDataPoint] = Field(default_factory=list, description="Array of market data points")
     risk_metrics: Optional[MarketRiskMetrics] = Field(None, description="Market risk metrics")
 
     # Vietnam-specific fields
