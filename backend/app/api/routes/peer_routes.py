@@ -1,7 +1,7 @@
 """
 Peer Routes - Step 4 and Step 5
 
-Handles peer suggestion and validation functionality using Step2 processor with PeerDiscoveryService.
+Handles peer suggestion and validation functionality using Step4 Peer Management Service with PeerDiscoveryService.
 Uses unified schemas for consistent API contracts.
 
 Single Responsibility:
@@ -13,14 +13,14 @@ import logging
 from fastapi import APIRouter, HTTPException
 
 from app.core.logging_config import get_logger
-from app.services.international.step2_market_data_processor import Step2MarketDataProcessor
+from app.services.international.step4_peer_management_service import Step4PeerManagementService
 
 logger = get_logger(__name__)
 
 router = APIRouter(tags=["Step 4-5 - Peer Selection"])
 
 # Initialize processor
-step2_processor = Step2MarketDataProcessor()
+step4_processor = Step4PeerManagementService()
 
 
 @router.post("/step-4-suggest-peers")
@@ -56,7 +56,7 @@ async def suggest_peers_endpoint(request: dict):
         logger.warning(f"Suggesting peers for ticker='{ticker}' without session_id. Consider adding session tracking.")
 
     try:
-        result = await step2_processor.suggest_peers(
+        result = await step4_processor.suggest_peers(
             ticker=ticker,
             max_peers=max_peers,
             market=market,
@@ -88,7 +88,7 @@ async def validate_manual_peers(request: dict):
     Returns:
         Dictionary with validated peers and any errors
     """
-    from app.api.schemas import ManualPeerRequest
+    from fastapi import HTTPException
 
     session_id = request.get("session_id")
     tickers = request.get("tickers", [])
@@ -103,9 +103,9 @@ async def validate_manual_peers(request: dict):
     logger.info(f"Validating {len(tickers)} manual peers for session='{session_id}', market={market}")
 
     try:
-        result = await step2_processor.validate_manual_peers(
-            tickers=tickers,
-            market=market
+        result = step4_processor.validate_peer_tickers(
+            session_id=session_id,
+            tickers=tickers
         )
 
         return result
