@@ -1070,54 +1070,54 @@ class YFinanceService:
 
             return {
                 # Assets
-                "total_assets": get_series_raw('Total Assets'),
-                "current_assets": get_series_raw('Current Assets'),
-                "non_current_assets": get_series_raw('Total Non Current Assets'),
+                "total_assets": get_series_raw('TotalAssets', ['Total Assets']),
+                "current_assets": get_series_raw('CurrentAssets', ['Current Assets']),
+                "non_current_assets": get_series_raw('TotalNonCurrentAssets', ['Total Non Current Assets']),
 
                 # Current Assets Breakdown
-                "cash_and_equivalents": get_series_raw('Cash Cash Equivalents And Short Term Investments'),
-                "cash": get_series_raw('Cash Cash Equivalents And Short Term Investments'),  # Alias
-                "accounts_receivable": get_series_raw('Accounts Receivable', ['Receivables', 'Gross Accounts Receivable']),
+                "cash_and_equivalents": get_series_raw('CashCashEquivalentsAndShortTermInvestments', ['Cash Cash Equivalents And Short Term Investments', 'CashAndCashEquivalents']),
+                "cash": get_series_raw('CashCashEquivalentsAndShortTermInvestments', ['Cash Cash Equivalents And Short Term Investments']),  # Alias
+                "accounts_receivable": get_series_raw('AccountsReceivable', ['Receivables', 'Gross Accounts Receivable']),
                 "ar": get_series_raw('Accounts Receivable', ['Receivables']),  # Alias
-                "inventory": get_series_raw('Inventory'),
-                "other_current_assets": get_series_raw('Other Current Assets'),
+                "inventory": get_series_raw('Inventory', ['Inventories']),
+                "other_current_assets": get_series_raw('OtherCurrentAssets', ['Other Current Assets']),
 
                 # Non-Current Assets
-                "property_plant_equipment": get_series_raw('Net PPE'),
-                "ppe_net": get_series_raw('Net PPE'),  # Alias
+                "property_plant_equipment": get_series_raw('NetPPE', ['Net PPE']),
+                "ppe_net": get_series_raw('NetPPE', ['Net PPE']),  # Alias
                 "goodwill": get_series_raw('Goodwill'),
-                "intangible_assets": get_series_raw('Other Intangible Assets', ['Intangible Assets']),
-                "long_term_investments": get_series_raw('Investments And Advances', ['Long Term Equity Investment']),
+                "intangible_assets": get_series_raw('OtherIntangibleAssets', ['Other Intangible Assets', 'IntangibleAssets']),
+                "long_term_investments": get_series_raw('InvestmentsAndAdvances', ['Investments And Advances', 'Long Term Equity Investment']),
 
                 # Liabilities
-                "total_liabilities": get_series_raw('Total Liabilities Net Minority Interest'),
-                "current_liabilities": get_series_raw('Current Liabilities'),
-                "non_current_liabilities": get_series_raw('Total Non Current Liabilities Net Minority Interest'),
+                "total_liabilities": get_series_raw('TotalLiabilitiesNetMinorityInterest', ['Total Liabilities Net Minority Interest']),
+                "current_liabilities": get_series_raw('CurrentLiabilities', ['Current Liabilities']),
+                "non_current_liabilities": get_series_raw('TotalNonCurrentLiabilitiesNetMinorityInterest', ['Total Non Current Liabilities Net Minority Interest']),
 
                 # Current Liabilities Breakdown
-                "accounts_payable": get_series_raw('Accounts Payable', ['Payables And Accrued Expenses', 'Payables']),
-                "ap": get_series_raw('Accounts Payable', ['Payables']),  # Alias
-                "short_term_debt": get_series_raw('Current Debt'),
-                "other_current_liabilities": get_series_raw('Other Current Liabilities'),
+                "accounts_payable": get_series_raw('AccountsPayable', ['PayablesAndAccruedExpenses', 'Payables And Accrued Expenses', 'Payables']),
+                "ap": get_series_raw('AccountsPayable', ['Payables']),  # Alias
+                "short_term_debt": get_series_raw('CurrentDebt', ['Current Debt']),
+                "other_current_liabilities": get_series_raw('OtherCurrentLiabilities', ['Other Current Liabilities']),
 
                 # Non-Current Liabilities
-                "long_term_debt": get_series_raw('Long Term Debt'),
-                "deferred_tax_liabilities": get_series_raw('Non Current Deferred Taxes Liabilities', ['Non Current Deferred Liabilities']),
-                "other_non_current_liabilities": get_series_raw('Other Non Current Liabilities'),
+                "long_term_debt": get_series_raw('LongTermDebt', ['Long Term Debt']),
+                "deferred_tax_liabilities": get_series_raw('NonCurrentDeferredTaxesLiabilities', ['Non Current Deferred Taxes Liabilities', 'Non Current Deferred Liabilities']),
+                "other_non_current_liabilities": get_series_raw('OtherNonCurrentLiabilities', ['Other Non Current Liabilities']),
 
                 # Total Debt
-                "total_debt": get_series_raw('Total Debt'),
+                "total_debt": get_series_raw('TotalDebt', ['Total Debt']),
                 "net_debt": None,  # Will be calculated
 
                 # Equity
-                "total_equity": get_series_raw('Total Equity Gross Minority Interest'),
-                "stockholders_equity": get_series_raw('Stockholders Equity'),
-                "retained_earnings": get_series_raw('Retained Earnings'),
-                "common_stock": get_series_raw('Common Stock Equity'),
+                "total_equity": get_series_raw('TotalEquityGrossMinorityInterest', ['Total Equity Gross Minority Interest']),
+                "stockholders_equity": get_series_raw('StockholdersEquity', ['Stockholders Equity']),
+                "retained_earnings": get_series_raw('RetainedEarnings'),
+                "common_stock": get_series_raw('CommonStockEquity', ['Common Stock Equity']),
 
                 # Working Capital (calculated)
                 "working_capital": None,  # Will be calculated
-                "shares_outstanding": get_series_raw('Ordinary Shares Number'),
+                "shares_outstanding": get_series_raw('OrdinarySharesNumber', ['Ordinary Shares Number']),
             }
         except Exception as e:
             logger.warning(f"Error fetching balance sheet: {str(e)}")
