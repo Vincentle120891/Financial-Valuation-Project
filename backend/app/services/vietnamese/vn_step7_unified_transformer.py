@@ -254,7 +254,7 @@ class VNStep7UnifiedTransformer:
             processed_period = ProcessedHistoricalPeriod(
                 period=period,
                 year=year,
-                data=period_data,
+                values=period_data,
                 growth_rates=growth_rates if growth_rates else None,
                 margins=margins if margins else None
             )
