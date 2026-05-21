@@ -63,6 +63,8 @@ from app.services.international.valuation_orchestrator import orchestrator
 from app.services.international.peer_discovery_service import PeerDiscoveryService, PeerDiscoveryRequest
 from app.services.international.step4_peer_management_service import Step4PeerManagementService
 from app.services.international.step7_data_enrichment_service import Step7DataEnrichmentService
+from app.services.api_adapter import APIAdapter, process_multiple_tickers
+from app.middleware.validation_middleware import create_validation_middleware
 
 logger = get_logger(__name__)
 
@@ -370,22 +372,18 @@ async def prepare_assumptions(request: UnifiedStep5Request):
 async def fetch_api_data(request: FetchDataRequest):
     """
     Step 6: Fetch financial data from APIs and calculate metrics.
-    Uses SessionService for session management and Step6DataReviewProcessor for comprehensive data review.
+    Uses SessionService for session management, APIAdapter for data fetching,
+    and ValidationMiddleware for data quality checks.
 
-    PHASE 1.2 UNIFIED SCHEMA IMPLEMENTATION:
-    - Returns UnifiedStep6Response instead of legacy FetchDataResponse
-    - Transforms method-specific outputs (DCF/DuPont/Comps) to unified schema
-    - Preserves ALL original calculations and data values
-    - Only changes the wrapping structure to match unified contract
-
+    ENHANCED WITH NEW ARCHITECTURE:
+    - APIAdapter: Handles fetching, mapping, normalizing, and validating data
+    - MetricRegistry: Centralized field mappings and validation rules
+    - ValidationMiddleware: Pre-save validation with outlier detection
+    
     MATRIX WORKFLOW:
     - Uses market/method from request parameters (REQUIRED - no fallback)
     - Stores financial data in the specific valuation track
     - Each model's data is stored independently
-
-    METHOD-AGNOSTIC DESIGN:
-    - Method MUST be provided in request.method - no session.selected_model fallback
-    - Each method operates independently with its own data track
     """
     try:
         # Get session data using SessionService
@@ -394,6 +392,7 @@ async def fetch_api_data(request: FetchDataRequest):
             raise HTTPException(status_code=404, detail="Session not found")
 
         ticker = session.get("ticker")
+        peer_tickers = session.get("peer_tickers", [])
         # Use market from request ONLY (no fallback to session)
         market = request.market.lower() if request.market else "international"
 
@@ -402,34 +401,70 @@ async def fetch_api_data(request: FetchDataRequest):
             raise HTTPException(status_code=400, detail="Method parameter is required")
 
         method = request.method.upper()
-
-        # Retrieve peer data and other assumptions from session (saved in Step 4)
-        retrieved_assumptions = session_service.get_session_value(
-            request.session_id,
-            "retrieved_assumptions",
-            {}
-        )
-
-        # GAP 1 FIX: Get session cache for "Fetch Once, Use Many" - pass entire session as cache
-        session_cache = session_service.get_session_data(request.session_id)
-
-        # Use Step6DataReviewProcessor for comprehensive data fetching and calculation
-        legacy_result = await step6_processor.process_data_review(
-            ticker=ticker,
-            market=market,
-            valuation_model=method,
-            retrieved_assumptions=retrieved_assumptions,
-            session_cache=session_cache  # PASS session cache to enable caching
-        )
-
-        # PHASE 1.2: Transform legacy response to unified schema
+        
+        # Create validation middleware for this method
+        validator = create_validation_middleware(method)
+        
+        # Use new APIAdapter for robust data fetching and processing
+        all_tickers = [ticker] + peer_tickers if peer_tickers else [ticker]
+        
+        logger.info(f"Processing {len(all_tickers)} tickers using APIAdapter")
+        
+        # Process all tickers through the adapter pipeline
+        adapter_result = process_multiple_tickers(all_tickers, method)
+        
+        # Extract company data and peer data
+        company_data = adapter_result["individual_results"].get(ticker, {})
+        peer_averages = adapter_result.get("peer_averages", {})
+        individual_results = adapter_result["individual_results"]
+        
+        # Validate the fetched data before saving
+        validation_report = validator.validate_complete_dataset({
+            "data": company_data.get("data", {}),
+            "peer_data": {k: v.get("data", {}) for k, v in individual_results.items() if k != ticker}
+        })
+        
+        logger.info(f"Validation report for {ticker}: {validation_report['status']}, completeness: {validation_report['completeness_score']:.2f}")
+        
+        # Build structured data with status tracking
+        structured_data = {}
+        missing_inputs = []
+        
+        for metric_id, metric_info in company_data.get("data", {}).items():
+            structured_data[metric_id] = metric_info
+        
+        for metric_id in company_data.get("missing", []):
+            missing_inputs.append({
+                "metric_id": metric_id,
+                "company": ticker,
+                "required_for_method": method
+            })
+        
+        # Add peer averages
+        for metric_id, avg_info in peer_averages.items():
+            if metric_id not in structured_data:
+                structured_data[metric_id] = avg_info
+        
+        # Prepare response data
+        data_for_response = {
+            "data": structured_data,
+            "missing_inputs": missing_inputs,
+            "validation_report": validation_report,
+            "peer_averages": peer_averages,
+            "completeness": adapter_result.get("completeness", 0)
+        }
+        
+        # Transform to unified schema using existing transformer
+        legacy_result = type('obj', (object,), {
+            'model_dump': lambda mode='json': data_for_response
+        })()
+        
         unified_response = Step6UnifiedTransformer.transform_any_response(
             response=legacy_result,
             valuation_model=method
         )
-
-        # Store results in session using SessionService (with JSON serialization)
-        # Store in the specific valuation track
+        
+        # Store results in session using SessionService
         result_dict = unified_response.model_dump(mode='json') if hasattr(unified_response, 'model_dump') else unified_response
         session_service.update_session_data(
             request.session_id,
