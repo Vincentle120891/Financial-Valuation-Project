@@ -275,11 +275,18 @@ class InternationalDataStrategy:
         except Exception as e:
             logger.debug(f"Could not calculate tax rate or cost of debt: {e}")
 
+        # DEBUG: Log all available keys in info for troubleshooting
+        logger.debug(f"[YFinance] Available info keys for {ticker.ticker}: {list(info.keys())[:30]}...")
+        logger.debug(f"[YFinance] currentPrice={info.get('currentPrice')}, totalCash={info.get('totalCash')}, marketCap={info.get('marketCap')}")
+
         return {
             'marketCap': sanitize_value(info.get('marketCap')),
             'beta': sanitize_value(info.get('beta', 1.0)),
             'totalDebt': sanitize_value(info.get('totalDebt') or info.get('TotalDebt')),
-            'cash': sanitize_value(info.get('cash') or info.get('CashAndCashEquivalents') or info.get('TotalCash')),
+            'cash': sanitize_value(info.get('totalCash') or info.get('TotalCash') or info.get('cash') or info.get('CashAndCashEquivalents')),
+            'currentPrice': sanitize_value(info.get('currentPrice') or info.get('regularMarketPrice')),
+            'totalAssets': sanitize_value(info.get('totalAssets')),
+            'totalEquity': sanitize_value(info.get('totalEquity') or info.get('StockholdersEquity') or info.get('TotalEquityGrossMinorityInterest')),
             'effectiveTaxRate': effective_tax_rate,
             'costOfDebt': cost_of_debt,
         }
@@ -331,11 +338,16 @@ class InternationalDataStrategy:
             periods = [col.strftime('%Y-%m-%d') if hasattr(col, 'strftime') else str(col) for col in columns]
             num_periods = len(periods)
 
+            # DEBUG: Log balance sheet keys for troubleshooting
+            logger.debug(f"[YFinance] Balance sheet index: {balance_sheet.index.tolist()[:20]}...")
+
             result = {
                 'periods': periods,
                 'total_debt': self._get_series_values(balance_sheet, 'TotalDebt', num_periods),
                 'cash_and_equivalents': self._get_series_values(balance_sheet, 'CashAndCashEquivalents', num_periods),
-                'total_equity': self._get_series_values(balance_sheet, 'TotalEquityGrossMinorityInterest', num_periods),
+                'total_equity': self._get_series_values(balance_sheet, 'TotalEquityGrossMinorityInterest', num_periods) or
+                                self._get_series_values(balance_sheet, 'StockholdersEquity', num_periods),
+                'total_assets': self._get_series_values(balance_sheet, 'TotalAssets', num_periods),
                 'working_capital': self._get_series_values(balance_sheet, 'WorkingCapital', num_periods),
                 'shares_outstanding': self._get_series_values(balance_sheet, 'OrdinarySharesNumber', num_periods),
                 'accounts_receivable': self._get_series_values(balance_sheet, 'AccountsReceivable', num_periods),
