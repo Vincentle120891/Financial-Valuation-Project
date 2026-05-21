@@ -22,7 +22,6 @@ from app.services.pdf_extraction_service import (
     ExtractedFinancialData
 )
 from app.services.international.ai_engine import AIFallbackEngine
-from app.services.step7 import extract_financial_metric_from_text
 
 logger = logging.getLogger(__name__)
 
@@ -469,6 +468,7 @@ class CompsStep7Processor:
                 extracted_text = await self._extract_comps_text_from_file(pdf_path)
                 
                 # Use AI to extract specific metric from text
+                from app.services import extract_financial_metric_from_text
                 ai_extracted = await extract_financial_metric_from_text(
                     text=extracted_text,
                     metric=metric,
@@ -485,6 +485,7 @@ class CompsStep7Processor:
         try:
             filing_text = await self._download_comps_sec_filing(ticker, fiscal_year)
             if filing_text:
+                from app.services import extract_financial_metric_from_text
                 ai_extracted = await extract_financial_metric_from_text(
                     text=filing_text,
                     metric=metric,
