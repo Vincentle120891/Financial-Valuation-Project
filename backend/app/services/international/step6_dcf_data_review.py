@@ -376,7 +376,7 @@ class DCFStep6Processor:
                         status = DataStatus.CALCULATED
                         source = "Calculated from API data"
                         formula = "Gross Profit - EBIT"
-                    elif field_name in ["pretax_income", "interest_expense", "other_income", "tax_provision", 
+                    elif field_name in ["pretax_income", "interest_expense", "other_income", "tax_provision",
                                         "working_capital_changes", "retained_earnings", "shares_outstanding"]:
                         status = DataStatus.CALCULATED
                         source = "Calculated from API data"
@@ -434,17 +434,30 @@ class DCFStep6Processor:
             "depreciation_amortization": ["depreciation_amortization", "ReconciledDepreciation", "DepreciationAndAmortization"]
         }
 
+        # Add debug logging to see what's in the DataFrames
+        logger.debug(f"Financials DF columns: {financials_df.columns.tolist() if financials_df is not None else 'None'}")
+        logger.debug(f"Financials DF index (first 20): {list(financials_df.index)[:20] if financials_df is not None else 'None'}")
+        logger.debug(f"Balance Sheet DF columns: {balance_sheet_df.columns.tolist() if balance_sheet_df is not None else 'None'}")
+        logger.debug(f"Balance Sheet DF index (first 30): {list(balance_sheet_df.index)[:30] if balance_sheet_df is not None else 'None'}")
+        logger.debug(f"Cash Flow DF columns: {cashflow_df.columns.tolist() if cashflow_df is not None else 'None'}")
+        logger.debug(f"Cash Flow DF index (first 20): {list(cashflow_df.index)[:20] if cashflow_df is not None else 'None'}")
+
         balance_sheet_mapping = {
             "accounts_receivable": ["accounts_receivable", "AccountsReceivable", "Receivables"],
             "inventory": ["inventory", "Inventory", "Inventories"],
-            "accounts_payable": ["accounts_payable", "AccountsPayable", "Payables"],
-            "cash_and_equivalents": ["cash_and_equivalents", "CashAndCashEquivalents", "Cash"],
-            "total_assets": ["total_assets", "TotalAssets", "Assets"],
-            "total_debt": ["total_debt", "TotalDebt", "Debt"],
-            "shareholders_equity": ["shareholders_equity", "TotalEquityGrossMinorityInterest", "StockholdersEquity"],
+            "accounts_payable": ["accounts_payable", "AccountsPayable", "Payables", "PayablesAndAccruedExpenses"],
+            "cash_and_equivalents": ["cash_and_equivalents", "CashCashEquivalentsAndShortTermInvestments", "CashAndCashEquivalents", "Cash", "Cash Cash Equivalents And Short Term Investments"],
+            "total_assets": ["total_assets", "TotalAssets", "Assets", "Total Assets"],
+            "total_debt": ["total_debt", "TotalDebt", "Debt", "Total Debt"],
+            "shareholders_equity": ["shareholders_equity", "StockholdersEquity", "TotalEquityGrossMinorityInterest", "Stockholders Equity", "Total Equity Gross Minority Interest", "CommonStockEquity"],
             "retained_earnings": ["retained_earnings", "RetainedEarnings"],
-            "shares_outstanding": ["shares_outstanding", "OrdinarySharesNumber", "SharesOutstanding"]
+            "shares_outstanding": ["shares_outstanding", "OrdinarySharesNumber", "SharesOutstanding", "Ordinary Shares Number"]
         }
+
+        # DEBUG: Log the mapping being used for troubleshooting
+        logger.debug(f"[Step6DCF] Balance sheet mapping keys: {list(balance_sheet_mapping.keys())}")
+        logger.debug(f"[Step6DCF] Looking for total_assets with variants: {balance_sheet_mapping['total_assets']}")
+        logger.debug(f"[Step6DCF] Looking for shareholders_equity with variants: {balance_sheet_mapping['shareholders_equity']}")
 
         cash_flow_mapping = {
             "capex": ["capex", "capital_expenditure", "CapitalExpenditure", "PurchaseOfPropertyPlantAndEquipment"],
@@ -487,7 +500,7 @@ class DCFStep6Processor:
             ar_values = self._extract_metric_from_financials("accounts_receivable", financials_df, balance_sheet_df, cashflow_df)
             inv_values = self._extract_metric_from_financials("inventory", financials_df, balance_sheet_df, cashflow_df)
             ap_values = self._extract_metric_from_financials("accounts_payable", financials_df, balance_sheet_df, cashflow_df)
-            
+
             if ar_values and inv_values and ap_values and len(ar_values) >= 2:
                 nwc_changes = []
                 for i in range(1, min(len(ar_values), len(inv_values), len(ap_values))):
@@ -630,6 +643,32 @@ class DCFStep6Processor:
             if pretax and tax:
                 return [(t / p * 100) if p and t else None for t, p in zip(tax, pretax)]
 
+        # Handle total_assets and shareholders_equity from balance sheet
+        if field_name == "total_assets":
+            if balance_sheet_df is not None:
+                asset_keys = ["total_assets", "TotalAssets", "Assets", "Total Assets"]
+                for key in asset_keys:
+                    if key in balance_sheet_df.index:
+                        series = balance_sheet_df.loc[key]
+                        values = [float(v) if pd.notna(v) else None for v in series.values]
+                        logger.debug(f"[Step6DCF] Found total_assets using key '{key}': {values[:2]}...")
+                        return values if values else None
+            logger.debug("[Step6DCF] total_assets NOT FOUND in balance_sheet_df")
+            return None
+
+        if field_name == "shareholders_equity":
+            if balance_sheet_df is not None:
+                equity_keys = ["shareholders_equity", "StockholdersEquity", "TotalEquityGrossMinorityInterest",
+                              "CommonStockEquity", "Stockholders Equity", "Total Equity Gross Minority Interest"]
+                for key in equity_keys:
+                    if key in balance_sheet_df.index:
+                        series = balance_sheet_df.loc[key]
+                        values = [float(v) if pd.notna(v) else None for v in series.values]
+                        logger.debug(f"[Step6DCF] Found shareholders_equity using key '{key}': {values[:2]}...")
+                        return values if values else None
+            logger.debug("[Step6DCF] shareholders_equity NOT FOUND in balance_sheet_df")
+            return None
+
         # If we reach here, try to extract from DataFrames using mappings
         # Determine which DataFrame to use based on field name
         df_to_use = None
@@ -675,6 +714,10 @@ class DCFStep6Processor:
         """Process DCF market data (6 fields)"""
         data_fields = []
 
+        # DEBUG: Log what keys are actually in market_data
+        logger.debug(f"[Step6DCF] market_data keys: {list(market_data.keys())[:30]}...")
+        logger.debug(f"[Step6DCF] currentPrice={market_data.get('currentPrice')}, totalCash={market_data.get('totalCash')}, marketCap={market_data.get('marketCap')}")
+
         # DCF market data fields - handle both snake_case and camelCase keys
         market_fields = [
             ("current_stock_price", "Current Stock Price", True, ""),
@@ -686,23 +729,38 @@ class DCFStep6Processor:
         ]
 
         for field_name, display_name, is_critical, unit in market_fields:
-            # Try multiple key variations
+            # Try multiple key variations - expanded for yfinance v1.3.0+ compatibility
             value = None
             possible_keys = [
                 field_name,  # snake_case: current_stock_price
                 field_name.replace("_", ""),  # no underscore: currentstockprice
                 "".join(word.capitalize() if i > 0 else word for i, word in enumerate(field_name.split("_"))),  # camelCase: currentStockPrice
             ]
-            
+
+            # Add yfinance v1.3.0+ specific key variations
+            if field_name == "current_stock_price":
+                possible_keys.extend(["currentPrice", "current_price", "price", "regularMarketPrice"])
+            elif field_name == "cash":
+                possible_keys.extend(["totalCash", "total_cash", "cashAndEquivalents", "cash_and_equivalents", "CashAndCashEquivalents"])
+            elif field_name == "total_debt":
+                possible_keys.extend(["totalDebt", "total_debt", "debt", "TotalDebt"])
+            elif field_name == "shares_outstanding":
+                possible_keys.extend(["sharesOutstanding", "shares_outstanding", "OrdinarySharesNumber"])
+            elif field_name == "market_cap":
+                possible_keys.extend(["marketCap", "market_cap", "marketCapitalization"])
+
+            logger.debug(f"Looking for {field_name} with keys: {possible_keys}")
+
             for key in possible_keys:
                 if key in market_data:
                     value = market_data[key]
+                    logger.debug(f"Found {field_name} using key '{key}': {value}")
                     break
-            
+
             # Also check if the value is nested in a dict with 'value' key
             if isinstance(value, dict) and 'value' in value:
                 value = value['value']
-            
+
             status = DataStatus.RETRIEVED if value is not None else DataStatus.MISSING
             source = "yfinance"
 
@@ -815,7 +873,7 @@ class DCFStep6Processor:
 
         # Get peer list - try multiple possible keys
         peers = retrieved_assumptions.get('peers', [])
-        
+
         # If no peers found directly, check for nested structure
         if not peers and 'peer_data' in retrieved_assumptions:
             peers = retrieved_assumptions['peer_data'].get('peers', [])
@@ -829,19 +887,19 @@ class DCFStep6Processor:
                 f"{peer_ticker}_info",
                 peer_ticker
             ]
-            
+
             for key in possible_keys:
                 if key in retrieved_assumptions:
                     peer_info = retrieved_assumptions[key]
                     break
-            
+
             # Also check nested in peer_data
             if not peer_info and 'peer_data' in retrieved_assumptions:
                 for key in possible_keys:
                     if key in retrieved_assumptions['peer_data']:
                         peer_info = retrieved_assumptions['peer_data'][key]
                         break
-            
+
             if peer_info:
                 company = PeerCompany(
                     ticker=peer_ticker,
@@ -1165,7 +1223,7 @@ class DCFStep6Processor:
         optional_missing = []
         retrieved_count = 0
         calculated_count = 0
-        
+
         for display in displays:
             if hasattr(display, 'data_fields'):
                 for field in display.data_fields:
@@ -1178,11 +1236,11 @@ class DCFStep6Processor:
                         retrieved_count += 1
                     elif field.status == DataStatus.CALCULATED:
                         calculated_count += 1
-        
+
         total_fields = retrieved_count + calculated_count + len(critical_missing) + len(optional_missing)
         completion_percentage = ((retrieved_count + calculated_count) / total_fields * 100) if total_fields > 0 else 0
         data_quality_score = (retrieved_count * 1.0 + calculated_count * 0.8) / total_fields * 100 if total_fields > 0 else 0
-        
+
         return MissingDataSummary(
             total_fields=total_fields,
             retrieved_count=retrieved_count,
