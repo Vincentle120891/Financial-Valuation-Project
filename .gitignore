@@ -22,11 +22,6 @@ node_modules/
 .vscode/
 .idea/
 
-# Build artifacts
-dist/
-build/
-target/
-
 # Coverage reports
 .coverage
 coverage/

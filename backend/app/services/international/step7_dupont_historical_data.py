@@ -464,7 +464,7 @@ class DuPontStep7Processor:
                 extracted_text = await self._extract_dupont_text_from_file(pdf_path)
                 
                 # Use AI to extract specific metric from text
-                from app.services import extract_financial_metric_from_text
+                from app.services.step7_pdf_extraction import extract_financial_metric_from_text
                 ai_extracted = await extract_financial_metric_from_text(
                     text=extracted_text,
                     metric=metric,
@@ -481,7 +481,7 @@ class DuPontStep7Processor:
         try:
             filing_text = await self._download_dupont_sec_filing(ticker, fiscal_year)
             if filing_text:
-                from app.services import extract_financial_metric_from_text
+                from app.services.step7_pdf_extraction import extract_financial_metric_from_text
                 ai_extracted = await extract_financial_metric_from_text(
                     text=filing_text,
                     metric=metric,
