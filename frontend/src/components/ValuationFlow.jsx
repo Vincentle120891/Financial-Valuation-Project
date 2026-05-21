@@ -358,7 +358,7 @@ const ValuationFlow = () => {
           setPeerData(saveResponse.peer_data);
         }
 
-        setCurrentStep(6);  // Move to Step 6: Requirements Review
+        setCurrentStep(5);  // Move to Step 5: Requirements Review
       } else {
         setError('Failed to save peers');
       }
@@ -512,11 +512,11 @@ const ValuationFlow = () => {
       }
     }));
 
-    // Reset selection and navigation - go back to Step 4: Model Selection
+    // Reset selection and navigation - go back to Step 3: Model Selection
     setSelectedModels('');
     setRequiredFields([]);
     setConfirmedValues({});
-    setCurrentStep(4);  // Go back to Step 4: Model Selection
+    setCurrentStep(3);  // Go back to Step 3: Model Selection
     setError(null);
     // Keep market locked - user selected company already, just switching models
   };
@@ -568,24 +568,24 @@ const ValuationFlow = () => {
     }
   }, [sessionId, selectedModels, market]);
 
-  // ==================== CONTINUE TO ASSUMPTIONS (STEP 7) ====================
+  // ==================== CONTINUE TO ASSUMPTIONS (STEP 9) ====================
   const handleContinueToAssumptions = useCallback(() => {
-    setCurrentStep(7);
+    setCurrentStep(9);
   }, []);
 
-  // ==================== BACK TO REQUIREMENTS (FROM STEP 6/8) ====================
+  // ==================== BACK TO REQUIREMENTS (FROM STEP 5/7) ====================
   const handleBackToRequirements = useCallback(() => {
+    setCurrentStep(5);
+  }, []);
+
+  // ==================== BACK TO API DATA (FROM STEP 7) ====================
+  const handleBackToApiData = useCallback(() => {
     setCurrentStep(6);
   }, []);
 
-  // ==================== BACK TO API DATA (FROM STEP 8) ====================
-  const handleBackToApiData = useCallback(() => {
-    setCurrentStep(7);
-  }, []);
-
-  // ==================== BACK TO FORECAST DRIVERS (FROM STEP 10) ====================
+  // ==================== BACK TO FORECAST DRIVERS (FROM STEP 9) ====================
   const handleBackToForecastDrivers = useCallback(() => {
-    setCurrentStep(9);
+    setCurrentStep(8);
   }, []);
 
   // ==================== FETCH REQUIRED INPUTS ====================
@@ -690,9 +690,9 @@ const ValuationFlow = () => {
           setCalculatedMetrics(financialData.calculated_metrics);
         }
 
-        // Auto-navigate to Step 7 (ApiDataStep) to show retrieved data
-        // Step 6 is Requirements Review (before fetch), Step 7 is ApiDataStep (after fetch)
-        setCurrentStep(7);
+        // Auto-navigate to Step 6 (ApiDataStep) to show retrieved data
+        // Step 5 is Requirements Review (before fetch), Step 6 is ApiDataStep (after fetch)
+        setCurrentStep(6);
       } else if (!result.success) {
         setError(result.error || 'Failed to retrieve data');
       }
@@ -823,7 +823,7 @@ const ValuationFlow = () => {
       const data = await confirmAssumptions(sessionId, confirmedValues, selectedScenario, method, market);
       console.log('Confirm assumptions response:', data);
       if (data.status) {
-        setCurrentStep(9);
+        setCurrentStep(10);
       }
     } catch (err) {
       console.error('Confirm assumptions error:', err);
@@ -1165,22 +1165,21 @@ const ValuationFlow = () => {
 
         {/* Enhanced Step Label with Progress */}
         <div className="step-label">
-          <span className="step-counter">Step {currentStep} of 12</span>
+          <span className="step-counter">Step {currentStep} of 11</span>
           <span className="step-name">
             {currentStep === 1 ? 'Search Company' :
              currentStep === 2 ? 'Company Overview' :
              currentStep === 3 ? 'Select Model' :
-             currentStep === 4 ? 'Find Peers' :
-             currentStep === 5 ? 'Select Peers' :
-             currentStep === 6 ? 'Requirements Review' :
-             currentStep === 7 ? 'API Data Review' :
-             currentStep === 8 ? 'Historical Data Extraction' :
-             currentStep === 9 ? 'Forecast Drivers' :
-             currentStep === 10 ? 'Confirm Assumptions' :
-             currentStep === 11 ? 'Run Valuation' :
-             currentStep === 12 ? 'View Results' : 'In Progress'}
+             currentStep === 4 ? 'Peer Selection' :
+             currentStep === 5 ? 'Requirements Review' :
+             currentStep === 6 ? 'API Data Review' :
+             currentStep === 7 ? 'Historical Data Extraction' :
+             currentStep === 8 ? 'Assumption & AI Suggestion' :
+             currentStep === 9 ? 'Confirm Assumptions' :
+             currentStep === 10 ? 'Run Valuation' :
+             currentStep === 11 ? 'View Results' : 'In Progress'}
           </span>
-          <span className="step-progress">{Math.round((currentStep / 12) * 100)}% Complete</span>
+          <span className="step-progress">{Math.round((currentStep / 11) * 100)}% Complete</span>
         </div>
       </header>
 
