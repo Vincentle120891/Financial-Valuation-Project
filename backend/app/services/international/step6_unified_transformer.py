@@ -612,6 +612,9 @@ class Step6UnifiedTransformer:
                 return cls.transform_dcf_response(response)
             else:
                 logger.warning(f"Expected DCFDataReviewResponse but got {type(response)}")
+                # Handle generic object with required attributes
+                if hasattr(response, 'ticker') and hasattr(response, 'session_id'):
+                    return cls._transform_generic_dcf_response(response)
                 # Attempt generic transformation
                 return cls.transform_dcf_response(response)
 
@@ -620,6 +623,8 @@ class Step6UnifiedTransformer:
                 return cls.transform_dupont_response(response)
             else:
                 logger.warning(f"Expected DuPontDataReviewResponse but got {type(response)}")
+                if hasattr(response, 'ticker') and hasattr(response, 'session_id'):
+                    return cls._transform_generic_dupont_response(response)
                 return cls.transform_dupont_response(response)
 
         elif model_upper == "COMPS":
@@ -627,8 +632,89 @@ class Step6UnifiedTransformer:
                 return cls.transform_comps_response(response)
             else:
                 logger.warning(f"Expected CompsDataReviewResponse but got {type(response)}")
+                if hasattr(response, 'ticker') and hasattr(response, 'session_id'):
+                    return cls._transform_generic_comps_response(response)
                 return cls.transform_comps_response(response)
 
         else:
             raise ValueError(f"Unknown valuation model: {valuation_model}. "
                            f"Supported models: DCF, DUPONT, COMPS")
+
+    @classmethod
+    def _transform_generic_dcf_response(cls, response: Any) -> UnifiedStep6Response:
+        """Transform a generic object with DCF-like attributes to UnifiedStep6Response"""
+        from app.api.schemas.unified_step_schemas import (
+            HistoricalFinancialsData,
+            ForecastDriversData,
+            MarketDataBase,
+            DataField as UnifiedDataField,
+            DataStatus as UnifiedDataStatus,
+            MissingDataSummary as UnifiedMissingDataSummary,
+        )
+
+        logger.info(f"Transforming generic DCF response for {getattr(response, 'ticker', 'unknown')}")
+
+        # Build basic response
+        historical_financials = HistoricalFinancialsData()
+        market_data = MarketDataBase()
+        forecast_drivers = ForecastDriversData()
+
+        # Extract missing data summary if available
+        missing_summary = UnifiedMissingDataSummary(
+            total_fields=0,
+            retrieved_count=0,
+            calculated_count=0,
+            estimated_count=0,
+            missing_count=0,
+            manual_override_count=0,
+            completion_percentage=0.0,
+            critical_missing=[],
+            optional_missing=[],
+            valuation_ready=False,
+            data_quality_score=0.0,
+            warnings=[],
+            recommendations=[]
+        )
+
+        if hasattr(response, 'missing_data_summary') and response.missing_data_summary:
+            summary = response.missing_data_summary
+            critical = getattr(summary, 'critical_missing', [])
+            optional = getattr(summary, 'optional_missing', [])
+            total = getattr(summary, 'total_missing', len(critical) + len(optional))
+
+            missing_summary = UnifiedMissingDataSummary(
+                total_fields=40,  # Approximate total fields for DCF
+                retrieved_count=max(0, 40 - total),
+                calculated_count=0,
+                estimated_count=0,
+                missing_count=total,
+                manual_override_count=0,
+                completion_percentage=((40 - total) / 40 * 100) if total < 40 else 0.0,
+                critical_missing=critical if isinstance(critical, list) else [],
+                optional_missing=optional if isinstance(optional, list) else [],
+                valuation_ready=(len(critical) == 0) if isinstance(critical, list) else False,
+                data_quality_score=((40 - total) / 40 * 90),
+                warnings=["Data fetched via APIAdapter - some metrics may be missing"],
+                recommendations=["Review missing fields and consider manual overrides"]
+            )
+
+        return UnifiedStep6Response(
+            status="partial" if not getattr(response, 'data_complete', False) else "success",
+            session_id=getattr(response, 'session_id', ''),
+            ticker=getattr(response, 'ticker', 'UNKNOWN'),
+            market="international",
+            method="DCF",
+            historical_financials=historical_financials,
+            forecast_drivers=forecast_drivers,
+            market_data=market_data,
+            dupont_metrics=None,
+            comps_multiples=None,
+            data_source="yfinance",
+            fetch_timestamp=datetime.now(),
+            cache_used=False,
+            periods_covered=[],
+            missing_data_summary=missing_summary,
+            data_quality_flags=[],
+            warnings=[],
+            message=getattr(response, 'message', "Data fetched successfully")
+        )
