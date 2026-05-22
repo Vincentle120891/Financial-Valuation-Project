@@ -153,9 +153,9 @@ class PeerDiscoveryService:
         for pas in relaxation_passes:
             if len(top_peers) >= request.max_peers:
                 break
-                
+
             logger.info(f"Running peer discovery pass: {pas['label']}")
-            
+
             # Determine market cap range for this pass
             market_cap_min = None
             market_cap_max = None
@@ -166,7 +166,7 @@ class PeerDiscoveryService:
                     mult_min, mult_max = pas["comps_mult"]
                 else:
                     mult_min, mult_max = pas["default_mult"]
-                
+
                 market_cap_min = target_market_cap * mult_min
                 market_cap_max = target_market_cap * mult_max
 
