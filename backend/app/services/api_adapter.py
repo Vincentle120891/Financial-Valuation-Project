@@ -175,12 +175,12 @@ class APIAdapter:
         for section in sections:
             if section in raw_data:
                 section_data = raw_data[section]
-                
+
                 # Handle info section (flat dict)
                 if section == "info" and isinstance(section_data, dict):
                     if source_key in section_data:
                         return section_data[source_key]
-                
+
                 # Handle financial statements (dict with timestamps as keys)
                 # Structure: {Timestamp: {metric_name: value, ...}, ...}
                 elif isinstance(section_data, dict):
@@ -243,6 +243,7 @@ class APIAdapter:
     def calculate_derived_metrics(self, fetched_data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Calculate metrics that have formulas based on fetched data.
+        Only calculates if all required dependencies are available.
         """
         calculated_results = {}
         data_values = {k: v["value"] for k, v in fetched_data.get("data", {}).items() if v.get("value") is not None}
@@ -258,11 +259,32 @@ class APIAdapter:
             formula = definition["calculation_formula"]
             try:
                 # Simple formula evaluation (in production, use safer eval or parser)
-                # Replace metric names with values
+                # Replace metric names with values - sort by length descending to avoid partial replacements
                 safe_formula = formula
-                for dep_metric in METRIC_REGISTRY.keys():
-                    if dep_metric in safe_formula and dep_metric in data_values:
-                        safe_formula = safe_formula.replace(dep_metric, str(data_values[dep_metric]))
+                sorted_metrics = sorted(METRIC_REGISTRY.keys(), key=len, reverse=True)
+
+                missing_deps = []
+                for dep_metric in sorted_metrics:
+                    if dep_metric in safe_formula:
+                        if dep_metric in data_values:
+                            # Use word boundary replacement to avoid partial matches
+                            import re
+                            pattern = r'\b' + re.escape(dep_metric) + r'\b'
+                            safe_formula = re.sub(pattern, str(data_values[dep_metric]), safe_formula)
+                        else:
+                            missing_deps.append(dep_metric)
+
+                # Skip calculation if any dependencies are missing
+                if missing_deps:
+                    logger.debug(f"Skipping calculation of {metric_id}: missing dependencies {missing_deps}")
+                    continue
+
+                # Verify no variable names remain in formula (should be all numbers now)
+                import re
+                remaining_vars = re.findall(r'\b[a-zA-Z_][a-zA-Z0-9_]*\b', safe_formula)
+                if remaining_vars:
+                    logger.warning(f"Cannot calculate {metric_id}: unresolved variables {remaining_vars} in formula '{formula}'")
+                    continue
 
                 calculated_value = eval(safe_formula)
 
