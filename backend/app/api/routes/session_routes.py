@@ -60,6 +60,12 @@ async def create_session(request: TickerSelectRequest):
         
         # Update session status from processor result
         session_service.update_session_data(session_id, "status", unified_response.status)
+        
+        # Update session with company_name and data_quality_score from Step 2 response
+        session_service.update_session_data(session_id, "company_name", unified_response.company_name)
+        session_service.update_session_data(session_id, "data_quality_score", unified_response.data_quality_score)
+        session_service.update_session_data(session_id, "confirmed", unified_response.confirmed)
+        session_service.update_session_data(session_id, "market", unified_response.market)
 
         # Return the unified response directly (with updated session_id)
         return unified_response
