@@ -12,7 +12,25 @@ class Step3SelectedModelsProcessor:
     
     def __init__(self, market: str):
         self.market = market
+        # Valid models with canonical casing
         self.valid_models = ['DCF', 'DuPont', 'Comps']
+        # Mapping from uppercase to canonical form
+        self.model_name_mapping = {
+            'DCF': 'DCF',
+            'DUPONT': 'DuPont',
+            'COMPS': 'Comps'
+        }
+    
+    def _normalize_model_name(self, model: str) -> str:
+        """Normalize model name to canonical form."""
+        model_upper = model.upper()
+        if model_upper == 'DCF':
+            return 'DCF'
+        elif model_upper == 'DUPONT':
+            return 'DuPont'
+        elif model_upper == 'COMPS':
+            return 'Comps'
+        return model  # Return as-is if not recognized
     
     def process_model_selection(self, selected_models: List[str]) -> Dict[str, Any]:
         """
@@ -24,13 +42,15 @@ class Step3SelectedModelsProcessor:
         Returns:
             Dictionary with validated models and metadata
         """
-        # Validate selected models
+        # Validate selected models (case-insensitive)
         validated_models = []
         invalid_models = []
         
         for model in selected_models:
-            if model in self.valid_models:
-                validated_models.append(model)
+            # Normalize to canonical form
+            normalized_model = self._normalize_model_name(model)
+            if normalized_model in self.valid_models:
+                validated_models.append(normalized_model)
             else:
                 invalid_models.append(model)
         
