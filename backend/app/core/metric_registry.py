@@ -29,7 +29,7 @@ METRIC_REGISTRY: Dict[str, Dict[str, Any]] = {
         "type": DataType.FLOAT,
         "unit": "currency",
         "sources": {
-            "yfinance": "total_revenue",
+            "yfinance": "Total Revenue",  # From financials index
             "alpha_vantage": "totalRevenue",
             "financial_modeling_prep": "revenue"
         },
@@ -42,7 +42,7 @@ METRIC_REGISTRY: Dict[str, Dict[str, Any]] = {
         "type": DataType.FLOAT,
         "unit": "currency",
         "sources": {
-            "yfinance": "operating_income",
+            "yfinance": "Operating Income",  # From financials index
             "alpha_vantage": "operatingIncome",
             "financial_modeling_prep": "operating_income"
         },
@@ -55,7 +55,7 @@ METRIC_REGISTRY: Dict[str, Dict[str, Any]] = {
         "type": DataType.FLOAT,
         "unit": "currency",
         "sources": {
-            "yfinance": "net_income",
+            "yfinance": "Net Income Common Stockholders",  # From financials index
             "alpha_vantage": "netIncome",
             "financial_modeling_prep": "net_income"
         },
@@ -68,13 +68,13 @@ METRIC_REGISTRY: Dict[str, Dict[str, Any]] = {
         "type": DataType.FLOAT,
         "unit": "currency",
         "sources": {
-            "yfinance": "ebitda",
-            "alpha_vantage": "ebitda", # Sometimes not direct
+            "yfinance": "EBITDA",  # From financials index
+            "alpha_vantage": "ebitda",
             "financial_modeling_prep": "ebitda"
         },
         "validation": {"min_value": None},
         "required_for_methods": ["DCF", "COMPS"],
-        "calculation_formula": "operating_income + depreciation_amortization" # Fallback logic
+        "calculation_formula": "operating_income + depreciation_amortization"  # Fallback logic
     },
     "depreciation_amortization": {
         "display_name": "Depreciation & Amortization",
@@ -82,14 +82,14 @@ METRIC_REGISTRY: Dict[str, Dict[str, Any]] = {
         "type": DataType.FLOAT,
         "unit": "currency",
         "sources": {
-            "yfinance": "depreciation_and_amortization",
+            "yfinance": "Reconciled Depreciation",  # From financials index
             "alpha_vantage": "depreciationAndAmortization",
             "financial_modeling_prep": "depreciation_and_amortization"
         },
         "validation": {"min_value": 0},
         "required_for_methods": ["DCF"]
     },
-    
+
     # --- Balance Sheet ---
     "total_assets": {
         "display_name": "Total Assets",
@@ -97,7 +97,7 @@ METRIC_REGISTRY: Dict[str, Dict[str, Any]] = {
         "type": DataType.FLOAT,
         "unit": "currency",
         "sources": {
-            "yfinance": "total_assets",
+            "yfinance": "Total Assets",  # From balance sheet index
             "alpha_vantage": "totalAssets",
             "financial_modeling_prep": "total_assets"
         },
@@ -110,7 +110,7 @@ METRIC_REGISTRY: Dict[str, Dict[str, Any]] = {
         "type": DataType.FLOAT,
         "unit": "currency",
         "sources": {
-            "yfinance": "total_liabilities_net_minority_interest",
+            "yfinance": "Total Liabilities Net Minority Interest",  # From balance sheet
             "alpha_vantage": "totalLiabilities",
             "financial_modeling_prep": "total_liabilities"
         },
@@ -123,7 +123,7 @@ METRIC_REGISTRY: Dict[str, Dict[str, Any]] = {
         "type": DataType.FLOAT,
         "unit": "currency",
         "sources": {
-            "yfinance": "total_stockholder_equity",
+            "yfinance": "Stockholders Equity",  # From balance sheet
             "alpha_vantage": "totalShareholderEquity",
             "financial_modeling_prep": "total_equity"
         },
@@ -136,7 +136,7 @@ METRIC_REGISTRY: Dict[str, Dict[str, Any]] = {
         "type": DataType.FLOAT,
         "unit": "currency",
         "sources": {
-            "yfinance": "cash_and_cash_equivalents",
+            "yfinance": "Cash And Cash Equivalents",  # From balance sheet
             "alpha_vantage": "cashAndCashEquivalents",
             "financial_modeling_prep": "cash_and_short_term_investments"
         },
@@ -149,7 +149,7 @@ METRIC_REGISTRY: Dict[str, Dict[str, Any]] = {
         "type": DataType.FLOAT,
         "unit": "currency",
         "sources": {
-            "yfinance": "total_debt", # Might need sum of short/long term
+            "yfinance": "Total Debt",  # From balance sheet
             "alpha_vantage": "totalDebt",
             "financial_modeling_prep": "total_debt"
         },
@@ -165,7 +165,7 @@ METRIC_REGISTRY: Dict[str, Dict[str, Any]] = {
         "type": DataType.FLOAT,
         "unit": "currency",
         "sources": {
-            "yfinance": "operating_cash_flow",
+            "yfinance": "Operating Cash Flow",  # From cash flow
             "alpha_vantage": "operatingCashflow",
             "financial_modeling_prep": "operating_cash_flow"
         },
@@ -178,7 +178,7 @@ METRIC_REGISTRY: Dict[str, Dict[str, Any]] = {
         "type": DataType.FLOAT,
         "unit": "currency",
         "sources": {
-            "yfinance": "capital_expenditure",
+            "yfinance": "Capital Expenditure",  # From cash flow
             "alpha_vantage": "capitalExpenditure",
             "financial_modeling_prep": "capital_expenditure"
         },
@@ -192,7 +192,7 @@ METRIC_REGISTRY: Dict[str, Dict[str, Any]] = {
         "type": DataType.FLOAT,
         "unit": "currency",
         "sources": {
-            "yfinance": "free_cash_flow",
+            "yfinance": "Free Cash Flow",  # From cash flow
             "alpha_vantage": "freeCashflow",
             "financial_modeling_prep": "free_cash_flow"
         },
@@ -208,7 +208,7 @@ METRIC_REGISTRY: Dict[str, Dict[str, Any]] = {
         "type": DataType.FLOAT,
         "unit": "currency",
         "sources": {
-            "yfinance": "market_cap",
+            "yfinance": "marketCap",  # From info dict
             "alpha_vantage": "marketCapitalization",
             "financial_modeling_prep": "market_cap"
         },
@@ -221,7 +221,7 @@ METRIC_REGISTRY: Dict[str, Dict[str, Any]] = {
         "type": DataType.FLOAT,
         "unit": "shares",
         "sources": {
-            "yfinance": "shares_outstanding",
+            "yfinance": "sharesOutstanding",  # From info dict
             "alpha_vantage": "sharesOutstanding",
             "financial_modeling_prep": "shares_outstanding"
         },
@@ -234,7 +234,7 @@ METRIC_REGISTRY: Dict[str, Dict[str, Any]] = {
         "type": DataType.FLOAT,
         "unit": "currency",
         "sources": {
-            "yfinance": "current_price",
+            "yfinance": "currentPrice",  # From info dict
             "alpha_vantage": "price",
             "financial_modeling_prep": "price"
         },
@@ -249,7 +249,7 @@ METRIC_REGISTRY: Dict[str, Dict[str, Any]] = {
         "type": DataType.FLOAT,
         "unit": "ratio",
         "sources": {
-            "yfinance": "trailing_pe",
+            "yfinance": "trailingPE",  # From info dict
             "alpha_vantage": "pe_ratio",
             "financial_modeling_prep": "price_earnings_ratio"
         },
@@ -263,7 +263,7 @@ METRIC_REGISTRY: Dict[str, Dict[str, Any]] = {
         "type": DataType.FLOAT,
         "unit": "ratio",
         "sources": {
-            "yfinance": "price_to_book",
+            "yfinance": "priceToBook",  # From info dict
             "alpha_vantage": "pb_ratio",
             "financial_modeling_prep": "price_to_book_ratio"
         },
@@ -277,7 +277,7 @@ METRIC_REGISTRY: Dict[str, Dict[str, Any]] = {
         "type": DataType.PERCENTAGE,
         "unit": "percent",
         "sources": {
-            "yfinance": "return_on_equity",
+            "yfinance": "returnOnEquity",  # From info dict
             "alpha_vantage": "roe",
             "financial_modeling_prep": "return_on_equity"
         },
@@ -291,7 +291,7 @@ METRIC_REGISTRY: Dict[str, Dict[str, Any]] = {
         "type": DataType.PERCENTAGE,
         "unit": "percent",
         "sources": {
-            "yfinance": "return_on_assets",
+            "yfinance": "returnOnAssets",  # From info dict
             "alpha_vantage": "roa",
             "financial_modeling_prep": "return_on_assets"
         },
@@ -305,7 +305,7 @@ METRIC_REGISTRY: Dict[str, Dict[str, Any]] = {
         "type": DataType.PERCENTAGE,
         "unit": "percent",
         "sources": {
-            "yfinance": "profit_margin",
+            "yfinance": "profitMargins",  # From info dict
             "alpha_vantage": "net_profit_margin",
             "financial_modeling_prep": "net_profit_margin"
         },
@@ -319,7 +319,7 @@ METRIC_REGISTRY: Dict[str, Dict[str, Any]] = {
         "type": DataType.FLOAT,
         "unit": "ratio",
         "sources": {
-            "yfinance": "asset_turnover", # Not always direct
+            "yfinance": "assetTurnover",  # Not always direct
             "alpha_vantage": "asset_turnover",
             "financial_modeling_prep": "asset_turnover"
         },
@@ -337,7 +337,7 @@ METRIC_REGISTRY: Dict[str, Dict[str, Any]] = {
         "required_for_methods": ["DuPont"],
         "calculation_formula": "total_assets / total_equity"
     },
-    
+
     # --- Forecast Inputs (Step 8) ---
     "revenue_growth_rate": {
         "display_name": "Revenue Growth Rate",
@@ -418,13 +418,13 @@ def get_source_key(metric_id: str, provider: str) -> Optional[str]:
 def get_required_metrics_for_method(method: str) -> List[str]:
     """Get list of metric IDs required for a specific valuation method."""
     return [
-        mid for mid, data in METRIC_REGISTRY.items() 
+        mid for mid, data in METRIC_REGISTRY.items()
         if method in data.get("required_for_methods", [])
     ]
 
 def get_calculated_metrics() -> List[str]:
     """Get list of metrics that have calculation formulas."""
     return [
-        mid for mid, data in METRIC_REGISTRY.items() 
+        mid for mid, data in METRIC_REGISTRY.items()
         if "calculation_formula" in data
     ]
