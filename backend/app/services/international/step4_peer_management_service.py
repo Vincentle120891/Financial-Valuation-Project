@@ -52,21 +52,23 @@ class Step4PeerManagementService:
         peers: List[Dict[str, Any]]
     ) -> Dict[str, Any]:
         """
-        Save selected peers to session and fetch their market data.
+        Save selected peers to session with BASIC INFO ONLY for UI display.
+        
+        CRITICAL CHANGE: Do NOT fetch expensive WACC data (Beta, Cost of Debt, Tax Rate) here.
+        WACC data will be fetched in Step 10 when actually running valuation calculations.
         
         Workflow:
         1. Extract peer tickers from peer objects
         2. Validate tickers
-        3. Save peer tickers and objects to session
-        4. Fetch market data for each peer from yfinance
-        5. Store peer data in session for Step 6 retrieval
+        3. Save peer tickers and basic info to session (ticker, name, sector, industry, market_cap)
+        4. Return basic peer list for UI display
         
         Args:
             session_id: Session identifier
             peers: List of peer company objects with symbol/ticker
             
         Returns:
-            Dictionary with status, message, and count of peers saved
+            Dictionary with status, message, count of peers saved, and peer_list (basic info only)
             
         Raises:
             HTTPException: If session not found or no valid tickers provided
@@ -89,45 +91,29 @@ class Step4PeerManagementService:
         session_service.update_session_data(session_id, "peer_tickers", peer_tickers)
         session_service.update_session_data(session_id, "selected_peers", peers)
         
-        # Fetch market data for each peer
-        logger.info(f"Fetching market data for {len(peer_tickers)} peers: {peer_tickers}")
-        peer_data = {}
-        successful_fetches = 0
-        failed_fetches = 0
+        # Build peer_list with BASIC INFO ONLY for UI display (Step 4-5)
+        # DO NOT fetch expensive WACC data here - that happens in Step 10
+        peer_list = []
+        for peer in peers:
+            peer_list.append({
+                "ticker": peer.get('symbol') or peer.get('ticker'),
+                "name": peer.get('name') or peer.get('company_name'),
+                "sector": peer.get('sector'),
+                "industry": peer.get('industry'),
+                "market_cap": peer.get('market_cap') or peer.get('marketCap'),
+                "similarity_score": peer.get('similarity_score') or peer.get('score', 0)
+            })
         
-        for ticker in peer_tickers:
-            result = self._fetch_peer_market_data(ticker)
-            
-            if result.error:
-                failed_fetches += 1
-                logger.warning(f"Failed to fetch data for peer {ticker}: {result.error}")
-            else:
-                successful_fetches += 1
-                logger.info(
-                    f"Fetched data for peer {ticker}: "
-                    f"marketCap={result.data.get('marketCap')}, "
-                    f"beta={result.data.get('beta')}, "
-                    f"costOfDebt={result.data.get('costOfDebt')}"
-                )
-            
-            # Store in format expected by step6: peer_{TICKER}_info
-            # The 5 key WACC inputs per peer: Beta, Market Cap, Cost of Debt, Tax Rate, Risk-free Rate (global)
-            peer_data[f"peer_{ticker}_info"] = result.data
+        # Store basic peer list in session for Step 5 requirements check
+        session_service.update_shared_context(session_id, "peer_list", peer_list)
         
-        # Also store list of peers for easy access
-        peer_data['peers'] = peer_tickers
-        
-        # Save all peer data to session using shared_context (Step 3 data)
-        # This ensures it's accessible by Step 6 via get_session_value
-        session_service.update_shared_context(session_id, "retrieved_assumptions", peer_data)
+        logger.info(f"Saved {len(peer_tickers)} peers with basic info for UI display: {peer_tickers}")
         
         return {
             "status": "success",
-            "message": f"Saved {len(peer_tickers)} peers and fetched market data",
+            "message": f"Saved {len(peer_tickers)} peers with basic info",
             "peers_saved": len(peer_tickers),
-            "successful_fetches": successful_fetches,
-            "failed_fetches": failed_fetches,
-            "peer_data": peer_data
+            "peer_list": peer_list  # Basic info for UI, NOT full WACC data
         }
     
     def _fetch_peer_market_data(self, ticker: str) -> PeerDataResult:
