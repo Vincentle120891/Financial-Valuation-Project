@@ -42,8 +42,19 @@ STRATEGY PATTERN IMPLEMENTATION:
 import logging
 from typing import Dict, Any, Optional, List, Protocol
 from datetime import datetime
+from functools import lru_cache
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 
 logger = logging.getLogger(__name__)
+
+# Thread pool for running synchronous yfinance calls without blocking the event loop
+_executor = ThreadPoolExecutor(max_workers=10)
+
+
+def run_in_executor(func, *args):
+    """Run a synchronous function in a thread pool executor."""
+    return asyncio.get_event_loop().run_in_executor(_executor, func, *args)
 
 
 # === Strategy Pattern Interface ===
@@ -566,6 +577,11 @@ def get_data_strategy(market: str, enable_alphavantage_fallback: bool = True) ->
 
 class YFinanceService:
     """Service for fetching financial data from yfinance with AlphaVantage fallback."""
+    
+    # Simple in-memory cache for ticker info to prevent duplicate network calls
+    _ticker_info_cache: Dict[str, Dict[str, Any]] = {}
+    _key_stats_cache: Dict[str, Dict[str, Any]] = {}
+    CACHE_TTL_SECONDS = 300  # 5 minutes
 
     def __init__(self, enable_alphavantage_fallback: bool = True):
         self.ticker = None
@@ -588,6 +604,19 @@ class YFinanceService:
         Returns:
             Dictionary containing key stats (marketCap, beta, totalDebt, cash, effectiveTaxRate, costOfDebt)
         """
+        import time
+        
+        # Check cache first
+        cache_key = ticker_symbol.upper()
+        if cache_key in self._key_stats_cache:
+            cached_data, timestamp = self._key_stats_cache[cache_key]
+            if time.time() - timestamp < self.CACHE_TTL_SECONDS:
+                logger.debug(f"Cache hit for key stats '{ticker_symbol}'")
+                return cached_data
+            else:
+                # Cache expired, remove it
+                del self._key_stats_cache[cache_key]
+        
         import yfinance as yf
 
         try:
@@ -597,7 +626,7 @@ class YFinanceService:
 
             if not info:
                 logger.warning(f"No info returned for {ticker_symbol}")
-                return {
+                result = {
                     'marketCap': None,
                     'beta': None,
                     'totalDebt': None,
@@ -605,6 +634,8 @@ class YFinanceService:
                     'effectiveTaxRate': None,
                     'costOfDebt': None,
                 }
+                self._key_stats_cache[cache_key] = (result, time.time())
+                return result
 
             # Helper to sanitize values
             def sanitize_value(val):
@@ -678,7 +709,7 @@ class YFinanceService:
             except Exception as e:
                 logger.debug(f"Could not calculate tax rate or cost of debt for {ticker_symbol}: {e}")
 
-            return {
+            result = {
                 'marketCap': sanitize_value(info.get('marketCap')),
                 'beta': sanitize_value(info.get('beta', 1.0)),
                 'totalDebt': sanitize_value(info.get('totalDebt') or info.get('TotalDebt')),
@@ -686,10 +717,14 @@ class YFinanceService:
                 'effectiveTaxRate': effective_tax_rate,
                 'costOfDebt': cost_of_debt,
             }
+            
+            # Store in cache
+            self._key_stats_cache[cache_key] = (result, time.time())
+            return result
 
         except Exception as e:
             logger.error(f"Error fetching key stats for '{ticker_symbol}': {str(e)}")
-            return {
+            error_result = {
                 'marketCap': None,
                 'beta': None,
                 'totalDebt': None,
@@ -698,6 +733,8 @@ class YFinanceService:
                 'costOfDebt': None,
                 'error': str(e)
             }
+            self._key_stats_cache[cache_key] = (error_result, time.time())
+            return error_result
 
     def fetch_all_data(self, ticker_symbol: str, market: str = "international") -> Dict[str, Any]:
         """
@@ -1384,6 +1421,19 @@ class YFinanceService:
         Returns:
             Dictionary with ticker info or None if not found
         """
+        import time
+        
+        # Check cache first
+        cache_key = ticker.upper()
+        if cache_key in self._ticker_info_cache:
+            cached_data, timestamp = self._ticker_info_cache[cache_key]
+            if time.time() - timestamp < self.CACHE_TTL_SECONDS:
+                logger.debug(f"Cache hit for ticker info '{ticker}'")
+                return cached_data
+            else:
+                # Cache expired, remove it
+                del self._ticker_info_cache[cache_key]
+        
         import yfinance as yf
 
         try:
@@ -1394,7 +1444,7 @@ class YFinanceService:
             if not info:
                 return None
 
-            return {
+            result = {
                 'symbol': info.get('symbol', ticker),
                 'shortName': info.get('shortName', ''),
                 'longName': info.get('longName', ''),
@@ -1420,6 +1470,10 @@ class YFinanceService:
                 'enterpriseToRevenue': info.get('enterpriseToRevenue'),
                 'priceToSalesTrailing12Months': info.get('priceToSalesTrailing12Months'),
             }
+            
+            # Store in cache
+            self._ticker_info_cache[cache_key] = (result, time.time())
+            return result
 
         except Exception as e:
             logger.error(f"Error getting ticker info for '{ticker}': {str(e)}")
