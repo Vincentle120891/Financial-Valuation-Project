@@ -48,6 +48,11 @@ from app.api.schemas.unified_step_schemas import (
     MarketType,
     ValuationMethod
 )
+
+# Import Step 4 method-specific discovery services
+from app.services.international.step4_dcf_discovery import process as dcf_discover_peers
+from app.services.international.step4_dupont_discovery import process as dupont_discover_peers
+from app.services.international.step4_comps_discovery import process as comps_discover_peers
 from app.services.international.step8_manual_overrides import FullAssumptionsResponse
 from app.services.international.step5_required_inputs_processor import Step5RequiredInputsProcessor
 from app.services.international.step3_selected_models_processor import Step3SelectedModelsProcessor
@@ -125,10 +130,20 @@ async def save_peers(request: SavePeersRequest):
 
 
 @router.post("/step-4-discover-peers", response_model=Dict[str, Any])
-async def discover_peers_endpoint(session_id: str, ticker: str, max_peers: int = 10, market: str = "international"):
+async def discover_peers_endpoint(
+    session_id: str,
+    ticker: str,
+    max_peers: int = 10,
+    market: str = "international",
+    method: Optional[str] = None
+):
     """
     Step 4: Discover peer companies automatically.
-    Delegates to PeerDiscoveryService for peer discovery logic.
+    Routes to method-specific discovery service based on valuation method.
+
+    - DCF: Discovers peers based on sector/industry/market cap
+    - DuPont: Returns empty/minimal peers (optional for this method)
+    - Comps: Enforces strict sector/industry peer discovery (mandatory)
     """
     try:
         # Validate session exists
@@ -136,35 +151,53 @@ async def discover_peers_endpoint(session_id: str, ticker: str, max_peers: int =
         if not session:
             raise HTTPException(status_code=404, detail="Session not found")
 
-        # Get target company info from session or yfinance
-        target_sector = session.get("sector")
-        target_industry = session.get("industry")
-        target_market_cap = session.get("marketCap")
+        # Get method from parameter or session (fallback to session if not provided)
+        valuation_method = method or session.get("method")
 
-        # Delegate to PeerDiscoveryService
-        discovery_request = PeerDiscoveryRequest(
-            target_ticker=ticker,
-            target_sector=target_sector,
-            target_industry=target_industry,
-            target_market_cap=target_market_cap,
-            max_peers=max_peers,
-            market=market
-        )
+        if not valuation_method:
+            raise HTTPException(
+                status_code=400,
+                detail="Method must be provided either as parameter or stored in session"
+            )
 
-        discovery_response = await peer_discovery_service.discover_peers(discovery_request)
+        valuation_method = valuation_method.lower()
 
-        # Convert peers to dict format for frontend
-        peers_dict = [peer.dict() for peer in discovery_response.peers]
+        # Route to appropriate discovery service based on method
+        if valuation_method == "dcf":
+            discovery_result = dcf_discover_peers(
+                session_id=session_id,
+                ticker=ticker,
+                market=market,
+                max_peers=max_peers
+            )
+        elif valuation_method == "dupont":
+            discovery_result = dupont_discover_peers(
+                session_id=session_id,
+                ticker=ticker,
+                market=market,
+                max_peers=max_peers
+            )
+        elif valuation_method == "comps":
+            discovery_result = comps_discover_peers(
+                session_id=session_id,
+                ticker=ticker,
+                market=market,
+                max_peers=max_peers
+            )
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid valuation method: {valuation_method}. Must be 'dcf', 'dupont', or 'comps'"
+            )
 
+        # Return method-specific discovery result
         return {
             "status": "success",
             "session_id": session_id,
-            "target_ticker": ticker,
-            "discovered_peers": peers_dict,
-            "total_found": discovery_response.total_found,
-            "search_criteria": discovery_response.search_criteria,
-            "warnings": discovery_response.warnings
+            "method": valuation_method,
+            **discovery_result
         }
+
     except HTTPException:
         raise
     except Exception as e:
