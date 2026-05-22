@@ -110,7 +110,7 @@ async def save_peers(request: SavePeersRequest):
             session_id=request.session_id,
             peers=request.peers
         )
-        
+
         return SavePeersResponse(
             status=result["status"],
             message=result["message"],
@@ -213,14 +213,14 @@ async def select_models(request: UnifiedStep4Request):
 
         # Delegate to Step3SelectedModelsProcessor for model validation
         model_result = step3_processor.process_model_selection([method])
-        
+
         if not model_result['is_valid']:
             raise HTTPException(status_code=400, detail=f"Invalid model selected: {model_result['invalid_models']}")
 
         # Save peer tickers to session (may be empty if peers not yet discovered)
         if selected_peers:
             session_service.update_session_data(request.session_id, "peer_tickers", selected_peers)
-        
+
         # Build peer company objects with available data (only if peers were provided)
         peer_companies = []
         for peer_ticker in selected_peers:
@@ -301,11 +301,11 @@ async def prepare_assumptions(request: UnifiedStep5Request):
         categories = []
         total_fields = 0
         missing_fields = []
-        
+
         for group_name, fields in result.retrieval_groups.items():
             assumptions_dict = {}
             requires_input = False
-            
+
             for field in fields:
                 total_fields += 1
                 assumptions_dict[field.field_name] = DataField(
@@ -319,7 +319,7 @@ async def prepare_assumptions(request: UnifiedStep5Request):
                 if field.is_required:
                     requires_input = True
                     missing_fields.append(f"{group_name}.{field.field_name}")
-            
+
             categories.append(AssumptionCategory(
                 category_name=group_name,
                 assumptions=assumptions_dict,
@@ -379,7 +379,7 @@ async def fetch_api_data(request: FetchDataRequest):
     - APIAdapter: Handles fetching, mapping, normalizing, and validating data
     - MetricRegistry: Centralized field mappings and validation rules
     - ValidationMiddleware: Pre-save validation with outlier detection
-    
+
     MATRIX WORKFLOW:
     - Uses market/method from request parameters (REQUIRED - no fallback)
     - Stores financial data in the specific valuation track
@@ -401,50 +401,50 @@ async def fetch_api_data(request: FetchDataRequest):
             raise HTTPException(status_code=400, detail="Method parameter is required")
 
         method = request.method.upper()
-        
+
         # Create validation middleware for this method
         validator = create_validation_middleware(method)
-        
+
         # Use new APIAdapter for robust data fetching and processing
         all_tickers = [ticker] + peer_tickers if peer_tickers else [ticker]
-        
+
         logger.info(f"Processing {len(all_tickers)} tickers using APIAdapter")
-        
+
         # Process all tickers through the adapter pipeline
         adapter_result = process_multiple_tickers(all_tickers, method)
-        
+
         # Extract company data and peer data
         company_data = adapter_result["individual_results"].get(ticker, {})
         peer_averages = adapter_result.get("peer_averages", {})
         individual_results = adapter_result["individual_results"]
-        
+
         # Validate the fetched data before saving
         validation_report = validator.validate_complete_dataset({
             "data": company_data.get("data", {}),
             "peer_data": {k: v.get("data", {}) for k, v in individual_results.items() if k != ticker}
         })
-        
+
         logger.info(f"Validation report for {ticker}: {validation_report['status']}, completeness: {validation_report['completeness_score']:.2f}")
-        
+
         # Build structured data with status tracking
         structured_data = {}
         missing_inputs = []
-        
+
         for metric_id, metric_info in company_data.get("data", {}).items():
             structured_data[metric_id] = metric_info
-        
+
         for metric_id in company_data.get("missing", []):
             missing_inputs.append({
                 "metric_id": metric_id,
                 "company": ticker,
                 "required_for_method": method
             })
-        
+
         # Add peer averages
         for metric_id, avg_info in peer_averages.items():
             if metric_id not in structured_data:
                 structured_data[metric_id] = avg_info
-        
+
         # Prepare response data
         data_for_response = {
             "data": structured_data,
@@ -453,17 +453,35 @@ async def fetch_api_data(request: FetchDataRequest):
             "peer_averages": peer_averages,
             "completeness": adapter_result.get("completeness", 0)
         }
-        
+
         # Transform to unified schema using existing transformer
+        # Build a proper legacy response object with all required attributes
         legacy_result = type('obj', (object,), {
+            'ticker': ticker,
+            'session_id': request.session_id,
+            'timestamp': datetime.now(),
+            'valuation_model': method,
+            'historical_financials': None,
+            'forecast_drivers': None,
+            'market_data': None,
+            'peer_comparables': None,
+            'calculated_metrics': None,
+            'missing_data_summary': type('summary', (object,), {
+                'critical_missing': [m['metric_id'] for m in missing_inputs],
+                'optional_missing': [],
+                'total_missing': len(missing_inputs)
+            })(),
+            'manual_overrides_applied': {},
+            'data_complete': validation_report.get('status') == 'COMPLETE',
+            'message': f"Fetched {len(structured_data)} metrics for {ticker}",
             'model_dump': lambda mode='json': data_for_response
         })()
-        
+
         unified_response = Step6UnifiedTransformer.transform_any_response(
             response=legacy_result,
             valuation_model=method
         )
-        
+
         # Store results in session using SessionService
         result_dict = unified_response.model_dump(mode='json') if hasattr(unified_response, 'model_dump') else unified_response
         session_service.update_session_data(
@@ -629,7 +647,7 @@ async def upload_pdf_for_step7(
 
         # Read file content
         content = await file.read()
-        
+
         # Delegate to service layer
         result = step7_enrichment_service.extract_from_pdf(
             session_id=session_id,
@@ -638,7 +656,7 @@ async def upload_pdf_for_step7(
             method=method,
             market=market
         )
-        
+
         return result
 
     except HTTPException:
@@ -689,7 +707,7 @@ async def ai_web_search_for_step7(
             method=method,
             market=market
         )
-        
+
         return result
 
     except HTTPException:
@@ -876,9 +894,9 @@ async def generate_ai_suggestion(request: GenerateAISuggestionRequest):
 async def confirm_assumptions(request: ConfirmAssumptionsRequest):
     """
     Step 9: Confirmation Processing - Consolidates Steps 6-8 inputs for Step 10.
-    
+
     Uses Step9ConfirmationProcessor to:
-    1. Receive all inputs from Step 6 (historical financials), Step 7 (gap-filled data), 
+    1. Receive all inputs from Step 6 (historical financials), Step 7 (gap-filled data),
        and Step 8 (manual overrides + AI suggestions)
     2. Process and validate all confirmed parameters
     3. Build model-specific inputs exclusively for Step 10
@@ -940,7 +958,7 @@ async def confirm_assumptions(request: ConfirmAssumptionsRequest):
 
         if not step8_final_inputs:
             raise HTTPException(
-                status_code=400, 
+                status_code=400,
                 detail="No Step 8 confirmed assumptions found. Please complete Step 8 first."
             )
 
@@ -1006,12 +1024,12 @@ async def confirm_assumptions(request: ConfirmAssumptionsRequest):
 async def valuate(request: ValuateRequest):
     """
     Step 10: Final Valuation - Uses ONLY Step 9 outputs.
-    
+
     CRITICAL WORKFLOW CONSTRAINT:
     - Step 10 CANNOT access Step 6, 7, or 8 data directly
     - Step 10 receives inputs EXCLUSIVELY from Step 9 confirmed outputs
     - This ensures strict workflow order and proper confirmation/override processing
-    
+
     Uses SessionService for session management and Step10ValuationProcessor for comprehensive multi-model valuation.
 
     MATRIX WORKFLOW:
@@ -1052,7 +1070,7 @@ async def valuate(request: ValuateRequest):
 
         if not step9_confirmed_outputs:
             raise HTTPException(
-                status_code=400, 
+                status_code=400,
                 detail="No Step 9 confirmed outputs available. Please complete Step 9 confirmation first."
             )
 
@@ -1061,7 +1079,7 @@ async def valuate(request: ValuateRequest):
         model_specific_inputs = step9_confirmed_outputs.get('model_specific_inputs', {})
         historical_summary = step9_confirmed_outputs.get('historical_financials_summary', {})
         market_context = step9_confirmed_outputs.get('market_context', {})
-        
+
         # Build consolidated assumptions dict for Step 10 processor
         # Combining Step 9 outputs into format expected by Step 10 engines
         confirmed_assumptions = {
