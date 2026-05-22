@@ -8,12 +8,12 @@ __pycache__/
 venv/
 node_modules/
 
-# Logs and temp files
+# Logs and temporary files
 *.log
 *.tmp
 *.swp
 
-# Environment
+# Environment files
 .env
 .env.local
 *.env.*
@@ -22,15 +22,15 @@ node_modules/
 .vscode/
 .idea/
 
+# Coverage reports
+coverage/
+htmlcov/
+.coverage
+
 # Build artifacts
 dist/
 build/
 target/
-
-# Coverage reports
-.coverage
-coverage/
-htmlcov/
 
 # Python cache
 .mypy_cache/
