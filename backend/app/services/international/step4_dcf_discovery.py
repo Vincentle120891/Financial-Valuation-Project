@@ -1,10 +1,12 @@
 """
-Step 4: Comps Peer Discovery Service (International Market)
+Step 4: DCF Peer Discovery Service (International Market)
 
-Trading Comparables relies ENTIRELY on peer multiples.
-Peer discovery is MANDATORY and strict.
+DCF Analysis requires peer comparison for:
+- Beta calculation (levered/unlevered)
+- Terminal value benchmarking
+- WACC component validation
 
-Market Cap Range for COMPS: 30% - 300% of target (wider range for M&A comparables)
+Market Cap Range for DCF: 50% - 200% of target (tighter range for similar cash flow profiles)
 """
 from typing import Dict, Any, List, Optional
 import asyncio
@@ -14,13 +16,13 @@ from app.services.international.yfinance_service import YFinanceService
 
 def process(session_id: str, ticker: str, market: str, max_peers: int = 5) -> Dict[str, Any]:
     """
-    For Comps, we enforce strict sector/industry peer discovery.
-    Returns 5-10 high-confidence peers in the same industry.
+    For DCF, we discover peers based on sector/industry/market cap.
+    Returns 5-10 peers for beta and valuation benchmarking.
     
-    COMPS-specific criteria:
-    - Market cap range: 30% - 300% of target (wider range for M&A analysis)
-    - Focus on companies suitable for multiple comparison
-    - Bonus for potential acquisition targets (<150% market cap)
+    DCF-specific criteria:
+    - Market cap range: 50% - 200% of target (tighter range)
+    - Focus on companies with similar cash flow profiles
+    - Bonus for similar growth stage (70%-140% market cap ratio)
     """
     try:
         # Initialize services
@@ -32,7 +34,7 @@ def process(session_id: str, ticker: str, market: str, max_peers: int = 5) -> Di
         if not ticker_info:
             return {
                 "suggested_peers": [],
-                "method": "comps",
+                "method": "dcf",
                 "message": f"Could not retrieve information for {ticker}.",
                 "peer_count": 0,
                 "error": "Failed to fetch target company info"
@@ -45,13 +47,13 @@ def process(session_id: str, ticker: str, market: str, max_peers: int = 5) -> Di
         if not sector or not industry:
             return {
                 "suggested_peers": [],
-                "method": "comps",
+                "method": "dcf",
                 "message": f"Could not determine sector/industry for {ticker}. Manual peer selection required.",
                 "peer_count": 0,
                 "warning": "Missing sector/industry data"
             }
         
-        # Create discovery request with COMPS-specific parameters
+        # Create discovery request with DCF-specific parameters
         discovery_request = PeerDiscoveryRequest(
             target_ticker=ticker,
             target_sector=sector,
@@ -59,7 +61,7 @@ def process(session_id: str, ticker: str, market: str, max_peers: int = 5) -> Di
             target_market_cap=market_cap,
             max_peers=max_peers,
             market=market,
-            method="COMPS"  # Critical: triggers COMPS-specific market cap ranges
+            method="DCF"  # Critical: triggers DCF-specific market cap ranges
         )
         
         # Run async discovery
@@ -89,11 +91,11 @@ def process(session_id: str, ticker: str, market: str, max_peers: int = 5) -> Di
         
         return {
             "suggested_peers": suggested_peers,
-            "method": "comps",
-            "message": f"Found {len(suggested_peers)} peers in {sector} - {industry}",
+            "method": "dcf",
+            "message": f"Found {len(suggested_peers)} DCF peers in {sector} - {industry}",
             "peer_count": len(suggested_peers),
-            "mandatory": True,  # COMPS requires peers
-            "min_peers_required": 3,
+            "mandatory": False,  # DCF can proceed without peers but recommended
+            "min_peers_recommended": 3,
             "sector": sector,
             "industry": industry,
             "target_market_cap": market_cap,
@@ -103,8 +105,8 @@ def process(session_id: str, ticker: str, market: str, max_peers: int = 5) -> Di
     except Exception as e:
         return {
             "suggested_peers": [],
-            "method": "comps",
-            "message": f"Error discovering peers: {str(e)}",
+            "method": "dcf",
+            "message": f"Error discovering DCF peers: {str(e)}",
             "peer_count": 0,
             "error": str(e)
         }
