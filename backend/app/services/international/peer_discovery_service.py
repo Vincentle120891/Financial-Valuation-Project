@@ -379,28 +379,32 @@ class PeerDiscoveryService:
         queries = []
 
         # Map common industry terms to better search keywords
+        # Priority: Use broad terms that yfinance actually returns results for
         industry_mappings = {
-            'auto manufacturers': ['Auto Manufacturers', 'Automotive', 'Car Manufacturers', 'Vehicle Manufacturers'],
-            'automotive': ['Auto Manufacturers', 'Automotive', 'Car Manufacturers', 'EV'],
-            'drug manufacturers': ['Pharma', 'Drugs', 'Pharmaceuticals'],
-            'software': ['Software', 'Technology'],
-            'semiconductors': ['Semiconductor', 'Chips', 'Semis'],
-            'biotechnology': ['Biotech', 'Biotechnology'],
-            'oil & gas': ['Oil', 'Gas', 'Energy'],
-            'banks': ['Bank', 'Banking'],
+            'auto manufacturers': ['Auto', 'Automotive', 'Cars', 'EV', 'Electric Vehicles'],
+            'automotive': ['Auto', 'Automotive', 'Cars', 'EV', 'Electric Vehicles'],
+            'drug manufacturers': ['Pharma', 'Pharmaceuticals', 'Biotech'],
+            'software': ['Software', 'Technology', 'Computer'],
+            'semiconductors': ['Semiconductor', 'Chips', 'Electronics'],
+            'biotechnology': ['Biotech', 'Biotechnology', 'Life Sciences'],
+            'oil & gas': ['Oil', 'Gas', 'Energy', 'Petroleum'],
+            'banks': ['Bank', 'Banking', 'Financial'],
             'insurance': ['Insurance'],
-            'retail': ['Retail', 'Stores'],
-            'restaurants': ['Restaurant', 'Food'],
-            'aerospace & defense': ['Aerospace', 'Defense', 'Aviation'],
-            'telecom services': ['Telecom', 'Communication'],
-            'utilities': ['Utilities', 'Electric', 'Power'],
+            'retail': ['Retail', 'Stores', 'E-commerce'],
+            'restaurants': ['Restaurant', 'Food', 'Dining'],
+            'aerospace & defense': ['Aerospace', 'Defense', 'Aviation', 'Airlines'],
+            'telecom services': ['Telecom', 'Communication', 'Wireless'],
+            'utilities': ['Utilities', 'Electric', 'Power', 'Water'],
             'real estate': ['Real Estate', 'REIT', 'Property'],
-            'consumer electronics': ['Electronics', 'Consumer'],
-            'apparel manufacturing': ['Apparel', 'Clothing', 'Fashion'],
+            'consumer electronics': ['Electronics', 'Technology', 'Consumer'],
+            'apparel manufacturing': ['Apparel', 'Clothing', 'Fashion', 'Textile'],
             'footwear & accessories': ['Footwear', 'Shoes', 'Apparel'],
-            'auto parts': ['Auto Parts', 'Automotive Parts', 'Car Parts'],
-            'recreational vehicles': ['RV', 'Recreational Vehicles', 'Motorcycles'],
-            'farm & heavy construction machinery': ['Heavy Machinery', 'Construction Equipment', 'Farm Equipment'],
+            'auto parts': ['Auto Parts', 'Automotive', 'Auto'],
+            'recreational vehicles': ['RV', 'Recreational', 'Motorcycles', 'Leisure'],
+            'farm & heavy construction machinery': ['Machinery', 'Construction', 'Equipment', 'Industrial'],
+            'home improvement retail': ['Home Improvement', 'Retail', 'Building'],
+            'internet retail': ['Internet', 'E-commerce', 'Retail', 'Technology'],
+            'specialty retail': ['Retail', 'Specialty', 'Stores'],
         }
 
         keyword_lower = keyword.lower().strip()
@@ -560,10 +564,10 @@ class PeerDiscoveryService:
                     score += 30
                     match_reasons.append("Similar industry")
                 else:
-                    # STRICT FILTERING: Skip companies from unrelated industries
-                    # Only allow sector-level match if no industry relationship exists
-                    logger.debug(f"Skipping {candidate.get('symbol')}: industry '{cand_industry}' not related to '{target_industry_lower}'")
-                    # Don't add score for unrelated industries, but continue to sector check
+                    # RELAXED FILTERING: Allow sector-level match even with different industries
+                    # This ensures we get enough peers when industry matches are limited
+                    logger.debug(f"Industry mismatch for {candidate.get('symbol')}: '{cand_industry}' vs '{target_industry_lower}', but allowing sector match")
+                    # Continue to sector check below
 
             # Sector match (+15 points) - only if no industry match found
             if target_sector and candidate.get('sector'):
