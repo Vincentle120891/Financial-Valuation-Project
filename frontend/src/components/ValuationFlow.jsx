@@ -463,8 +463,8 @@ const ValuationFlow = () => {
     setLoading(true);
     try {
       // Always use single model endpoint (multi-select is now forbidden per documentation)
-      // Pass undefined for peers - peers will be discovered in Step 4
-      const data = await selectModels(sessionId, modelType, market, undefined, undefined);
+      // Step 3: Select Method → Get Confirmation (Peers are generated in Step 4)
+      const data = await selectModels(sessionId, modelType, market);
       console.log('Select model response:', data);
       if (data.message) {
         // After selecting model, move to Step 4: Find & Review Peers
