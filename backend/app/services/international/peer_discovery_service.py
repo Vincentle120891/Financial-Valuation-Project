@@ -13,7 +13,7 @@ import logging
 from typing import Dict, List, Optional, Set, Tuple
 from pydantic import BaseModel
 
-from app.services.international.yfinance_service import YFinanceService
+from app.services.international.yfinance_service import YFinanceService, run_in_executor
 
 logger = logging.getLogger(__name__)
 
@@ -346,11 +346,11 @@ class PeerDiscoveryService:
             return []
 
         # CONCURRENCY FIX: Fetch ticker metrics concurrently rather than sequentially
+        # Use run_in_executor to avoid blocking the event loop during synchronous yfinance calls
         async def fetch_and_validate(ticker: str, exchange: str) -> Optional[Dict]:
             try:
-                # Wrap sync service architecture safely or run in execution thread if needed
-                # For this setup, we assume yfinance_service handles IO safely.
-                ticker_info = self.yfinance_service.get_ticker_info(ticker)
+                # Run the synchronous get_ticker_info in a thread pool to avoid blocking
+                ticker_info = await run_in_executor(self.yfinance_service.get_ticker_info, ticker)
                 if not ticker_info or not ticker_info.get('currentPrice'):
                     return None
 
@@ -377,7 +377,8 @@ class PeerDiscoveryService:
                 logger.debug(f"Failed parsing raw ticker data for {ticker}: {str(e)}")
                 return None
 
-        # Execute all ticker info fetches in parallel processing groups
+        # Execute all ticker info fetches in parallel using asyncio.gather
+        # This allows all network calls to happen concurrently instead of sequentially
         tasks = [fetch_and_validate(t, e) for t, e in raw_candidates]
         completed_metrics = await asyncio.gather(*tasks)
 
