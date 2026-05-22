@@ -402,8 +402,19 @@ const ValuationFlow = () => {
       console.log('Select company response:', data);
       if (data.session_id) {
         setSessionId(data.session_id);
-                // Merge backend company data with search results
+        
+        // Consume confirmed and market fields from backend response
+        const isConfirmed = data.confirmed !== undefined ? data.confirmed : true;
+        const responseMarket = data.market || market;
+        const dataQualityScore = data.data_quality_score !== undefined ? data.data_quality_score : 0;
+        
+        // Merge backend company data with search results
         const enrichedCompany = { ...company };
+        if (data.company_name) {
+          enrichedCompany.name = data.company_name;
+        }
+        // Store data quality score for display in Step 2
+        enrichedCompany.dataQualityScore = dataQualityScore;
         if (data.company_data) {
           // Merge company_data fields into selectedCompany
           if (data.company_data.current_price !== undefined) {
@@ -438,8 +449,8 @@ const ValuationFlow = () => {
         const ticker = company.ticker || company.symbol;
         setMarketValidation({
           isValid: true,
-          message: `Company ${ticker} selected in ${market === 'international' ? 'International' : 'Vietnamese'} market`,
-          selectedMarket: market,
+          message: `Company ${ticker} selected in ${responseMarket === 'international' ? 'International' : 'Vietnamese'} market${isConfirmed ? '' : ' (partial data)'}`,
+          selectedMarket: responseMarket,
           isLocked: true // Market is now locked - cannot be changed after Step 1
         });
 
