@@ -299,11 +299,11 @@ class Step2MarketDataProcessor:
                 unit=None
             ),
             equity_risk_premium=DataField(
-                value=market_premium + (country_risk or 0),
-                status=DataStatus.ESTIMATED,
+                value=(market_premium or 0) + (country_risk or 0) if market_premium is not None or country_risk is not None else None,
+                status=DataStatus.ESTIMATED if (market_premium is not None or country_risk is not None) else DataStatus.MISSING,
                 source="calculated",
                 formula="ERP + CRP",
-                confidence_score=70.0,
+                confidence_score=70.0 if (market_premium is not None or country_risk is not None) else None,
                 unit="%",
                 currency=None
             ),
