@@ -147,7 +147,7 @@ class APIAdapter:
 
                 mapped_data[metric_id] = {
                     "value": normalized,
-                    "unit": definition.unit,
+                    "unit": definition.get("unit", "unknown"),
                     "source": self.provider,
                     "status": "fetched",
                     "timestamp": datetime.utcnow().isoformat()
@@ -159,9 +159,9 @@ class APIAdapter:
                     missing_metrics.append(metric_id)
 
         return {
-            "mapped_data": mapped_data,
-            "missing_metrics": missing_metrics,
-            "calculated_metrics": calculated_metrics,
+            "data": mapped_data,
+            "missing": missing_metrics,
+            "calculated": calculated_metrics,
             "ticker": ticker,
             "provider": self.provider,
             "timestamp": datetime.utcnow().isoformat()
@@ -175,14 +175,22 @@ class APIAdapter:
         for section in sections:
             if section in raw_data:
                 section_data = raw_data[section]
-                if isinstance(section_data, dict):
-                    # Handle time-series data (get most recent)
+                
+                # Handle info section (flat dict)
+                if section == "info" and isinstance(section_data, dict):
                     if source_key in section_data:
-                        value = section_data[source_key]
-                        if isinstance(value, dict):
-                            # Get first value (most recent for yfinance)
-                            return list(value.values())[0] if value else None
-                        return value
+                        return section_data[source_key]
+                
+                # Handle financial statements (dict with timestamps as keys)
+                # Structure: {Timestamp: {metric_name: value, ...}, ...}
+                elif isinstance(section_data, dict):
+                    # Get most recent timestamp's data
+                    if section_data:
+                        # Get first key (most recent timestamp)
+                        most_recent_key = list(section_data.keys())[0]
+                        period_data = section_data[most_recent_key]
+                        if isinstance(period_data, dict) and source_key in period_data:
+                            return period_data[source_key]
 
         return None
 
