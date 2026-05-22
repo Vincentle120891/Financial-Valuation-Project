@@ -1414,6 +1414,7 @@ class YFinanceService:
                 'industry': info.get('industry'),
                 'exchange': info.get('exchange'),
                 'currency': info.get('currency'),
+                'country': info.get('country'),
                 'priceToBook': info.get('priceToBook'),
                 'enterpriseToEbitda': info.get('enterpriseToEbitda'),
                 'enterpriseToRevenue': info.get('enterpriseToRevenue'),

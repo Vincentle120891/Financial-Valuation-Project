@@ -297,12 +297,13 @@ class DCFInputManager:
         market_data = self._extract_market_data_from_api()
         
         # Build scenario drivers
+        # Get WACC-related inputs
         base_scenario = self._build_scenario_drivers_from_ai()
         
         # Get WACC-related inputs
         wacc_item = self._create_input_with_source("wacc_percent", 8.5)
         tax_rate_item = self._create_input_with_source("tax_rate_percent", 21.0)
-        risk_free_item = self._create_input_with_source("risk_free_rate", 4.5)
+        risk_free_item = self._create_input_with_source("risk_free_rate", None)
         
         # Convert percentage inputs
         wacc_value = wacc_item.value / 100 if wacc_item.value > 1 else wacc_item.value
@@ -475,8 +476,8 @@ def build_dcf_inputs_from_confirmed_assumptions(
             "worst_case": base_drivers
         },
         wacc=wacc,
-        risk_free_rate=confirmed_assumptions.get('risk_free_rate', 0.045),
-        equity_risk_premium=confirmed_assumptions.get('equity_risk_premium', 0.055),
+        risk_free_rate=confirmed_assumptions.get('risk_free_rate'),
+        equity_risk_premium=confirmed_assumptions.get('equity_risk_premium'),
         beta=confirmed_assumptions.get('beta', 1.0),
         cost_of_debt=confirmed_assumptions.get('cost_of_debt', 0.05),
         tax_rate_statutory=confirmed_assumptions.get('tax_rate', 0.21),

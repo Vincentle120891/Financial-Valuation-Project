@@ -56,8 +56,8 @@ class Step2MarketDataProcessor:
     - Discover peer companies based on industry and market cap
     """
 
-    DEFAULT_RISK_FREE_RATE = 4.5  # 10-year US Treasury
-    DEFAULT_MARKET_PREMIUM = 7.0  # Historical equity risk premium
+    DEFAULT_RISK_FREE_RATE = None  # No default - must be provided by user or external source
+    DEFAULT_MARKET_PREMIUM = None  # No default - must be provided by user or external source
 
     def __init__(self, yfinance_service: Optional[YFinanceService] = None):
         self.yfinance_service = yfinance_service or YFinanceService()
@@ -344,13 +344,13 @@ class Step2MarketDataProcessor:
             message=f"Successfully processed market data for {final_company_name}"
         )
 
-    def _get_risk_free_rate(self, market: str) -> float:
+    def _get_risk_free_rate(self, market: str) -> Optional[float]:
         """Get risk-free rate based on market."""
         if market == "vietnam":
             return 6.8  # Vietnam 10-year government bond
         return self.DEFAULT_RISK_FREE_RATE
 
-    def _get_market_premium(self, market: str) -> float:
+    def _get_market_premium(self, market: str) -> Optional[float]:
         """Get market risk premium based on market."""
         if market == "vietnam":
             return 7.5  # Higher premium for emerging market
