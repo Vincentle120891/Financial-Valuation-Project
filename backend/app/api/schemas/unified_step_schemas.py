@@ -233,9 +233,32 @@ class UnifiedStep4Request(BaseModel):
     """Step 4: Select peer companies"""
     session_id: str
     method: ValuationMethod
-    market: MarketType
+    market: MarketType = MarketType.INTERNATIONAL
     suggested_peers: Optional[List[str]] = None
     custom_peers: Optional[List[str]] = None
+
+    @field_validator('method', mode='before')
+    @classmethod
+    def validate_method(cls, v):
+        if isinstance(v, str):
+            # Convert to uppercase to match enum values
+            v_upper = v.upper()
+            if v_upper in ['DCF', 'DUPONT', 'COMPS']:
+                return v_upper
+        return v
+
+    @field_validator('market', mode='before')
+    @classmethod
+    def validate_market(cls, v):
+        if v is None or (isinstance(v, str) and v.strip() == ''):
+            # If None or empty string, use default
+            return MarketType.INTERNATIONAL
+        if isinstance(v, str):
+            # Convert to lowercase to match enum values
+            v_lower = v.lower()
+            if v_lower in ['international', 'vietnam']:
+                return v_lower
+        return v
 
 
 class UnifiedStep4Response(BaseModel):
