@@ -380,8 +380,8 @@ class PeerDiscoveryService:
 
         # Map common industry terms to better search keywords
         industry_mappings = {
-            'auto manufacturers': ['Auto', 'Automotive', 'Cars', 'Trucks'],
-            'automotive': ['Auto', 'Automotive', 'Cars'],
+            'auto manufacturers': ['Auto Manufacturers', 'Automotive', 'Car Manufacturers', 'Vehicle Manufacturers'],
+            'automotive': ['Auto Manufacturers', 'Automotive', 'Car Manufacturers', 'EV'],
             'drug manufacturers': ['Pharma', 'Drugs', 'Pharmaceuticals'],
             'software': ['Software', 'Technology'],
             'semiconductors': ['Semiconductor', 'Chips', 'Semis'],
@@ -398,6 +398,9 @@ class PeerDiscoveryService:
             'consumer electronics': ['Electronics', 'Consumer'],
             'apparel manufacturing': ['Apparel', 'Clothing', 'Fashion'],
             'footwear & accessories': ['Footwear', 'Shoes', 'Apparel'],
+            'auto parts': ['Auto Parts', 'Automotive Parts', 'Car Parts'],
+            'recreational vehicles': ['RV', 'Recreational Vehicles', 'Motorcycles'],
+            'farm & heavy construction machinery': ['Heavy Machinery', 'Construction Equipment', 'Farm Equipment'],
         }
 
         keyword_lower = keyword.lower().strip()
@@ -543,7 +546,7 @@ class PeerDiscoveryService:
             score = 0.0
             match_reasons = []
 
-            # INDUSTRY MATCHING WITH SUB-INDUSTRY WEIGHTING
+            # INDUSTRY MATCHING WITH SUB-INDUSTRY WEIGHTING AND STRICT FILTERING
             if target_industry and candidate.get('industry'):
                 cand_industry = candidate['industry'].lower()
                 target_industry_lower = target_industry.lower()
@@ -557,17 +560,21 @@ class PeerDiscoveryService:
                     score += 30
                     match_reasons.append("Similar industry")
                 else:
-                    # Check for keyword overlap as fallback (+15 points)
-                    if self._has_industry_keyword_overlap(target_industry_lower, cand_industry):
-                        score += 15
-                        match_reasons.append("Related industry")
+                    # STRICT FILTERING: Skip companies from unrelated industries
+                    # Only allow sector-level match if no industry relationship exists
+                    logger.debug(f"Skipping {candidate.get('symbol')}: industry '{cand_industry}' not related to '{target_industry_lower}'")
+                    # Don't add score for unrelated industries, but continue to sector check
 
-            # Sector match (+15 points)
+            # Sector match (+15 points) - only if no industry match found
             if target_sector and candidate.get('sector'):
                 if candidate['sector'].lower() == target_sector.lower():
-                    score += 15
-                    if not any("industry" in reason.lower() for reason in match_reasons):
+                    # Only add sector match if no industry match was found
+                    if not any("industry" in reason.lower() or "sub-industry" in reason.lower() for reason in match_reasons):
+                        score += 15
                         match_reasons.append("Same sector")
+                    else:
+                        # Industry already matched, still note same sector but don't double-count
+                        logger.debug(f"{candidate.get('symbol')}: Already has industry match, skipping sector bonus")
 
             # Market cap range match (+25 points)
             candidate_market_cap = candidate.get('market_cap')
@@ -670,9 +677,9 @@ class PeerDiscoveryService:
         Returns:
             True if industries are similar, False otherwise
         """
-        # Define industry term mappings
+        # Define industry term mappings with enhanced automotive coverage
         industry_groups = {
-            'auto': ['auto', 'automotive', 'car', 'truck', 'vehicle', 'motor'],
+            'auto': ['auto', 'automotive', 'car', 'truck', 'vehicle', 'motor', 'ev', 'electric vehicle'],
             'retail': ['retail', 'store', 'e-commerce', 'merchant'],
             'restaurant': ['restaurant', 'food service', 'dining', 'quick service'],
             'software': ['software', 'application', 'saas', 'cloud software'],
@@ -689,6 +696,7 @@ class PeerDiscoveryService:
             'consumer_electronics': ['consumer electronics', 'electronics', 'gadgets'],
             'apparel': ['apparel', 'clothing', 'garment', 'fashion', 'footwear'],
             'home_improvement': ['home improvement', 'building materials', 'hardware retail'],
+            'auto_parts': ['auto parts', 'automotive parts', 'motor vehicle parts'],
         }
 
         # Check if both industries fall into the same group
