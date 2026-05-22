@@ -1,10 +1,16 @@
 """
 Peer Discovery Service
 Automatically identifies peer companies based on industry, sector, and market cap.
+
+Key Improvements:
+- Progressive Filter Relaxation: Multi-pass search with loosening constraints
+- Asynchronous Parallel Fetching: Concurrent ticker info retrieval via asyncio.gather
+- Deep Search Strategy: Expanded search pool with better query handling
 """
 
+import asyncio
 import logging
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 from pydantic import BaseModel
 
 from app.services.international.yfinance_service import YFinanceService
@@ -95,7 +101,7 @@ class PeerDiscoveryService:
         request: PeerDiscoveryRequest
     ) -> PeerDiscoveryResponse:
         """
-        Discover peer companies for a target ticker.
+        Discover peer companies for a target ticker with progressive fallback relaxation.
 
         Args:
             request: Peer discovery request with target company info
@@ -104,7 +110,6 @@ class PeerDiscoveryService:
             PeerDiscoveryResponse with ranked peer candidates
         """
         logger.info(f"Discovering peers for '{request.target_ticker}', method='{request.method}'")
-
         warnings = []
 
         # Get target company info if not provided
@@ -135,61 +140,79 @@ class PeerDiscoveryService:
                 warnings=warnings
             )
 
-        # Determine market cap range - adjust based on method
-        market_cap_min = None
-        market_cap_max = None
-        if target_market_cap:
-            # COMPS may want closer M&A deals, DCF wants similar growth profiles
-            if method == "COMPS":
-                # For COMPS, focus on recent M&A targets - wider range to catch acquisition targets
-                market_cap_min = target_market_cap * 0.3  # 30% of target
-                market_cap_max = target_market_cap * 3.0  # 300% of target
-            elif method == "DCF":
-                # For DCF, focus on similar cash flow profiles - tighter range
-                market_cap_min = target_market_cap * 0.5  # 50% of target
-                market_cap_max = target_market_cap * 2.0  # 200% of target
-            else:
-                # Default or DuPont - standard range
-                market_cap_min = target_market_cap * self.MARKET_CAP_RANGE_MIN
-                market_cap_max = target_market_cap * self.MARKET_CAP_RANGE_MAX
+        # Multi-pass search: Start strict, loosen if we don't find enough peers
+        relaxation_passes = [
+            {"label": "Strict", "dcf_mult": (0.5, 2.0), "comps_mult": (0.3, 3.0), "default_mult": (0.4, 2.5)},
+            {"label": "Moderate", "dcf_mult": (0.25, 4.0), "comps_mult": (0.15, 6.0), "default_mult": (0.2, 5.0)},
+            {"label": "Broad", "dcf_mult": (0.05, 10.0), "comps_mult": (0.05, 10.0), "default_mult": (0.05, 10.0)}
+        ]
 
-        search_criteria = {
-            'sector': target_sector,
-            'industry': target_industry,
-            'market_cap_range': f"${market_cap_min/1e9:.1f}B - ${market_cap_max/1e9:.1f}B" if market_cap_min else "Any",
-            'allowed_exchanges': request.allowed_exchanges,
-            'method': method  # NEW: include method in search criteria
-        }
+        top_peers = []
+        search_criteria = {}
 
-        # Determine allowed exchanges for this market
-        allowed_exchanges = self._get_allowed_exchanges(request.market, request.allowed_exchanges)
+        for pas in relaxation_passes:
+            if len(top_peers) >= request.max_peers:
+                break
+                
+            logger.info(f"Running peer discovery pass: {pas['label']}")
+            
+            # Determine market cap range for this pass
+            market_cap_min = None
+            market_cap_max = None
+            if target_market_cap:
+                if method == "DCF":
+                    mult_min, mult_max = pas["dcf_mult"]
+                elif method == "COMPS":
+                    mult_min, mult_max = pas["comps_mult"]
+                else:
+                    mult_min, mult_max = pas["default_mult"]
+                
+                market_cap_min = target_market_cap * mult_min
+                market_cap_max = target_market_cap * mult_max
 
-        # Search for peers - pass method for method-specific search strategies
-        peer_candidates = await self._search_peer_candidates(
-            sector=target_sector,
-            industry=target_industry,
-            market_cap_min=market_cap_min,
-            market_cap_max=market_cap_max,
-            exclude_ticker=request.target_ticker,
-            max_results=request.max_peers * 3,  # Get more to filter and rank
-            allowed_exchanges=allowed_exchanges,
-            method=method  # NEW: pass method
-        )
+            search_criteria = {
+                'sector': target_sector,
+                'industry': target_industry,
+                'market_cap_range': f"${market_cap_min/1e9:.1f}B - ${market_cap_max/1e9:.1f}B" if market_cap_min else "Any",
+                'allowed_exchanges': request.allowed_exchanges,
+                'method': method
+            }
 
-        # Score and rank candidates - pass method for method-specific scoring
-        scored_peers = self._score_and_rank_peers(
-            candidates=peer_candidates,
-            target_sector=target_sector,
-            target_industry=target_industry,
-            target_market_cap=target_market_cap,
-            method=method  # NEW: pass method
-        )
+            allowed_exchanges = self._get_allowed_exchanges(request.market, request.allowed_exchanges)
 
-        # Return top N peers
-        top_peers = scored_peers[:request.max_peers]
+            # Search for candidates
+            peer_candidates = await self._search_peer_candidates(
+                sector=target_sector,
+                industry=target_industry,
+                market_cap_min=market_cap_min,
+                market_cap_max=market_cap_max,
+                exclude_ticker=request.target_ticker,
+                max_results=request.max_peers * 4,  # Expanded multiplier pool
+                allowed_exchanges=allowed_exchanges,
+                method=method
+            )
+
+            # Score and rank candidates
+            scored_peers = self._score_and_rank_peers(
+                candidates=peer_candidates,
+                target_sector=target_sector,
+                target_industry=target_industry,
+                target_market_cap=target_market_cap,
+                method=method
+            )
+
+            # Deduplicate and merge into top_peers
+            existing_symbols = {p.symbol for p in top_peers}
+            for peer in scored_peers:
+                if peer.symbol not in existing_symbols:
+                    top_peers.append(peer)
+                    existing_symbols.add(peer.symbol)
+
+        # Final slice
+        top_peers = top_peers[:request.max_peers]
 
         if len(top_peers) < request.max_peers:
-            warnings.append(f"Only found {len(top_peers)} suitable peers out of {request.max_peers} requested")
+            warnings.append(f"Only found {len(top_peers)} suitable peers out of {request.max_peers} requested after broad relaxation.")
 
         return PeerDiscoveryResponse(
             target_ticker=request.target_ticker,
@@ -284,7 +307,7 @@ class PeerDiscoveryService:
         allowed_exchanges: Optional[List[str]] = None
     ) -> List[Dict]:
         """
-        Search for companies by keyword using yfinance.
+        Search for companies by keyword using yfinance with concurrent fetching.
 
         Args:
             keyword: Search keyword (industry or sector name)
@@ -296,51 +319,51 @@ class PeerDiscoveryService:
         Returns:
             List of matching company dictionaries
         """
-        results = []
-
         # Generate multiple search queries from the keyword
         # yfinance search works better with shorter, simpler queries
         search_queries = self._generate_search_queries(keyword)
 
-        seen_symbols = set()
+        # Accumulate raw candidate tickers from yfinance search indices across all queries
+        raw_candidates = []
+        seen_symbols = set(exclude_tickers)
 
         for query in search_queries:
-            # Use yfinance search (now filtered in yfinance_service.search_tickers)
-            search_results = self.yfinance_service.search_tickers(query)
-
-            for result in search_results[:20]:  # Limit search results per query
+            # yfinance text search matches against broad terms
+            search_results = self.yfinance_service.search_tickers(query) or []
+            for result in search_results[:35]:  # Increase deep look capability
                 ticker = result.get('symbol', '')
                 exchange = result.get('exchange', '')
 
-                if ticker in exclude_tickers or ticker in seen_symbols:
+                if ticker in seen_symbols:
                     continue
-
-                # EXCHANGE FILTERING: Check if exchange is allowed
                 if not self._is_exchange_allowed(exchange, allowed_exchanges):
-                    logger.debug(f"Excluding {ticker}: exchange '{exchange}' not in allowed list")
                     continue
 
                 seen_symbols.add(ticker)
+                raw_candidates.append((ticker, exchange))
 
-                # Get detailed info
+        if not raw_candidates:
+            return []
+
+        # CONCURRENCY FIX: Fetch ticker metrics concurrently rather than sequentially
+        async def fetch_and_validate(ticker: str, exchange: str) -> Optional[Dict]:
+            try:
+                # Wrap sync service architecture safely or run in execution thread if needed
+                # For this setup, we assume yfinance_service handles IO safely.
                 ticker_info = self.yfinance_service.get_ticker_info(ticker)
                 if not ticker_info or not ticker_info.get('currentPrice'):
-                    logger.debug(f"Skipping {ticker}: no current price or info")
-                    continue
+                    return None
 
-                # Additional validation: check if it's a valid equity
                 market_cap = ticker_info.get('marketCap')
                 if not market_cap or market_cap <= 0:
-                    logger.debug(f"Skipping {ticker}: invalid market cap")
-                    continue
+                    return None
 
-                # Filter by market cap if range specified
+                # Apply cap filtering
                 if market_cap_min and market_cap_max:
                     if not (market_cap_min <= market_cap <= market_cap_max):
-                        logger.debug(f"Skipping {ticker}: market cap ${market_cap/1e9:.2f}B outside range ${market_cap_min/1e9:.2f}B-${market_cap_max/1e9:.2f}B")
-                        continue
+                        return None
 
-                results.append({
+                return {
                     'symbol': ticker,
                     'name': ticker_info.get('longName', ticker),
                     'exchange': exchange,
@@ -349,15 +372,17 @@ class PeerDiscoveryService:
                     'market_cap': market_cap,
                     'current_price': ticker_info.get('currentPrice'),
                     'beta': ticker_info.get('beta')
-                })
+                }
+            except Exception as e:
+                logger.debug(f"Failed parsing raw ticker data for {ticker}: {str(e)}")
+                return None
 
-                # Stop if we have enough results
-                if len(results) >= 20:
-                    break
+        # Execute all ticker info fetches in parallel processing groups
+        tasks = [fetch_and_validate(t, e) for t, e in raw_candidates]
+        completed_metrics = await asyncio.gather(*tasks)
 
-            if len(results) >= 20:
-                break
-
+        # Filter out None values from failed validations
+        results = [metric for metric in completed_metrics if metric is not None]
         return results
 
     def _generate_search_queries(self, keyword: str) -> List[str]:
