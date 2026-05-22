@@ -93,8 +93,8 @@ class Settings(BaseSettings):
     default_wacc: float = Field(default=0.08, description="Default WACC (8%)")
     default_terminal_growth: float = Field(default=0.02, description="Default terminal growth rate (2%)")
     default_tax_rate: float = Field(default=0.21, description="Default statutory tax rate (21%)")
-    default_risk_free_rate: float = Field(default=0.045, description="Default risk-free rate (4.5%)")
-    default_equity_risk_premium: float = Field(default=0.055, description="Default equity risk premium (5.5%)")
+    default_risk_free_rate: Optional[float] = Field(default=None, description="Default risk-free rate (None - must be provided)")
+    default_equity_risk_premium: Optional[float] = Field(default=None, description="Default equity risk premium (None - must be provided)")
     default_forecast_years: int = Field(default=5, description="Default forecast period (5 years)")
     
     # DuPont Defaults

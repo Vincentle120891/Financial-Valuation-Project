@@ -162,8 +162,8 @@ class Step9ConfirmationProcessor:
     
     # International market defaults
     INTERNATIONAL_DEFAULTS = {
-        "risk_free_rate": 0.045,  # 10Y US Treasury
-        "market_risk_premium": 0.055,  # 5.5% equity risk premium
+        "risk_free_rate": None,  # No default - must be provided by user
+        "market_risk_premium": None,  # No default - must be provided by user
         "country_risk_premium": 0.0,  # No additional CRP for developed markets
         "corporate_tax_rate": 0.21,  # US federal rate
         "currency": "USD"

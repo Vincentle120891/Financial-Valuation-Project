@@ -136,7 +136,7 @@ class DCFStrategy:
         ebitda_margin = financials.get('ebitda_margin_avg', 'N/A')
         net_margin = financials.get('net_margin_avg', 'N/A')
         beta = market_data.get('beta', 'N/A')
-        risk_free_rate = market_data.get('risk_free_rate', 4.5)
+        risk_free_rate = market_data.get('risk_free_rate', 'N/A')
         debt_to_equity = financials.get('debt_to_equity', 'N/A')
         
         # Historical working capital days for reference
@@ -161,7 +161,7 @@ Generate comprehensive DCF assumptions for {company_name} ({ticker}).
 - Industry: {industry}
 - Country: {country}
 - Beta: {beta}
-- Risk-Free Rate: {risk_free_rate}%
+- Risk-Free Rate: {risk_free_rate}
 - Avg 3Y Revenue Growth: {revenue_growth}%
 - Avg 3Y EBITDA Margin: {ebitda_margin}%
 - Avg 3Y Net Margin: {net_margin}%
@@ -808,7 +808,7 @@ Now return the JSON:""".strip()
         ebitda_margin = financials.get('ebitda_margin_avg', 'N/A')
         net_margin = financials.get('net_margin_avg', 'N/A')
         beta = market_data.get('beta', 'N/A')
-        risk_free_rate = market_data.get('risk_free_rate', 4.5)
+        risk_free_rate = market_data.get('risk_free_rate', 'N/A')
         debt_to_equity = financials.get('debt_to_equity', 'N/A')
         
         return f"""
@@ -826,7 +826,7 @@ You must provide ONLY these 4 inputs. All other DCF inputs are already calculate
 4. **Terminal EBITDA Multiple**: Exit multiple at end of forecast period
 
 # DO NOT PROVIDE
-- Risk-Free Rate (already provided: {risk_free_rate}%)
+- Risk-Free Rate (already provided: {risk_free_rate})
 - Beta (already calculated: {beta})
 - Cost of Debt (calculated from interest expense / debt)
 - WACC (calculated from CAPM formula)
@@ -844,7 +844,7 @@ You must provide ONLY these 4 inputs. All other DCF inputs are already calculate
 
 ## Market Data
 - Beta: {beta}
-- Risk-Free Rate: {risk_free_rate}%
+- Risk-Free Rate: {risk_free_rate}
 - Sector: {sector}
 - Industry: {industry}
 - Country: {country}
