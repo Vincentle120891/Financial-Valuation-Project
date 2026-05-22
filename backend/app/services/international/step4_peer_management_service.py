@@ -278,15 +278,16 @@ class Step4PeerManagementService:
             # Discover peers
             response = await self.peer_discovery_service.discover_peers(request)
 
-            if response.total_found == 0:
+            if response.total_found == 0 and not response.fallback_options:
                 return {
                     "status": "partial",
                     "message": f"No suitable peers found for {ticker}",
                     "warnings": response.warnings,
-                    "peers": []
+                    "peers": [],
+                    "fallback_options": []
                 }
 
-            # Build peer list
+            # Build peer list (auto-discovered peers only - NOT fallbacks)
             peers_list = [
                 {
                     "ticker": peer.ticker,
@@ -302,6 +303,23 @@ class Step4PeerManagementService:
                 for peer in response.peers
             ]
 
+            # Build fallback options list (for manual dropdown selection ONLY)
+            fallback_options_list = [
+                {
+                    "ticker": fb.ticker,
+                    "symbol": fb.symbol,
+                    "company_name": fb.company_name,
+                    "name": fb.name,
+                    "sector": fb.sector,
+                    "industry": fb.industry,
+                    "marketCap": fb.marketCap,
+                    "score": fb.score,
+                    "match_reasons": fb.match_reasons,
+                    "is_fallback": True  # Flag to indicate these are manual-selection options
+                }
+                for fb in response.fallback_options
+            ]
+
             # CRUCIAL FIX: Save suggestions to session immediately to prevent re-fetching loop
             if session_id:
                 session_service.update_session_data(
@@ -309,6 +327,15 @@ class Step4PeerManagementService:
                     f"peer_suggestions_{ticker}", 
                     peers_list
                 )
+                # Also save fallback options separately for dropdown display
+                if fallback_options_list:
+                    session_service.update_session_data(
+                        session_id,
+                        f"peer_fallback_options_{ticker}",
+                        fallback_options_list
+                    )
+                    logger.info(f"Saved {len(fallback_options_list)} fallback options for {ticker}")
+                
                 logger.info(f"Saved {len(peers_list)} peer suggestions to session for {ticker}")
 
             return {
@@ -322,6 +349,7 @@ class Step4PeerManagementService:
                     "marketCap": ticker_info.get('marketCap')
                 },
                 "peers": peers_list,
+                "fallback_options": fallback_options_list,  # Separate list for manual dropdown
                 "search_criteria": response.search_criteria,
                 "warnings": response.warnings
             }
