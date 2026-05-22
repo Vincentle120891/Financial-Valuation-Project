@@ -55,6 +55,8 @@ class PeerDiscoveryResponse(BaseModel):
     total_found: int
     search_criteria: Dict
     warnings: List[str] = []
+    # NEW: Fallback options for manual user selection (not auto-included)
+    fallback_options: List[PeerCandidate] = []
 
 
 class PeerDiscoveryService:
@@ -148,6 +150,7 @@ class PeerDiscoveryService:
         ]
 
         top_peers = []
+        fallback_options = []  # Store fallback options separately for manual selection
         search_criteria = {}
 
         for pas in relaxation_passes:
@@ -208,18 +211,52 @@ class PeerDiscoveryService:
                     top_peers.append(peer)
                     existing_symbols.add(peer.symbol)
 
-        # Final slice
-        top_peers = top_peers[:request.max_peers]
-
+        # If we still don't have enough peers after all relaxation passes,
+        # fetch fallback options but DO NOT auto-include them - they're for manual selection only
         if len(top_peers) < request.max_peers:
             warnings.append(f"Only found {len(top_peers)} suitable peers out of {request.max_peers} requested after broad relaxation.")
+            
+            # Fetch fallback options from predefined lists (for manual user selection via dropdown)
+            fallback_raw = await self._get_fallback_peers(
+                sector=target_sector,
+                industry=target_industry,
+                exclude_tickers={request.target_ticker} | {p.symbol for p in top_peers},
+                allowed_exchanges=allowed_exchanges
+            )
+            
+            # Convert fallback raw dicts to PeerCandidate objects
+            for fb in fallback_raw:
+                try:
+                    fallback_peer = PeerCandidate(
+                        symbol=fb['symbol'],
+                        ticker=fb['symbol'],
+                        name=fb.get('name', fb['symbol']),
+                        company_name=fb.get('name', fb['symbol']),
+                        exchange=fb.get('exchange', ''),
+                        sector=fb.get('sector'),
+                        industry=fb.get('industry'),
+                        market_cap=fb.get('market_cap'),
+                        marketCap=fb.get('market_cap'),
+                        current_price=fb.get('current_price'),
+                        beta=fb.get('beta'),
+                        similarity_score=0.0,
+                        score=0.0,
+                        match_reasons=['fallback_option']
+                    )
+                    fallback_options.append(fallback_peer)
+                except Exception as e:
+                    logger.debug(f"Failed to create fallback peer object: {e}")
+
+        # Final slice - only include auto-discovered peers, NOT fallback options
+        top_peers = top_peers[:request.max_peers]
 
         return PeerDiscoveryResponse(
             target_ticker=request.target_ticker,
             peers=top_peers,
             total_found=len(top_peers),
             search_criteria=search_criteria,
-            warnings=warnings
+            warnings=warnings,
+            fallback_options=fallback_options  # Separate list for manual dropdown selection
         )
 
     async def _search_peer_candidates(
@@ -469,6 +506,7 @@ class PeerDiscoveryService:
     ) -> List[Dict]:
         """
         Get fallback peers from known company lists by sector.
+        These are ONLY for manual user selection via dropdown, NOT auto-included.
 
         Args:
             sector: Target sector
@@ -477,7 +515,7 @@ class PeerDiscoveryService:
             allowed_exchanges: List of allowed exchange codes
 
         Returns:
-            List of fallback peer candidates
+            List of fallback peer candidates (for manual dropdown selection)
         """
         # Known companies by sector (can be expanded)
         fallback_companies = {
@@ -506,30 +544,41 @@ class PeerDiscoveryService:
                     break
 
         if sector_key and sector_key in fallback_companies:
-            for ticker in fallback_companies[sector_key]:
-                if ticker in exclude_tickers:
-                    continue
+            # CONCURRENT FIX: Fetch all ticker info in parallel using asyncio.gather
+            async def fetch_fallback_ticker(ticker: str) -> Optional[Dict]:
+                try:
+                    ticker_info = await run_in_executor(self.yfinance_service.get_ticker_info, ticker)
+                    if not ticker_info or not ticker_info.get('currentPrice'):
+                        return None
 
-                ticker_info = self.yfinance_service.get_ticker_info(ticker)
-                if not ticker_info or not ticker_info.get('currentPrice'):
-                    continue
+                    exchange = ticker_info.get('exchange', '')
+                    if not self._is_exchange_allowed(exchange, allowed_exchanges):
+                        logger.debug(f"Excluding fallback peer {ticker}: exchange '{exchange}' not allowed")
+                        return None
 
-                # Check exchange filtering
-                exchange = ticker_info.get('exchange', '')
-                if not self._is_exchange_allowed(exchange, allowed_exchanges):
-                    logger.debug(f"Excluding fallback peer {ticker}: exchange '{exchange}' not allowed")
-                    continue
+                    return {
+                        'symbol': ticker,
+                        'name': ticker_info.get('longName', ticker),
+                        'exchange': exchange,
+                        'sector': ticker_info.get('sector'),
+                        'industry': ticker_info.get('industry'),
+                        'market_cap': ticker_info.get('marketCap'),
+                        'current_price': ticker_info.get('currentPrice'),
+                        'beta': ticker_info.get('beta')
+                    }
+                except Exception as e:
+                    logger.debug(f"Failed fetching fallback ticker {ticker}: {e}")
+                    return None
 
-                results.append({
-                    'symbol': ticker,
-                    'name': ticker_info.get('longName', ticker),
-                    'exchange': exchange,
-                    'sector': ticker_info.get('sector'),
-                    'industry': ticker_info.get('industry'),
-                    'market_cap': ticker_info.get('marketCap'),
-                    'current_price': ticker_info.get('currentPrice'),
-                    'beta': ticker_info.get('beta')
-                })
+            # Filter out excluded tickers first
+            valid_tickers = [t for t in fallback_companies[sector_key] if t not in exclude_tickers]
+            
+            # Fetch all in parallel
+            tasks = [fetch_fallback_ticker(t) for t in valid_tickers]
+            fetched_results = await asyncio.gather(*tasks)
+            
+            # Filter out None values
+            results = [r for r in fetched_results if r is not None]
 
         return results
 
