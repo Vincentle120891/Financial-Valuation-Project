@@ -30,9 +30,9 @@ export const searchCompanies = async (query, market = 'international') => {
 
 // Step 4: Suggest Peers (after model selection)
 export const suggestPeers = async (ticker, market = 'international', maxPeers = 10, method = null, sessionId = null) => {
-  const response = await api.post('/step-4-suggest-peers', { 
-    ticker, 
-    market, 
+  const response = await api.post('/step-4-discover-peers', {
+    ticker,
+    market,
     max_peers: maxPeers,
     method: method, // Pass selected valuation method for method-specific peer criteria
     session_id: sessionId // Include session_id to store suggestions and prevent re-fetching loop
@@ -54,10 +54,10 @@ export const savePeers = async (sessionId, peers) => {
 
 // Step 5: Validate Manual Peer Tickers
 export const validateManualPeers = async (sessionId, tickers, market = 'international') => {
-  const response = await api.post('/step-5-validate-manual-peers', { 
-    session_id: sessionId, 
+  const response = await api.post('/step-5-validate-manual-peers', {
+    session_id: sessionId,
     tickers,
-    market 
+    market
   });
   return response.data;
 };
@@ -65,7 +65,7 @@ export const validateManualPeers = async (sessionId, tickers, market = 'internat
 // Step 3: Select Model - Updated to use unified schema
 // Workflow: Select Method → Get Confirmation (Peers are generated in Step 4)
 export const selectModels = async (sessionId, method, market = 'international') => {
-  const response = await api.post('/step-3-select-models', { 
+  const response = await api.post('/step-3-select-models', {
     session_id: sessionId,
     method: method.toUpperCase(),
     market: market.toLowerCase()
@@ -75,7 +75,7 @@ export const selectModels = async (sessionId, method, market = 'international') 
 
 // Step 5: Prepare Assumptions - Updated to use unified schema
 export const prepareAssumptions = async (sessionId, method, market = 'international', generateAi = true) => {
-  const response = await api.post('/step-5-prepare-assumptions', { 
+  const response = await api.post('/step-5-prepare-assumptions', {
     session_id: sessionId,
     method: method.toUpperCase(),
     market: market.toLowerCase(),
@@ -88,10 +88,10 @@ export const prepareAssumptions = async (sessionId, method, market = 'internatio
 // Market is passed as a parameter, not used for routing
 export const fetchApiData = async (sessionId, method, market = 'international') => {
   // Use unified endpoint for ALL markets - market is passed as parameter
-  const response = await api.post('/step-6-fetch-api-data', { 
+  const response = await api.post('/step-6-fetch-api-data', {
     session_id: sessionId,
     method,
-    market 
+    market
   });
   return response.data;
 };
@@ -100,10 +100,10 @@ export const fetchApiData = async (sessionId, method, market = 'international') 
 // Now requires method and market parameters
 export const retrieveHistoricalData = async (sessionId, method, market = 'international') => {
   try {
-    const response = await aiApi.post('/step-7-retrieve-historical-data', { 
+    const response = await aiApi.post('/step-7-retrieve-historical-data', {
       session_id: sessionId,
       method,
-      market 
+      market
     });
     return response.data;
   } catch (error) {
