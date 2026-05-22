@@ -50,8 +50,8 @@ from app.api.schemas.unified_step_schemas import (
 )
 
 # Import Step 4 method-specific discovery services
-from app.services.international.Step4_dcf_discovery import process as dcf_discover_peers
-from app.services.international.Step4_dupont_discovery import process as dupont_discover_peers
+from app.services.international.step4_dcf_discovery import process as dcf_discover_peers
+from app.services.international.step4_dupont_discovery import process as dupont_discover_peers
 from app.services.international.step4_comps_discovery import process as comps_discover_peers
 from app.services.international.step8_manual_overrides import FullAssumptionsResponse
 from app.services.international.step5_required_inputs_processor import Step5RequiredInputsProcessor

@@ -1,100 +1,42 @@
-# Python
+```
+# Compiled Python files
+*.pyc
 __pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
 
-# Virtual environments
-venv/
-ENV/
-env.bak/
+# Dependencies
 .venv/
-env/
+venv/
+node_modules/
 
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# Logs
+# Logs and temporary files
 *.log
+*.tmp
+*.swp
 
-# Environment variables
+# Environment files
 .env
 .env.local
 *.env.*
 
+# Editors
+.vscode/
+.idea/
+
 # Coverage reports
 .coverage
+coverage/
 htmlcov/
-.coverage.*
-.cache
 
-# MyPy
-.mypy_cache/
-.dmypy.json
-dmypy.json
+# Build artifacts
+dist/
+build/
+target/
 
-# Pytest
-.pytest_cache/
-
-# OS generated files
+# OS specific
 .DS_Store
 Thumbs.db
 
-# Compressed files
-*.zip
-*.gz
-*.tar
-*.tgz
-*.bz2
-*.xz
-*.7z
-*.rar
-*.zst
-*.lz4
-*.lzh
-*.cab
-*.arj
-*.rpm
-*.deb
-*.Z
-*.lz
-*.lzo
-*.tar.gz
-*.tar.bz2
-*.tar.xz
-*.tar.zst
-
-# Compiled binary files
-*.exe
-*.dll
-*.so
-*.a
-*.out
-
-# Build systems
-target/
-.gradle/
-node_modules/
-
-# Temp files
-*.tmp
-*.temp
+# Testing
+.pytest_cache/
+.mypy_cache/
+```
