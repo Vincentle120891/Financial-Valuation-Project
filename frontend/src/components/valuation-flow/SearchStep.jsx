@@ -53,162 +53,202 @@ const SearchStep = ({
     }
   };
 
-  const handleSaveApiKeys = (keys) => {
-    console.log('API Keys saved:', keys);
-    // Optionally trigger a refresh or notify backend
-  };
-
-  const isLoading = loading || vietnamSearchLoading;
+  const isSearching = loading || vietnamSearchLoading;
 
   return (
-    <div className="step-container">
-      {/* API Key Configuration Modal */}
-      <ApiKeyModal
-        isOpen={showApiKeyModal}
-        onClose={() => setShowApiKeyModal(false)}
-        onSave={handleSaveApiKeys}
-      />
+    <div className="w-full max-w-2xl mx-auto bg-white rounded-2xl shadow-md border border-slate-100 p-6 md:p-8 space-y-6">
+      
+      {/* Step Header */}
+      <div className="text-center md:text-left space-y-2">
+        <h2 className="text-2xl font-bold text-slate-800 tracking-tight">
+          Select Target Company
+        </h2>
+        <p className="text-sm text-slate-500">
+          Enter a company name or ticker symbol to fetch financial metrics and begin peer discovery.
+        </p>
+      </div>
 
-      <h2>Step 1: Search Company</h2>
-      <p style={{ marginBottom: '20px', color: '#666' }}>Enter a company name or ticker symbol to begin your valuation analysis.</p>
+      {/* Market Selector & Settings Controls */}
+      <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
+        {/* Segmented Control Market Toggle */}
+        <div className="inline-flex p-1 bg-slate-100 rounded-xl border border-slate-200/50">
+          <button
+            type="button"
+            onClick={() => setMarket('international')}
+            className={`flex-1 sm:flex-initial px-4 py-2 text-sm font-medium rounded-lg transition-all cursor-pointer ${
+              market !== 'vietnam'
+                ? 'bg-white text-indigo-600 shadow-sm font-semibold'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            International
+          </button>
+          <button
+            type="button"
+            onClick={() => setMarket('vietnam')}
+            className={`flex-1 sm:flex-initial px-4 py-2 text-sm font-medium rounded-lg transition-all cursor-pointer ${
+              market === 'vietnam'
+                ? 'bg-white text-indigo-600 shadow-sm font-semibold'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            Vietnam (HOSE/HNX)
+          </button>
+        </div>
 
-      {/* API Key Configuration Button */}
-      <div className="api-key-btn-container">
+        {/* API Configurations Button */}
         <button
+          type="button"
           onClick={() => setShowApiKeyModal(true)}
-          className="btn-api-config"
-          title="Configure API keys for FMP, Alpha Vantage, FRED, and SEC EDGAR"
+          className="inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer"
         >
-          <span className="icon">🔑</span>
-          Configure API Keys
+          <svg className="w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.43l-1.003.767c-.3.23-.452.617-.432.998a12.078 12.078 0 0 1 0 .255c-.02.38.132.767.433.998l1.003.767a1.125 1.125 0 0 1 .26 1.43l-1.296 2.247a1.125 1.125 0 0 1-1.37.49l-1.216-.456c-.356-.133-.751-.072-1.076.124a6.57 6.57 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.43l1.004-.767c.304-.23.456-.618.433-.998a12.048 12.048 0 0 1 0-.255c.023-.38-.129-.767-.433-.998L3.98 13.06a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.49l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.28Z" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+          </svg>
+          API Keys
         </button>
       </div>
 
-      {/* Market Validation Feedback */}
-      {marketValidation && marketValidation.message && (
-        <div
-          className={`validation-message ${marketValidation.isValid ? 'success' : 'error'}`}
-          style={{
-            marginTop: '15px',
-            padding: '12px 16px',
-            borderRadius: '6px',
-            backgroundColor: marketValidation.isValid ? '#d4edda' : '#f8d7da',
-            border: `1px solid ${marketValidation.isValid ? '#c3e6cb' : '#f5c6cb'}`,
-            color: marketValidation.isValid ? '#155724' : '#721c24',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px'
-          }}
-        >
-          <span style={{ fontSize: '1.2em' }}>
-            {marketValidation.isValid ? '✓' : '⚠️'}
-          </span>
-          <span>{marketValidation.message}</span>
+      {/* Main Search Input Form Group */}
+      <div className="relative flex items-stretch gap-2">
+        <div className="relative flex-1">
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={handleKeyPress}
+            placeholder={market === 'vietnam' ? "e.g., FPT, VNM, HPG..." : "e.g., Apple, AAPL, Microsoft..."}
+            disabled={isSearching}
+            className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:bg-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 disabled:opacity-60 disabled:cursor-not-allowed transition-all"
+          />
+          {searchQuery && !isSearching && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 rounded-md bg-transparent border-0 cursor-pointer text-xs font-semibold"
+            >
+              Clear
+            </button>
+          )}
         </div>
-      )}
-
-      {/* Market Toggle */}
-      <div className="market-toggle" style={{ marginBottom: '20px', marginTop: '20px' }}>
-        <label style={{ marginRight: '20px', opacity: marketValidation?.isLocked ? 0.5 : 1, cursor: marketValidation?.isLocked ? 'not-allowed' : 'pointer' }}>
-          <input
-            type="radio"
-            value="international"
-            checked={market === 'international'}
-            onChange={(e) => !marketValidation?.isLocked && setMarket(e.target.value)}
-            disabled={marketValidation?.isLocked}
-          />
-          International Company
-        </label>
-        <label style={{ opacity: marketValidation?.isLocked ? 0.5 : 1, cursor: marketValidation?.isLocked ? 'not-allowed' : 'pointer' }}>
-          <input
-            type="radio"
-            value="vietnam"
-            checked={market === 'vietnam'}
-            onChange={(e) => !marketValidation?.isLocked && setMarket(e.target.value)}
-            disabled={marketValidation?.isLocked}
-          />
-          Vietnamese Company
-        </label>
-        {marketValidation?.isLocked && (
-          <span style={{ marginLeft: '15px', fontSize: '0.85em', color: '#856404', backgroundColor: '#fff3cd', padding: '4px 8px', borderRadius: '4px', border: '1px solid #ffc107' }}>
-            🔒 Market locked after company selection
-          </span>
-        )}
-      </div>
-
-      {/* Search Input */}
-      <div className="input-group">
-        <input
-          type="text"
-          placeholder={
-            market === 'vietnam'
-              ? "Enter ticker (e.g., VNM, VIC, HPG) or company name (Vinamilk, Vingroup)"
-              : "Enter ticker (e.g., AAPL, MSFT) or company name"
-          }
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          onKeyPress={handleKeyPress}
-          className="search-input"
-          disabled={isLoading}
-        />
         <button
           onClick={performSearch}
-          disabled={isLoading}
-          className="btn-primary"
+          disabled={isSearching || !searchQuery.trim()}
+          className="px-5 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-medium text-sm rounded-xl inline-flex items-center gap-2 shadow-sm transition-colors disabled:opacity-50 disabled:bg-indigo-600 disabled:cursor-not-allowed cursor-pointer"
         >
-          {isLoading ? 'Searching...' : 'Search'}
+          {isSearching ? (
+            <>
+              <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+              </svg>
+              Searching...
+            </>
+          ) : (
+            <>
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth="2.5" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.608 10.608Z" />
+              </svg>
+              Search
+            </>
+          )}
         </button>
       </div>
 
-      {/* Market-specific hints */}
-      {market === 'vietnam' && (
-        <div className="market-hint" style={{ marginTop: '10px', fontSize: '0.9em', color: '#666' }}>
-          <p><strong>Popular Vietnamese stocks:</strong> VNM (Vinamilk), VIC (Vingroup), HPG (Hoa Phat), VCB (Vietcombank), FPT (FPT Corp)</p>
-          <p><strong>Supported exchanges:</strong> HOSE (.VN), HNX (.HA), UPCOM (.VC)</p>
+      {/* Market Input Validation Alert Notice */}
+      {marketValidation && marketValidation.message && (
+        <div className={`flex items-start gap-3 p-3 rounded-xl border text-xs ${
+          marketValidation.isValid 
+            ? 'bg-emerald-50 border-emerald-200/60 text-emerald-800' 
+            : 'bg-amber-50 border-amber-200/60 text-amber-800'
+        }`}>
+          <svg className="w-4 h-4 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" d={marketValidation.isValid 
+              ? "M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
+              : "M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z"
+            } />
+          </svg>
+          <div>{marketValidation.message}</div>
         </div>
       )}
 
-      {/* Search Results */}
-      {searchResults.length > 0 && (
-        <div className="search-results">
-          {searchResults.map((result, index) => {
-            // Support both old (symbol/name) and new (ticker/company_name) field names for backward compatibility
-            const ticker = result.ticker || result.symbol;
-            const companyName = result.company_name || result.name;
-            const uniqueKey = `${ticker}-${companyName}-${index}`;
+      {/* Search Results Display Area */}
+      {searchResults && searchResults.length > 0 && (
+        <div className="space-y-2">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400 px-1">
+            Matching Results ({searchResults.length})
+          </h3>
+          <div className="border border-slate-100 rounded-xl overflow-hidden divide-y divide-slate-100 bg-white shadow-sm max-h-72 overflow-y-auto">
+            {searchResults.map((result, index) => {
+              // Backward compatibility lookups for legacy and current key schemas
+              const ticker = result.ticker || result.symbol;
+              const companyName = result.company_name || result.name;
+              const uniqueKey = `${ticker}-${companyName}-${index}`;
 
-            return (
-              <div key={uniqueKey} className="result-item">
-                <div style={{ flex: 1 }}>
-                  <span style={{ fontWeight: 'bold' }}>{companyName}</span>
-                  <span style={{ marginLeft: '8px', color: '#666' }}>({ticker})</span>
-                  {result.sector && (
-                    <span style={{ marginLeft: '8px', fontSize: '0.85em', color: '#888' }}>
-                      • {result.sector}
-                    </span>
-                  )}
-                  {result.exchange && (
-                    <span style={{ marginLeft: '8px', fontSize: '0.85em', color: '#888' }}>
-                      • {result.exchange}
-                    </span>
-                  )}
-                </div>
-                <button
-                  onClick={() => onSelectCompany(result)}
-                  className="btn-secondary"
+              return (
+                <div 
+                  key={uniqueKey} 
+                  className="flex items-center justify-between p-4 bg-white hover:bg-slate-50 transition-colors group"
                 >
-                  Select
-                </button>
-              </div>
-            );
-          })}
+                  <div className="flex-1 min-w-0 pr-4">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-semibold text-slate-900 truncate">
+                        {companyName}
+                      </span>
+                      <span className="inline-flex px-2 py-0.5 text-xs font-bold bg-slate-100 text-slate-600 rounded-md tracking-wide shrink-0">
+                        {ticker}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-slate-400 mt-1 flex-wrap">
+                      {result.sector && (
+                        <span className="truncate">{result.sector}</span>
+                      )}
+                      {result.sector && result.exchange && (
+                        <span className="text-slate-200">•</span>
+                      )}
+                      {result.exchange && (
+                        <span className="uppercase font-medium tracking-wide text-slate-400">
+                          {result.exchange}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => onSelectCompany(result)}
+                    className="inline-flex items-center justify-center px-4 py-2 border border-slate-200 rounded-lg bg-white hover:bg-indigo-50 active:bg-indigo-100 text-slate-700 hover:text-indigo-600 font-medium text-sm shadow-sm hover:border-indigo-200 transition-all cursor-pointer whitespace-nowrap"
+                  >
+                    Select
+                  </button>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
-      {/* Error Message */}
-      {error && (
-        <div className="error-message">{error}</div>
+      {/* Fallback Empty Results Slate */}
+      {searchResults && searchResults.length === 0 && !isSearching && searchQuery && (
+        <div className="text-center p-8 bg-slate-50 border border-dashed border-slate-200 rounded-xl space-y-2">
+          <p className="text-sm font-medium text-slate-600">No companies found</p>
+          <p className="text-xs text-slate-400">Try adjusting your query, checks, or verify the selected market criteria.</p>
+        </div>
       )}
+
+      {/* Global Error Banner Display */}
+      {error && (
+        <div className="flex items-center gap-3 p-4 bg-red-50 text-red-800 border border-red-100 rounded-xl text-sm font-medium animate-pulse">
+          <svg className="w-5 h-5 text-red-500 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m0-10.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.75c0 5.592 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.57-.598-3.75h-.152c-3.196 0-6.1-1.249-8.25-3.286Zm0 13.036h.008v.008H12v-.008Z" />
+          </svg>
+          <div className="flex-1">{error}</div>
+        </div>
+      )}
+
+      {/* Embedded API Configuration Portal View Modal overlay */}
+      <ApiKeyModal 
+        isOpen={showApiKeyModal} 
+        onClose={() => setShowApiKeyModal(false)} 
+      />
     </div>
   );
 };
