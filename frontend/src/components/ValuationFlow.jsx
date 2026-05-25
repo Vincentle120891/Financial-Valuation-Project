@@ -420,31 +420,51 @@ const ValuationFlow = () => {
         }
         // Store data quality score for display in Step 2
         enrichedCompany.dataQualityScore = dataQualityScore;
-        if (data.company_data) {
-          // Merge company_data fields into selectedCompany
-          if (data.company_data.current_price !== undefined) {
-            enrichedCompany.currentPrice = data.company_data.current_price;
+        
+        // Map unified schema market_data array to flat properties
+        if (data.market_data && Array.isArray(data.market_data)) {
+          data.market_data.forEach(item => {
+            if (item.metric === 'current_price' && item.value !== undefined) {
+              enrichedCompany.currentPrice = item.value;
+            }
+            if (item.metric === 'market_cap' && item.value !== undefined) {
+              enrichedCompany.marketCap = item.value;
+            }
+            if (item.metric === 'beta' && item.value !== undefined) {
+              enrichedCompany.beta = item.value;
+            }
+            if (item.metric === 'risk_free_rate' && item.value !== undefined) {
+              enrichedCompany.riskFreeRate = item.value;
+            }
+            if (item.metric === 'market_risk_premium' && item.value !== undefined) {
+              enrichedCompany.marketRiskPremium = item.value;
+            }
+          });
+        }
+        
+        // Also check risk_metrics object for any missing values
+        if (data.risk_metrics) {
+          if (data.risk_metrics.beta?.value !== undefined && enrichedCompany.beta === undefined) {
+            enrichedCompany.beta = data.risk_metrics.beta.value;
           }
-          if (data.company_data.market_cap !== undefined) {
-            enrichedCompany.marketCap = data.company_data.market_cap;
+          if (data.risk_metrics.risk_free_rate?.value !== undefined && enrichedCompany.riskFreeRate === undefined) {
+            enrichedCompany.riskFreeRate = data.risk_metrics.risk_free_rate.value;
           }
-          if (data.company_data.beta !== undefined) {
-            enrichedCompany.beta = data.company_data.beta;
+          if (data.risk_metrics.market_risk_premium?.value !== undefined && enrichedCompany.marketRiskPremium === undefined) {
+            enrichedCompany.marketRiskPremium = data.risk_metrics.market_risk_premium.value;
           }
-          if (data.company_data.risk_free_rate !== undefined) {
-            enrichedCompany.riskFreeRate = data.company_data.risk_free_rate;
+        }
+        
+        // Get sector/industry from ticker_info if available
+        if (data.ticker_info) {
+          if (data.ticker_info.sector !== undefined) {
+            enrichedCompany.sector = data.ticker_info.sector;
           }
-          if (data.company_data.market_risk_premium !== undefined) {
-            enrichedCompany.marketRiskPremium = data.company_data.market_risk_premium;
+          if (data.ticker_info.industry !== undefined) {
+            enrichedCompany.industry = data.ticker_info.industry;
           }
-          if (data.company_data.sector !== undefined) {
-            enrichedCompany.sector = data.company_data.sector;
-          }
-          if (data.company_data.industry !== undefined) {
-            enrichedCompany.industry = data.company_data.industry;
-          }
-          if (data.company_data.country !== undefined) {
-            enrichedCompany.country = data.company_data.country;
+          if (data.ticker_info.country !== undefined) {
+            enrichedCompany.country = data.ticker_info.country;
           }
         }
 
