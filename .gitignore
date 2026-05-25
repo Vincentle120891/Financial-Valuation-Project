@@ -1,1 +1,9 @@
-Nothing needs to be added to .gitignore since the changes only include Python source files (.py) which are legitimate code files to track in version control.
+```
+# Dependencies
+backend/
+
+# Environment
+.env
+.env.local
+*.env.*
+```
