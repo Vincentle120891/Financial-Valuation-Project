@@ -56,8 +56,8 @@ class Step2MarketDataProcessor:
     - Discover peer companies based on industry and market cap
     """
 
-    DEFAULT_RISK_FREE_RATE = None  # No default - must be provided by user or external source
-    DEFAULT_MARKET_PREMIUM = None  # No default - must be provided by user or external source
+    DEFAULT_RISK_FREE_RATE = 4.5  # US 10-year Treasury yield (approximate)
+    DEFAULT_MARKET_PREMIUM = 6.0  # Historical average market risk premium
 
     def __init__(self, yfinance_service: Optional[YFinanceService] = None):
         self.yfinance_service = yfinance_service or YFinanceService()
