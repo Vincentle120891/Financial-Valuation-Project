@@ -1,105 +1,137 @@
 """
-Step 4: Comps Peer Discovery Service (International Market)
+Step 4: COMPS Peer Discovery Service (International Market)
 
-Trading Comparables relies ENTIRELY on peer multiples.
-Peer discovery is MANDATORY and strict.
+Trading Comps Analysis requires peer comparison for:
+- Trading multiples (P/E, EV/EBITDA, P/S, etc.)
+- Relative valuation benchmarking
+- Sector/industry comparables
 
-Market Cap Range for COMPS: 30% - 300% of target (wider range for M&A comparables)
+Market Cap Range for COMPS: 30% - 300% of target (wider range for trading comps)
+Uses InstitutionalPeerDiscoveryService for advanced multi-segment peer matching
 """
-from typing import Dict, Any, List, Optional
-import asyncio
-from app.services.international.peer_discovery_service import PeerDiscoveryService, PeerDiscoveryRequest
-from app.services.international.yfinance_service import YFinanceService
+import os
+import logging
+from typing import Dict, Any
+from app.services.international.institutional_peer_discovery import (
+    InstitutionalPeerDiscoveryService,
+    PeerDiscoveryRequest
+)
+
+logger = logging.getLogger(__name__)
 
 
-async def process(session_id: str, ticker: str, market: str, max_peers: int = 5) -> Dict[str, Any]:
+async def process(session_id: str, ticker: str, market: str, max_peers: int = 10) -> Dict[str, Any]:
     """
-    For Comps, we enforce strict sector/industry peer discovery.
-    Returns 5-10 high-confidence peers in the same industry.
+    Discovers peers for Trading Comps valuation using institutional-grade multi-segment analysis.
     
     COMPS-specific criteria:
-    - Market cap range: 30% - 300% of target (wider range for M&A analysis)
-    - Focus on companies suitable for multiple comparison
-    - Bonus for potential acquisition targets (<150% market cap)
+    - Market Cap Range: 30%-300% of target (strict), 15%-600% (moderate), 5%-1000% (broad)
+    - Focus on companies with similar trading multiples and operational profiles
+    - Prioritizes segment overlap and multiple availability
     """
+    logger.info(f"Starting COMPS peer discovery for {ticker} (Session: {session_id})")
+    
+    # Get FMP API key from environment
+    fmp_api_key = os.getenv("FMP_API_KEY")
+    
+    if not fmp_api_key:
+        logger.warning("FMP_API_KEY not configured. Peer discovery limited to basic matching.")
+        return {
+            "status": "success",
+            "session_id": session_id,
+            "method": "comps",
+            "market": market,
+            "suggested_peers": [],
+            "peer_count": 0,
+            "message": "FMP API key not configured. Please set FMP_API_KEY environment variable for advanced peer discovery.",
+            "mandatory": True,
+            "min_peers_recommended": 5
+        }
+    
     try:
-        # Initialize services
-        yfinance_service = YFinanceService()
-        peer_discovery = PeerDiscoveryService(yfinance_service=yfinance_service)
-        
-        # Get target company info
-        ticker_info = yfinance_service.get_ticker_info(ticker)
-        if not ticker_info:
-            return {
-                "suggested_peers": [],
-                "method": "comps",
-                "message": f"Could not retrieve information for {ticker}.",
-                "peer_count": 0,
-                "error": "Failed to fetch target company info"
-            }
-        
-        sector = ticker_info.get('sector', '')
-        industry = ticker_info.get('industry', '')
-        market_cap = ticker_info.get('marketCap', 0)
-        
-        if not sector or not industry:
-            return {
-                "suggested_peers": [],
-                "method": "comps",
-                "message": f"Could not determine sector/industry for {ticker}. Manual peer selection required.",
-                "peer_count": 0,
-                "warning": "Missing sector/industry data"
-            }
+        # Initialize institutional discovery service
+        discovery_service = InstitutionalPeerDiscoveryService(fmp_api_key=fmp_api_key)
         
         # Create discovery request with COMPS-specific parameters
-        discovery_request = PeerDiscoveryRequest(
+        request = PeerDiscoveryRequest(
             target_ticker=ticker,
-            target_sector=sector,
-            target_industry=industry,
-            target_market_cap=market_cap,
+            method="COMPS",
             max_peers=max_peers,
-            market=market,
-            method="COMPS"  # Critical: triggers COMPS-specific market cap ranges
+            market=market
         )
         
-        # Run async discovery (no manual loop management needed)
-        response = await peer_discovery.discover_peers(discovery_request)
+        # Execute discovery
+        response = await discovery_service.discover_peers(request)
         
-        # Convert response to expected format
-        suggested_peers = []
+        # Transform response to expected format
+        peers = []
         for peer in response.peers:
-            suggested_peers.append({
-                "symbol": peer.symbol,
-                "ticker": peer.ticker,
-                "name": peer.name,
-                "company_name": peer.company_name,
-                "sector": peer.sector,
-                "industry": peer.industry,
-                "market_cap": peer.market_cap,
-                "marketCap": peer.marketCap,
-                "similarity_score": peer.similarity_score,
-                "score": peer.score,
-                "match_reasons": peer.match_reasons
+            peers.append({
+                "ticker": peer.get("symbol"),
+                "name": peer.get("name"),
+                "match_score": peer.get("match_score", 0),
+                "market_cap": peer.get("market_cap"),
+                "sector": peer.get("sector"),
+                "industry": peer.get("industry"),
+                "match_reasons": _generate_match_reasons(peer),
+                "segments": peer.get("segments", {}),
+                "pe_ratio": peer.get("pe_ratio"),
+                "ev_to_ebitda": peer.get("ev_to_ebitda"),
+                "ps_ratio": peer.get("ps_ratio")
             })
         
+        logger.info(f"Found {len(peers)} COMPS peers for {ticker}")
+        
         return {
-            "suggested_peers": suggested_peers,
+            "status": "success",
+            "session_id": session_id,
             "method": "comps",
-            "message": f"Found {len(suggested_peers)} peers in {sector} - {industry}",
-            "peer_count": len(suggested_peers),
-            "mandatory": True,  # COMPS requires peers
-            "min_peers_required": 3,
-            "sector": sector,
-            "industry": industry,
-            "target_market_cap": market_cap,
-            "fallback_options": []  # Could add fallback options if needed
+            "market": market,
+            "suggested_peers": peers,
+            "peer_count": len(peers),
+            "message": f"Found {len(peers)} COMPS peers using multi-segment analysis",
+            "search_criteria": response.search_criteria,
+            "warnings": response.warnings,
+            "mandatory": True,
+            "min_peers_recommended": 5
         }
         
     except Exception as e:
+        logger.error(f"Error discovering COMPS peers: {str(e)}")
         return {
-            "suggested_peers": [],
+            "status": "success",
+            "session_id": session_id,
             "method": "comps",
-            "message": f"Error discovering peers: {str(e)}",
+            "market": market,
+            "suggested_peers": [],
             "peer_count": 0,
-            "error": str(e)
+            "message": f"Error discovering COMPS peers: {str(e)}",
+            "mandatory": True,
+            "min_peers_recommended": 5
         }
+
+
+def _generate_match_reasons(peer: Dict[str, Any]) -> str:
+    """Generate human-readable match reasons based on scoring components."""
+    reasons = []
+    
+    if peer.get("segments"):
+        reasons.append("Segment overlap detected")
+    
+    if peer.get("industry"):
+        reasons.append(f"Industry: {peer['industry']}")
+    
+    if peer.get("market_cap"):
+        mc = peer["market_cap"]
+        if mc > 1e9:
+            reasons.append(f"Market Cap: ${mc/1e9:.2f}B")
+        else:
+            reasons.append(f"Market Cap: ${mc/1e6:.2f}M")
+    
+    if peer.get("pe_ratio"):
+        reasons.append(f"P/E: {peer['pe_ratio']:.2f}x")
+    
+    if peer.get("ev_to_ebitda"):
+        reasons.append(f"EV/EBITDA: {peer['ev_to_ebitda']:.2f}x")
+    
+    return "; ".join(reasons) if reasons else "Basic industry match"
