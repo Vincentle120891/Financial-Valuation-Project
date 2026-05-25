@@ -2,11 +2,50 @@ import os
 import sqlite3
 import logging
 import requests
+from typing import Dict, List, Optional, Any
+from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
 DB_PATH = os.getenv("MARKET_DATABASE_PATH", "market_universe.db")
 FMP_API_KEY = os.getenv("FMP_API_KEY", "meq65Y3F8YP1LRdtqHQHLu6s0RmHSISL")
+
+
+class PeerDiscoveryRequest(BaseModel):
+    """Request for peer discovery."""
+    target_ticker: str
+    method: Optional[str] = None  # DCF, COMPS, DuPont
+    max_peers: int = 10
+    market: str = "international"
+
+
+class PeerCandidate(BaseModel):
+    """Peer candidate company."""
+    symbol: str
+    ticker: str
+    name: str
+    company_name: str
+    exchange: str
+    sector: Optional[str] = None
+    industry: Optional[str] = None
+    market_cap: Optional[float] = None
+    marketCap: Optional[float] = None
+    match_score: float = 0.0
+    segments: Dict[str, Any] = {}
+    pe_ratio: Optional[float] = None
+    ev_to_ebitda: Optional[float] = None
+    ps_ratio: Optional[float] = None
+    match_reasons: List[str] = []
+
+
+class PeerDiscoveryResponse(BaseModel):
+    """Response from peer discovery."""
+    target_ticker: str
+    peers: List[PeerCandidate]
+    total_found: int
+    search_criteria: Dict
+    warnings: List[str] = []
+
 
 def extract_market_context(symbol: str) -> tuple[str, str]:
     """
@@ -20,6 +59,7 @@ def extract_market_context(symbol: str) -> tuple[str, str]:
         country = 'JP' if ext in ['T', 'TYO'] else ('VN' if ext in ['VN', 'HNX', 'HOSE'] else ext)
         return ticker, country
     return parts[0], 'US'
+
 
 def _get_live_fmp_peers(symbol: str) -> list[str]:
     """Primary Option B Strategy: Hits the pre-computed relationships engine"""
@@ -37,6 +77,7 @@ def _get_live_fmp_peers(symbol: str) -> list[str]:
     except Exception as e:
         logger.warning(f"Option B API Request failed for {symbol}: {str(e)}")
         return []
+
 
 def _get_local_fallback_peers(symbol: str) -> list[str]:
     """Backup Option A Strategy: Scans local cross-market tables if FMP fails"""
@@ -90,9 +131,115 @@ def _get_local_fallback_peers(symbol: str) -> list[str]:
         logger.error(f"Fallback Execution Failure on Option A: {str(e)}")
         return []
 
+
+class InstitutionalPeerDiscoveryService:
+    """
+    Institutional-grade peer discovery service with dual-loop failover.
+    
+    Execution Flow:
+    1. Try Live Option B: FMP /stable/peers endpoint
+    2. If fails/empty: Trigger Fallback Option A: Local SQLite DB
+    3. Normalize candidates and fetch profiles
+    4. Return verified peer profiles for soft scoring
+    """
+    
+    def __init__(self, fmp_api_key: Optional[str] = None):
+        """Initialize with optional FMP API key."""
+        self.fmp_api_key = fmp_api_key or FMP_API_KEY
+    
+    async def discover_peers(self, request: PeerDiscoveryRequest) -> PeerDiscoveryResponse:
+        """
+        Master discovery method executing Option B with Option A failover.
+        
+        Args:
+            request: PeerDiscoveryRequest with target ticker and method
+            
+        Returns:
+            PeerDiscoveryResponse with ranked peer candidates
+        """
+        target_symbol = request.target_ticker.upper()
+        _, target_country = extract_market_context(target_symbol)
+        
+        warnings = []
+        search_criteria = {
+            'method': request.method,
+            'market': request.market,
+            'target_country': target_country
+        }
+        
+        # --- STEP 1: Execute Option B Strategy ---
+        candidate_symbols = _get_live_fmp_peers(target_symbol)
+        
+        # --- STEP 2: Automated Hybrid Transition ---
+        if not candidate_symbols:
+            warnings.append("Option B (FMP API) returned no results. Triggering Option A fallback.")
+            candidate_symbols = _get_local_fallback_peers(target_symbol)
+            
+        if not candidate_symbols:
+            logger.error(f"Peer discovery pipeline completely exhausted for {target_symbol}. Returning 0 assets.")
+            return PeerDiscoveryResponse(
+                target_ticker=target_symbol,
+                peers=[],
+                total_found=0,
+                search_criteria=search_criteria,
+                warnings=warnings + ["No peers found via Option B or Option A"]
+            )
+        
+        # --- STEP 3: Normalize Candidates & Fetch Profiles ---
+        verified_peers = []
+        
+        for symbol in candidate_symbols:
+            # Prevent cross-contamination: Ensure peers align with target country
+            _, peer_country = extract_market_context(symbol)
+            if peer_country != target_country:
+                continue
+                
+            # Fetch profile details
+            profile_url = f"https://financialmodelingprep.com/api/v3/profile/{symbol}?apikey={self.fmp_api_key}"
+            try:
+                p_resp = requests.get(profile_url, timeout=5).json()
+                if p_resp and isinstance(p_resp, list) and len(p_resp) > 0:
+                    profile_data = p_resp[0]
+                    
+                    # Check for major listing requirements
+                    exchange = profile_data.get("exchangeShortName", "")
+                    if exchange in ["NYSE", "NASDAQ", "HOSE", "HNX", "TSE", "NYQ", "NMS"]:
+                        peer = PeerCandidate(
+                            symbol=symbol,
+                            ticker=symbol,
+                            name=profile_data.get("companyName", symbol),
+                            company_name=profile_data.get("companyName", symbol),
+                            exchange=exchange,
+                            sector=profile_data.get("sector"),
+                            industry=profile_data.get("industry"),
+                            market_cap=profile_data.get("marketCap"),
+                            marketCap=profile_data.get("marketCap"),
+                            match_score=0.8,  # Default high score for verified peers
+                            segments={},
+                            pe_ratio=profile_data.get("priceEarningsRatio"),
+                            ev_to_ebitda=profile_data.get("evToEBITDA"),
+                            ps_ratio=profile_data.get("priceToSalesRatio"),
+                            match_reasons=[f"Verified peer via {'Option B' if len(warnings) == 0 else 'Option A'}"]
+                        )
+                        verified_peers.append(peer)
+            except Exception as e:
+                logger.debug(f"Failed to fetch profile for {symbol}: {e}")
+                continue
+        
+        logger.info(f"Pipeline complete. {len(verified_peers)} validated profiles returned.")
+        
+        return PeerDiscoveryResponse(
+            target_ticker=target_symbol,
+            peers=verified_peers[:request.max_peers],
+            total_found=len(verified_peers),
+            search_criteria=search_criteria,
+            warnings=warnings
+        )
+
+
 def discover_institutional_peers(target_symbol: str) -> list[dict]:
     """
-    Master Service Entry Point:
+    Legacy function-based entry point for backward compatibility.
     Executes Pre-computed Peer Pulling (Option B) with Local SQL Caching (Option A) Failover.
     """
     target_symbol = target_symbol.upper()
@@ -120,10 +267,10 @@ def discover_institutional_peers(target_symbol: str) -> list[dict]:
             continue
             
         # Call profile details array (Supported cleanly on Free Tiers)
-        profile_url = f"https://financialmodelingprep.com/stable/profile/{symbol}?apikey={FMP_API_KEY}"
+        profile_url = f"https://financialmodelingprep.com/api/v3/profile/{symbol}?apikey={FMP_API_KEY}"
         try:
             p_resp = requests.get(profile_url, timeout=5).json()
-            if p_resp and isinstance(p_resp, list):
+            if p_resp and isinstance(p_resp, list) and len(p_resp) > 0:
                 profile_data = p_resp[0]
                 
                 # Check for major listing requirements
