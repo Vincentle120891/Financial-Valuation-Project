@@ -1,17 +1,31 @@
-```
-# Dependencies
-node_modules/
-
-# Build outputs
+# Compiled and build artifacts
+*.pyc
+__pycache__/
+*.o
+*.obj
+*.class
+*.exe
+*.dll
+*.so
+*.a
+*.out
 dist/
 build/
-*.js.map
-*.css.map
+target/
 
-# Environment variables
+# Dependencies
+node_modules/
+venv/
+.venv/
 .env
 .env.local
 *.env.*
+
+# Logs and temp files
+*.log
+*.tmp
+*.swp
+*.swo
 
 # Editors
 .vscode/
@@ -19,49 +33,21 @@ build/
 *.swp
 *.swo
 
-# Logs
-*.log
+# System files
+.DS_Store
+Thumbs.db
 
 # Coverage
 coverage/
 htmlcov/
 .coverage
 
-# Python
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-.Python
-*.so
-*.egg-info/
-.eggs/
-
-# Temporary files
-*.tmp
-*~
-.DS_Store
-Thumbs.db
-
-# Testing
-.pytest_cache/
+# Python specific
 .mypy_cache/
-.nyc_output/
-coverage/
+.pytest_cache/
 
-# Distribution / packaging
-.Python
-*.so
-.PyInstaller/
-.spec
-.DS_Store
-Thumbs.db
-
-# IDE specific
-.vscode/settings.json
-.idea/
-*.swp
-*.swo
+# Java/Gradle
+.gradle/
 
 # Compressed files
 *.zip
@@ -72,19 +58,17 @@ Thumbs.db
 *.xz
 *.7z
 *.rar
+*.zst
+*.lz4
+*.lzh
+*.cab
+*.arj
+*.rpm
+*.deb
 *.Z
 *.lz
 *.lzo
 *.tar.gz
 *.tar.bz2
 *.tar.xz
-
-# OS generated files
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
-```
+*.tar.zst
