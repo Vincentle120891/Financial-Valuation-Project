@@ -308,15 +308,20 @@ const ValuationFlow = () => {
       // Include session_id to store suggestions and prevent re-fetching loop
       const data = await suggestPeers(ticker, company.market || market, 10, selectedModels, sessionId);
       console.log('Suggest peers response:', data);
-      if (data.peers && data.peers.length > 0) {
-        setSuggestedPeers(data.peers);
+      if (data.suggested_peers && data.suggested_peers.length > 0) {
+        setSuggestedPeers(data.suggested_peers);
 
         // Auto-select top 5 peers with highest scores
-        const sortedPeers = [...data.peers].sort((a, b) => b.score - a.score);
+        const sortedPeers = [...data.suggested_peers].sort((a, b) => {
+          // Use match_score or score field
+          const scoreA = a.match_score || a.score || 0;
+          const scoreB = b.match_score || b.score || 0;
+          return scoreB - scoreA;
+        });
         const topPeers = sortedPeers.slice(0, Math.min(5, sortedPeers.length));
         setSelectedPeers(topPeers);
 
-        console.log(`Auto-selected ${topPeers.length} peers with highest scores:`, topPeers.map(p => p.symbol));
+        console.log(`Auto-selected ${topPeers.length} peers with highest scores:`, topPeers.map(p => p.symbol || p.ticker));
 
         // Stay on Step 4 to review peers - user clicks Continue to go to Step 5
         // Do NOT auto-advance to Step 5
