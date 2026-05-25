@@ -57,7 +57,8 @@ const CompanySelectionStep = ({
         const response = await fetch(`/api/market-data/${ticker}/price-history?market_code=${marketCode}`);
         if (response.ok) {
           const data = await response.json();
-          setPriceHistory(data);
+          // Extract the prices array from the response for the chart
+          setPriceHistory(data.prices || []);
         } else if (response.status === 404) {
           console.warn(`Ticker ${ticker} not found or delisted`);
         } else if (response.status === 422) {
