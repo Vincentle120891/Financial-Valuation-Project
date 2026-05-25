@@ -24,7 +24,10 @@ const ApiDataStep = ({
   calculatedMetrics,
   onBackToRequirements,
   onContinueToAiAssumptions,
-  loading
+  loading,
+  sessionId,
+  market = 'international',
+  selectedModel
 }) => {
   // Check if data has been retrieved - improved check to include peerData with companies
   // FIXED: Check for historical_financials object directly, not nested inside historicalData
@@ -34,6 +37,76 @@ const ApiDataStep = ({
                            dupontResults ||
                            compsResults ||
                            calculatedMetrics;
+
+  // State for API key management
+  const [showApiKeyModal, setShowApiKeyModal] = React.useState(false);
+  const [apiKeysStatus, setApiKeysStatus] = React.useState(null);
+  const [apiKeysLoading, setApiKeysLoading] = React.useState(false);
+  const [apiKeyForm, setApiKeyForm] = React.useState({
+    openrouter_api_key: '',
+    alpha_vantage_key: '',
+    groq_api_key: '',
+    gemini_api_key: '',
+    qwen_api_key: ''
+  });
+
+  // Fetch API keys status on mount
+  React.useEffect(() => {
+    if (sessionId) {
+      fetchApiKeysStatus();
+    }
+  }, [sessionId]);
+
+  // Fetch API keys status from backend
+  const fetchApiKeysStatus = async () => {
+    try {
+      const response = await fetch(`/api/check-api-keys?session_id=${sessionId}`);
+      if (response.ok) {
+        const data = await response.json();
+        setApiKeysStatus(data);
+      }
+    } catch (error) {
+      console.error('Error fetching API keys status:', error);
+    }
+  };
+
+  // Save API keys to backend
+  const handleSaveApiKeys = async () => {
+    setApiKeysLoading(true);
+    try {
+      const response = await fetch('/api/save-api-keys', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          session_id: sessionId,
+          ...apiKeyForm
+        })
+      });
+      
+      if (response.ok) {
+        await fetchApiKeysStatus();
+        setShowApiKeyModal(false);
+        setApiKeyForm({
+          openrouter_api_key: '',
+          alpha_vantage_key: '',
+          groq_api_key: '',
+          gemini_api_key: '',
+          qwen_api_key: ''
+        });
+      } else {
+        const error = await response.json();
+        alert(`Error saving API keys: ${error.detail}`);
+      }
+    } catch (error) {
+      console.error('Error saving API keys:', error);
+      alert('Failed to save API keys');
+    } finally {
+      setApiKeysLoading(false);
+    }
+  };
+
+  // Check if all required keys are configured
+  const canProceedToStep7 = apiKeysStatus?.all_required_configured === true;
 
   // Comprehensive list of ALL expected inputs to display (even if missing/errors)
   const allExpectedInputs = [
@@ -1195,14 +1268,43 @@ const ApiDataStep = ({
           {renderCompsResults()}
           {renderCalculatedMetrics()}
 
-          <div style={{ marginTop: '20px', display: 'flex', gap: '10px' }}>
+          <div style={{ marginTop: '20px', display: 'flex', gap: '10px', alignItems: 'center' }}>
             <button
               onClick={onContinueToAiAssumptions}
               className="btn-primary"
-              disabled={loading}
+              disabled={loading || !canProceedToStep7}
+              title={!canProceedToStep7 ? "Please configure API keys first" : ""}
             >
               Continue to Historical Data Extraction →
             </button>
+            
+            {/* API Key Configuration Button */}
+            <button
+              onClick={() => setShowApiKeyModal(true)}
+              className="btn-secondary"
+              style={{
+                background: apiKeysStatus?.all_required_configured ? '#4caf50' : '#ff9800',
+                color: 'white',
+                border: 'none',
+                padding: '10px 20px',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontWeight: 'bold'
+              }}
+            >
+              🔑 Configure AI Keys Required
+              {apiKeysStatus && (
+                <span style={{ marginLeft: '8px', fontSize: '12px' }}>
+                  ({apiKeysStatus.total_configured}/5 configured)
+                </span>
+              )}
+            </button>
+            
+            {!canProceedToStep7 && apiKeysStatus && (
+              <span style={{ color: '#f44336', fontSize: '14px', fontWeight: 'bold' }}>
+                ⚠️ OpenRouter key required to proceed
+              </span>
+            )}
           </div>
         </>
       )}
@@ -1338,6 +1440,182 @@ const ApiDataStep = ({
           </pre>
         </details>
       </div>
+
+      {/* ============================================ */}
+      {/* API KEY CONFIGURATION MODAL */}
+      {/* ============================================ */}
+      {showApiKeyModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.7)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 10000
+        }}>
+          <div style={{
+            background: 'white',
+            padding: '30px',
+            borderRadius: '12px',
+            maxWidth: '600px',
+            width: '90%',
+            maxHeight: '80vh',
+            overflow: 'auto'
+          }}>
+            <h2 style={{ marginTop: 0, color: '#1565c0' }}>🔑 Configure AI API Keys</h2>
+            <p style={{ color: '#666', marginBottom: '20px' }}>
+              Enter your API keys for AI-powered data extraction (Step 7) and assumptions (Step 8).
+              Keys are stored securely in your session and not shared externally.
+            </p>
+
+            <div style={{ marginBottom: '20px', padding: '12px', background: '#fff3e0', borderRadius: '6px', borderLeft: '4px solid #ff9800' }}>
+              <strong>⚠️ Required:</strong> OpenRouter key is mandatory to proceed to Step 7.
+              Other keys are optional but recommended for fallback options.
+            </div>
+
+            <div style={{ display: 'grid', gap: '16px' }}>
+              {/* OpenRouter - REQUIRED */}
+              <div>
+                <label style={{ display: 'block', marginBottom: '6px', fontWeight: 'bold', color: '#d32f2f' }}>
+                  OpenRouter API Key *
+                </label>
+                <input
+                  type="password"
+                  value={apiKeyForm.openrouter_api_key}
+                  onChange={(e) => setApiKeyForm({ ...apiKeyForm, openrouter_api_key: e.target.value })}
+                  placeholder="sk-or-..."
+                  style={{
+                    width: '100%',
+                    padding: '10px',
+                    border: '2px solid #ff9800',
+                    borderRadius: '6px',
+                    fontSize: '14px'
+                  }}
+                />
+                <small style={{ color: '#666' }}>Primary AI provider for Step 7-8 operations</small>
+              </div>
+
+              {/* Alpha Vantage */}
+              <div>
+                <label style={{ display: 'block', marginBottom: '6px', fontWeight: 'bold' }}>
+                  Alpha Vantage API Key
+                </label>
+                <input
+                  type="password"
+                  value={apiKeyForm.alpha_vantage_key}
+                  onChange={(e) => setApiKeyForm({ ...apiKeyForm, alpha_vantage_key: e.target.value })}
+                  placeholder="Your Alpha Vantage key"
+                  style={{
+                    width: '100%',
+                    padding: '10px',
+                    border: '1px solid #ddd',
+                    borderRadius: '6px',
+                    fontSize: '14px'
+                  }}
+                />
+                <small style={{ color: '#666' }}>Financial data API (optional if using yfinance)</small>
+              </div>
+
+              {/* Groq */}
+              <div>
+                <label style={{ display: 'block', marginBottom: '6px', fontWeight: 'bold' }}>
+                  Groq API Key
+                </label>
+                <input
+                  type="password"
+                  value={apiKeyForm.groq_api_key}
+                  onChange={(e) => setApiKeyForm({ ...apiKeyForm, groq_api_key: e.target.value })}
+                  placeholder="gsk_..."
+                  style={{
+                    width: '100%',
+                    padding: '10px',
+                    border: '1px solid #ddd',
+                    borderRadius: '6px',
+                    fontSize: '14px'
+                  }}
+                />
+                <small style={{ color: '#666' }}>Alternative AI provider (fallback)</small>
+              </div>
+
+              {/* Gemini */}
+              <div>
+                <label style={{ display: 'block', marginBottom: '6px', fontWeight: 'bold' }}>
+                  Google Gemini API Key
+                </label>
+                <input
+                  type="password"
+                  value={apiKeyForm.gemini_api_key}
+                  onChange={(e) => setApiKeyForm({ ...apiKeyForm, gemini_api_key: e.target.value })}
+                  placeholder="AIza..."
+                  style={{
+                    width: '100%',
+                    padding: '10px',
+                    border: '1px solid #ddd',
+                    borderRadius: '6px',
+                    fontSize: '14px'
+                  }}
+                />
+                <small style={{ color: '#666' }}>Alternative AI provider (fallback)</small>
+              </div>
+
+              {/* Qwen */}
+              <div>
+                <label style={{ display: 'block', marginBottom: '6px', fontWeight: 'bold' }}>
+                  Alibaba Qwen/DashScope API Key
+                </label>
+                <input
+                  type="password"
+                  value={apiKeyForm.qwen_api_key}
+                  onChange={(e) => setApiKeyForm({ ...apiKeyForm, qwen_api_key: e.target.value })}
+                  placeholder="sk-..."
+                  style={{
+                    width: '100%',
+                    padding: '10px',
+                    border: '1px solid #ddd',
+                    borderRadius: '6px',
+                    fontSize: '14px'
+                  }}
+                />
+                <small style={{ color: '#666' }}>Alternative AI provider (fallback)</small>
+              </div>
+            </div>
+
+            <div style={{ marginTop: '24px', display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setShowApiKeyModal(false)}
+                style={{
+                  padding: '10px 20px',
+                  border: '1px solid #ddd',
+                  background: 'white',
+                  borderRadius: '6px',
+                  cursor: 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveApiKeys}
+                disabled={apiKeysLoading || !apiKeyForm.openrouter_api_key}
+                style={{
+                  padding: '10px 20px',
+                  background: (!apiKeyForm.openrouter_api_key) ? '#ccc' : '#1976d2',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: (!apiKeyForm.openrouter_api_key) ? 'not-allowed' : 'pointer',
+                  fontWeight: 'bold'
+                }}
+              >
+                {apiKeysLoading ? 'Saving...' : 'Save API Keys'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

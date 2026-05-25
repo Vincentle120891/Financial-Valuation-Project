@@ -43,6 +43,7 @@ class Settings(BaseSettings):
     groq_api_key: Optional[str] = Field(default=None, description="Groq API key for AI engine")
     gemini_api_key: Optional[str] = Field(default=None, description="Google Gemini API key")
     qwen_api_key: Optional[str] = Field(default=None, description="Alibaba Qwen/DashScope API key")
+    openrouter_api_key: Optional[str] = Field(default=None, description="OpenRouter API key for unified AI access")
     alpha_vantage_key: Optional[str] = Field(default=None, description="Alpha Vantage API key")
     
     # Aliases for different env var naming conventions
@@ -140,6 +141,7 @@ class Settings(BaseSettings):
             "groq": self.groq_api_key is not None,
             "gemini": self.effective_gemini_key is not None,
             "qwen": self.effective_qwen_key is not None,
+            "openrouter": self.openrouter_api_key is not None,
             "alpha_vantage": self.effective_alpha_vantage_key is not None,
         }
     
