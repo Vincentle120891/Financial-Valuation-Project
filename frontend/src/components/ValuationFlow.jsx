@@ -326,7 +326,7 @@ const ValuationFlow = () => {
         // Stay on Step 4 to review peers - user clicks Continue to go to Step 5
         // Do NOT auto-advance to Step 5
       } else {
-        setError('No peers found for this company. Try a different company or manually add peers later.');
+        setError('No peers found for this company. Please try searching for a different company.');
       }
     } catch (err) {
       console.error('Suggest peers error:', err);

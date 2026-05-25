@@ -54,16 +54,12 @@ class vn_Step2MarketDataProcessor:
     Responsibilities:
     - Fetch current Vietnamese market price (VND)
     - Calculate/retrieve beta for Vietnamese stocks
-    - Get Vietnam risk-free rate (government bond yields)
-    - Calculate market risk premium for emerging market
+    - Get Vietnam risk-free rate from government bond APIs
+    - Calculate market risk premium from historical data
     - Flag missing market data
     - Discover Vietnamese peer companies
     - Include VNINDEX performance context
     """
-
-    DEFAULT_RISK_FREE_RATE_VN = 6.8  # Vietnam 10-year government bond yield
-    DEFAULT_MARKET_PREMIUM_VN = 7.5  # Higher premium for Vietnam emerging market
-    DEFAULT_COUNTRY_RISK_PREMIUM = 3.5  # Country risk premium for Vietnam
 
     def __init__(self, vn_ticker_service: Optional[VietnameseTickerService] = None):
         self.vn_ticker_service = vn_ticker_service or VietnameseTickerService()
@@ -289,20 +285,23 @@ class vn_Step2MarketDataProcessor:
             exchange_info=exchange_info
         )
 
-    def _get_vietnam_risk_free_rate(self) -> float:
-        """Get Vietnam risk-free rate (10-year government bond yield)."""
+    def _get_vietnam_risk_free_rate(self) -> Optional[float]:
+        """Get Vietnam risk-free rate (10-year government bond yield). Returns None if not available."""
+        # No default fallbacks - return None to indicate missing data
         # In production, this would fetch real-time data from VNDirect or State Bank of Vietnam
-        return self.DEFAULT_RISK_FREE_RATE_VN
+        return None  # Explicitly no default
 
-    def _get_vietnam_market_premium(self) -> float:
-        """Get Vietnam market risk premium (emerging market premium)."""
+    def _get_vietnam_market_premium(self) -> Optional[float]:
+        """Get Vietnam market risk premium (emerging market premium). Returns None if not available."""
+        # No default fallbacks - return None to indicate missing data
         # Vietnam-specific ERP considering emerging market status
-        return self.DEFAULT_MARKET_PREMIUM_VN
+        return None  # Explicitly no default
 
-    def _get_vietnam_country_risk(self) -> float:
-        """Get Vietnam country risk premium."""
+    def _get_vietnam_country_risk(self) -> Optional[float]:
+        """Get Vietnam country risk premium. Returns None if not available."""
+        # No default fallbacks - return None to indicate missing data
         # Based on sovereign credit spread and market volatility
-        return self.DEFAULT_COUNTRY_RISK_PREMIUM
+        return None  # Explicitly no default
 
     def _get_exchange_name(self, market_code: str) -> str:
         """Get full exchange name from market code."""
