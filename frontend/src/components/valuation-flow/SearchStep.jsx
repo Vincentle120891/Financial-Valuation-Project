@@ -5,7 +5,7 @@ import ApiKeyModal from '../ApiKeyModal';
 /**
  * SearchStep Component
  * Step 1: Input Company Name or Ticker
- * 
+ *
  * Features:
  * - Market toggle (International/Vietnamese)
  * - Search input with enter key support
@@ -14,21 +14,21 @@ import ApiKeyModal from '../ApiKeyModal';
  * - Vietnamese stock search integration
  * - API Key configuration modal
  */
-const SearchStep = ({ 
-  searchQuery, 
-  setSearchQuery, 
-  searchResults, 
-  loading, 
-  error, 
-  market, 
-  setMarket, 
-  onSearch, 
+const SearchStep = ({
+  searchQuery,
+  setSearchQuery,
+  searchResults,
+  loading,
+  error,
+  market,
+  setMarket,
+  onSearch,
   onSelectCompany,
   marketValidation
 }) => {
   const [vietnamSearchLoading, setVietnameseSearchLoading] = useState(false);
   const [showApiKeyModal, setShowApiKeyModal] = useState(false);
-  
+
   const handleKeyPress = async (e) => {
     if (e.key === 'Enter') {
       await performSearch();
@@ -63,7 +63,7 @@ const SearchStep = ({
   return (
     <div className="step-container">
       {/* API Key Configuration Modal */}
-      <ApiKeyModal 
+      <ApiKeyModal
         isOpen={showApiKeyModal}
         onClose={() => setShowApiKeyModal(false)}
         onSave={handleSaveApiKeys}
@@ -71,22 +71,22 @@ const SearchStep = ({
 
       <h2>Step 1: Search Company</h2>
       <p style={{ marginBottom: '20px', color: '#666' }}>Enter a company name or ticker symbol to begin your valuation analysis.</p>
-      
+
       {/* API Key Configuration Button */}
-      <div style={{ marginBottom: '20px', display: 'flex', justifyContent: 'flex-end' }}>
+      <div className="api-key-btn-container">
         <button
           onClick={() => setShowApiKeyModal(true)}
-          className="btn-secondary"
-          style={{ fontSize: '0.9em', padding: '8px 16px' }}
+          className="btn-api-config"
           title="Configure API keys for FMP, Alpha Vantage, FRED, and SEC EDGAR"
         >
-          🔑 Configure API Keys
+          <span className="icon">🔑</span>
+          Configure API Keys
         </button>
       </div>
-      
+
       {/* Market Validation Feedback */}
       {marketValidation && marketValidation.message && (
-        <div 
+        <div
           className={`validation-message ${marketValidation.isValid ? 'success' : 'error'}`}
           style={{
             marginTop: '15px',
@@ -141,8 +141,8 @@ const SearchStep = ({
         <input
           type="text"
           placeholder={
-            market === 'vietnam' 
-              ? "Enter ticker (e.g., VNM, VIC, HPG) or company name (Vinamilk, Vingroup)" 
+            market === 'vietnam'
+              ? "Enter ticker (e.g., VNM, VIC, HPG) or company name (Vinamilk, Vingroup)"
               : "Enter ticker (e.g., AAPL, MSFT) or company name"
           }
           value={searchQuery}
@@ -151,9 +151,9 @@ const SearchStep = ({
           className="search-input"
           disabled={isLoading}
         />
-        <button 
-          onClick={performSearch} 
-          disabled={isLoading} 
+        <button
+          onClick={performSearch}
+          disabled={isLoading}
           className="btn-primary"
         >
           {isLoading ? 'Searching...' : 'Search'}
@@ -176,7 +176,7 @@ const SearchStep = ({
             const ticker = result.ticker || result.symbol;
             const companyName = result.company_name || result.name;
             const uniqueKey = `${ticker}-${companyName}-${index}`;
-            
+
             return (
               <div key={uniqueKey} className="result-item">
                 <div style={{ flex: 1 }}>
@@ -193,8 +193,8 @@ const SearchStep = ({
                     </span>
                   )}
                 </div>
-                <button 
-                  onClick={() => onSelectCompany(result)} 
+                <button
+                  onClick={() => onSelectCompany(result)}
                   className="btn-secondary"
                 >
                   Select
