@@ -12,7 +12,7 @@ from app.services.international.peer_discovery_service import PeerDiscoveryServi
 from app.services.international.yfinance_service import YFinanceService
 
 
-def process(session_id: str, ticker: str, market: str, max_peers: int = 5) -> Dict[str, Any]:
+async def process(session_id: str, ticker: str, market: str, max_peers: int = 5) -> Dict[str, Any]:
     """
     For DuPont, we do not enforce strict peer discovery.
     Returns a minimal/empty peer list as peers are optional for this method.
@@ -63,13 +63,8 @@ def process(session_id: str, ticker: str, market: str, max_peers: int = 5) -> Di
             method="DUPONT"  # Uses standard/default market cap ranges
         )
         
-        # Run async discovery
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
-            response = loop.run_until_complete(peer_discovery.discover_peers(discovery_request))
-        finally:
-            loop.close()
+        # Run async discovery (no manual loop management needed)
+        response = await peer_discovery.discover_peers(discovery_request)
         
         # Convert response to expected format
         suggested_peers = []

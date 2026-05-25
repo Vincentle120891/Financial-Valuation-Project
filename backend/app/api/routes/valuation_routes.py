@@ -183,22 +183,23 @@ async def discover_peers_endpoint(request: DiscoverPeersRequest):
         valuation_method = valuation_method.lower()
 
         # Route to appropriate discovery service based on method
+        # All discovery functions are now async, so we need to await them
         if valuation_method == "dcf":
-            discovery_result = dcf_discover_peers(
+            discovery_result = await dcf_discover_peers(
                 session_id=request.session_id,
                 ticker=request.ticker,
                 market=request.market,
                 max_peers=request.max_peers
             )
         elif valuation_method == "dupont":
-            discovery_result = dupont_discover_peers(
+            discovery_result = await dupont_discover_peers(
                 session_id=request.session_id,
                 ticker=request.ticker,
                 market=request.market,
                 max_peers=request.max_peers
             )
         elif valuation_method == "comps":
-            discovery_result = comps_discover_peers(
+            discovery_result = await comps_discover_peers(
                 session_id=request.session_id,
                 ticker=request.ticker,
                 market=request.market,

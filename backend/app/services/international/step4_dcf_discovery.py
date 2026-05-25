@@ -14,7 +14,7 @@ from app.services.international.peer_discovery_service import PeerDiscoveryServi
 from app.services.international.yfinance_service import YFinanceService
 
 
-def process(session_id: str, ticker: str, market: str, max_peers: int = 5) -> Dict[str, Any]:
+async def process(session_id: str, ticker: str, market: str, max_peers: int = 5) -> Dict[str, Any]:
     """
     For DCF, we discover peers based on sector/industry/market cap.
     Returns 5-10 peers for beta and valuation benchmarking.
@@ -64,13 +64,8 @@ def process(session_id: str, ticker: str, market: str, max_peers: int = 5) -> Di
             method="DCF"  # Critical: triggers DCF-specific market cap ranges
         )
         
-        # Run async discovery
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
-            response = loop.run_until_complete(peer_discovery.discover_peers(discovery_request))
-        finally:
-            loop.close()
+        # Run async discovery (no manual loop management needed)
+        response = await peer_discovery.discover_peers(discovery_request)
         
         # Convert response to expected format
         suggested_peers = []
