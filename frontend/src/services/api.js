@@ -24,8 +24,40 @@ const aiApi = axios.create({
 // FIX Issue #1 & #3: Use unified POST endpoint for both markets
 export const searchCompanies = async (query, market = 'international') => {
   // Use unified POST endpoint for ALL markets - no routing based on market
-  const response = await api.post('/step-1-search', { query, market });
-  return response.data;
+  try {
+    const response = await api.post('/step-1-search', { query, market });
+    return transformVietnameseResponse(response.data, market);
+  } catch (error) {
+    console.error('Search companies error:', error);
+    throw error;
+  }
+};
+
+// Transform Vietnamese response to match standard schema
+const transformVietnameseResponse = (data, market) => {
+  if (market !== 'vietnam' || !data) return data;
+  
+  // Handle array of results
+  if (Array.isArray(data)) {
+    return data.map(item => ({
+      ticker: item.ticker || item.symbol,
+      company_name: item.company_name || item.name || item.companyName,
+      sector: item.sector || item.industry,
+      exchange: item.exchange || item.market || 'HOSE',
+      market_cap: item.market_cap || item.marketCap,
+      ...item
+    }));
+  }
+  
+  // Handle single object
+  return {
+    ticker: data.ticker || data.symbol,
+    company_name: data.company_name || data.name || data.companyName,
+    sector: data.sector || data.industry,
+    exchange: data.exchange || data.market || 'HOSE',
+    market_cap: data.market_cap || data.marketCap,
+    ...data
+  };
 };
 
 // Step 4: Suggest Peers (after model selection)

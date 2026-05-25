@@ -50,38 +50,21 @@ const ModelSelectionStep = ({ onSelectModel, selectedModels }) => {
             key={model.id} 
             className={`model-card ${isSelected(model.id) ? 'selected' : ''}`}
             onClick={() => handleSelectModel(model.id)}
-            style={{
-              cursor: 'pointer',
-              border: isSelected(model.id) ? '2px solid #667eea' : '2px solid #e0e0e0',
-              background: isSelected(model.id) ? '#f8f9ff' : 'white',
-              position: 'relative'
-            }}
+            style={{ cursor: 'pointer' }}
           >
             {/* GAP 2 FIX: Radio button instead of checkbox */}
-            <div style={{ 
-              position: 'absolute', 
-              top: '10px', 
-              right: '10px',
-              width: '20px',
-              height: '20px',
-              borderRadius: '50%',  // Circle for radio button
-              border: '2px solid #667eea',
-              background: isSelected(model.id) ? '#667eea' : 'white',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'white',
-              fontSize: '14px'
-            }}>
-              {isSelected(model.id) && '●'}  // Filled circle for selected radio
+            <div className={`absolute top-2.5 right-2.5 w-5 h-5 rounded-full border-2 border-indigo-500 flex items-center justify-center text-white text-sm transition-all ${
+              isSelected(model.id) ? 'bg-indigo-500' : 'bg-white'
+            }`}>
+              {isSelected(model.id) && '●'}
             </div>
             <h3>{model.name}</h3>
             <p>{model.desc}</p>
           </div>
         ))}
       </div>
-      <div style={{ marginTop: '20px', textAlign: 'center' }}>
-        <p style={{ color: '#666', fontSize: '14px' }}>
+      <div className="mt-5 text-center">
+        <p className="text-slate-600 text-sm">
           {!selectedModels
             ? 'Select one model to continue'
             : `1 model selected: ${selectedModels}`}
