@@ -12,10 +12,7 @@ Uses InstitutionalPeerDiscoveryService for advanced multi-segment peer matching
 import os
 import logging
 from typing import Dict, Any
-from app.services.international.institutional_peer_discovery import (
-    InstitutionalPeerDiscoveryService,
-    PeerDiscoveryRequest
-)
+from app.services.international.institutional_peer_discovery import discover_institutional_peers
 
 logger = logging.getLogger(__name__)
 
@@ -31,52 +28,24 @@ async def process(session_id: str, ticker: str, market: str, max_peers: int = 10
     """
     logger.info(f"Starting DCF peer discovery for {ticker} (Session: {session_id})")
     
-    # Get FMP API key from environment
-    fmp_api_key = os.getenv("FMP_API_KEY")
-    
-    if not fmp_api_key:
-        logger.warning("FMP_API_KEY not configured. Peer discovery limited to basic matching.")
-        return {
-            "status": "success",
-            "session_id": session_id,
-            "method": "dcf",
-            "market": market,
-            "suggested_peers": [],
-            "peer_count": 0,
-            "message": "FMP API key not configured. Please set FMP_API_KEY environment variable for advanced peer discovery.",
-            "mandatory": False,
-            "min_peers_recommended": 3
-        }
-    
     try:
-        # Initialize institutional discovery service
-        discovery_service = InstitutionalPeerDiscoveryService(fmp_api_key=fmp_api_key)
-        
-        # Create discovery request with DCF-specific parameters
-        request = PeerDiscoveryRequest(
-            target_ticker=ticker,
-            method="DCF",
-            max_peers=max_peers,
-            market=market
-        )
-        
-        # Execute discovery
-        response = await discovery_service.discover_peers(request)
+        # Use the new hybrid discovery function (FMP + SQLite fallback)
+        peer_profiles = discover_institutional_peers(ticker)
         
         # Transform response to expected format
         peers = []
-        for peer in response.peers:
+        for peer in peer_profiles[:max_peers]:
             peers.append({
                 "ticker": peer.get("symbol"),
-                "name": peer.get("name"),
-                "match_score": peer.get("match_score", 0),
-                "market_cap": peer.get("market_cap"),
+                "name": peer.get("companyName") or peer.get("name"),
+                "match_score": 75,  # Default score for now
+                "market_cap": peer.get("mktCap") or peer.get("marketCap"),
                 "sector": peer.get("sector"),
                 "industry": peer.get("industry"),
                 "match_reasons": _generate_match_reasons(peer),
-                "segments": peer.get("segments", {}),
-                "pe_ratio": peer.get("pe_ratio"),
-                "ev_to_ebitda": peer.get("ev_to_ebitda")
+                "segments": {},  # Will be populated later if available
+                "pe_ratio": peer.get("price") and peer.get("eps") and round(peer.get("price", 0) / peer.get("eps", 1), 2),
+                "ev_to_ebitda": None  # Will be populated from financial data
             })
         
         logger.info(f"Found {len(peers)} DCF peers for {ticker}")
@@ -89,14 +58,12 @@ async def process(session_id: str, ticker: str, market: str, max_peers: int = 10
             "suggested_peers": peers,
             "peer_count": len(peers),
             "message": f"Found {len(peers)} DCF peers using multi-segment analysis",
-            "search_criteria": response.search_criteria,
-            "warnings": response.warnings,
             "mandatory": False,
             "min_peers_recommended": 3
         }
         
     except Exception as e:
-        logger.error(f"Error discovering DCF peers: {str(e)}")
+        logger.error(f"Error discovering DCF peers: {str(e)}", exc_info=True)
         return {
             "status": "success",
             "session_id": session_id,
@@ -114,17 +81,18 @@ def _generate_match_reasons(peer: Dict[str, Any]) -> str:
     """Generate human-readable match reasons based on scoring components."""
     reasons = []
     
-    if peer.get("segments"):
-        reasons.append("Segment overlap detected")
-    
     if peer.get("industry"):
         reasons.append(f"Industry: {peer['industry']}")
     
-    if peer.get("market_cap"):
-        mc = peer["market_cap"]
-        if mc > 1e9:
-            reasons.append(f"Market Cap: ${mc/1e9:.2f}B")
-        else:
-            reasons.append(f"Market Cap: ${mc/1e6:.2f}M")
+    if peer.get("sector"):
+        reasons.append(f"Sector: {peer['sector']}")
+    
+    if peer.get("mktCap") or peer.get("marketCap"):
+        mc = peer.get("mktCap") or peer.get("marketCap")
+        if mc and mc > 0:
+            if mc > 1e9:
+                reasons.append(f"Market Cap: ${mc/1e9:.2f}B")
+            else:
+                reasons.append(f"Market Cap: ${mc/1e6:.2f}M")
     
     return "; ".join(reasons) if reasons else "Basic industry match"
