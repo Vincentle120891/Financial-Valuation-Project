@@ -10,6 +10,7 @@ from pydantic import BaseModel
 
 from app.services.international.yfinance_service import YFinanceService
 from app.services.international.peer_discovery_service import PeerDiscoveryService, PeerDiscoveryRequest
+from app.services.international.fred_service import get_fred_service
 from app.api.schemas.unified_step_schemas import (
     UnifiedStep2Response,
     MarketDataPoint,
@@ -208,26 +209,28 @@ class Step2MarketDataProcessor:
 
         # Risk-free rate
         risk_free_rate = self._get_risk_free_rate(market)
+        risk_free_status = DataStatus.RETRIEVED if risk_free_rate is not None else DataStatus.MISSING
         market_data_points.append(MarketDataPoint(
             metric="risk_free_rate",
             value=risk_free_rate,
-            source="government_bond",
-            status=DataStatus.RETRIEVED,
-            formula="10-year Government Bond Yield",
-            confidence_score=95.0,
+            source="FRED" if risk_free_rate is not None else "pending",
+            status=risk_free_status,
+            formula="10-year US Treasury Yield",
+            confidence_score=95.0 if risk_free_rate is not None else None,
             currency=None,
             unit="%"
         ))
 
         # Market Risk Premium
         market_premium = self._get_market_premium(market)
+        market_premium_status = DataStatus.ESTIMATED if market_premium is not None else DataStatus.MISSING
         market_data_points.append(MarketDataPoint(
             metric="market_risk_premium",
             value=market_premium,
-            source="historical_average",
-            status=DataStatus.ESTIMATED,
+            source="damodaran" if market_premium is not None else "pending",
+            status=market_premium_status,
             formula="Historical Equity Risk Premium",
-            confidence_score=75.0,
+            confidence_score=75.0 if market_premium is not None else None,
             currency=None,
             unit="%"
         ))
@@ -252,19 +255,19 @@ class Step2MarketDataProcessor:
         risk_metrics = MarketRiskMetrics(
             risk_free_rate=DataField(
                 value=risk_free_rate,
-                status=DataStatus.RETRIEVED,
-                source="government_bond",
-                formula="10-year Government Bond Yield",
-                confidence_score=95.0,
+                status=risk_free_status,
+                source="FRED" if risk_free_rate is not None else "pending",
+                formula="10-year US Treasury Yield",
+                confidence_score=95.0 if risk_free_rate is not None else None,
                 unit="%",
                 currency=None
             ),
             market_risk_premium=DataField(
                 value=market_premium,
-                status=DataStatus.ESTIMATED,
-                source="historical_average",
+                status=market_premium_status,
+                source="damodaran" if market_premium is not None else "pending",
                 formula="Historical Equity Risk Premium",
-                confidence_score=75.0,
+                confidence_score=75.0 if market_premium is not None else None,
                 unit="%",
                 currency=None
             ),
@@ -342,14 +345,26 @@ class Step2MarketDataProcessor:
         )
 
     def _get_risk_free_rate(self, market: str) -> Optional[float]:
-        """Get risk-free rate based on market. Returns None if not available."""
-        # No default fallbacks - return None to indicate missing data
-        # Frontend must handle null values and show "Pending" or require user input
+        """Get risk-free rate from FRED API (US 10-year Treasury yield)."""
         if market == "vietnam":
             # Vietnam market: would need VND government bond API
-            return None  # Explicitly no default
-        # International market: would need US Treasury API
-        return None  # Explicitly no default
+            return None
+        
+        # International market: Fetch from FRED
+        try:
+            fred_service = get_fred_service()
+            treasury_data = fred_service.get_10year_treasury_yield()
+            
+            if treasury_data and treasury_data.get('status') == 'RETRIEVED':
+                value = treasury_data.get('value')
+                if value is not None:
+                    logger.info(f"Fetched risk-free rate from FRED: {value}%")
+                    return value
+        except Exception as e:
+            logger.error(f"Error fetching risk-free rate from FRED: {str(e)}")
+        
+        # Return None if FRED data unavailable - no default fallbacks
+        return None
 
     def _get_market_premium(self, market: str) -> Optional[float]:
         """Get market risk premium based on market. Returns None if not available."""
