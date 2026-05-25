@@ -1,4 +1,3 @@
-```
 # Compiled and build artifacts
 *.pyc
 __pycache__/
@@ -15,11 +14,11 @@ __pycache__/
 .venv/
 venv/
 node_modules/
+.mypy_cache/
+.pytest_cache/
 dist/
 build/
 target/
-.mypy_cache/
-.pytest_cache/
 .gradle/
 
 # Logs and temp files
@@ -31,11 +30,13 @@ target/
 # Environment
 .env
 .env.local
-*.env.*
+.env.*
 
 # Editors
 .vscode/
 .idea/
+*.swp
+*.swo
 
 # System files
 .DS_Store
@@ -69,4 +70,3 @@ htmlcov/
 *.tar.bz2
 *.tar.xz
 *.tar.zst
-```

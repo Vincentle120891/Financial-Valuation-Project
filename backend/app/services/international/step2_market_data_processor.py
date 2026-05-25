@@ -208,26 +208,28 @@ class Step2MarketDataProcessor:
 
         # Risk-free rate
         risk_free_rate = self._get_risk_free_rate(market)
+        risk_free_status = DataStatus.RETRIEVED if risk_free_rate is not None else DataStatus.MISSING
         market_data_points.append(MarketDataPoint(
             metric="risk_free_rate",
             value=risk_free_rate,
-            source="government_bond",
-            status=DataStatus.RETRIEVED,
+            source="government_bond" if risk_free_rate is not None else "pending",
+            status=risk_free_status,
             formula="10-year Government Bond Yield",
-            confidence_score=95.0,
+            confidence_score=95.0 if risk_free_rate is not None else None,
             currency=None,
             unit="%"
         ))
 
         # Market Risk Premium
         market_premium = self._get_market_premium(market)
+        market_premium_status = DataStatus.ESTIMATED if market_premium is not None else DataStatus.MISSING
         market_data_points.append(MarketDataPoint(
             metric="market_risk_premium",
             value=market_premium,
-            source="historical_average",
-            status=DataStatus.ESTIMATED,
+            source="historical_average" if market_premium is not None else "pending",
+            status=market_premium_status,
             formula="Historical Equity Risk Premium",
-            confidence_score=75.0,
+            confidence_score=75.0 if market_premium is not None else None,
             currency=None,
             unit="%"
         ))
