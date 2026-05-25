@@ -78,6 +78,7 @@ const SearchStep = ({
           onClick={() => setShowApiKeyModal(true)}
           className="btn-secondary"
           style={{ fontSize: '0.9em', padding: '8px 16px' }}
+          title="Configure API keys for FMP, Alpha Vantage, FRED, and SEC EDGAR"
         >
           🔑 Configure API Keys
         </button>
