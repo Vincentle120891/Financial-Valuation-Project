@@ -9,7 +9,7 @@ import logging
 from datetime import datetime
 from typing import Dict, Any, List, Optional
 from fastapi import APIRouter, HTTPException, UploadFile, File
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from app.core.logging_config import get_logger
 from app.core.session_service import session_service
 from app.api.schemas import (
@@ -129,14 +129,34 @@ async def save_peers(request: SavePeersRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/step-4-discover-peers", response_model=Dict[str, Any])
-async def discover_peers_endpoint(
-    session_id: str,
-    ticker: str,
-    max_peers: int = 10,
-    market: str = "international",
+# =============================================================================
+# STEP 4 REQUEST/RESPONSE MODELS
+# =============================================================================
+
+class DiscoverPeersRequest(BaseModel):
+    """Step 4: Discover peers request model"""
+    session_id: str
+    ticker: str
+    market: str = "international"
+    max_peers: int = 10
     method: Optional[str] = None
-):
+
+
+class DiscoverPeersResponse(BaseModel):
+    """Step 4: Discover peers response model"""
+    status: str
+    session_id: str
+    method: str
+    market: str
+    suggested_peers: List[Dict[str, Any]]
+    peer_count: int
+    message: str
+    mandatory: Optional[bool] = False
+    min_peers_recommended: Optional[int] = None
+
+
+@router.post("/step-4-discover-peers", response_model=DiscoverPeersResponse)
+async def discover_peers_endpoint(request: DiscoverPeersRequest):
     """
     Step 4: Discover peer companies automatically.
     Routes to method-specific discovery service based on valuation method.
@@ -147,12 +167,12 @@ async def discover_peers_endpoint(
     """
     try:
         # Validate session exists
-        session = session_service.get_session_data(session_id)
+        session = session_service.get_session_data(request.session_id)
         if not session:
             raise HTTPException(status_code=404, detail="Session not found")
 
         # Get method from parameter or session (fallback to session if not provided)
-        valuation_method = method or session.get("method")
+        valuation_method = request.method or session.get("method")
 
         if not valuation_method:
             raise HTTPException(
@@ -165,24 +185,24 @@ async def discover_peers_endpoint(
         # Route to appropriate discovery service based on method
         if valuation_method == "dcf":
             discovery_result = dcf_discover_peers(
-                session_id=session_id,
-                ticker=ticker,
-                market=market,
-                max_peers=max_peers
+                session_id=request.session_id,
+                ticker=request.ticker,
+                market=request.market,
+                max_peers=request.max_peers
             )
         elif valuation_method == "dupont":
             discovery_result = dupont_discover_peers(
-                session_id=session_id,
-                ticker=ticker,
-                market=market,
-                max_peers=max_peers
+                session_id=request.session_id,
+                ticker=request.ticker,
+                market=request.market,
+                max_peers=request.max_peers
             )
         elif valuation_method == "comps":
             discovery_result = comps_discover_peers(
-                session_id=session_id,
-                ticker=ticker,
-                market=market,
-                max_peers=max_peers
+                session_id=request.session_id,
+                ticker=request.ticker,
+                market=request.market,
+                max_peers=request.max_peers
             )
         else:
             raise HTTPException(
@@ -191,12 +211,17 @@ async def discover_peers_endpoint(
             )
 
         # Return method-specific discovery result
-        return {
-            "status": "success",
-            "session_id": session_id,
-            "method": valuation_method,
-            **discovery_result
-        }
+        return DiscoverPeersResponse(
+            status="success",
+            session_id=request.session_id,
+            method=valuation_method,
+            market=request.market,
+            suggested_peers=discovery_result.get("suggested_peers", []),
+            peer_count=discovery_result.get("peer_count", 0),
+            message=discovery_result.get("message", ""),
+            mandatory=discovery_result.get("mandatory", False),
+            min_peers_recommended=discovery_result.get("min_peers_recommended")
+        )
 
     except HTTPException:
         raise
