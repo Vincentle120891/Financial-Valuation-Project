@@ -223,7 +223,7 @@ const CompanySelectionStep = ({
             </svg>
           </div>
         ) : priceHistory && priceHistory.length > 0 ? (
-          <div className="h-64">
+          <div style={{ width: '100%', height: '300px' }}>
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={priceHistory}>
                 <defs>
