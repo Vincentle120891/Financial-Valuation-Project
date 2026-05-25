@@ -39,15 +39,15 @@ const PeerSelectionStep = ({
   const handleSelectAll = () => {
     if (selectedPeers.length === suggestedPeers.length) {
       suggestedPeers.forEach(peer => {
-        const peerId = peer.symbol || peer.ticker;
-        if (selectedPeers.find(p => (p.symbol || p.ticker) === peerId)) {
+        const peerId = peer.ticker || peer.symbol;
+        if (selectedPeers.find(p => (p.ticker || p.symbol) === peerId)) {
           onTogglePeer(peer);
         }
       });
     } else {
       suggestedPeers.forEach(peer => {
-        const peerId = peer.symbol || peer.ticker;
-        if (!selectedPeers.find(p => (p.symbol || p.ticker) === peerId)) {
+        const peerId = peer.ticker || peer.symbol;
+        if (!selectedPeers.find(p => (p.ticker || p.symbol) === peerId)) {
           onTogglePeer(peer);
         }
       });
@@ -122,21 +122,22 @@ const PeerSelectionStep = ({
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {suggestedPeers.map((peer) => {
-                const peerId = peer.symbol || peer.ticker;
-                const isSelected = selectedPeers.find(p => (p.symbol || p.ticker) === peerId);
+                const peerId = peer.ticker || peer.symbol;
+                const isSelected = selectedPeers.find(p => (p.ticker || p.symbol) === peerId);
                 
                 const isInvalidPeer = 
-                  peer.symbol?.startsWith('^') ||
                   peer.ticker?.startsWith('^') ||
-                  peer.symbol?.includes('INDEX') ||
+                  peer.symbol?.startsWith('^') ||
                   peer.ticker?.includes('INDEX') ||
-                  peer.symbol?.includes('IDX') ||
+                  peer.symbol?.includes('INDEX') ||
                   peer.ticker?.includes('IDX') ||
-                  !peer.marketCap ||
-                  peer.marketCap <= 0;
+                  peer.symbol?.includes('IDX') ||
+                  !peer.market_cap ||
+                  peer.market_cap <= 0;
 
                 const ticker = peer.ticker || peer.symbol;
                 const name = peer.company_name || peer.name;
+                const marketCap = peer.market_cap || peer.marketCap;
 
                 return (
                   <tr 
@@ -188,8 +189,7 @@ const PeerSelectionStep = ({
 
                     <td className="px-4 py-3 text-right">
                       <span className="text-sm text-gray-900">
-                        {peer.marketCap ? `$${(() => {
-                          const marketCap = peer.marketCap;
+                        {marketCap ? `$${(() => {
                           if (marketCap >= 1e12) return `${(marketCap / 1e12).toFixed(2)}T`;
                           if (marketCap >= 1e9) return `${(marketCap / 1e9).toFixed(2)}B`;
                           if (marketCap >= 1e6) return `${(marketCap / 1e6).toFixed(2)}M`;
@@ -202,19 +202,19 @@ const PeerSelectionStep = ({
                       <div className="flex flex-col">
                         <div className="flex items-center justify-between text-xs mb-1">
                           <span className={`font-semibold ${
-                            peer.score >= 80 ? 'text-green-600' :
-                            peer.score >= 60 ? 'text-yellow-600' : 'text-gray-600'
+                            (peer.match_score || peer.score || 0) >= 80 ? 'text-green-600' :
+                            (peer.match_score || peer.score || 0) >= 60 ? 'text-yellow-600' : 'text-gray-600'
                           }`}>
-                            {peer.score}/100
+                            {peer.match_score || peer.score || 0}/100
                           </span>
                         </div>
                         <div className="w-full bg-gray-200 rounded-full h-2">
                           <div
                             className={`h-2 rounded-full ${
-                              peer.score >= 80 ? 'bg-green-500' :
-                              peer.score >= 60 ? 'bg-yellow-500' : 'bg-gray-400'
+                              (peer.match_score || peer.score || 0) >= 80 ? 'bg-green-500' :
+                              (peer.match_score || peer.score || 0) >= 60 ? 'bg-yellow-500' : 'bg-gray-400'
                             }`}
-                            style={{ width: `${peer.score}%` }}
+                            style={{ width: `${peer.match_score || peer.score || 0}%` }}
                           />
                         </div>
                       </div>
@@ -235,6 +235,8 @@ const PeerSelectionStep = ({
                             <li className="text-gray-500">+{peer.match_reasons.length - 2} more</li>
                           )}
                         </ul>
+                      ) : peer.match_reason ? (
+                        <span className="text-xs text-gray-600">{peer.match_reason}</span>
                       ) : (
                         <span className="text-xs text-gray-400">No match reasons</span>
                       )}
