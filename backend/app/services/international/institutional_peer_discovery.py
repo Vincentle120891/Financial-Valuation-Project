@@ -237,48 +237,113 @@ class InstitutionalPeerDiscoveryService:
         )
 
 
+def _expand_peer_network(initial_peers: list[str], target_symbol: str, expansion_count: int = 2) -> list[str]:
+    """
+    Recursive Neighbor Expansion (2-Hop Discovery):
+    Fetches peer lists for the top 'expansion_count' candidates to find secondary connections.
+    This broadens the universe when the primary list is sparse (< 5 peers).
+    
+    Args:
+        initial_peers: List of peer symbols from Option B or A
+        target_symbol: Original target ticker (to exclude from results)
+        expansion_count: Number of top peers to expand (default 2 to limit API calls)
+    
+    Returns:
+        Expanded list of unique peer symbols
+    """
+    if not initial_peers:
+        return []
+    
+    logger.info(f"Starting Network Expansion: Fetching neighbors for top {expansion_count} peers...")
+    expanded_set = set(initial_peers)
+    
+    # We only expand the top N peers to avoid rate limits and noise
+    peers_to_expand = initial_peers[:expansion_count]
+    
+    for peer_symbol in peers_to_expand:
+        # Fetch neighbors of the neighbor (2nd degree connection)
+        second_degree_peers = _get_live_fmp_peers(peer_symbol)
+        
+        for candidate in second_degree_peers:
+            # Filter: Must not be the original target, and must not be already in the list
+            if candidate.upper() != target_symbol.upper() and candidate.upper() not in [p.upper() for p in expanded_set]:
+                expanded_set.add(candidate)
+                logger.debug(f"Network Expansion: Added {candidate} via {peer_symbol}")
+    
+    final_list = list(expanded_set)
+    logger.info(f"Network Expansion Complete: List grew from {len(initial_peers)} to {len(final_list)} candidates.")
+    return final_list
+
+
 def discover_institutional_peers(target_symbol: str) -> list[dict]:
     """
     Legacy function-based entry point for backward compatibility.
-    Executes Pre-computed Peer Pulling (Option B) with Local SQL Caching (Option A) Failover.
+    
+    Execution Flow:
+    1. Execute Option B (FMP Live) -> Fallback to Option A (Local SQL)
+    2. [NEW] Recursive Network Expansion (2-Hop Discovery) if list is sparse
+    3. Profile Enrichment & Local Soft Scoring
+    4. Return scored and sorted peer profiles
     """
     target_symbol = target_symbol.upper()
     _, target_country = extract_market_context(target_symbol)
     
-    # --- STEP 1: Execute Option B Strategy ---
+    # --- STEP 1: Execute Primary/Fallback Strategy ---
     candidate_symbols = _get_live_fmp_peers(target_symbol)
     
-    # --- STEP 2: Automated Hybrid Transition ---
     if not candidate_symbols:
-        # Fall back to Option A if Option B hits a paywall, drops out, or lacks VN/JP density
+        logger.info("Primary API empty. Triggering Option A Fallback (Local DB)...")
         candidate_symbols = _get_local_fallback_peers(target_symbol)
         
     if not candidate_symbols:
-        logger.error(f"Peer discovery pipeline completely exhausted for {target_symbol}. Returning 0 assets.")
+        logger.error(f"Peer discovery pipeline completely exhausted for {target_symbol}.")
         return []
 
-    # --- STEP 3: Normalize Candidates & Prep for Profile Parsing ---
+    # --- STEP 2: Recursive Network Expansion (The "Broadening" Step) ---
+    # Only expand if we have few peers (< 5) to maximize coverage without spamming API
+    if len(candidate_symbols) < 5:
+        candidate_symbols = _expand_peer_network(candidate_symbols, target_symbol, expansion_count=2)
+    
+    # --- STEP 3: Normalize, Enrich & Score Candidates ---
     verified_peer_profiles = []
     
     for symbol in candidate_symbols:
-        # Prevent cross-contamination: Make sure peers align with target country boundaries
+        # 1. Market Boundary Check
         _, peer_country = extract_market_context(symbol)
         if peer_country != target_country:
             continue
             
-        # Call profile details array (Supported cleanly on Free Tiers)
+        # 2. Fetch Profile Data for Scoring
         profile_url = f"https://financialmodelingprep.com/api/v3/profile/{symbol}?apikey={FMP_API_KEY}"
         try:
             p_resp = requests.get(profile_url, timeout=5).json()
             if p_resp and isinstance(p_resp, list) and len(p_resp) > 0:
                 profile_data = p_resp[0]
                 
-                # Check for major listing requirements
-                if profile_data.get("exchangeShortName") in ["NYSE", "NASDAQ", "HOSE", "HNX", "TSE"]:
-                    verified_peer_profiles.append(profile_data)
-        except Exception:
+                # Exchange Validation
+                exchange = profile_data.get("exchangeShortName", "")
+                if exchange not in ["NYSE", "NASDAQ", "HOSE", "HNX", "TSE", "AMEX", "NYQ", "NMS"]:
+                    continue
+                
+                # 3. Calculate Local Soft Score (0.0 - 1.0)
+                # In production, this would compare sector/industry/market_cap ratios against target
+                # For now, we assign a high base score for verified peers, with slight variation
+                base_score = 0.85
+                is_expanded = symbol not in candidate_symbols[:max(1, len(candidate_symbols) - 2)]
+                score = base_score - (0.05 if is_expanded else 0.0)  # Slightly lower score for expanded peers
+                
+                # Inject score and discovery path into the payload for downstream consumption
+                profile_data['match_score'] = score
+                profile_data['discovery_path'] = "expanded" if is_expanded else "direct"
+                
+                verified_peer_profiles.append(profile_data)
+                
+        except Exception as e:
+            logger.warning(f"Failed to fetch profile for {symbol}: {str(e)}")
             continue
 
-    # Clean data payload flows into Step 3 (Soft Scoring) unchanged
-    logger.info(f"Pipeline complete. {len(verified_peer_profiles)} validated profiles passed to Soft Scoring.")
+    # Sort by score descending (highest quality peers first)
+    verified_peer_profiles.sort(key=lambda x: x.get('match_score', 0), reverse=True)
+
+    logger.info(f"Pipeline complete. {len(verified_peer_profiles)} validated & scored peers ready.")
     return verified_peer_profiles
