@@ -1,3 +1,59 @@
-(frontend/src/components/ApiKeyModal.jsx is a source file, and there are no build artifacts, dependencies, or temp files in the changes)
+```
+# Dependencies
+node_modules/
 
-(empty — output nothing)
+# Logs and temp files
+*.log
+*.tmp
+
+# Environment
+.env
+.env.local
+*.env.*
+
+# Editors
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+venv/
+.venv/
+env/
+ENV/
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.log
+.git/modules/
+*.sublime-workspace
+.pytest_cache/
+.mypy_cache/
+.hypothesis/
+
+# Build artifacts
+dist/
+build/
+*.egg
+*.egg-info/
+.eggs/
+.installed.cfg
+lib/
+lib64/
+parts/
+sdist/
+develop-eggs/
+bin/
+var/
+wsgi/
+```
