@@ -58,6 +58,9 @@ async def create_session(request: TickerSelectRequest):
             company_name=None
         )
         
+        # Get ticker_info for sector/industry/country data
+        ticker_info = step2_processor.yfinance_service.get_ticker_info(request.ticker)
+        
         # Update session status from processor result
         session_service.update_session_data(session_id, "status", unified_response.status)
         
@@ -66,6 +69,16 @@ async def create_session(request: TickerSelectRequest):
         session_service.update_session_data(session_id, "data_quality_score", unified_response.data_quality_score)
         session_service.update_session_data(session_id, "confirmed", unified_response.confirmed)
         session_service.update_session_data(session_id, "market", unified_response.market)
+        
+        # Add ticker_info to response for frontend display
+        if ticker_info:
+            unified_response_dict = unified_response.model_dump()
+            unified_response_dict['ticker_info'] = {
+                'sector': ticker_info.get('sector'),
+                'industry': ticker_info.get('industry'),
+                'country': ticker_info.get('country', ticker_info.get('exchange'))
+            }
+            return unified_response_dict
 
         # Return the unified response directly (with updated session_id)
         return unified_response

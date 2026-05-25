@@ -1,12 +1,12 @@
 """
-Step 4: COMPS Peer Discovery Service (International Market)
+Step 4: DuPont Peer Discovery Service (International Market)
 
-Trading Comps Analysis requires peer comparison for:
-- Trading multiples (P/E, EV/EBITDA, P/S, etc.)
-- Relative valuation benchmarking
-- Sector/industry comparables
+DuPont Analysis requires peer comparison for:
+- ROE decomposition benchmarking
+- Profit margin, asset turnover, and equity multiplier comparisons
+- Operational efficiency analysis
 
-Market Cap Range for COMPS: 30% - 300% of target (wider range for trading comps)
+Market Cap Range for DuPont: 20% - 500% of target (widest range for operational analysis)
 Uses InstitutionalPeerDiscoveryService for advanced multi-segment peer matching
 """
 import os
@@ -22,14 +22,14 @@ logger = logging.getLogger(__name__)
 
 async def process(session_id: str, ticker: str, market: str, max_peers: int = 10) -> Dict[str, Any]:
     """
-    Discovers peers for Trading Comps valuation using institutional-grade multi-segment analysis.
+    Discovers peers for DuPont valuation using institutional-grade multi-segment analysis.
     
-    COMPS-specific criteria:
-    - Market Cap Range: 30%-300% of target (strict), 15%-600% (moderate), 5%-1000% (broad)
-    - Focus on companies with similar trading multiples and operational profiles
-    - Prioritizes segment overlap and multiple availability
+    DuPont-specific criteria:
+    - Market Cap Range: 20%-500% of target (widest range for operational comparison)
+    - Focus on companies with similar operational metrics and capital structures
+    - Optional for DuPont analysis (can work without peers)
     """
-    logger.info(f"Starting COMPS peer discovery for {ticker} (Session: {session_id})")
+    logger.info(f"Starting DuPont peer discovery for {ticker} (Session: {session_id})")
     
     # Get FMP API key from environment
     fmp_api_key = os.getenv("FMP_API_KEY")
@@ -39,23 +39,23 @@ async def process(session_id: str, ticker: str, market: str, max_peers: int = 10
         return {
             "status": "success",
             "session_id": session_id,
-            "method": "comps",
+            "method": "dupont",
             "market": market,
             "suggested_peers": [],
             "peer_count": 0,
             "message": "FMP API key not configured. Please set FMP_API_KEY environment variable for advanced peer discovery.",
-            "mandatory": True,
-            "min_peers_recommended": 5
+            "mandatory": False,
+            "min_peers_recommended": 3
         }
     
     try:
         # Initialize institutional discovery service
         discovery_service = InstitutionalPeerDiscoveryService(fmp_api_key=fmp_api_key)
         
-        # Create discovery request with COMPS-specific parameters
+        # Create discovery request with DuPont-specific parameters
         request = PeerDiscoveryRequest(
             target_ticker=ticker,
-            method="COMPS",
+            method="DUPONT",
             max_peers=max_peers,
             market=market
         )
@@ -76,38 +76,37 @@ async def process(session_id: str, ticker: str, market: str, max_peers: int = 10
                 "match_reasons": _generate_match_reasons(peer),
                 "segments": peer.get("segments", {}),
                 "pe_ratio": peer.get("pe_ratio"),
-                "ev_to_ebitda": peer.get("ev_to_ebitda"),
-                "ps_ratio": peer.get("ps_ratio")
+                "ev_to_ebitda": peer.get("ev_to_ebitda")
             })
         
-        logger.info(f"Found {len(peers)} COMPS peers for {ticker}")
+        logger.info(f"Found {len(peers)} DuPont peers for {ticker}")
         
         return {
             "status": "success",
             "session_id": session_id,
-            "method": "comps",
+            "method": "dupont",
             "market": market,
             "suggested_peers": peers,
             "peer_count": len(peers),
-            "message": f"Found {len(peers)} COMPS peers using multi-segment analysis",
+            "message": f"Found {len(peers)} DuPont peers using multi-segment analysis",
             "search_criteria": response.search_criteria,
             "warnings": response.warnings,
-            "mandatory": True,
-            "min_peers_recommended": 5
+            "mandatory": False,
+            "min_peers_recommended": 3
         }
         
     except Exception as e:
-        logger.error(f"Error discovering COMPS peers: {str(e)}")
+        logger.error(f"Error discovering DuPont peers: {str(e)}")
         return {
             "status": "success",
             "session_id": session_id,
-            "method": "comps",
+            "method": "dupont",
             "market": market,
             "suggested_peers": [],
             "peer_count": 0,
-            "message": f"Error discovering COMPS peers: {str(e)}",
-            "mandatory": True,
-            "min_peers_recommended": 5
+            "message": f"Error discovering DuPont peers: {str(e)}",
+            "mandatory": False,
+            "min_peers_recommended": 3
         }
 
 
@@ -127,11 +126,5 @@ def _generate_match_reasons(peer: Dict[str, Any]) -> str:
             reasons.append(f"Market Cap: ${mc/1e9:.2f}B")
         else:
             reasons.append(f"Market Cap: ${mc/1e6:.2f}M")
-    
-    if peer.get("pe_ratio"):
-        reasons.append(f"P/E: {peer['pe_ratio']:.2f}x")
-    
-    if peer.get("ev_to_ebitda"):
-        reasons.append(f"EV/EBITDA: {peer['ev_to_ebitda']:.2f}x")
     
     return "; ".join(reasons) if reasons else "Basic industry match"

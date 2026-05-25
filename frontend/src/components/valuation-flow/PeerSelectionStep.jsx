@@ -39,15 +39,15 @@ const PeerSelectionStep = ({
   const handleSelectAll = () => {
     if (selectedPeers.length === suggestedPeers.length) {
       suggestedPeers.forEach(peer => {
-        const peerId = peer.symbol || peer.ticker;
-        if (selectedPeers.find(p => (p.symbol || p.ticker) === peerId)) {
+        const peerId = peer.ticker || peer.symbol;
+        if (selectedPeers.find(p => (p.ticker || p.symbol) === peerId)) {
           onTogglePeer(peer);
         }
       });
     } else {
       suggestedPeers.forEach(peer => {
-        const peerId = peer.symbol || peer.ticker;
-        if (!selectedPeers.find(p => (p.symbol || p.ticker) === peerId)) {
+        const peerId = peer.ticker || peer.symbol;
+        if (!selectedPeers.find(p => (p.ticker || p.symbol) === peerId)) {
           onTogglePeer(peer);
         }
       });
@@ -59,17 +59,23 @@ const PeerSelectionStep = ({
       <div className="step-container">
         <h2>Step 4: Peer Selection</h2>
         <p className="text-gray-600" style={{ marginBottom: '24px' }}>
-          No peers discovered yet. Please go back to Step 2 and click "Auto-Find Peers".
+          Discovering peers automatically based on your selected valuation model...
         </p>
 
-        <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded">
-          <p className="text-yellow-700">
-            ⚠️ No peer suggestions available. Try searching for a different company or manually add peers in later steps.
-          </p>
+        <div className="bg-blue-50 border-l-4 border-blue-400 p-4 rounded">
+          <div className="flex items-center gap-2">
+            <svg className="animate-spin h-5 w-5 text-blue-600" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+            <p className="text-blue-700">
+              Loading peer companies for {selectedCompany?.ticker || selectedCompany?.symbol}...
+            </p>
+          </div>
         </div>
 
         <div className="mt-8">
-          <button onClick={onBack} className="btn-secondary">
+          <button onClick={onBack} className="btn-secondary" disabled={loading}>
             ← Back to Model Selection
           </button>
         </div>
@@ -122,21 +128,22 @@ const PeerSelectionStep = ({
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {suggestedPeers.map((peer) => {
-                const peerId = peer.symbol || peer.ticker;
-                const isSelected = selectedPeers.find(p => (p.symbol || p.ticker) === peerId);
+                const peerId = peer.ticker || peer.symbol;
+                const isSelected = selectedPeers.find(p => (p.ticker || p.symbol) === peerId);
                 
                 const isInvalidPeer = 
-                  peer.symbol?.startsWith('^') ||
                   peer.ticker?.startsWith('^') ||
-                  peer.symbol?.includes('INDEX') ||
+                  peer.symbol?.startsWith('^') ||
                   peer.ticker?.includes('INDEX') ||
-                  peer.symbol?.includes('IDX') ||
+                  peer.symbol?.includes('INDEX') ||
                   peer.ticker?.includes('IDX') ||
-                  !peer.marketCap ||
-                  peer.marketCap <= 0;
+                  peer.symbol?.includes('IDX') ||
+                  !peer.market_cap ||
+                  peer.market_cap <= 0;
 
                 const ticker = peer.ticker || peer.symbol;
                 const name = peer.company_name || peer.name;
+                const marketCap = peer.market_cap || peer.marketCap;
 
                 return (
                   <tr 
@@ -188,8 +195,7 @@ const PeerSelectionStep = ({
 
                     <td className="px-4 py-3 text-right">
                       <span className="text-sm text-gray-900">
-                        {peer.marketCap ? `$${(() => {
-                          const marketCap = peer.marketCap;
+                        {marketCap ? `$${(() => {
                           if (marketCap >= 1e12) return `${(marketCap / 1e12).toFixed(2)}T`;
                           if (marketCap >= 1e9) return `${(marketCap / 1e9).toFixed(2)}B`;
                           if (marketCap >= 1e6) return `${(marketCap / 1e6).toFixed(2)}M`;
@@ -202,19 +208,19 @@ const PeerSelectionStep = ({
                       <div className="flex flex-col">
                         <div className="flex items-center justify-between text-xs mb-1">
                           <span className={`font-semibold ${
-                            peer.score >= 80 ? 'text-green-600' :
-                            peer.score >= 60 ? 'text-yellow-600' : 'text-gray-600'
+                            (peer.match_score || peer.score || 0) >= 80 ? 'text-green-600' :
+                            (peer.match_score || peer.score || 0) >= 60 ? 'text-yellow-600' : 'text-gray-600'
                           }`}>
-                            {peer.score}/100
+                            {peer.match_score || peer.score || 0}/100
                           </span>
                         </div>
                         <div className="w-full bg-gray-200 rounded-full h-2">
                           <div
                             className={`h-2 rounded-full ${
-                              peer.score >= 80 ? 'bg-green-500' :
-                              peer.score >= 60 ? 'bg-yellow-500' : 'bg-gray-400'
+                              (peer.match_score || peer.score || 0) >= 80 ? 'bg-green-500' :
+                              (peer.match_score || peer.score || 0) >= 60 ? 'bg-yellow-500' : 'bg-gray-400'
                             }`}
-                            style={{ width: `${peer.score}%` }}
+                            style={{ width: `${peer.match_score || peer.score || 0}%` }}
                           />
                         </div>
                       </div>
@@ -235,6 +241,8 @@ const PeerSelectionStep = ({
                             <li className="text-gray-500">+{peer.match_reasons.length - 2} more</li>
                           )}
                         </ul>
+                      ) : peer.match_reason ? (
+                        <span className="text-xs text-gray-600">{peer.match_reason}</span>
                       ) : (
                         <span className="text-xs text-gray-400">No match reasons</span>
                       )}

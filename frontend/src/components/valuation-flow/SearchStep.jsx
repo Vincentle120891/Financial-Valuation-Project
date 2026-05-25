@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { searchVietnameseStocks } from '../../services/api';
+import ApiKeyModal from '../ApiKeyModal';
 
 /**
  * SearchStep Component
@@ -11,6 +12,7 @@ import { searchVietnameseStocks } from '../../services/api';
  * - Search results display
  * - Error handling
  * - Vietnamese stock search integration
+ * - API Key configuration modal
  */
 const SearchStep = ({ 
   searchQuery, 
@@ -25,6 +27,7 @@ const SearchStep = ({
   marketValidation
 }) => {
   const [vietnamSearchLoading, setVietnameseSearchLoading] = useState(false);
+  const [showApiKeyModal, setShowApiKeyModal] = useState(false);
   
   const handleKeyPress = async (e) => {
     if (e.key === 'Enter') {
@@ -50,12 +53,35 @@ const SearchStep = ({
     }
   };
 
+  const handleSaveApiKeys = (keys) => {
+    console.log('API Keys saved:', keys);
+    // Optionally trigger a refresh or notify backend
+  };
+
   const isLoading = loading || vietnamSearchLoading;
 
   return (
     <div className="step-container">
+      {/* API Key Configuration Modal */}
+      <ApiKeyModal 
+        isOpen={showApiKeyModal}
+        onClose={() => setShowApiKeyModal(false)}
+        onSave={handleSaveApiKeys}
+      />
+
       <h2>Step 1: Search Company</h2>
       <p style={{ marginBottom: '20px', color: '#666' }}>Enter a company name or ticker symbol to begin your valuation analysis.</p>
+      
+      {/* API Key Configuration Button */}
+      <div style={{ marginBottom: '20px', display: 'flex', justifyContent: 'flex-end' }}>
+        <button
+          onClick={() => setShowApiKeyModal(true)}
+          className="btn-secondary"
+          style={{ fontSize: '0.9em', padding: '8px 16px' }}
+        >
+          🔑 Configure API Keys
+        </button>
+      </div>
       
       {/* Market Validation Feedback */}
       {marketValidation && marketValidation.message && (
