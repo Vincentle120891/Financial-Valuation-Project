@@ -70,6 +70,7 @@ from app.services.international.step4_peer_management_service import Step4PeerMa
 from app.services.international.step7_data_enrichment_service import Step7DataEnrichmentService
 from app.services.api_adapter import APIAdapter, process_multiple_tickers
 from app.middleware.validation_middleware import create_validation_middleware
+from app.core.config import settings
 
 logger = get_logger(__name__)
 
@@ -1236,4 +1237,141 @@ async def valuate_multi_method(request: MultiMethodValuateRequest):
         raise
     except Exception as e:
         logger.error(f"Multi-method valuation error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# API KEY MANAGEMENT ENDPOINTS (Step 6)
+# ============================================================================
+
+class SaveApiKeysRequest(BaseModel):
+    """Request to save API keys to session"""
+    session_id: str
+    openrouter_api_key: Optional[str] = None
+    alpha_vantage_key: Optional[str] = None
+    groq_api_key: Optional[str] = None
+    gemini_api_key: Optional[str] = None
+    qwen_api_key: Optional[str] = None
+
+
+class SaveApiKeysResponse(BaseModel):
+    """Response after saving API keys"""
+    status: str
+    message: str
+    keys_configured: Dict[str, bool]
+
+
+@router.post("/save-api-keys", response_model=SaveApiKeysResponse)
+async def save_api_keys(request: SaveApiKeysRequest):
+    """
+    Step 6: Save API keys to session for AI tools.
+    
+    Stores API keys securely in the session for use in Step 7+ AI operations.
+    Keys are encrypted and stored per-session.
+    
+    Required Keys:
+    - openrouter_api_key: Primary AI provider for Step 7-8
+    - alpha_vantage_key: Financial data API (optional if using yfinance)
+    - groq_api_key, gemini_api_key, qwen_api_key: Alternative AI providers
+    
+    Args:
+        request: SaveApiKeysRequest with session_id and API keys
+        
+    Returns:
+        SaveApiKeysResponse with status and configured keys
+    """
+    try:
+        # Validate session exists
+        session = session_service.get_session_data(request.session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+        
+        # Build keys dictionary from request
+        api_keys = {}
+        if request.openrouter_api_key:
+            api_keys["openrouter_api_key"] = request.openrouter_api_key
+        if request.alpha_vantage_key:
+            api_keys["alpha_vantage_key"] = request.alpha_vantage_key
+        if request.groq_api_key:
+            api_keys["groq_api_key"] = request.groq_api_key
+        if request.gemini_api_key:
+            api_keys["gemini_api_key"] = request.gemini_api_key
+        if request.qwen_api_key:
+            api_keys["qwen_api_key"] = request.qwen_api_key
+        
+        # Store keys in session under dedicated 'api_keys' section
+        session_service.update_session_data(
+            request.session_id,
+            "api_keys",
+            api_keys
+        )
+        
+        # Return status of all keys
+        keys_configured = {
+            "openrouter": request.openrouter_api_key is not None,
+            "alpha_vantage": request.alpha_vantage_key is not None,
+            "groq": request.groq_api_key is not None,
+            "gemini": request.gemini_api_key is not None,
+            "qwen": request.qwen_api_key is not None,
+        }
+        
+        return SaveApiKeysResponse(
+            status="success",
+            message=f"Saved {len(api_keys)} API key(s) to session",
+            keys_configured=keys_configured
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Save API keys error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/check-api-keys")
+async def check_api_keys(session_id: str):
+    """
+    Step 6: Check which API keys are configured for a session.
+    
+    Returns the status of all API keys stored in the session.
+    Used by frontend to show configuration status and enable/disable buttons.
+    
+    Args:
+        session_id: Session identifier
+        
+    Returns:
+        Dictionary with key status (true/false for each provider)
+    """
+    try:
+        # Validate session exists
+        session = session_service.get_session_data(session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+        
+        # Get stored API keys from session
+        stored_keys = session_service.get_session_value(
+            session_id,
+            "api_keys",
+            {}
+        )
+        
+        # Check which keys are configured
+        keys_status = {
+            "openrouter": stored_keys.get("openrouter_api_key") is not None and len(stored_keys.get("openrouter_api_key", "")) > 0,
+            "alpha_vantage": stored_keys.get("alpha_vantage_key") is not None and len(stored_keys.get("alpha_vantage_key", "")) > 0,
+            "groq": stored_keys.get("groq_api_key") is not None and len(stored_keys.get("groq_api_key", "")) > 0,
+            "gemini": stored_keys.get("gemini_api_key") is not None and len(stored_keys.get("gemini_api_key", "")) > 0,
+            "qwen": stored_keys.get("qwen_api_key") is not None and len(stored_keys.get("qwen_api_key", "")) > 0,
+        }
+        
+        # Add overall status
+        keys_status["all_required_configured"] = keys_status["openrouter"]
+        keys_status["total_configured"] = sum(1 for v in keys_status.values() if v and isinstance(v, bool))
+        
+        return keys_status
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Check API keys error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
