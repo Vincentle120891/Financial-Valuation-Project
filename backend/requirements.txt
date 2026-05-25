@@ -102,3 +102,4 @@ python-json-logger>=4.1.0
 # the completeness of the valuation models.
 # See MODEL_INTEGRITY_MANIFESTO.md for complete guidelines.
 #
+fredapi==0.5.1
