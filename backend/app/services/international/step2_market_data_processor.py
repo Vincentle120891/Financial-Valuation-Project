@@ -50,14 +50,11 @@ class Step2MarketDataProcessor:
     Responsibilities:
     - Fetch current market price
     - Calculate/retrieve beta
-    - Get risk-free rate
-    - Calculate market risk premium
+    - Get risk-free rate from government bond APIs
+    - Calculate market risk premium from historical data
     - Flag missing market data
     - Discover peer companies based on industry and market cap
     """
-
-    DEFAULT_RISK_FREE_RATE = 4.5  # US 10-year Treasury yield (approximate)
-    DEFAULT_MARKET_PREMIUM = 6.0  # Historical average market risk premium
 
     def __init__(self, yfinance_service: Optional[YFinanceService] = None):
         self.yfinance_service = yfinance_service or YFinanceService()
@@ -345,16 +342,22 @@ class Step2MarketDataProcessor:
         )
 
     def _get_risk_free_rate(self, market: str) -> Optional[float]:
-        """Get risk-free rate based on market."""
+        """Get risk-free rate based on market. Returns None if not available."""
+        # No default fallbacks - return None to indicate missing data
+        # Frontend must handle null values and show "Pending" or require user input
         if market == "vietnam":
-            return 6.8  # Vietnam 10-year government bond
-        return self.DEFAULT_RISK_FREE_RATE
+            # Vietnam market: would need VND government bond API
+            return None  # Explicitly no default
+        # International market: would need US Treasury API
+        return None  # Explicitly no default
 
     def _get_market_premium(self, market: str) -> Optional[float]:
-        """Get market risk premium based on market."""
+        """Get market risk premium based on market. Returns None if not available."""
+        # No default fallbacks - return None to indicate missing data
+        # Frontend must handle null values and show "Pending" or require user input
         if market == "vietnam":
-            return 7.5  # Higher premium for emerging market
-        return self.DEFAULT_MARKET_PREMIUM
+            return None  # Explicitly no default
+        return None  # Explicitly no default
 
     def _get_country_risk_premium(self, market: str) -> Optional[float]:
         """Get country risk premium."""
