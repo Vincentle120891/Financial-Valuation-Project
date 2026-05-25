@@ -59,17 +59,23 @@ const PeerSelectionStep = ({
       <div className="step-container">
         <h2>Step 4: Peer Selection</h2>
         <p className="text-gray-600" style={{ marginBottom: '24px' }}>
-          No peers discovered yet. Please go back to Step 2 and click "Auto-Find Peers".
+          Discovering peers automatically based on your selected valuation model...
         </p>
 
-        <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded">
-          <p className="text-yellow-700">
-            ⚠️ No peer suggestions available. Try searching for a different company or manually add peers in later steps.
-          </p>
+        <div className="bg-blue-50 border-l-4 border-blue-400 p-4 rounded">
+          <div className="flex items-center gap-2">
+            <svg className="animate-spin h-5 w-5 text-blue-600" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+            <p className="text-blue-700">
+              Loading peer companies for {selectedCompany?.ticker || selectedCompany?.symbol}...
+            </p>
+          </div>
         </div>
 
         <div className="mt-8">
-          <button onClick={onBack} className="btn-secondary">
+          <button onClick={onBack} className="btn-secondary" disabled={loading}>
             ← Back to Model Selection
           </button>
         </div>
