@@ -21,7 +21,6 @@ from app.core.exceptions import ValuationException
 from app.middleware.api_key_middleware import APIKeyMiddleware
 from app.api.routes.search_routes import router as search_router
 from app.api.routes.session_routes import router as session_router
-from app.api.routes.peer_routes import router as peer_router
 from app.api.routes.valuation_routes import router as valuation_router
 from app.api.routes.pdf_extraction_routes import router as pdf_extraction_router
 from app.api.routes.vietnamese_reports_routes import router as vietnamese_reports_router
@@ -225,8 +224,7 @@ def get_session_store() -> dict:
 # Route layer refactored: Each step has its own router file following Single Responsibility Principle
 app.include_router(search_router, prefix="/api")  # Step 1: Search
 app.include_router(session_router, prefix="/api")  # Step 2: Create Session
-app.include_router(peer_router, prefix="/api")  # Steps 3-4: Peer Selection
-app.include_router(valuation_router, prefix="/api")
+app.include_router(valuation_router, prefix="/api")  # Steps 3-5: Model selection, Peer discovery, Assumptions
 app.include_router(pdf_extraction_router, prefix="/api/pdf")
 app.include_router(vietnamese_reports_router, prefix="/api")
 app.include_router(international_router, prefix="/api")
