@@ -68,6 +68,7 @@ from app.services.international.valuation_orchestrator import orchestrator
 from app.services.international.peer_discovery_service import PeerDiscoveryService, PeerDiscoveryRequest
 from app.services.international.step4_peer_management_service import Step4PeerManagementService
 from app.services.international.step7_data_enrichment_service import Step7DataEnrichmentService
+from app.services.international.sec_edgar_service import get_sec_edgar_service
 from app.services.api_adapter import APIAdapter, process_multiple_tickers
 from app.middleware.validation_middleware import create_validation_middleware
 from app.core.config import settings
@@ -775,6 +776,90 @@ async def ai_web_search_for_step7(
     except Exception as e:
         logger.error(f"AI web search error for {ticker}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"AI web search failed: {str(e)}")
+
+
+@router.post("/step-7-fetch-sec-edgar")
+async def fetch_sec_edgar_for_step7(
+    session_id: str,
+    ticker: str,
+    company_name: str,
+    email: str,
+    method: str,
+    market: str = "international"
+):
+    """
+    Step 7: Fetch SEC EDGAR Filings for Historical Data
+
+    Fetches 10-K and 10-Q filings directly from SEC EDGAR database.
+    Requires email address for rate limit compliance (SEC requirement).
+
+    Workflow:
+    1. User clicks "Fetch SEC Filings" in Step 7 frontend (US companies only)
+    2. Backend queries SEC EDGAR API to get recent 10-K/10-Q filings
+    3. Filing metadata is extracted and stored in session
+    4. Optionally, AI can be used to extract data from filing content
+    5. Results merged with Step 6 data for Step 8
+
+    Args:
+        session_id: Session identifier
+        ticker: Stock ticker symbol (e.g., AAPL, MSFT) - US companies only
+        company_name: Full company name for User-Agent header
+        email: Contact email for SEC rate limit compliance
+        method: Valuation method (DCF, DUPONT, COMPS)
+        market: Market type (international, vietnamese)
+
+    Returns:
+        SEC filing metadata including accession numbers, filing dates, and document URLs
+    """
+    try:
+        # Get SEC EDGAR service
+        sec_service = get_sec_edgar_service()
+        
+        # Search for company filings
+        result = await sec_service.search_company_filings(
+            ticker=ticker.upper(),
+            email=email,
+            company_name=company_name or ticker,
+            limit=10
+        )
+        
+        if not result.get("success"):
+            raise HTTPException(
+                status_code=404,
+                detail=result.get("error", f"No SEC filings found for {ticker}")
+            )
+        
+        # Store SEC filings data in session for potential AI extraction
+        session_data = session_service.get_session_data(session_id)
+        if session_data:
+            session_data["sec_edgar_filings"] = result
+            session_service.save_session(session_id, session_data)
+        
+        # Log successful fetch
+        logger.info(
+            f"Successfully fetched {result['filings_count']} SEC filings for {ticker}",
+            extra={
+                "session_id": session_id,
+                "cik": result.get("cik"),
+                "filings_count": result["filings_count"]
+            }
+        )
+        
+        return {
+            "success": True,
+            "message": f"Found {result['filings_count']} SEC filings for {ticker}",
+            "filings": result["filings"],
+            "filings_count": result["filings_count"],
+            "cik": result.get("cik"),
+            "company_name": result.get("company_name"),
+            "source": "SEC EDGAR"
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"SEC EDGAR fetch error for {ticker}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"SEC EDGAR fetch failed: {str(e)}")
 
 
 @router.post("/step-8-initialize", response_model=UnifiedStep8Response)

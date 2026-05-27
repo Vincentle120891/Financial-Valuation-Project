@@ -49,6 +49,13 @@ const HistoricalDataExtractionStep = ({
   const [searchingWithAi, setSearchingWithAi] = useState(false);
   const [aiSearchResult, setAiSearchResult] = useState(null);
   const [aiSearchError, setAiSearchError] = useState(null);
+  
+  // SEC EDGAR Modal state
+  const [showSecEdgarModal, setShowSecEdgarModal] = useState(false);
+  const [secEdgarEmail, setSecEdgarEmail] = useState('');
+  const [fetchingSecData, setFetchingSecData] = useState(false);
+  const [secFetchResult, setSecFetchResult] = useState(null);
+  const [secFetchError, setSecFetchError] = useState(null);
 
   // Handle using AI suggestion for historical data
   const handleUseAiSuggestion = (field, value) => {
@@ -153,6 +160,64 @@ const HistoricalDataExtractionStep = ({
       setSearchingWithAi(false);
     }
   };
+
+  // SEC EDGAR Fetch handler
+  const handleSecEdgarFetch = async () => {
+    if (!sessionId || !ticker || !secEdgarEmail) return;
+
+    setFetchingSecData(true);
+    setSecFetchError(null);
+    setSecFetchResult(null);
+
+    try {
+      // Save email to localStorage for future use
+      localStorage.setItem('sec_edgar_email', secEdgarEmail);
+
+      const response = await fetch('/api/step-7-fetch-sec-edgar', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key-SecEdgar': secEdgarEmail
+        },
+        body: JSON.stringify({
+          session_id: sessionId,
+          ticker: ticker,
+          company_name: companyName || ticker,
+          email: secEdgarEmail,
+          method: selectedModel || 'DCF',
+          market: market
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'SEC EDGAR fetch failed');
+      }
+
+      const result = await response.json();
+      setSecFetchResult(result);
+
+      // Notify parent component of successful fetch
+      if (onRetryAiExtraction) {
+        onRetryAiExtraction();
+      }
+
+      // Close modal after success
+      setShowSecEdgarModal(false);
+    } catch (error) {
+      setSecFetchError(error.message);
+    } finally {
+      setFetchingSecData(false);
+    }
+  };
+
+  // Load saved SEC EDGAR email on mount
+  React.useEffect(() => {
+    const savedEmail = localStorage.getItem('sec_edgar_email');
+    if (savedEmail) {
+      setSecEdgarEmail(savedEmail);
+    }
+  }, [showSecEdgarModal]);
 
   // Get ticker and company name from props or session
   const ticker = historicalData?.ticker || apiData?.ticker || '';
@@ -457,6 +522,46 @@ const HistoricalDataExtractionStep = ({
             {!ticker && (
               <p style={{ marginTop: '8px', fontSize: '12px', color: '#f44336' }}>
                 ⚠️ Ticker symbol required for AI search
+              </p>
+            )}
+          </div>
+
+          {/* Option 4 - SEC EDGAR Fetch */}
+          <div style={{
+            background: 'white',
+            padding: '16px',
+            borderRadius: '6px',
+            border: '2px solid #ff9800'
+          }}>
+            <h4 style={{ color: '#f57c00', margin: '0 0 8px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '20px' }}>🏛️</span> Option 4: Fetch from SEC EDGAR (US Companies Only)
+            </h4>
+            <p style={{ margin: '0 0 12px 0', fontSize: '13px', color: '#666', lineHeight: '1.5' }}>
+              Automatically fetch 10-K and 10-Q filings directly from SEC EDGAR database.
+              Requires email address for rate limit compliance.
+            </p>
+            <ul style={{ margin: '0', paddingLeft: '20px', fontSize: '12px', color: '#757575', lineHeight: '1.8' }}>
+              <li><strong>Best for:</strong> US publicly traded companies</li>
+              <li><strong>Forms:</strong> 10-K (Annual), 10-Q (Quarterly)</li>
+              <li><strong>Requirement:</strong> Valid email address</li>
+            </ul>
+            <button
+              onClick={() => setShowSecEdgarModal(true)}
+              disabled={loading || !ticker}
+              className="btn-primary"
+              style={{
+                marginTop: '12px',
+                width: '100%',
+                background: '#ff9800',
+                color: 'white',
+                border: 'none'
+              }}
+            >
+              📥 Fetch SEC Filings
+            </button>
+            {!ticker && (
+              <p style={{ marginTop: '8px', fontSize: '12px', color: '#f44336' }}>
+                ⚠️ Ticker symbol required for SEC fetch
               </p>
             )}
           </div>
@@ -780,6 +885,87 @@ const HistoricalDataExtractionStep = ({
           >
             🔄 Retry AI Search
           </button>
+        </div>
+      )}
+
+      {/* SEC EDGAR Fetch Error */}
+      {secFetchError && (
+        <div style={{
+          background: 'linear-gradient(135deg, #ffebee 0%, #ffcdd2 100%)',
+          border: '2px solid #ef5350',
+          padding: '20px',
+          borderRadius: '8px',
+          marginBottom: '20px'
+        }}>
+          <h3 style={{ color: '#c62828', margin: '0 0 12px 0' }}>❌ SEC EDGAR Fetch Failed</h3>
+          <p style={{ margin: '0', color: '#b71c1c' }}>{secFetchError}</p>
+          <button
+            onClick={() => setShowSecEdgarModal(true)}
+            className="btn-secondary"
+            style={{ marginTop: '12px' }}
+          >
+            🔄 Retry SEC Fetch
+          </button>
+        </div>
+      )}
+
+      {/* SEC EDGAR Modal */}
+      {showSecEdgarModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+            <div className="p-6 border-b border-gray-200">
+              <h3 className="text-xl font-bold text-gray-800">🏛️ SEC EDGAR Configuration</h3>
+              <p className="mt-2 text-sm text-gray-600">
+                Enter your email address to fetch SEC filings. This is required for rate limit compliance.
+              </p>
+            </div>
+            
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Email Address
+                </label>
+                <input
+                  type="email"
+                  value={secEdgarEmail}
+                  onChange={(e) => setSecEdgarEmail(e.target.value)}
+                  placeholder="your-email@company.com"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  Format: Company Name (email@domain.com) - e.g., "Acme Corp (admin@acme.com)"
+                </p>
+              </div>
+
+              {secFetchError && (
+                <div className="bg-red-50 border border-red-200 rounded-md p-3">
+                  <p className="text-sm text-red-700">{secFetchError}</p>
+                </div>
+              )}
+
+              {secFetchResult && (
+                <div className="bg-green-50 border border-green-200 rounded-md p-3">
+                  <p className="text-sm text-green-700">✓ Successfully fetched {secFetchResult.filings_count} filings</p>
+                </div>
+              )}
+            </div>
+
+            <div className="p-6 border-t border-gray-200 bg-gray-50 rounded-b-lg flex justify-between items-center">
+              <button
+                onClick={() => setShowSecEdgarModal(false)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSecEdgarFetch}
+                disabled={fetchingSecData || !secEdgarEmail || !ticker}
+                className="px-4 py-2 text-sm font-medium text-white bg-orange-600 rounded-md hover:bg-orange-700 disabled:bg-gray-400"
+              >
+                {fetchingSecData ? '⏳ Fetching...' : '📥 Fetch SEC Filings'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
