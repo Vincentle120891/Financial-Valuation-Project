@@ -65,7 +65,7 @@ from app.services.international.step9_confirmation_processor import Step9Confirm
 from app.services.international.step10_valuation_processor import Step10ValuationProcessor
 from app.services.international.yfinance_service import YFinanceService
 from app.services.international.valuation_orchestrator import orchestrator
-from app.services.international.peer_discovery_service import PeerDiscoveryService, PeerDiscoveryRequest
+from app.services.international.institutional_peer_discovery import InstitutionalPeerDiscoveryService, PeerDiscoveryRequest
 from app.services.international.step4_peer_management_service import Step4PeerManagementService
 from app.services.international.step7_data_enrichment_service import Step7DataEnrichmentService
 from app.services.international.sec_edgar_service import get_sec_edgar_service
@@ -88,7 +88,7 @@ step8_processor = Step8ManualOverridesProcessor()
 step9_processor = Step9ConfirmationProcessor()
 step10_processor = Step10ValuationProcessor()
 yfinance_service = YFinanceService()
-peer_discovery_service = PeerDiscoveryService(yfinance_service=yfinance_service)
+peer_discovery_service = InstitutionalPeerDiscoveryService()
 
 
 class SavePeersRequest(BaseModel):
