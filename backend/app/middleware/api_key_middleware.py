@@ -27,31 +27,35 @@ logger = logging.getLogger(__name__)
 
 class APIKeyMiddleware(BaseHTTPMiddleware):
     """Middleware to extract and inject API keys from request headers."""
-    
+
     def __init__(self, app: ASGIApp):
         super().__init__(app)
-    
+
     async def dispatch(self, request: Request, call_next):
-        """Extract API keys from headers and attach to request state."""
-        
-        # Extract API keys from headers
+        """Extract API keys from headers and attach to request state.
+
+        Note: FastAPI/Starlette converts all headers to lowercase, so we must
+        use lowercase header names when accessing request.headers.
+        """
+
+        # Extract API keys from headers (lowercase as per HTTP/2 spec)
         api_keys = {
-            'alpha_vantage': request.headers.get('X-API-Key-AlphaVantage'),
-            'fmp': request.headers.get('X-API-Key-FMP'),
-            'fred': request.headers.get('X-API-Key-FRED'),
-            'sec_edgar': request.headers.get('X-API-Key-SECEdgar'),
+            'alpha_vantage': request.headers.get('x-api-key-alphavantage'),
+            'fmp': request.headers.get('x-api-key-fmp'),
+            'fred': request.headers.get('x-api-key-fred'),
+            'sec_edgar': request.headers.get('x-api-key-secedgar'),
         }
-        
+
         # Filter out None values
         api_keys = {k: v for k, v in api_keys.items() if v}
-        
+
         # Attach to request state for downstream access
         request.state.api_keys = api_keys
-        
+
         # Log if any custom API keys provided (without logging the actual keys)
         if api_keys:
             logger.debug(f"Request includes custom API keys for: {list(api_keys.keys())}")
-        
+
         # Continue processing
         response = await call_next(request)
         return response
@@ -60,11 +64,11 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
 def get_api_key_from_request(request: Request, service_name: str) -> Optional[str]:
     """
     Helper function to retrieve API key from request state.
-    
+
     Args:
         request: FastAPI request object
         service_name: Name of the service ('alpha_vantage', 'fmp', 'fred', 'sec_edgar')
-    
+
     Returns:
         API key from header if provided, None otherwise
     """
@@ -75,10 +79,10 @@ def get_api_key_from_request(request: Request, service_name: str) -> Optional[st
 def get_all_api_keys(request: Request) -> Dict[str, str]:
     """
     Get all API keys from request state.
-    
+
     Args:
         request: FastAPI request object
-    
+
     Returns:
         Dictionary of API keys (empty dict if none provided)
     """
