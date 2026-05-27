@@ -9,7 +9,7 @@ from typing import Dict, List, Optional, Any
 from pydantic import BaseModel
 
 from app.services.international.yfinance_service import YFinanceService
-from app.services.international.peer_discovery_service import PeerDiscoveryService, PeerDiscoveryRequest
+from app.services.international.institutional_peer_discovery import InstitutionalPeerDiscoveryService, PeerDiscoveryRequest
 from app.services.international.fred_service import get_fred_service
 from app.api.schemas.unified_step_schemas import (
     UnifiedStep2Response,
@@ -59,7 +59,7 @@ class Step2MarketDataProcessor:
 
     def __init__(self, yfinance_service: Optional[YFinanceService] = None):
         self.yfinance_service = yfinance_service or YFinanceService()
-        self.peer_discovery_service = PeerDiscoveryService(self.yfinance_service)
+        self.peer_discovery_service = InstitutionalPeerDiscoveryService()
 
     async def select_company(
         self,
