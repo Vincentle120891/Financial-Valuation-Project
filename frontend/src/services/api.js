@@ -2,6 +2,34 @@ import axios from 'axios';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
 
+// Helper to get stored API keys from localStorage
+const getStoredApiKeys = () => ({
+  alphaVantage: localStorage.getItem('alpha_vantage_api_key') || '',
+  fmp: localStorage.getItem('fmp_api_key') || '',
+  fred: localStorage.getItem('fred_api_key') || '',
+  secEdgar: localStorage.getItem('sec_edgar_email') || ''
+});
+
+// Helper to inject API keys into request headers
+const injectApiKeys = (headers = {}) => {
+  const apiKeys = getStoredApiKeys();
+  
+  if (apiKeys.alphaVantage) {
+    headers['X-API-Key-AlphaVantage'] = apiKeys.alphaVantage;
+  }
+  if (apiKeys.fmp) {
+    headers['X-API-Key-FMP'] = apiKeys.fmp;
+  }
+  if (apiKeys.fred) {
+    headers['X-API-Key-FRED'] = apiKeys.fred;
+  }
+  if (apiKeys.secEdgar) {
+    headers['X-API-Key-SECEdgar'] = apiKeys.secEdgar;
+  }
+  
+  return headers;
+};
+
 const api = axios.create({
   baseURL: API_BASE_URL,
   headers: {
@@ -11,6 +39,15 @@ const api = axios.create({
   timeout: 60000,
 });
 
+// Request interceptor to inject API keys into all requests
+api.interceptors.request.use(
+  (config) => {
+    config.headers = injectApiKeys(config.headers);
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
 // Create separate instance for AI calls with longer timeout
 const aiApi = axios.create({
   baseURL: API_BASE_URL,
@@ -19,6 +56,15 @@ const aiApi = axios.create({
   },
   timeout: 120000, // 2 minutes for AI generation
 });
+
+// Request interceptor for AI API as well
+aiApi.interceptors.request.use(
+  (config) => {
+    config.headers = injectApiKeys(config.headers);
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
 
 // Step 1: Search Company
 // FIX Issue #1 & #3: Use unified POST endpoint for both markets
