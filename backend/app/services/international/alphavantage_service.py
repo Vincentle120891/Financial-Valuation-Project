@@ -44,14 +44,28 @@ class AlphaVantageService:
         
         Args:
             api_key: AlphaVantage API key. If not provided, will try to load from 
-                    environment variable ALPHAVANTAGE_API_KEY
+                    environment variable ALPHAVANTAGE_API_KEY or ALPHA_VANTAGE_API_KEY.
+                    Can also be provided per-request via header.
         """
         self.api_key = api_key or os.getenv('ALPHAVANTAGE_API_KEY') or os.getenv('ALPHA_VANTAGE_API_KEY')
         self.base_url = "https://www.alphavantage.co/query"
         self._session = None
         
         if not self.api_key:
-            logger.warning("AlphaVantage API key not provided. Set ALPHAVANTAGE_API_KEY or ALPHA_VANTAGE_API_KEY environment variable.")
+            logger.warning("AlphaVantage API key not provided. Set ALPHAVANTAGE_API_KEY or ALPHA_VANTAGE_API_KEY environment variable, or provide via request header.")
+    
+    def set_api_key(self, api_key: str) -> None:
+        """
+        Set API key dynamically (e.g., from request header).
+        
+        Args:
+            api_key: The API key to use for subsequent requests
+        """
+        if api_key and api_key.strip():
+            self.api_key = api_key.strip()
+            logger.debug("AlphaVantage API key updated from request header")
+        else:
+            logger.warning("Attempted to set empty API key, keeping existing key")
     
     @property
     def session(self):

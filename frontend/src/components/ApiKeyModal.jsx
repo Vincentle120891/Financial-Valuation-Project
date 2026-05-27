@@ -158,7 +158,7 @@ const ApiKeyModal = ({ isOpen, onClose, onSave }) => {
           </div>
           <p className="mt-2 text-sm text-gray-600">
             Configure API keys to enable advanced features and real-time data fetching. 
-            Keys are stored locally in your browser.
+            Keys are stored locally in your browser and sent securely via HTTPS headers.
           </p>
         </div>
 
@@ -311,7 +311,7 @@ const ApiKeyModal = ({ isOpen, onClose, onSave }) => {
         <div className="p-6 border-t border-gray-200 bg-gray-50 rounded-b-lg">
           <div className="flex justify-between items-center">
             <p className="text-xs text-gray-500">
-              🔒 Keys are stored locally and never sent to our servers
+              🔒 Keys stored locally, sent securely via HTTPS headers
             </p>
             <div className="flex space-x-3">
               <button
