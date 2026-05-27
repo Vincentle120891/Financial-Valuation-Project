@@ -4,15 +4,13 @@ const ApiKeyModal = ({ isOpen, onClose, onSave }) => {
   const [apiKeys, setApiKeys] = useState({
     fmp: '',
     fred: '',
-    alphaVantage: '',
-    secEdgar: ''
+    alphaVantage: ''
   });
   
   const [showPasswords, setShowPasswords] = useState({
     fmp: false,
     fred: false,
-    alphaVantage: false,
-    secEdgar: false
+    alphaVantage: false
   });
 
   const [savedStatus, setSavedStatus] = useState({});
@@ -23,8 +21,7 @@ const ApiKeyModal = ({ isOpen, onClose, onSave }) => {
       const savedKeys = {
         fmp: localStorage.getItem('fmp_api_key') || '',
         fred: localStorage.getItem('fred_api_key') || '',
-        alphaVantage: localStorage.getItem('alpha_vantage_api_key') || '',
-        secEdgar: localStorage.getItem('sec_edgar_email') || ''
+        alphaVantage: localStorage.getItem('alpha_vantage_api_key') || ''
       };
       setApiKeys(savedKeys);
       
@@ -104,10 +101,11 @@ const ApiKeyModal = ({ isOpen, onClose, onSave }) => {
       },
       secEdgar: {
         name: 'SEC EDGAR Email',
-        description: 'SEC filings and company disclosures (format: your-email@domain.com)',
+        description: 'SEC filings and company disclosures (format: your-email@domain.com) - Configure at Step 7 when fetching filings',
         link: 'https://www.sec.gov/edgar/sec-api-documentation',
         priority: 'optional',
-        icon: '📄'
+        icon: '📄',
+        hidden: true // Hidden in Step 1, shown only at Step 7
       }
     };
     return configs[service] || {};
@@ -238,9 +236,10 @@ const ApiKeyModal = ({ isOpen, onClose, onSave }) => {
             <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide border-b border-gray-200 pb-2">
               Optional APIs (Enhanced Data)
             </h3>
-            {Object.entries(apiKeys).filter(([service]) => 
-              getServiceConfig(service).priority === 'optional'
-            ).map(([service, value]) => (
+            {Object.entries(apiKeys).filter(([service]) => {
+              const config = getServiceConfig(service);
+              return config.priority === 'optional' && !config.hidden;
+            }).map(([service, value]) => (
               <div key={service} className="space-y-2">
                 <div className="flex justify-between items-center">
                   <label className="block text-sm font-medium text-gray-700">
