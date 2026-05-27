@@ -18,6 +18,7 @@ import uuid
 from app.core.config import settings
 from app.core.logging_config import setup_logging, get_logger
 from app.core.exceptions import ValuationException
+from app.middleware.api_key_middleware import APIKeyMiddleware
 from app.api.routes.search_routes import router as search_router
 from app.api.routes.session_routes import router as session_router
 from app.api.routes.peer_routes import router as peer_router
@@ -61,6 +62,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Add API Key middleware for per-request API key injection
+app.add_middleware(APIKeyMiddleware)
 
 
 @app.middleware("http")
