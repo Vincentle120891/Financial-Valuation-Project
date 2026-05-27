@@ -9,25 +9,56 @@ Example User-Agent: "Your Company Name admin@yourcompany.com"
 
 import aiohttp
 import asyncio
+import os
 from typing import Optional, Dict, List, Any
+from fastapi import Request
 from loguru import logger
 
 
 class SecEdgarService:
     """Service for interacting with SEC EDGAR database."""
-    
+
     BASE_URL = "https://data.sec.gov"
     SEARCH_URL = "https://search.sec.gov/api/search"
-    
+
     def __init__(self):
         self.session: Optional[aiohttp.ClientSession] = None
-    
+
+    @staticmethod
+    def get_email(request: Optional[Request] = None) -> Optional[str]:
+        """
+        Get SEC EDGAR email with priority: request header > environment variable.
+
+        Args:
+            request: FastAPI request object (optional)
+
+        Returns:
+            Email from request header if available, else from environment, else None
+        """
+        # Priority 1: Check request state (from header)
+        if request:
+            api_keys = getattr(request.state, 'api_keys', {})
+            request_email = api_keys.get('sec_edgar')
+            if request_email:
+                logger.debug("Using SEC EDGAR email from request header")
+                return request_email
+
+        # Priority 2: Fallback to environment variable
+        env_email = os.getenv('SEC_EDGAR_EMAIL')
+        if env_email:
+            logger.debug("Using SEC EDGAR email from environment variable")
+            return env_email
+
+        # No email available
+        logger.warning("SEC EDGAR email not configured (neither in request header nor environment)")
+        return None
+
     async def _get_session(self, email: str, company_name: str = "Company") -> aiohttp.ClientSession:
         """Get or create aiohttp session with proper User-Agent."""
         if self.session is None or self.session.closed:
             # SEC requires User-Agent in format: "Company Name (email)"
             user_agent = f"{company_name} ({email})"
-            
+
             self.session = aiohttp.ClientSession(
                 headers={
                     "User-Agent": user_agent,
@@ -36,45 +67,45 @@ class SecEdgarService:
                 }
             )
         return self.session
-    
+
     async def close(self):
         """Close the aiohttp session."""
         if self.session and not self.session.closed:
             await self.session.close()
-    
+
     async def search_company_filings(
-        self, 
-        ticker: str, 
+        self,
+        ticker: str,
         email: str,
         company_name: str = "Company",
         limit: int = 10
     ) -> Dict[str, Any]:
         """
         Search for company filings by ticker symbol.
-        
+
         Args:
             ticker: Stock ticker symbol (e.g., AAPL, MSFT)
             email: Contact email for rate limit compliance
             company_name: Company name for User-Agent header
             limit: Maximum number of filings to return
-            
+
         Returns:
             Dictionary containing filing metadata and access URLs
         """
         try:
             session = await self._get_session(email, company_name)
-            
+
             # Search for company by ticker
             search_params = {
                 "ticker": ticker,
                 "start": 0,
                 "count": limit
             }
-            
+
             # Use SEC EDGAR Company Facts API
             # First get CIK (Central Index Key) for the ticker
             cik = await self._get_cik(ticker, email, company_name)
-            
+
             if not cik:
                 logger.warning(f"Could not find CIK for ticker: {ticker}")
                 return {
@@ -83,17 +114,17 @@ class SecEdgarService:
                     "filings": [],
                     "filings_count": 0
                 }
-            
+
             # Get recent filings for this CIK
             filings_url = f"https://data.sec.gov/submissions/CIK{cik}.json"
-            
+
             async with session.get(filings_url) as response:
                 if response.status == 200:
                     data = await response.json()
-                    
+
                     # Extract recent 10-K and 10-Q filings
                     filings = self._parse_filings(data, limit)
-                    
+
                     return {
                         "success": True,
                         "cik": cik,
@@ -110,7 +141,7 @@ class SecEdgarService:
                         "filings": [],
                         "filings_count": 0
                     }
-                    
+
         except Exception as e:
             logger.error(f"SEC EDGAR search error for {ticker}: {e}", exc_info=True)
             return {
@@ -119,37 +150,37 @@ class SecEdgarService:
                 "filings": [],
                 "filings_count": 0
             }
-    
+
     async def _get_cik(self, ticker: str, email: str, company_name: str) -> Optional[str]:
         """
         Get CIK (Central Index Key) for a ticker symbol.
-        
+
         Args:
             ticker: Stock ticker symbol
             email: Contact email
             company_name: Company name
-            
+
         Returns:
             CIK string or None if not found
         """
         try:
             session = await self._get_session(email, company_name)
-            
+
             # Use tickersymbol lookup
             url = f"https://www.sec.gov/cgi-bin/browse-edgar?CIK={ticker}&Find=Search&owner=exclude&action=getcompany"
-            
+
             # Alternative: Use the company tickers JSON file
             async with session.get("https://www.sec.gov/files/company_tickers.json") as response:
                 if response.status == 200:
                     data = await response.json()
-                    
+
                     # Search for ticker in the data
                     for key, value in data.items():
                         if value.get("ticker", "").upper() == ticker.upper():
                             cik = str(value.get("cik_str", "")).zfill(10)
                             logger.info(f"Found CIK {cik} for ticker {ticker}")
                             return cik
-                    
+
             # Fallback: Try direct CIK lookup
             async with session.get(
                 f"https://www.sec.gov/cgi-bin/browse-edgar",
@@ -165,47 +196,47 @@ class SecEdgarService:
                         match = re.search(r'CIK\s+(\d+)', html)
                         if match:
                             return match.group(1).zfill(10)
-            
+
             return None
-            
+
         except Exception as e:
             logger.error(f"Error getting CIK for {ticker}: {e}")
             return None
-    
+
     def _parse_filings(self, data: Dict[str, Any], limit: int) -> List[Dict[str, Any]]:
         """
         Parse SEC EDGAR response to extract relevant filings.
-        
+
         Args:
             data: Raw SEC EDGAR JSON response
             limit: Maximum number of filings to return
-            
+
         Returns:
             List of filing dictionaries
         """
         filings = []
-        
+
         # SEC EDGAR submissions format
         recent_filings = data.get("filings", {}).get("recent", {})
-        
+
         accessions = recent_filings.get("accessionNumber", [])
         forms = recent_filings.get("form", [])
         dates = recent_filings.get("filingDate", [])
         reports = recent_filings.get("reportDate", [])
-        
+
         # Filter for 10-K and 10-Q only
         for i, form_type in enumerate(forms[:min(limit, len(forms))]):
             if form_type in ["10-K", "10-Q", "10-K/A", "10-Q/A"]:
                 accession = accessions[i] if i < len(accessions) else ""
                 filing_date = dates[i] if i < len(dates) else ""
                 report_date = reports[i] if i < len(reports) else ""
-                
+
                 # Build document URL
                 # Accession number format: XXXXXXXXXX-XX-XXXXXX
                 # URL format: https://www.sec.gov/Archives/edgar/data/CIK/XXXXXXXXXX-XX-XXXXXX.txt
                 cik = data.get("cik", "")
                 doc_url = f"https://www.sec.gov/Archives/edgar/data/{cik}/{accession.replace('-', '')}.txt"
-                
+
                 filings.append({
                     "accession_number": accession,
                     "form_type": form_type,
@@ -214,9 +245,9 @@ class SecEdgarService:
                     "document_url": doc_url,
                     "is_amended": "/A" in form_type
                 })
-        
+
         return filings
-    
+
     async def fetch_filing_details(
         self,
         accession_number: str,
@@ -226,28 +257,28 @@ class SecEdgarService:
     ) -> Dict[str, Any]:
         """
         Fetch detailed content of a specific filing.
-        
+
         Args:
             accession_number: SEC accession number
             cik: Company CIK
             email: Contact email
             company_name: Company name
-            
+
         Returns:
             Filing content and metadata
         """
         try:
             session = await self._get_session(email, company_name)
-            
+
             # Remove dashes from accession number for URL
             clean_accession = accession_number.replace("-", "")
-            
+
             url = f"https://www.sec.gov/Archives/edgar/data/{cik}/{clean_accession}.txt"
-            
+
             async with session.get(url) as response:
                 if response.status == 200:
                     content = await response.text()
-                    
+
                     return {
                         "success": True,
                         "accession_number": accession_number,
@@ -259,7 +290,7 @@ class SecEdgarService:
                         "success": False,
                         "error": f"Failed to fetch filing: {response.status}"
                     }
-                    
+
         except Exception as e:
             logger.error(f"Error fetching filing {accession_number}: {e}")
             return {

@@ -31,33 +31,63 @@ import logging
 from typing import Dict, Any, Optional, List
 from datetime import datetime
 import os
+from fastapi import Request
 
 logger = logging.getLogger(__name__)
 
 
 class AlphaVantageService:
     """Service for fetching financial data from AlphaVantage API."""
-    
+
     def __init__(self, api_key: Optional[str] = None):
         """
         Initialize AlphaVantage service.
-        
+
         Args:
-            api_key: AlphaVantage API key. If not provided, will try to load from 
+            api_key: AlphaVantage API key. If not provided, will try to load from
                     environment variable ALPHAVANTAGE_API_KEY or ALPHA_VANTAGE_API_KEY.
                     Can also be provided per-request via header.
         """
         self.api_key = api_key or os.getenv('ALPHAVANTAGE_API_KEY') or os.getenv('ALPHA_VANTAGE_API_KEY')
         self.base_url = "https://www.alphavantage.co/query"
         self._session = None
-        
+
         if not self.api_key:
             logger.warning("AlphaVantage API key not provided. Set ALPHAVANTAGE_API_KEY or ALPHA_VANTAGE_API_KEY environment variable, or provide via request header.")
-    
+
+    @staticmethod
+    def get_api_key(request: Optional[Request] = None) -> Optional[str]:
+        """
+        Get API key with priority: request header > environment variable.
+
+        Args:
+            request: FastAPI request object (optional)
+
+        Returns:
+            API key from request header if available, else from environment, else None
+        """
+        # Priority 1: Check request state (from header)
+        if request:
+            api_keys = getattr(request.state, 'api_keys', {})
+            request_key = api_keys.get('alpha_vantage')
+            if request_key:
+                logger.debug("Using AlphaVantage API key from request header")
+                return request_key
+
+        # Priority 2: Fallback to environment variable
+        env_key = os.getenv('ALPHAVANTAGE_API_KEY') or os.getenv('ALPHA_VANTAGE_API_KEY')
+        if env_key:
+            logger.debug("Using AlphaVantage API key from environment variable")
+            return env_key
+
+        # No key available
+        logger.warning("AlphaVantage API key not configured (neither in request header nor environment)")
+        return None
+
     def set_api_key(self, api_key: str) -> None:
         """
         Set API key dynamically (e.g., from request header).
-        
+
         Args:
             api_key: The API key to use for subsequent requests
         """
@@ -66,7 +96,7 @@ class AlphaVantageService:
             logger.debug("AlphaVantage API key updated from request header")
         else:
             logger.warning("Attempted to set empty API key, keeping existing key")
-    
+
     @property
     def session(self):
         """Lazy session initialization for HTTP requests."""
@@ -74,30 +104,30 @@ class AlphaVantageService:
             import requests
             self._session = requests.Session()
         return self._session
-    
+
     def fetch_all_data(self, ticker_symbol: str, market: str = "international") -> Dict[str, Any]:
         """
         Fetch all available financial data from AlphaVantage.
-        
+
         Args:
             ticker_symbol: Stock ticker symbol
             market: Market type (international or vietnamese)
-            
+
         Returns:
             Comprehensive dictionary containing all fetched data, or empty dict on failure
         """
         if not self.api_key:
             logger.warning("AlphaVantage API key not configured, skipping fetch")
             return {}
-        
+
         try:
             logger.info(f"Fetching AlphaVantage data for ticker='{ticker_symbol}', market='{market}'")
-            
+
             # For Vietnamese market, AlphaVantage may not have coverage
             if market == "vietnam":
                 logger.info(f"AlphaVantage does not support Vietnamese market, skipping")
                 return {}
-            
+
             # Fetch all data categories
             overview = self._fetch_company_overview(ticker_symbol)
             income_statement = self._fetch_income_statement(ticker_symbol)
@@ -105,7 +135,7 @@ class AlphaVantageService:
             cash_flow = self._fetch_cash_flow(ticker_symbol)
             analyst_ratings = self._fetch_analyst_ratings(ticker_symbol)
             price_targets = self._fetch_price_targets(ticker_symbol)
-            
+
             # Compile comprehensive data package
             data_package = {
                 "symbol": ticker_symbol,
@@ -121,14 +151,14 @@ class AlphaVantageService:
                     "price_targets": price_targets
                 },
             }
-            
+
             logger.info(f"Successfully fetched AlphaVantage data for ticker='{ticker_symbol}'")
             return data_package
-            
+
         except Exception as e:
             logger.error(f"Failed to fetch AlphaVantage data for ticker='{ticker_symbol}': {str(e)}")
             return {}
-    
+
     def _make_request(self, function: str, params: Optional[Dict] = None) -> Optional[Dict]:
         """Make API request to AlphaVantage with error handling."""
         try:
@@ -137,35 +167,35 @@ class AlphaVantageService:
                 'apikey': self.api_key,
                 **(params or {})
             }
-            
+
             response = self.session.get(self.base_url, params=url_params, timeout=30)
             response.raise_for_status()
-            
+
             data = response.json()
-            
+
             # Check for API limit errors
             if 'Note' in data:
                 logger.warning(f"AlphaVantage API limit reached: {data['Note']}")
                 return None
-            
+
             if 'Error Message' in data:
                 logger.error(f"AlphaVantage API error: {data['Error Message']}")
                 return None
-            
+
             return data
-            
+
         except Exception as e:
             logger.error(f"AlphaVantage request failed: {str(e)}")
             return None
-    
+
     def _fetch_company_overview(self, symbol: str) -> Dict[str, Any]:
         """Fetch company overview and key statistics."""
         try:
             data = self._make_request('OVERVIEW', {'symbol': symbol})
-            
+
             if not data:
                 return {}
-            
+
             def parse_float(val: str) -> Optional[float]:
                 if val is None or val == '' or val == 'None':
                     return None
@@ -173,7 +203,7 @@ class AlphaVantageService:
                     return float(val)
                 except (ValueError, TypeError):
                     return None
-            
+
             return {
                 # Company Info
                 "company_name": data.get('Name'),
@@ -183,7 +213,7 @@ class AlphaVantageService:
                 "currency": data.get('Currency', 'USD'),
                 "country": data.get('Country'),
                 "exchange": data.get('Exchange'),
-                
+
                 # Market Data
                 "current_price": parse_float(data.get('Price')),
                 "previous_close": parse_float(data.get('PreviousClose')),
@@ -192,16 +222,16 @@ class AlphaVantageService:
                 "day_high": parse_float(data.get('DayHigh')),
                 "fifty_two_week_low": parse_float(data.get('52WeekLow')),
                 "fifty_two_week_high": parse_float(data.get('52WeekHigh')),
-                
+
                 # Market Cap & Enterprise Value
                 "market_cap": parse_float(data.get('MarketCapitalization')),
-                
+
                 # Risk Metrics
                 "beta": parse_float(data.get('Beta')),
-                
+
                 # Shares
                 "shares_outstanding": parse_float(data.get('SharesOutstanding')),
-                
+
                 # Valuation Ratios
                 "pe_ratio": parse_float(data.get('PERatio')),
                 "forward_pe": parse_float(data.get('ForwardPE')),
@@ -210,26 +240,26 @@ class AlphaVantageService:
                 "price_to_sales": parse_float(data.get('PriceToSalesRatio')),
                 "ev_to_revenue": None,  # Not directly available
                 "ev_to_ebitda": parse_float(data.get('EVToEBITDA')),
-                
+
                 # Dividend Info
                 "dividend_rate": parse_float(data.get('DividendRate')),
                 "dividend_yield": parse_float(data.get('DividendYield')),
                 "payout_ratio": parse_float(data.get('PayoutRatio')),
                 "ex_dividend_date": data.get('ExDividendDate'),
-                
+
                 # Profitability
                 "profit_margin": parse_float(data.get('ProfitMargin')),
                 "operating_margin": parse_float(data.get('OperatingMarginTTM')),
                 "return_on_assets": parse_float(data.get('ReturnOnAssetsTTM')),
                 "return_on_equity": parse_float(data.get('ReturnOnEquityTTM')),
-                
+
                 # Financial Health
                 "total_debt": parse_float(data.get('TotalDebt')),
                 "total_cash": parse_float(data.get('TotalCash')),
                 "debt_to_equity": parse_float(data.get('DebtToEquity')),
                 "current_ratio": parse_float(data.get('CurrentRatio')),
                 "quick_ratio": parse_float(data.get('QuickRatio')),
-                
+
                 # Revenue & Earnings
                 "revenue_ttm": parse_float(data.get('RevenueTTM')),
                 "revenue_per_share_ttm": parse_float(data.get('RevenuePerShareTTM')),
@@ -239,33 +269,33 @@ class AlphaVantageService:
                 "net_income_ttm": parse_float(data.get('NetIncomeTTM')),
                 "diluted_eps_ttm": parse_float(data.get('DilutedEPSTTM')),
                 "quarterly_earnings_growth": parse_float(data.get('QuarterlyEarningsGrowthYOY')),
-                
+
                 # Analyst Targets
                 "analyst_target_price": parse_float(data.get('AnalystTargetPrice')),
                 "trailing_pe": parse_float(data.get('TrailingPE')),
             }
-            
+
         except Exception as e:
             logger.error(f"Error fetching company overview: {str(e)}")
             return {}
-    
+
     def _fetch_income_statement(self, symbol: str) -> Dict[str, Any]:
         """Fetch annual income statement data."""
         try:
             data = self._make_request('INCOME_STATEMENT', {'symbol': symbol})
-            
+
             if not data or 'annualReports' not in data:
                 return {}
-            
+
             # Convert annual reports to year-keyed format
             result = {}
-            
+
             for report in data['annualReports'][:5]:  # Last 5 years
                 fiscal_year = report.get('fiscalDateEnding', '')[:4]  # Extract year
-                
+
                 if not fiscal_year:
                     continue
-                
+
                 # Map AlphaVantage fields to standard format
                 result[fiscal_year] = {
                     'total_revenue': self._parse_float(report.get('totalRevenue')),
@@ -290,36 +320,36 @@ class AlphaVantageService:
                     'weighted_average_shares_basic': self._parse_float(report.get('weightedAverageShsOutDil')),
                     'depreciation_amortization': self._parse_float(report.get('depreciationAndAmortization')),
                 }
-            
+
             # Transpose to field-keyed format for compatibility
             return self._transpose_annual_data(result)
-            
+
         except Exception as e:
             logger.error(f"Error fetching income statement: {str(e)}")
             return {}
-    
+
     def _fetch_balance_sheet(self, symbol: str) -> Dict[str, Any]:
         """Fetch annual balance sheet data."""
         try:
             data = self._make_request('BALANCE_SHEET', {'symbol': symbol})
-            
+
             if not data or 'annualReports' not in data:
                 return {}
-            
+
             result = {}
-            
+
             for report in data['annualReports'][:5]:  # Last 5 years
                 fiscal_year = report.get('fiscalDateEnding', '')[:4]
-                
+
                 if not fiscal_year:
                     continue
-                
+
                 result[fiscal_year] = {
                     # Assets
                     'total_assets': self._parse_float(report.get('totalAssets')),
                     'current_assets': self._parse_float(report.get('totalCurrentAssets')),
                     'non_current_assets': self._parse_float(report.get('totalNonCurrentAssets')),
-                    
+
                     # Current Assets
                     'cash_and_equivalents': self._parse_float(report.get('cashAndCashEquivalentsAtCarryingValue')),
                     'cash': self._parse_float(report.get('cashAndShortTermInvestments')),
@@ -327,33 +357,33 @@ class AlphaVantageService:
                     'ar': self._parse_float(report.get('inventory')),
                     'inventory': self._parse_float(report.get('inventory')),
                     'other_current_assets': self._parse_float(report.get('otherCurrentAssets')),
-                    
+
                     # Non-Current Assets
                     'property_plant_equipment': self._parse_float(report.get('propertyPlantAndEquipmentNet')),
                     'ppe_net': self._parse_float(report.get('propertyPlantAndEquipmentNet')),
                     'goodwill': self._parse_float(report.get('goodwill')),
                     'intangible_assets': self._parse_float(report.get('intangibleAssets')),
                     'long_term_investments': self._parse_float(report.get('longTermInvestments')),
-                    
+
                     # Liabilities
                     'total_liabilities': self._parse_float(report.get('totalLiabilities')),
                     'current_liabilities': self._parse_float(report.get('totalCurrentLiabilities')),
                     'non_current_liabilities': self._parse_float(report.get('totalNonCurrentLiabilities')),
-                    
+
                     # Current Liabilities
                     'accounts_payable': self._parse_float(report.get('accountsPayable')),
                     'ap': self._parse_float(report.get('accountsPayable')),
                     'short_term_debt': self._parse_float(report.get('shortTermDebt')),
                     'other_current_liabilities': self._parse_float(report.get('otherCurrentLiabilities')),
-                    
+
                     # Non-Current Liabilities
                     'long_term_debt': self._parse_float(report.get('longTermDebt')),
                     'deferred_tax_liabilities': self._parse_float(report.get('deferredRevenueNonCurrent')),
                     'other_non_current_liabilities': self._parse_float(report.get('otherNonCurrentLiabilities')),
-                    
+
                     # Total Debt
                     'total_debt': self._parse_float(report.get('totalDebt')),
-                    
+
                     # Equity
                     'total_equity': self._parse_float(report.get('totalShareholderEquity')),
                     'stockholders_equity': self._parse_float(report.get('retainedEarnings')),
@@ -361,29 +391,29 @@ class AlphaVantageService:
                     'common_stock': self._parse_float(report.get('commonStock')),
                     'shares_outstanding': self._parse_float(report.get('commonStockSharesOutstanding')),
                 }
-            
+
             return self._transpose_annual_data(result)
-            
+
         except Exception as e:
             logger.error(f"Error fetching balance sheet: {str(e)}")
             return {}
-    
+
     def _fetch_cash_flow(self, symbol: str) -> Dict[str, Any]:
         """Fetch annual cash flow data."""
         try:
             data = self._make_request('CASH_FLOW', {'symbol': symbol})
-            
+
             if not data or 'annualReports' not in data:
                 return {}
-            
+
             result = {}
-            
+
             for report in data['annualReports'][:5]:  # Last 5 years
                 fiscal_year = report.get('fiscalDateEnding', '')[:4]
-                
+
                 if not fiscal_year:
                     continue
-                
+
                 result[fiscal_year] = {
                     # Operating Activities
                     'operating_cash_flow': self._parse_float(report.get('operatingCashflow')),
@@ -394,7 +424,7 @@ class AlphaVantageService:
                     'change_in_ar': self._parse_float(report.get('changeInReceivables')),
                     'change_in_inventory': self._parse_float(report.get('changeInInventory')),
                     'change_in_ap': self._parse_float(report.get('changeInPayables')),
-                    
+
                     # Investing Activities
                     'investing_cash_flow': self._parse_float(report.get('investmentCashflow')),
                     'capital_expenditure': self._parse_float(report.get('capitalExpenditures')),
@@ -402,7 +432,7 @@ class AlphaVantageService:
                     'acquisitions': self._parse_float(report.get('investments')),
                     'purchase_of_investments': self._parse_float(report.get('investments')),
                     'sale_of_investments': self._parse_float(report.get('proceedsFromSaleOfInvestments')),
-                    
+
                     # Financing Activities
                     'financing_cash_flow': self._parse_float(report.get('financingCashflow')),
                     'dividends_paid': self._parse_float(report.get('dividendsPaid')),
@@ -411,23 +441,23 @@ class AlphaVantageService:
                     'issuance_of_stock': self._parse_float(report.get('proceedsFromIssuanceOfCommonStock')),
                     'repayment_of_debt': self._parse_float(report.get('paymentsOfLongTermDebt')),
                     'issuance_of_debt': self._parse_float(report.get('proceedsFromIssuanceOfLongTermDebt')),
-                    
+
                     # Free Cash Flow
                     'free_cash_flow': self._parse_float(report.get('freeCashFlow')),
                     'fcf': self._parse_float(report.get('freeCashFlow')),
-                    
+
                     # Net Change in Cash
                     'end_cash_position': self._parse_float(report.get('cashAtEndOfPeriod')),
                     'beginning_cash_position': self._parse_float(report.get('cashAtBeginningOfPeriod')),
                     'change_in_cash': self._parse_float(report.get('changeInCashAndCashEquivalents')),
                 }
-            
+
             return self._transpose_annual_data(result)
-            
+
         except Exception as e:
             logger.error(f"Error fetching cash flow: {str(e)}")
             return {}
-    
+
     def _fetch_analyst_ratings(self, symbol: str) -> Dict[str, Any]:
         """Fetch analyst recommendations."""
         try:
@@ -435,14 +465,14 @@ class AlphaVantageService:
             # or may require premium API access. We gracefully handle this by returning
             # empty dict if the endpoint doesn't exist or fails.
             data = self._make_request('ANALYST_RECOMMENDATIONS', {'symbol': symbol})
-            
+
             if not data or 'data' not in data:
                 logger.info(f"No analyst recommendations available for {symbol} from AlphaVantage")
                 return {}
-            
+
             # Get most recent recommendation
             latest = data['data'][0] if data['data'] else {}
-            
+
             return {
                 'strong_buy': self._parse_int(latest.get('strongBuy')),
                 'buy': self._parse_int(latest.get('buy')),
@@ -451,17 +481,17 @@ class AlphaVantageService:
                 'strong_sell': self._parse_int(latest.get('strongSell')),
                 'date': latest.get('period'),
             }
-            
+
         except Exception as e:
             logger.info(f"Analyst ratings not available for {symbol}: {str(e)}")
             return {}
-    
+
     def _fetch_price_targets(self, symbol: str) -> Dict[str, Any]:
         """Fetch analyst price targets (if available via other endpoints)."""
         # AlphaVantage doesn't have direct price target endpoint in free tier
         # This would need to be supplemented from other sources
         return {}
-    
+
     def _parse_float(self, val: str) -> Optional[float]:
         """Parse string value to float, handling None and empty strings."""
         if val is None or val == '' or val == 'None':
@@ -470,7 +500,7 @@ class AlphaVantageService:
             return float(val)
         except (ValueError, TypeError):
             return None
-    
+
     def _parse_int(self, val: str) -> Optional[int]:
         """Parse string value to int, handling None and empty strings."""
         if val is None or val == '' or val == 'None':
@@ -479,61 +509,61 @@ class AlphaVantageService:
             return int(val)
         except (ValueError, TypeError):
             return None
-    
+
     def _transpose_annual_data(self, year_data: Dict[str, Dict]) -> Dict[str, Dict]:
         """
         Transpose year-keyed data to field-keyed data for compatibility.
-        
+
         Input: {'2023': {'revenue': 100}, '2022': {'revenue': 90}}
         Output: {'revenue': {'2023': 100, '2022': 90}}
         """
         if not year_data:
             return {}
-        
+
         # Get all unique field names
         all_fields = set()
         for year_data_dict in year_data.values():
             all_fields.update(year_data_dict.keys())
-        
+
         # Transpose
         result = {}
         for field in all_fields:
             result[field] = {}
             for year, data in year_data.items():
                 result[field][year] = data.get(field)
-        
+
         return result
-    
+
     def merge_with_yfinance(self, yf_data: Dict, av_data: Dict) -> Dict:
         """
         Merge AlphaVantage data with yfinance data for maximum coverage.
-        
+
         Priority:
         1. Use yfinance as primary source
         2. Fill gaps with AlphaVantage data
         3. Flag discrepancies for review
-        
+
         Args:
             yf_data: Data from yfinance (primary)
             av_data: Data from AlphaVantage (supplementary)
-            
+
         Returns:
             Merged data package with quality indicators
         """
         if not av_data:
             return yf_data
-        
+
         merged = yf_data.copy()
         merged['data_sources'] = ['yfinance', 'alphavantage']
         merged['merge_timestamp'] = datetime.now().isoformat()
-        
+
         # Fill gaps in key stats
         if 'key_stats' in yf_data and 'key_stats' in av_data:
             for key, value in av_data['key_stats'].items():
                 if yf_data['key_stats'].get(key) is None and value is not None:
                     merged['key_stats'][key] = value
                     merged['key_stats'][f'{key}_source'] = 'alphavantage'
-        
+
         # Fill gaps in financial statements
         for statement in ['income_statement', 'balance_sheet', 'cash_flow']:
             if statement in yf_data and statement in av_data:
@@ -541,12 +571,12 @@ class AlphaVantageService:
                     if yf_data[statement].get(field) is None or not yf_data[statement][field]:
                         merged[statement][field] = values
                         merged[statement][f'{field}_source'] = 'alphavantage'
-        
+
         # Add analyst estimates from AlphaVantage
         if 'analyst_estimates' in av_data and av_data['analyst_estimates']:
             if 'analyst_estimates' not in merged:
                 merged['analyst_estimates'] = {}
             merged['analyst_estimates']['alphavantage_ratings'] = av_data['analyst_estimates'].get('analyst_ratings', {})
-        
+
         logger.info(f"Merged yfinance and AlphaVantage data successfully")
         return merged

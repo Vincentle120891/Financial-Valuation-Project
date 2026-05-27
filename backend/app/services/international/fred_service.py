@@ -7,17 +7,18 @@ import logging
 from typing import Optional, Dict, Any
 from datetime import datetime, timedelta
 from fredapi import Fred
+from fastapi import Request
 
 logger = logging.getLogger(__name__)
 
 
 class FREDService:
     """Service for fetching economic data from FRED API."""
-    
+
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or os.getenv('FRED_API_KEY')
         self.fred = None
-        
+
         if self.api_key and self.api_key != 'your_fred_api_key_here':
             try:
                 self.fred = Fred(api_key=self.api_key)
@@ -26,7 +27,36 @@ class FREDService:
                 logger.warning(f"Failed to initialize FRED service: {str(e)}")
         else:
             logger.warning("FRED API key not configured. Risk-free rate data will be unavailable.")
-    
+
+    @staticmethod
+    def get_api_key(request: Optional[Request] = None) -> Optional[str]:
+        """
+        Get API key with priority: request header > environment variable.
+
+        Args:
+            request: FastAPI request object (optional)
+
+        Returns:
+            API key from request header if available, else from environment, else None
+        """
+        # Priority 1: Check request state (from header)
+        if request:
+            api_keys = getattr(request.state, 'api_keys', {})
+            request_key = api_keys.get('fred')
+            if request_key:
+                logger.debug("Using FRED API key from request header")
+                return request_key
+
+        # Priority 2: Fallback to environment variable
+        env_key = os.getenv('FRED_API_KEY')
+        if env_key and env_key != 'your_fred_api_key_here':
+            logger.debug("Using FRED API key from environment variable")
+            return env_key
+
+        # No key available
+        logger.warning("FRED API key not configured (neither in request header nor environment)")
+        return None
+
     def get_10year_treasury_yield(self) -> Optional[Dict[str, Any]]:
         """
         Fetch current 10-year US Treasury yield (standard risk-free rate proxy).
@@ -34,15 +64,15 @@ class FREDService:
         """
         if not self.fred:
             return None
-        
+
         try:
             # Fetch latest 10-year Treasury constant maturity rate
             data = self.fred.get_series('DGS10')
-            
+
             if data is not None and not data.empty:
                 latest_value = data.iloc[-1]
                 latest_date = data.index[-1]
-                
+
                 # Filter out NaN values
                 if not isinstance(latest_value, (int, float)) or latest_value != latest_value:  # NaN check
                     # Try to get last non-NaN value
@@ -52,9 +82,9 @@ class FREDService:
                         latest_date = valid_data.index[-1]
                     else:
                         return None
-                
+
                 logger.info(f"Fetched 10Y Treasury Yield: {latest_value}% ({latest_date})")
-                
+
                 return {
                     'value': float(latest_value),
                     'unit': '%',
@@ -65,22 +95,22 @@ class FREDService:
                 }
         except Exception as e:
             logger.error(f"Error fetching 10Y Treasury yield from FRED: {str(e)}")
-        
+
         return None
-    
+
     def get_market_risk_premium(self) -> Optional[Dict[str, Any]]:
         """
         Fetch estimated Equity Risk Premium (ERP).
-        Note: FRED doesn't directly provide ERP, so we use historical averages or 
+        Note: FRED doesn't directly provide ERP, so we use historical averages or
         implied ERP from market data. This is a placeholder for future implementation.
-        
+
         For now, returns None to indicate data must be estimated or user-provided.
         """
         # TODO: Implement implied ERP calculation from S&P 500 data
         # Alternative: Use Damodaran's published ERP data via web scraping
         logger.info("Market Risk Premium estimation requires external data source (e.g., Damodaran)")
         return None
-    
+
     def get_inflation_rate(self) -> Optional[Dict[str, Any]]:
         """
         Fetch current US inflation rate (CPI year-over-year change).
@@ -88,18 +118,18 @@ class FREDService:
         """
         if not self.fred:
             return None
-        
+
         try:
             cpi_data = self.fred.get_series('CPIAUCSL')
-            
+
             if cpi_data is not None and len(cpi_data) >= 12:
                 # Calculate YoY inflation rate
                 latest_cpi = cpi_data.iloc[-1]
                 year_ago_cpi = cpi_data.iloc[-12]
-                
+
                 if year_ago_cpi > 0:
                     inflation_rate = ((latest_cpi / year_ago_cpi) - 1) * 100
-                    
+
                     return {
                         'value': round(inflation_rate, 2),
                         'unit': '%',
@@ -110,9 +140,9 @@ class FREDService:
                     }
         except Exception as e:
             logger.error(f"Error calculating inflation rate from FRED: {str(e)}")
-        
+
         return None
-    
+
     def get_gdp_growth_rate(self) -> Optional[Dict[str, Any]]:
         """
         Fetch US GDP growth rate (real GDP, seasonally adjusted annual rate).
@@ -120,17 +150,17 @@ class FREDService:
         """
         if not self.fred:
             return None
-        
+
         try:
             gdp_data = self.fred.get_series('GDPC1')
-            
+
             if gdp_data is not None and len(gdp_data) >= 4:
                 latest_gdp = gdp_data.iloc[-1]
                 year_ago_gdp = gdp_data.iloc[-4]
-                
+
                 if year_ago_gdp > 0:
                     gdp_growth = ((latest_gdp / year_ago_gdp) - 1) * 100
-                    
+
                     return {
                         'value': round(gdp_growth, 2),
                         'unit': '%',
@@ -141,9 +171,9 @@ class FREDService:
                     }
         except Exception as e:
             logger.error(f"Error calculating GDP growth from FRED: {str(e)}")
-        
+
         return None
-    
+
     def get_all_macro_indicators(self) -> Dict[str, Optional[Dict[str, Any]]]:
         """Fetch all available macroeconomic indicators in one call."""
         return {
