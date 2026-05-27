@@ -1,1 +1,1 @@
-Nothing should be ignored in this case, as only a Python source file was modified and no build artifacts, dependencies, or temporary files were detected.
+Nothing needs to be added to .gitignore since only a markdown file (PEER_FINDING_LOGIC_COMPLETE.md) was added, which is a source/config file and should not be ignored.
