@@ -299,7 +299,7 @@ class InstitutionalPeerDiscoveryService:
 
         return PeerDiscoveryResponse(
             target_ticker=target_symbol,
-            peers=verified_peers[:request.max_peers],
+            peers=verified_peers[:request_obj.max_peers],
             total_found=len(verified_peers),
             search_criteria=search_criteria,
             warnings=warnings
