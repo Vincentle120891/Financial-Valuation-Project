@@ -73,17 +73,18 @@ async def process(session_id: str, ticker: str, market: str, max_peers: int = 10
         # Execute discovery
         response = await discovery_service.discover_peers(request)
         
-        # Transform response to expected format
+        # Transform response to expected format - using unified PeerCompany schema fields
         peers = []
         for peer in response.peers:
             peers.append({
                 "ticker": peer.ticker,
-                "name": peer.name,
-                "match_score": peer.match_score,
+                "company_name": peer.company_name,
+                "sector": peer.sector or "Unknown",
+                "industry": peer.industry or "Unknown",
                 "market_cap": peer.market_cap,
-                "sector": peer.sector,
-                "industry": peer.industry,
-                "match_reasons": _generate_match_reasons(peer),
+                "selected": False,
+                "match_score": peer.match_score * 100 if peer.match_score <= 1.0 else peer.match_score,  # Convert to 0-100 scale
+                "match_reasons": _generate_match_reasons(peer),  # Returns list of strings
                 "segments": peer.segments,
                 "pe_ratio": peer.pe_ratio,
                 "ev_to_ebitda": peer.ev_to_ebitda
@@ -120,8 +121,8 @@ async def process(session_id: str, ticker: str, market: str, max_peers: int = 10
         }
 
 
-def _generate_match_reasons(peer: PeerCandidate) -> str:
-    """Generate human-readable match reasons based on scoring components."""
+def _generate_match_reasons(peer: PeerCandidate) -> list[str]:
+    """Generate human-readable match reasons based on scoring components. Returns a list."""
     reasons = []
     
     if peer.segments:
@@ -137,4 +138,4 @@ def _generate_match_reasons(peer: PeerCandidate) -> str:
         else:
             reasons.append(f"Market Cap: ${mc/1e6:.2f}M")
     
-    return "; ".join(reasons) if reasons else "Basic industry match"
+    return reasons if reasons else ["Basic industry match"]
