@@ -57,7 +57,8 @@ class Step2MarketDataProcessor:
     - Discover peer companies based on industry and market cap
     """
 
-    def __init__(self, yfinance_service: Optional[YFinanceService] = None):
+    def __init__(self, request=None, yfinance_service: Optional[YFinanceService] = None):
+        self.request = request
         self.yfinance_service = yfinance_service or YFinanceService()
         self.peer_discovery_service = InstitutionalPeerDiscoveryService()
 
@@ -352,7 +353,8 @@ class Step2MarketDataProcessor:
         
         # International market: Fetch from FRED
         try:
-            fred_service = get_fred_service()
+            # Pass request to get_fred_service so it can use API key from request headers
+            fred_service = get_fred_service(self.request)
             treasury_data = fred_service.get_10year_treasury_yield()
             
             if treasury_data and treasury_data.get('status') == 'RETRIEVED':

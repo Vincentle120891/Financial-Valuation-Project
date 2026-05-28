@@ -188,9 +188,22 @@ class FREDService:
 _fred_service_instance: Optional[FREDService] = None
 
 
-def get_fred_service() -> FREDService:
-    """Get or create singleton FRED service instance."""
+def get_fred_service(request: Optional[Request] = None) -> FREDService:
+    """Get or create FRED service instance with API key from request or environment.
+    
+    Args:
+        request: FastAPI request object (optional). If provided, API key will be
+                 extracted from request headers with priority over environment variables.
+    
+    Returns:
+        FREDService instance initialized with appropriate API key
+    """
     global _fred_service_instance
-    if _fred_service_instance is None:
-        _fred_service_instance = FREDService()
-    return _fred_service_instance
+    
+    # Get API key with priority: request header > environment variable
+    api_key = FREDService.get_api_key(request)
+    
+    # Create new instance with the resolved API key
+    # Note: We create a new instance per request to ensure correct API key usage
+    # This is necessary because API keys vary per user
+    return FREDService(api_key=api_key)
