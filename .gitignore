@@ -1,1 +1,43 @@
-Nothing should be ignored based on the provided file changes. The only modified file is a Python source file (`backend/app/services/international/step6_unified_transformer.py`), which should not be added to .gitignore. Since there are no build artifacts, dependencies, temporary files, or other items that should be ignored, the .gitignore remains empty.
+```
+# Compiled Python files
+*.pyc
+__pycache__/
+
+# Dependencies
+venv/
+.venv/
+node_modules/
+
+# Logs
+*.log
+
+# Environment files
+.env
+.env.local
+*.env.*
+
+# Editor/IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*.tmp
+
+# Build/dist directories
+build/
+dist/
+target/
+
+# Coverage reports
+coverage/
+htmlcov/
+.coverage
+
+# Python cache
+.mypy_cache/
+.pytest_cache/
+
+# System files
+.DS_Store
+Thumbs.db
+```

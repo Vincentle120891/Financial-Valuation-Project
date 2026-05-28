@@ -509,37 +509,30 @@ async def fetch_api_data(request: FetchDataRequest):
             if metric_id not in structured_data:
                 structured_data[metric_id] = avg_info
 
-        # Prepare response data
-        data_for_response = {
-            "data": structured_data,
-            "missing_inputs": missing_inputs,
-            "validation_report": validation_report,
-            "peer_averages": peer_averages,
-            "completeness": adapter_result.get("completeness", 0)
-        }
-
-        # Transform to unified schema using existing transformer
-        # Build a proper legacy response object with all required attributes
-        legacy_result = type('obj', (object,), {
-            'ticker': ticker,
-            'session_id': request.session_id,
-            'timestamp': datetime.now(),
-            'valuation_model': method,
-            'historical_financials': None,
-            'forecast_drivers': None,
-            'market_data': None,
-            'peer_comparables': None,
-            'calculated_metrics': None,
-            'missing_data_summary': type('summary', (object,), {
-                'critical_missing': [m['metric_id'] for m in missing_inputs],
-                'optional_missing': [],
-                'total_missing': len(missing_inputs)
-            })(),
-            'manual_overrides_applied': {},
-            'data_complete': validation_report.get('status') == 'COMPLETE',
-            'message': f"Fetched {len(structured_data)} metrics for {ticker}",
-            'model_dump': lambda mode='json': data_for_response
-        })()
+        # CALL THE ACTUAL STEP 6 PROCESSOR instead of creating a fake object
+        # The processor will wrap the adapter results in proper DataField objects
+        logger.info(f"Calling Step6DataReviewProcessor for {ticker} ({method})")
+        
+        legacy_result = await step6_processor.process_data_review(
+            ticker=ticker,
+            market=market,
+            historical_data={'data': company_data.get("data", {}), 'periods': []},
+            market_data=company_data.get("data", {}),
+            forecast_data={},
+            retrieved_assumptions={'peer_data': individual_results, 'peer_averages': peer_averages},
+            user_overrides={},
+            valuation_model=method,
+            session_cache={
+                'session_id': request.session_id,
+                'international_market_data': {
+                    'timestamp': datetime.now(),
+                    'historical_data': {'data': company_data.get("data", {}), 'periods': []},
+                    'market_data': company_data.get("data", {}),
+                    'forecast_data': {},
+                    'retrieved_assumptions': {'peer_data': individual_results, 'peer_averages': peer_averages}
+                }
+            }
+        )
 
         unified_response = Step6UnifiedTransformer.transform_any_response(
             response=legacy_result,
