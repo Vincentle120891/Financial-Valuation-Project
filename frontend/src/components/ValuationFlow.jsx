@@ -27,6 +27,7 @@ import ForecastDriversStep from './valuation-flow/ForecastDriversStep';
 import AssumptionsStep from './valuation-flow/AssumptionsStep';
 import RunValuationStep from './valuation-flow/RunValuationStep';
 import ResultsStep from './valuation-flow/ResultsStep';
+import ApiKeyDebugButton from './ApiKeyDebugButton';
 
 // Debounce utility function for auto-save
 const useDebounce = (callback, delay) => {
@@ -1247,6 +1248,9 @@ const ValuationFlow = () => {
       <footer className="app-footer">
         <p>Powered by yfinance, Alpha Vantage & AI Analysis | DCF • DuPont • Trading Comps</p>
       </footer>
+
+      {/* API Key Debug Button - Always visible across all steps */}
+      <ApiKeyDebugButton />
     </div>
   );
 };

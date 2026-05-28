@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { searchVietnameseStocks } from '../../services/api';
 import ApiKeyModal from '../ApiKeyModal';
-import ApiKeyDebugButton from '../ApiKeyDebugButton';
 
 /**
  * SearchStep Component
@@ -112,9 +111,6 @@ const SearchStep = ({
           Configure API Keys
         </button>
       </div>
-
-      {/* Debug Button - Always visible for troubleshooting */}
-      <ApiKeyDebugButton />
 
       {/* Main Search Input Form Group */}
       <div className="relative flex items-stretch gap-2">
