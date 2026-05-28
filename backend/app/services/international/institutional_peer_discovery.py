@@ -91,58 +91,64 @@ def extract_market_context(symbol: str) -> tuple[str, str]:
     return parts[0], 'US'
 
 
-def _get_live_fmp_peers(symbol: str, request: Optional[Request] = None) -> list[str]:
-    """Primary Option B Strategy: Hits the pre-computed relationships engine"""
+def _get_live_fmp_peers(symbol: str, request: Optional[Request] = None) -> list[dict]:
+    """Primary Option B Strategy: Hits the pre-computed relationships engine
+
+    Returns list of dicts with peer data from stable/stock-peers endpoint:
+    [{'symbol': 'AZO', 'companyName': 'AutoZone, Inc.', 'price': 3007.08, 'mktCap': 49222892520}, ...]
+    """
     api_key = get_fmp_api_key(request)
-    
+
     # Try multiple FMP endpoints in order of preference
     endpoints = [
-        f"https://financialmodelingprep.com/api/v4/stock_peers?symbol={symbol}&apikey={api_key}",  # V4 API
-        f"https://financialmodelingprep.com/stable/stock-peers?symbol={symbol}&apikey={api_key}",  # Stable API
+        f"https://financialmodelingprep.com/api/v4/stock_peers?symbol={symbol}&apikey={api_key}",  # V4 API (legacy)
+        f"https://financialmodelingprep.com/stable/stock-peers?symbol={symbol}&apikey={api_key}",  # Stable API (working)
     ]
-    
+
     for url in endpoints:
         logger.info(f"Attempting FMP API call: {url[:80]}...")
         try:
             response = requests.get(url, timeout=7)
             logger.info(f"FMP API Response Status: {response.status_code}")
-            
+
             if response.status_code == 200:
                 data = response.json()
                 logger.debug(f"FMP API Raw Response: {str(data)[:200]}")
-                
+
                 # Handle different response formats
                 if data and isinstance(data, list):
-                    # Format 1: Direct list of peer objects [{"symbol": "AZO", ...}]
+                    # Format 1: Direct list of peer objects [{"symbol": "AZO", "companyName": "...", "price": ..., "mktCap": ...}]
                     if isinstance(data[0], dict) and "symbol" in data[0]:
-                        peers = [item["symbol"] for item in data if isinstance(item, dict) and "symbol" in item]
+                        # Return the full peer objects, not just symbols
+                        peers = [item for item in data if isinstance(item, dict) and "symbol" in item]
                         if peers:
                             logger.info(f"Option B Succeeded (Format 1): Retrieved {len(peers)} peers for {symbol}")
                             return peers
-                    
+
                     # Format 2: Wrapped in "peers" key [{"peers": [...]}]
                     if isinstance(data[0], dict) and "peers" in data[0]:
                         peers = data[0]["peers"]
                         if peers and isinstance(peers, list):
                             logger.info(f"Option B Succeeded (Format 2): Retrieved {len(peers)} peers for {symbol}")
                             return peers
-                    
+
                     # Format 3: Simple list of strings ["AAPL", "MSFT", ...]
                     if isinstance(data[0], str):
-                        peers = [item for item in data if isinstance(item, str)]
+                        # Convert to minimal dict format
+                        peers = [{"symbol": item, "companyName": item, "price": None, "mktCap": None} for item in data if isinstance(item, str)]
                         if peers:
                             logger.info(f"Option B Succeeded (Format 3): Retrieved {len(peers)} peers for {symbol}")
                             return peers
-                
+
                 # If we got a valid response but no peers, log it
                 logger.warning(f"FMP API returned valid response but no peers for {symbol}. Response: {data}")
             else:
                 logger.warning(f"FMP API returned status {response.status_code} for {symbol}. Response: {response.text[:200]}")
-                
+
         except Exception as e:
             logger.warning(f"FMP API request failed for {symbol} on {url[:50]}...: {str(e)}")
             continue
-    
+
     logger.warning(f"All FMP API endpoints failed for {symbol}, returning empty list")
     return []
 
@@ -267,41 +273,50 @@ class InstitutionalPeerDiscoveryService:
             profile_data = None
             profile_fetch_success = False
             exchange = "UNKNOWN"
-            
+
+            # Use the stable stock-peers endpoint data if available (already fetched)
+            # The stock-peers endpoint returns: symbol, companyName, price, mktCap
+            # We'll use this as fallback and try to enhance with profile data
+            peer_from_list = next((p for p in candidate_symbols if isinstance(p, dict) and p.get('symbol') == symbol), None)
+
             # Try multiple profile endpoints (legacy -> stable)
             profile_endpoints = [
                 f"https://financialmodelingprep.com/api/v3/profile/{symbol}?apikey={self.fmp_api_key}",
                 f"https://financialmodelingprep.com/stable/company-profile?symbol={symbol}&apikey={self.fmp_api_key}",
             ]
-            
+
             for profile_url in profile_endpoints:
                 try:
-                    p_resp = requests.get(profile_url, timeout=5).json()
-                    if p_resp and isinstance(p_resp, list) and len(p_resp) > 0:
-                        profile_data = p_resp[0]
-                        profile_fetch_success = True
-                        exchange = profile_data.get("exchangeShortName", "UNKNOWN")
-                        logger.info(f"Profile fetched successfully for {symbol} via {profile_url[:60]}...")
-                        break
-                    elif p_resp and isinstance(p_resp, dict) and "companyName" in p_resp:
-                        # Handle single object response format
-                        profile_data = p_resp
-                        profile_fetch_success = True
-                        exchange = profile_data.get("exchangeShortName", "UNKNOWN")
-                        logger.info(f"Profile fetched successfully for {symbol} via {profile_url[:60]}...")
-                        break
+                    p_resp = requests.get(profile_url, timeout=5)
+                    if p_resp.status_code == 200:
+                        p_resp_json = p_resp.json()
+                        if p_resp_json and isinstance(p_resp_json, list) and len(p_resp_json) > 0:
+                            profile_data = p_resp_json[0]
+                            profile_fetch_success = True
+                            exchange = profile_data.get("exchangeShortName", "UNKNOWN")
+                            logger.info(f"Profile fetched successfully for {symbol} via {profile_url[:60]}...")
+                            break
+                        elif p_resp_json and isinstance(p_resp_json, dict) and "companyName" in p_resp_json:
+                            # Handle single object response format
+                            profile_data = p_resp_json
+                            profile_fetch_success = True
+                            exchange = profile_data.get("exchangeShortName", "UNKNOWN")
+                            logger.info(f"Profile fetched successfully for {symbol} via {profile_url[:60]}...")
+                            break
+                    else:
+                        logger.debug(f"Profile fetch returned status {p_resp.status_code} for {symbol} on {profile_url[:50]}...")
                 except Exception as e:
                     logger.debug(f"Profile fetch failed for {symbol} on {profile_url[:50]}...: {e}")
                     continue
-            
+
             if not profile_fetch_success:
                 logger.warning(f"Profile fetch failed for {symbol}, accepting as unverified peer (Hybrid Mode)")
-                # Create minimal profile from symbol only
+                # Create minimal profile from symbol only, using data from stock-peers endpoint if available
                 profile_data = {
-                    "companyName": symbol,
+                    "companyName": peer_from_list.get('companyName', symbol) if peer_from_list else symbol,
                     "sector": None,
                     "industry": None,
-                    "marketCap": None,
+                    "marketCap": peer_from_list.get('mktCap') if peer_from_list else None,
                     "priceEarningsRatio": None,
                     "evToEBITDA": None,
                     "priceToSalesRatio": None,
@@ -312,7 +327,7 @@ class InstitutionalPeerDiscoveryService:
             # Relaxed exchange validation: Accept all peers, but flag major exchanges
             major_exchanges = ["NYSE", "NASDAQ", "HOSE", "HNX", "TSE", "NYQ", "NMS", "AMEX", "LSE", "EURONEXT"]
             is_major_exchange = exchange in major_exchanges
-            
+
             # Calculate match score based on data quality
             if profile_fetch_success and is_major_exchange:
                 match_score = 0.8  # High confidence: verified + major exchange
@@ -323,7 +338,7 @@ class InstitutionalPeerDiscoveryService:
             else:
                 match_score = 0.4  # Lower confidence: unverified but accepted
                 verification_status = "Unverified (Profile Unavailable)"
-            
+
             peer = PeerCandidate(
                 symbol=symbol,
                 ticker=symbol,
@@ -437,14 +452,14 @@ def discover_institutional_peers(target_symbol: str) -> list[dict]:
         profile_data = None
         profile_fetch_success = False
         exchange = "UNKNOWN"
-        
+
         # Try multiple profile endpoints (legacy -> stable)
         api_key = get_fmp_api_key(request)
         profile_endpoints = [
             f"https://financialmodelingprep.com/api/v3/profile/{symbol}?apikey={api_key}",
             f"https://financialmodelingprep.com/stable/company-profile?symbol={symbol}&apikey={api_key}",
         ]
-        
+
         for profile_url in profile_endpoints:
             try:
                 p_resp = requests.get(profile_url, timeout=5).json()
@@ -464,7 +479,7 @@ def discover_institutional_peers(target_symbol: str) -> list[dict]:
             except Exception as e:
                 logger.debug(f"Profile fetch failed for {symbol} on {profile_url[:50]}...: {e}")
                 continue
-        
+
         if not profile_fetch_success:
             logger.warning(f"Profile fetch failed for {symbol}, accepting as unverified peer (Hybrid Mode)")
             # Create minimal profile from symbol only
@@ -483,7 +498,7 @@ def discover_institutional_peers(target_symbol: str) -> list[dict]:
         # Relaxed exchange validation: Accept all peers, but flag major exchanges
         major_exchanges = ["NYSE", "NASDAQ", "HOSE", "HNX", "TSE", "NYQ", "NMS", "AMEX", "LSE", "EURONEXT"]
         is_major_exchange = exchange in major_exchanges
-        
+
         # Calculate match score based on data quality
         if profile_fetch_success and is_major_exchange:
             base_score = 0.85  # High confidence: verified + major exchange
@@ -494,11 +509,11 @@ def discover_institutional_peers(target_symbol: str) -> list[dict]:
         else:
             base_score = 0.45  # Lower confidence: unverified but accepted
             verification_status = "Unverified (Profile Unavailable)"
-        
+
         # Adjust score for expanded peers
         is_expanded = symbol not in candidate_symbols[:max(1, len(candidate_symbols) - 2)]
         score = base_score - (0.05 if is_expanded else 0.0)
-        
+
         # Inject score and discovery path into the payload
         profile_data['match_score'] = score
         profile_data['discovery_path'] = "expanded" if is_expanded else "direct"
