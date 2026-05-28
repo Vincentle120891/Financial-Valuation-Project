@@ -698,6 +698,19 @@ class Step6UnifiedTransformer:
                 recommendations=["Review missing fields and consider manual overrides"]
             )
 
+        # NEW: Populate data fields from model_dump if available (APIAdapter result)
+        if hasattr(response, 'model_dump') and callable(getattr(response, 'model_dump')):
+            try:
+                dump_result = response.model_dump(mode='json') if 'mode' in response.model_dump.__code__.co_varnames else response.model_dump()
+                data_dict = dump_result.get('data', {})
+                
+                # Map APIAdapter metric IDs to unified schema field names
+                cls._populate_historical_financials_from_dict(historical_financials, data_dict)
+                cls._populate_forecast_drivers_from_dict(forecast_drivers, data_dict)
+                cls._populate_market_data_from_dict(market_data, data_dict)
+            except Exception as e:
+                logger.warning(f"Failed to populate from model_dump: {e}")
+
         return UnifiedStep6Response(
             status="partial" if not getattr(response, 'data_complete', False) else "success",
             session_id=getattr(response, 'session_id', ''),
@@ -718,3 +731,242 @@ class Step6UnifiedTransformer:
             warnings=[],
             message=getattr(response, 'message', "Data fetched successfully")
         )
+
+    @classmethod
+    def _populate_historical_financials_from_dict(cls, historical: HistoricalFinancialsData, data_dict: Dict[str, Any]):
+        """Populate HistoricalFinancialsData fields from APIAdapter data dictionary"""
+        # Income Statement mappings (APIAdapter metric_id -> unified field)
+        income_mappings = {
+            'revenue': 'revenue',
+            'cogs': 'cogs',
+            'gross_profit': 'gross_profit',
+            'operating_expenses': 'operating_expenses',
+            'rd_expenses': 'research_development',
+            'ebitda': 'ebitda',
+            'ebit': 'ebit',
+            'interest_expense': 'interest_expense',
+            'other_income_expense': 'other_income_expense',
+            'pretax_income': 'pretax_income',
+            'tax_provision': 'tax_provision',
+            'net_income': 'net_income',
+            'depreciation_amortization': 'depreciation_amortization',
+        }
+        
+        # Cash Flow mappings
+        cashflow_mappings = {
+            'capex': 'capex',
+            'operating_cash_flow': 'operating_cash_flow',
+            'free_cash_flow': 'free_cash_flow',
+            'working_capital_changes': 'working_capital_changes',
+        }
+        
+        # Balance Sheet mappings
+        balance_mappings = {
+            'accounts_receivable': 'accounts_receivable',
+            'inventory': 'inventory',
+            'accounts_payable': 'accounts_payable',
+            'cash_and_equivalents': 'cash_and_equivalents',
+            'total_assets': 'total_assets',
+            'total_debt': 'total_debt',
+            'shareholders_equity': 'shareholders_equity',
+            'retained_earnings': 'retained_earnings',
+            'shares_outstanding': 'shares_outstanding',
+        }
+        
+        # Calculated metrics mappings
+        calculated_mappings = {
+            'revenue_cagr': 'revenue_cagr',
+            'avg_ebitda_margin': 'avg_ebitda_margin',
+            'avg_roe': 'avg_roe',
+            'avg_roa': 'avg_roa',
+        }
+
+        reporting_period = "Latest FY"
+        
+        # Process each mapping category
+        for metric_id, field_name in income_mappings.items():
+            if metric_id in data_dict:
+                metric_info = data_dict[metric_id]
+                value = metric_info.get('value')
+                source = metric_info.get('source', 'yfinance')
+                status_str = metric_info.get('status', 'fetched')
+                
+                unified_status = cls._map_adapter_status_to_unified(status_str)
+                
+                setattr(historical, field_name, UnifiedDataField(
+                    value=value,
+                    status=unified_status,
+                    source=source,
+                    confidence_score=95.0 if unified_status == UnifiedDataStatus.RETRIEVED else 50.0,
+                    is_missing=(unified_status == UnifiedDataStatus.MISSING),
+                    can_override=True,
+                    unit="USD",
+                    currency="USD",
+                    reporting_period=reporting_period,
+                    last_updated=datetime.now()
+                ))
+
+        for metric_id, field_name in cashflow_mappings.items():
+            if metric_id in data_dict:
+                metric_info = data_dict[metric_id]
+                value = metric_info.get('value')
+                source = metric_info.get('source', 'yfinance')
+                status_str = metric_info.get('status', 'fetched')
+                
+                unified_status = cls._map_adapter_status_to_unified(status_str)
+                
+                setattr(historical, field_name, UnifiedDataField(
+                    value=value,
+                    status=unified_status,
+                    source=source,
+                    confidence_score=95.0 if unified_status == UnifiedDataStatus.RETRIEVED else 50.0,
+                    is_missing=(unified_status == UnifiedDataStatus.MISSING),
+                    can_override=True,
+                    unit="USD",
+                    currency="USD",
+                    reporting_period=reporting_period,
+                    last_updated=datetime.now()
+                ))
+
+        for metric_id, field_name in balance_mappings.items():
+            if metric_id in data_dict:
+                metric_info = data_dict[metric_id]
+                value = metric_info.get('value')
+                source = metric_info.get('source', 'yfinance')
+                status_str = metric_info.get('status', 'fetched')
+                
+                unified_status = cls._map_adapter_status_to_unified(status_str)
+                
+                setattr(historical, field_name, UnifiedDataField(
+                    value=value,
+                    status=unified_status,
+                    source=source,
+                    confidence_score=95.0 if unified_status == UnifiedDataStatus.RETRIEVED else 50.0,
+                    is_missing=(unified_status == UnifiedDataStatus.MISSING),
+                    can_override=True,
+                    unit="USD",
+                    currency="USD",
+                    reporting_period=reporting_period,
+                    last_updated=datetime.now()
+                ))
+
+        for metric_id, field_name in calculated_mappings.items():
+            if metric_id in data_dict:
+                metric_info = data_dict[metric_id]
+                value = metric_info.get('value')
+                source = metric_info.get('source', 'yfinance')
+                status_str = metric_info.get('status', 'fetched')
+                
+                unified_status = cls._map_adapter_status_to_unified(status_str)
+                
+                setattr(historical, field_name, UnifiedDataField(
+                    value=value,
+                    status=unified_status,
+                    source=source,
+                    confidence_score=95.0 if unified_status == UnifiedDataStatus.RETRIEVED else 50.0,
+                    is_missing=(unified_status == UnifiedDataStatus.MISSING),
+                    can_override=True,
+                    unit="%",
+                    reporting_period=reporting_period,
+                    last_updated=datetime.now()
+                ))
+
+    @classmethod
+    def _populate_forecast_drivers_from_dict(cls, drivers: ForecastDriversData, data_dict: Dict[str, Any]):
+        """Populate ForecastDriversData fields from APIAdapter data dictionary"""
+        forecast_mappings = {
+            'revenue_growth_forecast': 'revenue_growth_forecast',
+            'volume_growth_split': 'volume_growth_split',
+            'ebitda_margin_forecast': 'ebitda_margin_forecast',
+            'tax_rate': 'tax_rate',
+            'ar_days': 'ar_days',
+            'inv_days': 'inv_days',
+            'ap_days': 'ap_days',
+            'capex_pct_of_revenue': 'capex_pct_of_revenue',
+            'useful_life_existing': 'useful_life_existing',
+            'useful_life_new': 'useful_life_new',
+            'risk_free_rate': 'risk_free_rate',
+            'equity_risk_premium': 'equity_risk_premium',
+            'beta': 'beta',
+            'cost_of_debt': 'cost_of_debt',
+            'wacc': 'wacc',
+            'terminal_growth_rate': 'terminal_growth_rate',
+            'terminal_ebitda_multiple': 'terminal_ebitda_multiple',
+        }
+
+        reporting_period = "Forecast"
+        
+        for metric_id, field_name in forecast_mappings.items():
+            if metric_id in data_dict:
+                metric_info = data_dict[metric_id]
+                value = metric_info.get('value')
+                source = metric_info.get('source', 'yfinance')
+                status_str = metric_info.get('status', 'fetched')
+                
+                unified_status = cls._map_adapter_status_to_unified(status_str)
+                
+                setattr(drivers, field_name, UnifiedDataField(
+                    value=value,
+                    status=unified_status,
+                    source=source,
+                    confidence_score=95.0 if unified_status == UnifiedDataStatus.RETRIEVED else 50.0,
+                    is_missing=(unified_status == UnifiedDataStatus.MISSING),
+                    can_override=True,
+                    unit="%" if any(x in metric_id for x in ['rate', 'pct', 'margin', 'growth']) else "days" if 'days' in metric_id else "x" if 'multiple' in metric_id else "years",
+                    reporting_period=reporting_period,
+                    last_updated=datetime.now()
+                ))
+
+    @classmethod
+    def _populate_market_data_from_dict(cls, market: MarketDataBase, data_dict: Dict[str, Any]):
+        """Populate MarketDataBase fields from APIAdapter data dictionary"""
+        market_mappings = {
+            'current_stock_price': 'current_stock_price',
+            'shares_outstanding': 'shares_outstanding',
+            'market_cap': 'market_cap',
+            'beta': 'beta',
+            'total_debt': 'total_debt',
+            'cash': 'cash',
+            'currency': 'currency',
+            'fifty_two_week_high': 'fifty_two_week_high',
+            'fifty_two_week_low': 'fifty_two_week_low',
+            'average_volume': 'average_volume',
+        }
+
+        reporting_period = "Current"
+        
+        for metric_id, field_name in market_mappings.items():
+            if metric_id in data_dict:
+                metric_info = data_dict[metric_id]
+                value = metric_info.get('value')
+                source = metric_info.get('source', 'yfinance')
+                status_str = metric_info.get('status', 'fetched')
+                
+                unified_status = cls._map_adapter_status_to_unified(status_str)
+                
+                is_currency_field = metric_id not in ['beta', 'shares_outstanding', 'fifty_two_week_high', 'fifty_two_week_low', 'average_volume', 'currency']
+                
+                setattr(market, field_name, UnifiedDataField(
+                    value=value,
+                    status=unified_status,
+                    source=source,
+                    confidence_score=95.0 if unified_status == UnifiedDataStatus.RETRIEVED else 50.0,
+                    is_missing=(unified_status == UnifiedDataStatus.MISSING),
+                    can_override=True,
+                    unit="USD" if is_currency_field else "" if metric_id == 'currency' else "x" if metric_id == 'beta' else "",
+                    currency="USD" if is_currency_field else None,
+                    reporting_period=reporting_period,
+                    last_updated=datetime.now()
+                ))
+
+    @staticmethod
+    def _map_adapter_status_to_unified(status_str: str) -> UnifiedDataStatus:
+        """Map APIAdapter status string to unified DataStatus enum"""
+        mapping = {
+            'fetched': UnifiedDataStatus.RETRIEVED,
+            'calculated': UnifiedDataStatus.CALCULATED,
+            'estimated': UnifiedDataStatus.ESTIMATED,
+            'missing': UnifiedDataStatus.MISSING,
+            'override': UnifiedDataStatus.MANUAL_OVERRIDE,
+        }
+        return mapping.get(status_str.lower(), UnifiedDataStatus.RETRIEVED)
