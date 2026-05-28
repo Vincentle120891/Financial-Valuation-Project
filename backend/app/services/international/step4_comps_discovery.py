@@ -11,7 +11,7 @@ Uses InstitutionalPeerDiscoveryService for advanced multi-segment peer matching
 """
 import os
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from fastapi import Request
 from app.services.international.institutional_peer_discovery import (
     InstitutionalPeerDiscoveryService,
@@ -122,8 +122,8 @@ async def process(session_id: str, ticker: str, market: str, max_peers: int = 10
         }
 
 
-def _generate_match_reasons(peer: PeerCandidate) -> list[str]:
-    """Generate human-readable match reasons based on scoring components. Returns a list."""
+def _generate_match_reasons(peer: PeerCandidate) -> List[str]:
+    """Generate human-readable match reasons based on scoring components."""
     reasons = []
     
     if peer.segments:
