@@ -62,7 +62,7 @@ async def process(session_id: str, ticker: str, market: str, max_peers: int = 10
         discovery_service = InstitutionalPeerDiscoveryService(fmp_api_key=fmp_api_key, request=request)
         
         # Create discovery request with DCF-specific parameters
-        request = PeerDiscoveryRequest(
+        discovery_request = PeerDiscoveryRequest(
             target_ticker=ticker,
             method="DCF",
             max_peers=max_peers,
@@ -70,7 +70,7 @@ async def process(session_id: str, ticker: str, market: str, max_peers: int = 10
         )
         
         # Execute discovery
-        response = await discovery_service.discover_peers(request)
+        response = await discovery_service.discover_peers(discovery_request)
         
         # Transform response to expected format
         peers = []
