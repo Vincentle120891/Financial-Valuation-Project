@@ -15,7 +15,7 @@ Architecture:
 - Market-specific variations handled through optional fields, not structure changes
 """
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, ConfigDict
 from typing import Optional, List, Dict, Any, Union
 from datetime import datetime, date
 from enum import Enum
@@ -221,12 +221,20 @@ class UnifiedStep3Response(BaseModel):
 
 class PeerCompany(BaseModel):
     """Peer company information"""
+    model_config = ConfigDict(extra='forbid')  # Strict mode: reject unknown fields
+    
     ticker: str
     company_name: str
     sector: str
     industry: str
     market_cap: Optional[DataField] = None
     selected: bool = False
+    match_score: Optional[float] = Field(None, ge=0, le=100, description="Match score 0-100")
+    match_reasons: Optional[List[str]] = Field(default_factory=list, description="Reasons for peer match")
+    segments: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Business segments")
+    pe_ratio: Optional[float] = Field(None, description="P/E ratio")
+    ev_to_ebitda: Optional[float] = Field(None, description="EV/EBITDA multiple")
+    ps_ratio: Optional[float] = Field(None, description="P/S ratio")
 
 
 class UnifiedStep4Request(BaseModel):
