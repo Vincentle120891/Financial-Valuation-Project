@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from '../services/api';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
 
@@ -26,16 +26,13 @@ const ApiKeyDebugButton = () => {
     secEdgar: localStorage.getItem('sec_edgar_email') || ''
   });
 
-  // Fetch backend debug data
+  // Fetch backend debug data - uses api instance with interceptors
   const fetchBackendData = async () => {
     setLoading(true);
     setError(null);
     try {
-      const response = await axios.get(`${API_BASE_URL}/debug/api-keys`, {
-        headers: {
-          'Content-Type': 'application/json',
-        }
-      });
+      // Use the api instance to ensure headers are injected via interceptor
+      const response = await api.get('/debug/api-keys');
       setBackendData(response.data.data);
     } catch (err) {
       console.error('Failed to fetch backend debug data:', err);
