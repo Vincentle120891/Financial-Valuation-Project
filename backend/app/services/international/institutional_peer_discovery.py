@@ -254,7 +254,7 @@ class InstitutionalPeerDiscoveryService:
                 warnings=warnings + ["No peers found via Option B or Option A"]
             )
 
-        # --- STEP 3: Normalize Candidates & Fetch Profiles ---
+        # --- STEP 3: Normalize Candidates & Fetch Profiles (Hybrid Best-Effort) ---
         verified_peers = []
 
         for symbol in candidate_symbols:
@@ -263,39 +263,90 @@ class InstitutionalPeerDiscoveryService:
             if peer_country != target_country:
                 continue
 
-            # Fetch profile details
-            profile_url = f"https://financialmodelingprep.com/api/v3/profile/{symbol}?apikey={self.fmp_api_key}"
-            try:
-                p_resp = requests.get(profile_url, timeout=5).json()
-                if p_resp and isinstance(p_resp, list) and len(p_resp) > 0:
-                    profile_data = p_resp[0]
+            # Hybrid Approach: Try to fetch profile, but accept peer even if it fails
+            profile_data = None
+            profile_fetch_success = False
+            exchange = "UNKNOWN"
+            
+            # Try multiple profile endpoints (legacy -> stable)
+            profile_endpoints = [
+                f"https://financialmodelingprep.com/api/v3/profile/{symbol}?apikey={self.fmp_api_key}",
+                f"https://financialmodelingprep.com/stable/company-profile?symbol={symbol}&apikey={self.fmp_api_key}",
+            ]
+            
+            for profile_url in profile_endpoints:
+                try:
+                    p_resp = requests.get(profile_url, timeout=5).json()
+                    if p_resp and isinstance(p_resp, list) and len(p_resp) > 0:
+                        profile_data = p_resp[0]
+                        profile_fetch_success = True
+                        exchange = profile_data.get("exchangeShortName", "UNKNOWN")
+                        logger.info(f"Profile fetched successfully for {symbol} via {profile_url[:60]}...")
+                        break
+                    elif p_resp and isinstance(p_resp, dict) and "companyName" in p_resp:
+                        # Handle single object response format
+                        profile_data = p_resp
+                        profile_fetch_success = True
+                        exchange = profile_data.get("exchangeShortName", "UNKNOWN")
+                        logger.info(f"Profile fetched successfully for {symbol} via {profile_url[:60]}...")
+                        break
+                except Exception as e:
+                    logger.debug(f"Profile fetch failed for {symbol} on {profile_url[:50]}...: {e}")
+                    continue
+            
+            if not profile_fetch_success:
+                logger.warning(f"Profile fetch failed for {symbol}, accepting as unverified peer (Hybrid Mode)")
+                # Create minimal profile from symbol only
+                profile_data = {
+                    "companyName": symbol,
+                    "sector": None,
+                    "industry": None,
+                    "marketCap": None,
+                    "priceEarningsRatio": None,
+                    "evToEBITDA": None,
+                    "priceToSalesRatio": None,
+                    "exchangeShortName": "UNKNOWN"
+                }
+                exchange = "UNKNOWN"
 
-                    # Check for major listing requirements
-                    exchange = profile_data.get("exchangeShortName", "")
-                    if exchange in ["NYSE", "NASDAQ", "HOSE", "HNX", "TSE", "NYQ", "NMS"]:
-                        peer = PeerCandidate(
-                            symbol=symbol,
-                            ticker=symbol,
-                            name=profile_data.get("companyName", symbol),
-                            company_name=profile_data.get("companyName", symbol),
-                            exchange=exchange,
-                            sector=profile_data.get("sector"),
-                            industry=profile_data.get("industry"),
-                            market_cap=profile_data.get("marketCap"),
-                            marketCap=profile_data.get("marketCap"),
-                            match_score=0.8,  # Default high score for verified peers
-                            segments={},
-                            pe_ratio=profile_data.get("priceEarningsRatio"),
-                            ev_to_ebitda=profile_data.get("evToEBITDA"),
-                            ps_ratio=profile_data.get("priceToSalesRatio"),
-                            match_reasons=[f"Verified peer via {'Option B' if len(warnings) == 0 else 'Option A'}"]
-                        )
-                        verified_peers.append(peer)
-            except Exception as e:
-                logger.debug(f"Failed to fetch profile for {symbol}: {e}")
-                continue
+            # Relaxed exchange validation: Accept all peers, but flag major exchanges
+            major_exchanges = ["NYSE", "NASDAQ", "HOSE", "HNX", "TSE", "NYQ", "NMS", "AMEX", "LSE", "EURONEXT"]
+            is_major_exchange = exchange in major_exchanges
+            
+            # Calculate match score based on data quality
+            if profile_fetch_success and is_major_exchange:
+                match_score = 0.8  # High confidence: verified + major exchange
+                verification_status = "Verified"
+            elif profile_fetch_success:
+                match_score = 0.6  # Medium confidence: verified but minor exchange
+                verification_status = "Verified (Minor Exchange)"
+            else:
+                match_score = 0.4  # Lower confidence: unverified but accepted
+                verification_status = "Unverified (Profile Unavailable)"
+            
+            peer = PeerCandidate(
+                symbol=symbol,
+                ticker=symbol,
+                name=profile_data.get("companyName", symbol),
+                company_name=profile_data.get("companyName", symbol),
+                exchange=exchange,
+                sector=profile_data.get("sector"),
+                industry=profile_data.get("industry"),
+                market_cap=profile_data.get("marketCap"),
+                marketCap=profile_data.get("marketCap"),
+                match_score=match_score,
+                segments={},
+                pe_ratio=profile_data.get("priceEarningsRatio"),
+                ev_to_ebitda=profile_data.get("evToEBITDA"),
+                ps_ratio=profile_data.get("priceToSalesRatio"),
+                match_reasons=[
+                    f"Peer via {'Option B' if len(warnings) == 0 else 'Option A'}",
+                    f"Status: {verification_status}"
+                ]
+            )
+            verified_peers.append(peer)
 
-        logger.info(f"Pipeline complete. {len(verified_peers)} validated profiles returned.")
+        logger.info(f"Pipeline complete. {len(verified_peers)} peers returned ({sum(1 for p in verified_peers if p.match_score >= 0.8)} verified, {sum(1 for p in verified_peers if p.match_score < 0.8)} unverified/partial).")
 
         return PeerDiscoveryResponse(
             target_ticker=target_symbol,
@@ -373,7 +424,7 @@ def discover_institutional_peers(target_symbol: str) -> list[dict]:
     if len(candidate_symbols) < 5:
         candidate_symbols = _expand_peer_network(candidate_symbols, target_symbol, expansion_count=2)
 
-    # --- STEP 3: Normalize, Enrich & Score Candidates ---
+    # --- STEP 3: Normalize, Enrich & Score Candidates (Hybrid Best-Effort) ---
     verified_peer_profiles = []
 
     for symbol in candidate_symbols:
@@ -382,38 +433,84 @@ def discover_institutional_peers(target_symbol: str) -> list[dict]:
         if peer_country != target_country:
             continue
 
-        # 2. Fetch Profile Data for Scoring
+        # 2. Hybrid Approach: Try to fetch profile, but accept peer even if it fails
+        profile_data = None
+        profile_fetch_success = False
+        exchange = "UNKNOWN"
+        
+        # Try multiple profile endpoints (legacy -> stable)
         api_key = get_fmp_api_key(request)
-        profile_url = f"https://financialmodelingprep.com/api/v3/profile/{symbol}?apikey={api_key}"
-        try:
-            p_resp = requests.get(profile_url, timeout=5).json()
-            if p_resp and isinstance(p_resp, list) and len(p_resp) > 0:
-                profile_data = p_resp[0]
+        profile_endpoints = [
+            f"https://financialmodelingprep.com/api/v3/profile/{symbol}?apikey={api_key}",
+            f"https://financialmodelingprep.com/stable/company-profile?symbol={symbol}&apikey={api_key}",
+        ]
+        
+        for profile_url in profile_endpoints:
+            try:
+                p_resp = requests.get(profile_url, timeout=5).json()
+                if p_resp and isinstance(p_resp, list) and len(p_resp) > 0:
+                    profile_data = p_resp[0]
+                    profile_fetch_success = True
+                    exchange = profile_data.get("exchangeShortName", "UNKNOWN")
+                    logger.info(f"Profile fetched successfully for {symbol} via {profile_url[:60]}...")
+                    break
+                elif p_resp and isinstance(p_resp, dict) and "companyName" in p_resp:
+                    # Handle single object response format
+                    profile_data = p_resp
+                    profile_fetch_success = True
+                    exchange = profile_data.get("exchangeShortName", "UNKNOWN")
+                    logger.info(f"Profile fetched successfully for {symbol} via {profile_url[:60]}...")
+                    break
+            except Exception as e:
+                logger.debug(f"Profile fetch failed for {symbol} on {profile_url[:50]}...: {e}")
+                continue
+        
+        if not profile_fetch_success:
+            logger.warning(f"Profile fetch failed for {symbol}, accepting as unverified peer (Hybrid Mode)")
+            # Create minimal profile from symbol only
+            profile_data = {
+                "companyName": symbol,
+                "sector": None,
+                "industry": None,
+                "marketCap": None,
+                "priceEarningsRatio": None,
+                "evToEBITDA": None,
+                "priceToSalesRatio": None,
+                "exchangeShortName": "UNKNOWN"
+            }
+            exchange = "UNKNOWN"
 
-                # Exchange Validation
-                exchange = profile_data.get("exchangeShortName", "")
-                if exchange not in ["NYSE", "NASDAQ", "HOSE", "HNX", "TSE", "AMEX", "NYQ", "NMS"]:
-                    continue
+        # Relaxed exchange validation: Accept all peers, but flag major exchanges
+        major_exchanges = ["NYSE", "NASDAQ", "HOSE", "HNX", "TSE", "NYQ", "NMS", "AMEX", "LSE", "EURONEXT"]
+        is_major_exchange = exchange in major_exchanges
+        
+        # Calculate match score based on data quality
+        if profile_fetch_success and is_major_exchange:
+            base_score = 0.85  # High confidence: verified + major exchange
+            verification_status = "Verified"
+        elif profile_fetch_success:
+            base_score = 0.65  # Medium confidence: verified but minor exchange
+            verification_status = "Verified (Minor Exchange)"
+        else:
+            base_score = 0.45  # Lower confidence: unverified but accepted
+            verification_status = "Unverified (Profile Unavailable)"
+        
+        # Adjust score for expanded peers
+        is_expanded = symbol not in candidate_symbols[:max(1, len(candidate_symbols) - 2)]
+        score = base_score - (0.05 if is_expanded else 0.0)
+        
+        # Inject score and discovery path into the payload
+        profile_data['match_score'] = score
+        profile_data['discovery_path'] = "expanded" if is_expanded else "direct"
+        profile_data['verification_status'] = verification_status
+        profile_data['exchange'] = exchange
 
-                # 3. Calculate Local Soft Score (0.0 - 1.0)
-                # In production, this would compare sector/industry/market_cap ratios against target
-                # For now, we assign a high base score for verified peers, with slight variation
-                base_score = 0.85
-                is_expanded = symbol not in candidate_symbols[:max(1, len(candidate_symbols) - 2)]
-                score = base_score - (0.05 if is_expanded else 0.0)  # Slightly lower score for expanded peers
-
-                # Inject score and discovery path into the payload for downstream consumption
-                profile_data['match_score'] = score
-                profile_data['discovery_path'] = "expanded" if is_expanded else "direct"
-
-                verified_peer_profiles.append(profile_data)
-
-        except Exception as e:
-            logger.warning(f"Failed to fetch profile for {symbol}: {str(e)}")
-            continue
+        verified_peer_profiles.append(profile_data)
 
     # Sort by score descending (highest quality peers first)
     verified_peer_profiles.sort(key=lambda x: x.get('match_score', 0), reverse=True)
 
-    logger.info(f"Pipeline complete. {len(verified_peer_profiles)} validated & scored peers ready.")
+    verified_count = sum(1 for p in verified_peer_profiles if p.get('match_score', 0) >= 0.8)
+    partial_count = sum(1 for p in verified_peer_profiles if p.get('match_score', 0) < 0.8)
+    logger.info(f"Pipeline complete. {len(verified_peer_profiles)} peers ready ({verified_count} verified, {partial_count} unverified/partial).")
     return verified_peer_profiles
