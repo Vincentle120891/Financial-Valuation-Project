@@ -265,30 +265,6 @@ export const runValuationMulti = async (sessionId, methods, market = 'internatio
   return response.data;
 };
 
-// Get DCF Inputs with historical data
-export const getDcfInputs = async (sessionId) => {
-  const response = await api.post('/dcf/inputs', { session_id: sessionId });
-  return response.data;
-};
-
-// Get Peer Data for Comps
-export const getPeerData = async (sessionId, minPeers = 5) => {
-  const response = await api.post('/comps/peers', { session_id: sessionId, min_peers: minPeers });
-  return response.data;
-};
-
-// Get DuPont Analysis
-export const getDupontAnalysis = async (sessionId, years = 5) => {
-  const response = await api.post('/dupont/analyze', { session_id: sessionId, years });
-  return response.data;
-};
-
-// Get Forecast Benchmarks
-export const getForecastBenchmarks = async (sessionId) => {
-  const response = await api.post('/forecast/benchmarks', { session_id: sessionId });
-  return response.data;
-};
-
 // =====================
 // International Markets
 // =====================
