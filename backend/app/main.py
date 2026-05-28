@@ -26,6 +26,7 @@ from app.api.routes.pdf_extraction_routes import router as pdf_extraction_router
 from app.api.routes.vietnamese_reports_routes import router as vietnamese_reports_router
 from app.api.routes.international_market_data_routes import router as international_router
 from app.api.routes.vietnamese_market_data_routes import router as vietnamese_valuation_router
+from app.api.routes.debug_routes import router as debug_router
 
 # Setup structured logging at application startup
 setup_logging(
@@ -229,6 +230,7 @@ app.include_router(pdf_extraction_router, prefix="/api/pdf")
 app.include_router(vietnamese_reports_router, prefix="/api")
 app.include_router(international_router, prefix="/api")
 app.include_router(vietnamese_valuation_router, prefix="/api")
+app.include_router(debug_router, prefix="/api")  # Debug endpoints
 
 
 @app.on_event("startup")
