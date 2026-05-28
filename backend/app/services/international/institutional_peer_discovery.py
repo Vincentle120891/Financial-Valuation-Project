@@ -94,20 +94,57 @@ def extract_market_context(symbol: str) -> tuple[str, str]:
 def _get_live_fmp_peers(symbol: str, request: Optional[Request] = None) -> list[str]:
     """Primary Option B Strategy: Hits the pre-computed relationships engine"""
     api_key = get_fmp_api_key(request)
-    url = f"https://financialmodelingprep.com/stable/stock-peers?symbol={symbol}&apikey={api_key}"
-    try:
-        response = requests.get(url, timeout=7)
-        if response.status_code == 200:
-            data = response.json()
-            if data and isinstance(data, list) and "peers" in data[0]:
-                peers = data[0]["peers"]
-                if peers:
-                    logger.info(f"Option B Succeeded: Retrieved {len(peers)} pre-computed peers for {symbol}")
-                    return peers
-        return []
-    except Exception as e:
-        logger.warning(f"Option B API Request failed for {symbol}: {str(e)}")
-        return []
+    
+    # Try multiple FMP endpoints in order of preference
+    endpoints = [
+        f"https://financialmodelingprep.com/api/v4/stock_peers?symbol={symbol}&apikey={api_key}",  # V4 API
+        f"https://financialmodelingprep.com/stable/stock-peers?symbol={symbol}&apikey={api_key}",  # Stable API
+    ]
+    
+    for url in endpoints:
+        logger.info(f"Attempting FMP API call: {url[:80]}...")
+        try:
+            response = requests.get(url, timeout=7)
+            logger.info(f"FMP API Response Status: {response.status_code}")
+            
+            if response.status_code == 200:
+                data = response.json()
+                logger.debug(f"FMP API Raw Response: {str(data)[:200]}")
+                
+                # Handle different response formats
+                if data and isinstance(data, list):
+                    # Format 1: Direct list of peer objects [{"symbol": "AZO", ...}]
+                    if isinstance(data[0], dict) and "symbol" in data[0]:
+                        peers = [item["symbol"] for item in data if isinstance(item, dict) and "symbol" in item]
+                        if peers:
+                            logger.info(f"Option B Succeeded (Format 1): Retrieved {len(peers)} peers for {symbol}")
+                            return peers
+                    
+                    # Format 2: Wrapped in "peers" key [{"peers": [...]}]
+                    if isinstance(data[0], dict) and "peers" in data[0]:
+                        peers = data[0]["peers"]
+                        if peers and isinstance(peers, list):
+                            logger.info(f"Option B Succeeded (Format 2): Retrieved {len(peers)} peers for {symbol}")
+                            return peers
+                    
+                    # Format 3: Simple list of strings ["AAPL", "MSFT", ...]
+                    if isinstance(data[0], str):
+                        peers = [item for item in data if isinstance(item, str)]
+                        if peers:
+                            logger.info(f"Option B Succeeded (Format 3): Retrieved {len(peers)} peers for {symbol}")
+                            return peers
+                
+                # If we got a valid response but no peers, log it
+                logger.warning(f"FMP API returned valid response but no peers for {symbol}. Response: {data}")
+            else:
+                logger.warning(f"FMP API returned status {response.status_code} for {symbol}. Response: {response.text[:200]}")
+                
+        except Exception as e:
+            logger.warning(f"FMP API request failed for {symbol} on {url[:50]}...: {str(e)}")
+            continue
+    
+    logger.warning(f"All FMP API endpoints failed for {symbol}, returning empty list")
+    return []
 
 
 def _get_local_fallback_peers(symbol: str) -> list[str]:
