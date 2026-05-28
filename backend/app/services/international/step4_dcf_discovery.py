@@ -11,16 +11,18 @@ Uses InstitutionalPeerDiscoveryService for advanced multi-segment peer matching
 """
 import os
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, Optional
+from fastapi import Request
 from app.services.international.institutional_peer_discovery import (
     InstitutionalPeerDiscoveryService,
-    PeerDiscoveryRequest
+    PeerDiscoveryRequest,
+    get_fmp_api_key
 )
 
 logger = logging.getLogger(__name__)
 
 
-async def process(session_id: str, ticker: str, market: str, max_peers: int = 10) -> Dict[str, Any]:
+async def process(session_id: str, ticker: str, market: str, max_peers: int = 10, request: Optional[Request] = None) -> Dict[str, Any]:
     """
     Discovers peers for DCF valuation using institutional-grade multi-segment analysis.
     
@@ -28,11 +30,18 @@ async def process(session_id: str, ticker: str, market: str, max_peers: int = 10
     - Market Cap Range: 50%-200% of target (strict), 25%-400% (moderate), 5%-1000% (broad)
     - Focus on companies with similar risk profiles and operational scale
     - Prioritizes segment overlap for accurate beta estimation
+    
+    Args:
+        session_id: Session identifier
+        ticker: Target company ticker
+        market: Market type
+        max_peers: Maximum number of peers to return
+        request: FastAPI Request object (optional, for API key extraction from headers)
     """
     logger.info(f"Starting DCF peer discovery for {ticker} (Session: {session_id})")
     
-    # Get FMP API key from environment
-    fmp_api_key = os.getenv("FMP_API_KEY")
+    # Get FMP API key from request header or environment variable
+    fmp_api_key = get_fmp_api_key(request)
     
     if not fmp_api_key:
         logger.warning("FMP_API_KEY not configured. Peer discovery limited to basic matching.")
@@ -49,8 +58,8 @@ async def process(session_id: str, ticker: str, market: str, max_peers: int = 10
         }
     
     try:
-        # Initialize institutional discovery service
-        discovery_service = InstitutionalPeerDiscoveryService(fmp_api_key=fmp_api_key)
+        # Initialize institutional discovery service with request context
+        discovery_service = InstitutionalPeerDiscoveryService(fmp_api_key=fmp_api_key, request=request)
         
         # Create discovery request with DCF-specific parameters
         request = PeerDiscoveryRequest(

@@ -8,7 +8,7 @@ Routes are thin - only receiving requests, validating inputs, and delegating to 
 import logging
 from datetime import datetime
 from typing import Dict, Any, List, Optional
-from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi import APIRouter, HTTPException, UploadFile, File, Request
 from pydantic import BaseModel, Field
 from app.core.logging_config import get_logger
 from app.core.session_service import session_service
@@ -158,7 +158,7 @@ class DiscoverPeersResponse(BaseModel):
 
 
 @router.post("/step-4-discover-peers", response_model=DiscoverPeersResponse)
-async def discover_peers_endpoint(request: DiscoverPeersRequest):
+async def discover_peers_endpoint(request: DiscoverPeersRequest, req: Request):
     """
     Step 4: Discover peer companies automatically.
     Routes to method-specific discovery service based on valuation method.
@@ -191,21 +191,24 @@ async def discover_peers_endpoint(request: DiscoverPeersRequest):
                 session_id=request.session_id,
                 ticker=request.ticker,
                 market=request.market,
-                max_peers=request.max_peers
+                max_peers=request.max_peers,
+                request=req
             )
         elif valuation_method == "dupont":
             discovery_result = await dupont_discover_peers(
                 session_id=request.session_id,
                 ticker=request.ticker,
                 market=request.market,
-                max_peers=request.max_peers
+                max_peers=request.max_peers,
+                request=req
             )
         elif valuation_method == "comps":
             discovery_result = await comps_discover_peers(
                 session_id=request.session_id,
                 ticker=request.ticker,
                 market=request.market,
-                max_peers=request.max_peers
+                max_peers=request.max_peers,
+                request=req
             )
         else:
             raise HTTPException(
