@@ -6,35 +6,85 @@ __pycache__/
 # Dependencies
 venv/
 .venv/
-node_modules/
+.env
+.env.local
+.env.*
 
 # Logs
 *.log
-
-# Environment variables
-.env
-.env.local
-*.env.*
 
 # Coverage reports
 .coverage
 coverage/
 htmlcov/
 
-# IDE specific
+# IDE files
 .vscode/
 .idea/
 *.swp
 *.swo
 
-# OS generated
-.DS_Store
-Thumbs.db
-
 # Build artifacts
 dist/
 build/
 target/
-.mypy_cache/
+*.egg-info/
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Testing
 .pytest_cache/
+.mypy_cache/
+
+# Distribution / packaging
+*.tar.gz
+*.whl
+*.egg
+
+# Environment specific
+.env*
+!.env.example
+
+# Backup files
+*~
+*.bak
+*.tmp
+
+# Python virtual environments
+venv/
+.venv/
+.env/
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Compiled binary files
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Compression files
+*.zip
+*.gz
+*.tar
+*.tgz
+*.bz2
+*.xz
+*.7z
+*.rar
+*.zst
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Documentation builds
+docs/_build/
 ```

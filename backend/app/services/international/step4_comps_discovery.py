@@ -11,7 +11,7 @@ Uses InstitutionalPeerDiscoveryService for advanced multi-segment peer matching
 """
 import os
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from fastapi import Request
 from app.services.international.institutional_peer_discovery import (
     InstitutionalPeerDiscoveryService,
