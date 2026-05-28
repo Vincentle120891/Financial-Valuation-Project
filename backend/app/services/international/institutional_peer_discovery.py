@@ -263,7 +263,21 @@ class InstitutionalPeerDiscoveryService:
         # --- STEP 3: Normalize Candidates & Fetch Profiles (Hybrid Best-Effort) ---
         verified_peers = []
 
-        for symbol in candidate_symbols:
+        for candidate in candidate_symbols:
+            # Handle both dict format (from FMP API) and string format (from fallback)
+            if isinstance(candidate, dict):
+                symbol = candidate.get('symbol')
+                if not symbol:
+                    logger.warning(f"Skipping candidate without symbol: {candidate}")
+                    continue
+            else:
+                symbol = candidate
+            
+            # Ensure symbol is a string
+            if not isinstance(symbol, str):
+                logger.warning(f"Skipping invalid symbol type: {type(symbol)}")
+                continue
+                
             # Prevent cross-contamination: Ensure peers align with target country
             _, peer_country = extract_market_context(symbol)
             if peer_country != target_country:
