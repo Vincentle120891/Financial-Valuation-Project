@@ -42,12 +42,16 @@ const ApiKeyModal = ({ isOpen, onClose, onSave }) => {
   };
 
   const handleSave = () => {
-    // Save to localStorage
-    Object.entries(apiKeys).forEach(([key, value]) => {
-      if (value.trim()) {
-        localStorage.setItem(`${key}_api_key`, value.trim());
-      }
-    });
+    // Save to localStorage with correct key names
+    if (apiKeys.fmp.trim()) {
+      localStorage.setItem('fmp_api_key', apiKeys.fmp.trim());
+    }
+    if (apiKeys.fred.trim()) {
+      localStorage.setItem('fred_api_key', apiKeys.fred.trim());
+    }
+    if (apiKeys.alphaVantage.trim()) {
+      localStorage.setItem('alpha_vantage_api_key', apiKeys.alphaVantage.trim());
+    }
     
     // Update status
     const newStatus = {};
