@@ -99,11 +99,21 @@ def _get_live_fmp_peers(symbol: str, request: Optional[Request] = None) -> list[
         response = requests.get(url, timeout=7)
         if response.status_code == 200:
             data = response.json()
-            if data and isinstance(data, list) and "peers" in data[0]:
-                peers = data[0]["peers"]
-                if peers:
-                    logger.info(f"Option B Succeeded: Retrieved {len(peers)} pre-computed peers for {symbol}")
-                    return peers
+            # NEW FORMAT: Direct list of peer objects with symbol field
+            # Example: [{"symbol": "AZO", "companyName": "..."}, {"symbol": "CPRT", ...}]
+            if data and isinstance(data, list):
+                # Check if it's the new direct list format
+                if isinstance(data[0], dict) and "symbol" in data[0]:
+                    peers = [item["symbol"] for item in data if isinstance(item, dict) and "symbol" in item]
+                    if peers:
+                        logger.info(f"Option B Succeeded: Retrieved {len(peers)} pre-computed peers for {symbol}")
+                        return peers
+                # OLD FORMAT: Wrapped in "peers" key (legacy support)
+                elif isinstance(data[0], dict) and "peers" in data[0]:
+                    peers = data[0]["peers"]
+                    if peers:
+                        logger.info(f"Option B Succeeded: Retrieved {len(peers)} pre-computed peers for {symbol}")
+                        return peers
         return []
     except Exception as e:
         logger.warning(f"Option B API Request failed for {symbol}: {str(e)}")
