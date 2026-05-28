@@ -16,7 +16,8 @@ from fastapi import Request
 from app.services.international.institutional_peer_discovery import (
     InstitutionalPeerDiscoveryService,
     PeerDiscoveryRequest,
-    get_fmp_api_key
+    get_fmp_api_key,
+    PeerCandidate
 )
 
 logger = logging.getLogger(__name__)
@@ -76,16 +77,16 @@ async def process(session_id: str, ticker: str, market: str, max_peers: int = 10
         peers = []
         for peer in response.peers:
             peers.append({
-                "ticker": peer.get("symbol"),
-                "name": peer.get("name"),
-                "match_score": peer.get("match_score", 0),
-                "market_cap": peer.get("market_cap"),
-                "sector": peer.get("sector"),
-                "industry": peer.get("industry"),
+                "ticker": peer.ticker,
+                "name": peer.name,
+                "match_score": peer.match_score,
+                "market_cap": peer.market_cap,
+                "sector": peer.sector,
+                "industry": peer.industry,
                 "match_reasons": _generate_match_reasons(peer),
-                "segments": peer.get("segments", {}),
-                "pe_ratio": peer.get("pe_ratio"),
-                "ev_to_ebitda": peer.get("ev_to_ebitda")
+                "segments": peer.segments,
+                "pe_ratio": peer.pe_ratio,
+                "ev_to_ebitda": peer.ev_to_ebitda
             })
         
         logger.info(f"Found {len(peers)} DuPont peers for {ticker}")
@@ -119,18 +120,18 @@ async def process(session_id: str, ticker: str, market: str, max_peers: int = 10
         }
 
 
-def _generate_match_reasons(peer: Dict[str, Any]) -> str:
+def _generate_match_reasons(peer: PeerCandidate) -> str:
     """Generate human-readable match reasons based on scoring components."""
     reasons = []
     
-    if peer.get("segments"):
+    if peer.segments:
         reasons.append("Segment overlap detected")
     
-    if peer.get("industry"):
-        reasons.append(f"Industry: {peer['industry']}")
+    if peer.industry:
+        reasons.append(f"Industry: {peer.industry}")
     
-    if peer.get("market_cap"):
-        mc = peer["market_cap"]
+    if peer.market_cap:
+        mc = peer.market_cap
         if mc > 1e9:
             reasons.append(f"Market Cap: ${mc/1e9:.2f}B")
         else:
