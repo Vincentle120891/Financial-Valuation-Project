@@ -84,7 +84,8 @@ class InternationalDataStrategy:
     - Quality validation before returning
     """
 
-    def __init__(self, enable_alphavantage_fallback: bool = True):
+    def __init__(self, request=None, enable_alphavantage_fallback: bool = True):
+        self.request = request
         self.enable_alphavantage_fallback = enable_alphavantage_fallback
         self.alphavantage_service = None
 
@@ -201,10 +202,12 @@ class InternationalDataStrategy:
             return None
 
     def _get_alphavantage_service(self):
-        """Lazy initialization of AlphaVantage service."""
+        """Lazy initialization of AlphaVantage service with request-aware API key."""
         if self.alphavantage_service is None:
             from .alphavantage_service import AlphaVantageService
-            self.alphavantage_service = AlphaVantageService()
+            # Get API key from request headers or environment
+            api_key = AlphaVantageService.get_api_key(self.request)
+            self.alphavantage_service = AlphaVantageService(api_key=api_key)
         return self.alphavantage_service
 
     def _fetch_key_stats(self, ticker) -> Dict[str, Any]:
@@ -862,10 +865,12 @@ class YFinanceService:
             return None
 
     def _get_alphavantage_service(self):
-        """Lazy initialization of AlphaVantage service."""
+        """Lazy initialization of AlphaVantage service with request-aware API key."""
         if self.alphavantage_service is None:
             from .alphavantage_service import AlphaVantageService
-            self.alphavantage_service = AlphaVantageService()
+            # Get API key from request headers or environment
+            api_key = AlphaVantageService.get_api_key(self.request)
+            self.alphavantage_service = AlphaVantageService(api_key=api_key)
         return self.alphavantage_service
 
     def _fetch_vietnamese_enhanced(self, ticker_symbol: str) -> Dict[str, Any]:
