@@ -211,39 +211,57 @@ class DCFStep6Processor:
             # Fetch and map data using APIAdapter (includes audit logging + versioning)
             raw_result = self.api_adapter.fetch_raw_data(ticker, required_metrics)
             mapped_result = self.api_adapter.map_and_normalize(raw_result, ticker, session_id)
-            
+
+            # FIX: APIAdapter returns {"data": {...}, "missing": [...], ...} NOT {"mapped_data": ...}
+            # Extract the actual data dict from the mapped_result
+            api_data = mapped_result.get("data", {})  # Changed from mapped_result.get("mapped_data", {})
+            missing_from_api = mapped_result.get("missing", [])
+
+            logger.info(f"APIAdapter returned {len(api_data)} metrics for {ticker}, missing: {len(missing_from_api)}")
+
             all_data = {
-                'income_statement': mapped_result.get('mapped_data', {}),
-                'balance_sheet': {},
-                'cash_flow': {},
-                'key_stats': mapped_result.get('mapped_data', {}),
-                'analyst_estimates': forecast_data or {}
+                "income_statement": {"data": api_data, "periods": []},  # Wrap in dict with "data" key
+                "balance_sheet": {"data": {}, "periods": []},
+                "cash_flow": {"data": {}, "periods": []},
+                "key_stats": api_data,  # Use flat dict for market data
+                "analyst_estimates": forecast_data or {}
             }
 
             # Convert dict format to DataFrame format expected by processors
-            income_stmt_dict = all_data.get('income_statement', {})
-            balance_sheet_dict = all_data.get('balance_sheet', {})
-            cash_flow_dict = all_data.get('cash_flow', {})
+            income_stmt_dict = all_data.get("income_statement", {})
+            balance_sheet_dict = all_data.get("balance_sheet", {})
+            cash_flow_dict = all_data.get("cash_flow", {})
 
-            # FIX: Properly construct DataFrames using 'periods' as index, then transpose
-            # This prevents the "1970" year issue caused by converting integer column indices to datetime
-            def build_financials_df(data_dict):
-                """Build DataFrame from yfinance dict format with periods as columns"""
-                if not data_dict:
+            # FIX: Properly construct DataFrames using APIAdapter data structure
+            # APIAdapter returns flat dict {metric_id: {value, source, status, ...}}
+            # We need to convert this to time-series format for historical display
+            def build_financials_from_api_data(api_data_dict):
+                """Build pseudo time-series from APIAdapter flat data"""
+                if not api_data_dict:
                     return None
-                periods = data_dict.get('periods', [])
-                data_rows = {k: v for k, v in data_dict.items() if k != 'periods' and isinstance(v, list)}
-                if not data_rows or not periods:
+                # Extract all metric values into a single-period DataFrame
+                # Since APIAdapter returns current/latest values only
+                # IMPORTANT: Metrics must be in the INDEX (rows), not columns
+                # because _extract_metric_from_financials() searches df.index
+                metrics_data = {}
+                periods = ["Latest"]  # Single period for now
+                for metric_id, metric_info in api_data_dict.items():
+                    if isinstance(metric_info, dict) and "value" in metric_info:
+                        # Store metric_id as the INDEX key, value as the data
+                        metrics_data[metric_id] = metric_info["value"]
+                if not metrics_data:
                     return None
-                # Create DataFrame with metrics as rows and periods as columns
-                df = pd.DataFrame(data_rows, index=periods).T
-                # DO NOT convert columns to datetime - periods are already date strings like '2023-12-31'
-                # Keep them as strings to avoid Timestamp conversion issues
+                # Create DataFrame with metrics as INDEX, not columns
+                df = pd.DataFrame.from_dict(metrics_data, orient='index', columns=periods)
+                logger.debug(f"[Step6DCF] Built financials_df with {len(df)} rows (metrics) and {len(df.columns)} periods")
+                logger.debug(f"[Step6DCF] financials_df.index (first 10): {list(df.index)[:10]}")
                 return df
 
-            financials_df = build_financials_df(income_stmt_dict)
-            balance_sheet_df = build_financials_df(balance_sheet_dict)
-            cashflow_df = build_financials_df(cash_flow_dict)
+            # Build DataFrames from API data
+            financials_df = build_financials_from_api_data(api_data)
+            balance_sheet_df = None  # Would need separate balance sheet API call
+            cashflow_df = None  # Would need separate cash flow API call
+
 
             historical_data = historical_data or {
                 'financials': financials_df,
@@ -733,7 +751,11 @@ class DCFStep6Processor:
                             values.append(float(v))
                         else:
                             values.append(None)
+                    logger.debug(f"[Step6DCF] Found {field_name} using key '{key}': {values}")
                     return values if values else None
+                    
+            # DEBUG: Log which keys were tried but not found
+            logger.debug(f"[Step6DCF] Tried keys {keys_to_try} for {field_name} but none found in df.index: {list(df_to_use.index)[:20]}...")
 
         return None
 
