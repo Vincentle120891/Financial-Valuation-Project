@@ -241,14 +241,20 @@ class DCFStep6Processor:
                     return None
                 # Extract all metric values into a single-period DataFrame
                 # Since APIAdapter returns current/latest values only
+                # IMPORTANT: Metrics must be in the INDEX (rows), not columns
+                # because _extract_metric_from_financials() searches df.index
                 metrics_data = {}
                 periods = ["Latest"]  # Single period for now
                 for metric_id, metric_info in api_data_dict.items():
                     if isinstance(metric_info, dict) and "value" in metric_info:
-                        metrics_data[metric_id] = [metric_info["value"]]
+                        # Store metric_id as the INDEX key, value as the data
+                        metrics_data[metric_id] = metric_info["value"]
                 if not metrics_data:
                     return None
-                df = pd.DataFrame(metrics_data, index=periods)
+                # Create DataFrame with metrics as INDEX, not columns
+                df = pd.DataFrame.from_dict(metrics_data, orient='index', columns=periods)
+                logger.debug(f"[Step6DCF] Built financials_df with {len(df)} rows (metrics) and {len(df.columns)} periods")
+                logger.debug(f"[Step6DCF] financials_df.index (first 10): {list(df.index)[:10]}")
                 return df
 
             # Build DataFrames from API data
@@ -745,7 +751,11 @@ class DCFStep6Processor:
                             values.append(float(v))
                         else:
                             values.append(None)
+                    logger.debug(f"[Step6DCF] Found {field_name} using key '{key}': {values}")
                     return values if values else None
+                    
+            # DEBUG: Log which keys were tried but not found
+            logger.debug(f"[Step6DCF] Tried keys {keys_to_try} for {field_name} but none found in df.index: {list(df_to_use.index)[:20]}...")
 
         return None
 
