@@ -151,7 +151,7 @@ async def discover_peers_endpoint(request: UnifiedStep4Request, req: Request):
             raise HTTPException(status_code=404, detail="Session not found")
 
         # Get method from request (already validated by Pydantic)
-        valuation_method = request.method.value
+        valuation_method = request.method.value.lower()
 
         # Route to appropriate discovery service based on method
         # All discovery functions are now async, so we need to await them
