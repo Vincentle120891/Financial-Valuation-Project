@@ -41,6 +41,56 @@ def get_fmp_api_key(request: Optional[Request] = None) -> str:
     return default_key
 
 
+def _enrich_peer_with_yfinance(symbol: str) -> Optional[Dict[str, Any]]:
+    """
+    Enrich peer candidate with sector/industry data from yfinance.
+    
+    This is called when FMP profile data is missing industry/sector information.
+    Uses yfinance as a secondary source to fill in these critical fields.
+    
+    Args:
+        symbol: Stock ticker symbol
+        
+    Returns:
+        Dict with sector, industry, and other metadata, or None if fetch fails
+    """
+    try:
+        import yfinance as yf
+        
+        logger.info(f"[yfinance Enrichment] Fetching profile for {symbol}")
+        ticker = yf.Ticker(symbol)
+        info = ticker.info
+        
+        if not info:
+            logger.warning(f"[yfinance Enrichment] No info returned for {symbol}")
+            return None
+        
+        # Extract sector and industry
+        sector = info.get('sector')
+        industry = info.get('industry')
+        
+        # Also get additional useful data
+        market_cap = info.get('marketCap')
+        exchange = info.get('exchange', 'UNKNOWN')
+        company_name = info.get('longName', info.get('shortName', symbol))
+        
+        result = {
+            'sector': sector,
+            'industry': industry,
+            'market_cap': market_cap,
+            'exchange': exchange,
+            'company_name': company_name,
+            'source': 'yfinance'
+        }
+        
+        logger.info(f"[yfinance Enrichment] Successfully enriched {symbol}: sector={sector}, industry={industry}")
+        return result
+        
+    except Exception as e:
+        logger.warning(f"[yfinance Enrichment] Failed to enrich {symbol}: {e}")
+        return None
+
+
 class PeerDiscoveryRequest(BaseModel):
     """Request for peer discovery."""
     target_ticker: str
@@ -337,21 +387,63 @@ class InstitutionalPeerDiscoveryService:
                     "exchangeShortName": "UNKNOWN"
                 }
                 exchange = "UNKNOWN"
+            
+            # ENHANCEMENT: If sector/industry are missing after FMP profile fetch, try yfinance enrichment
+            if not profile_data.get("sector") or not profile_data.get("industry"):
+                logger.info(f"Sector/industry missing for {symbol}, attempting yfinance enrichment...")
+                yf_data = _enrich_peer_with_yfinance(symbol)
+                if yf_data:
+                    # Merge yfinance data into profile_data
+                    if yf_data.get('sector'):
+                        profile_data["sector"] = yf_data['sector']
+                    if yf_data.get('industry'):
+                        profile_data["industry"] = yf_data['industry']
+                    # Update other fields if they were missing
+                    if not profile_data.get("marketCap") and yf_data.get('market_cap'):
+                        profile_data["marketCap"] = yf_data['market_cap']
+                    if profile_data.get("exchangeShortName") == "UNKNOWN" and yf_data.get('exchange'):
+                        profile_data["exchangeShortName"] = yf_data['exchange']
+                        exchange = yf_data['exchange']
+                    if profile_data.get("companyName") == symbol and yf_data.get('company_name'):
+                        profile_data["companyName"] = yf_data['company_name']
+                    
+                    logger.info(f"Successfully enriched {symbol} with yfinance data: sector={profile_data.get('sector')}, industry={profile_data.get('industry')}")
 
             # Relaxed exchange validation: Accept all peers, but flag major exchanges
             major_exchanges = ["NYSE", "NASDAQ", "HOSE", "HNX", "TSE", "NYQ", "NMS", "AMEX", "LSE", "EURONEXT"]
             is_major_exchange = exchange in major_exchanges
 
-            # Calculate match score based on data quality
-            if profile_fetch_success and is_major_exchange:
+            # Calculate match score based on data quality and sector/industry availability
+            has_sector_industry = bool(profile_data.get("sector") and profile_data.get("industry"))
+            
+            if profile_fetch_success and is_major_exchange and has_sector_industry:
+                match_score = 0.95  # Highest confidence: verified + major exchange + full sector/industry
+                verification_status = "Verified (Full Profile)"
+            elif profile_fetch_success and is_major_exchange:
                 match_score = 0.8  # High confidence: verified + major exchange
                 verification_status = "Verified"
+            elif profile_fetch_success and has_sector_industry:
+                match_score = 0.75  # Good confidence: verified + sector/industry
+                verification_status = "Verified (Sector/Industry via yfinance)"
             elif profile_fetch_success:
                 match_score = 0.6  # Medium confidence: verified but minor exchange
                 verification_status = "Verified (Minor Exchange)"
+            elif has_sector_industry:
+                match_score = 0.55  # Moderate confidence: unverified but has sector/industry from yfinance
+                verification_status = "Enriched (yfinance)"
             else:
-                match_score = 0.4  # Lower confidence: unverified but accepted
+                match_score = 0.4  # Lower confidence: unverified and missing sector/industry
                 verification_status = "Unverified (Profile Unavailable)"
+
+            # Build match reasons with enrichment info
+            match_reasons = [
+                f"Peer via {'Option B' if len(warnings) == 0 else 'Option A'}",
+                f"Status: {verification_status}"
+            ]
+            if has_sector_industry and not profile_fetch_success:
+                match_reasons.append(f"Sector: {profile_data.get('sector')}, Industry: {profile_data.get('industry')} (via yfinance)")
+            elif has_sector_industry:
+                match_reasons.append(f"Sector: {profile_data.get('sector')}, Industry: {profile_data.get('industry')}")
 
             peer = PeerCandidate(
                 symbol=symbol,
@@ -368,10 +460,7 @@ class InstitutionalPeerDiscoveryService:
                 pe_ratio=profile_data.get("priceEarningsRatio"),
                 ev_to_ebitda=profile_data.get("evToEBITDA"),
                 ps_ratio=profile_data.get("priceToSalesRatio"),
-                match_reasons=[
-                    f"Peer via {'Option B' if len(warnings) == 0 else 'Option A'}",
-                    f"Status: {verification_status}"
-                ]
+                match_reasons=match_reasons
             )
             verified_peers.append(peer)
 
