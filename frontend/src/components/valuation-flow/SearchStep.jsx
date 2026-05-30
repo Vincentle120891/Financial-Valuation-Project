@@ -36,20 +36,9 @@ const SearchStep = ({
   };
 
   const performSearch = async () => {
-    if (market === 'vietnam' && searchQuery.trim()) {
-      // Use Vietnamese-specific search - results will be handled by parent's handleSearch
-      setVietnameseSearchLoading(true);
-      try {
-        // Call onSearch which triggers parent's handleSearch to fetch and set results
-        await onSearch();
-      } catch (err) {
-        console.error('Vietnamese search error:', err);
-      } finally {
-        setVietnameseSearchLoading(false);
-      }
-    } else {
-      // Use international search
-      await onSearch();
+    if (searchQuery.trim()) {
+      // Force uppercase format matching the backend Enum constraints (MarketType: "INTERNATIONAL" | "VIETNAM")
+      await onSearch(searchQuery, market.toUpperCase()); 
     }
   };
 

@@ -36,8 +36,8 @@ const HistoricalDataExtractionStep = ({
   onRetryAiExtraction,
   loading
 }) => {
-  // FIX Issue #5: Backward compatibility layer for legacy aiData prop name
-  const data = historicalGapsData || aiData;
+  // FIX Issue #5: Use only historicalGapsData as per UnifiedStep7Response (no legacy fallback)
+  const data = historicalGapsData;
 
   // PDF Upload state
   const [uploadingPdf, setUploadingPdf] = useState(false);
