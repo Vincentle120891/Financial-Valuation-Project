@@ -38,6 +38,8 @@ from app.api.schemas.unified_step_schemas import (
     ValuationMethod,
     AssumptionCategoryType,
     AssumptionCategoryResponse,
+    UnifiedStep10Response as MultiMethodValuateResponse,
+    UnifiedStep10Request as MultiMethodValuateRequest,
 )
 
 # Backward compatibility alias

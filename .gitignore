@@ -1,64 +1,41 @@
-```python
-# Python
+```
+# Compiled Python files
+*.pyc
 __pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
 
-# Environment
-.env
-.venv/
-env/
-ENV/
+# Dependencies
 venv/
-virtualenv/
-!.env.example
-!.env.sample
+.venv/
+node_modules/
 
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
+# Logs and temporary files
+*.log
 *.tmp
 
-# Logs
-*.log
+# Environment variables
+.env
+.env.local
+*.env.*
 
-# Coverage
+# Editors
+.vscode/
+.idea/
+
+# Coverage reports
 .coverage
 coverage/
 htmlcov/
-.coverage.*
 
-# Testing
-.pytest_cache/
+# Python cache
 .mypy_cache/
+.pytest_cache/
 
-# OS
+# Build directories
+dist/
+build/
+target/
+
+# OS generated files
 .DS_Store
 Thumbs.db
 ```
-
-Wait, I need to reconsider. The only modified file is a Python source file (`backend/app/api/routes/valuation_routes.py`), which doesn't indicate any build artifacts, dependencies, or temporary files were created. The current .gitignore appears to be for a general Python project but may not be related to the specific changes shown.
-
-Actually, looking at the example more carefully - since only a source code file was modified and there's no evidence of build artifacts, dependencies, or temporary files being created, I should output nothing according to rule #6.
-
-(empty - output nothing)
