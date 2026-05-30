@@ -680,7 +680,7 @@ Response format (JSON):
             ticker: Stock ticker symbol
             metric: Financial metric to estimate
             fiscal_year: Target fiscal year
-            existing_data: Available financial data from APIs
+            existing_data: Available financial data from APIs (Step 6 format)
             market: Market type (US, International)
 
         Returns:
@@ -689,14 +689,35 @@ Response format (JSON):
         logger.info(f"Calculating deterministic fallback for {metric} {fiscal_year}")
 
         try:
-            # Get available years from existing data
-            available_years = []
-            for key in existing_data.keys():
-                if key.isdigit() or key.startswith("FY"):
-                    year = int(key.replace("FY", ""))
-                    available_years.append(year)
-            available_years.sort()
-
+            # Extract available data from Step 6 format
+            # Step 6 format: {historical_financials: {data_fields: [{field_name, value, status}, ...]}}
+            available_values_by_year = {}
+            
+            historical = existing_data.get('historical_financials', {})
+            if historical:
+                data_fields = historical.get('data_fields', [])
+                for field in data_fields:
+                    if isinstance(field, dict):
+                        field_name = field.get('field_name', '')
+                        value = field.get('value')
+                        status = field.get('status', 'RETRIEVED')
+                        
+                        # Extract year and metric name from field_name (e.g., "Revenue_2023" -> metric="Revenue", year=2023)
+                        if '_' in field_name:
+                            parts = field_name.rsplit('_', 1)
+                            if len(parts) == 2 and parts[1].isdigit():
+                                metric_name = parts[0]
+                                year = int(parts[1])
+                                
+                                # Only include if has value and status is not MISSING
+                                if value is not None and status != 'MISSING':
+                                    if year not in available_values_by_year:
+                                        available_values_by_year[year] = {}
+                                    available_values_by_year[year][metric_name] = value
+            
+            # Get list of available years
+            available_years = sorted(available_values_by_year.keys())
+            
             if not available_years:
                 logger.warning(f"No historical data available for fallback calculation")
                 return None
@@ -705,10 +726,17 @@ Response format (JSON):
             if len(available_years) >= 2:
                 values = []
                 for year in available_years:
-                    year_key = str(year)
-                    year_data = existing_data.get(year_key, existing_data.get(f"FY{year}", {}))
-                    if metric in year_data and year_data[metric] is not None:
-                        values.append(year_data[metric])
+                    year_data = available_values_by_year.get(year, {})
+                    # Try both original metric name and common variations
+                    metric_variations = [
+                        metric,
+                        metric.lower(),
+                        metric.upper()
+                    ]
+                    for var in metric_variations:
+                        if var in year_data and year_data[var] is not None:
+                            values.append(year_data[var])
+                            break
 
                 if len(values) >= 2:
                     avg_value = sum(values) / len(values)
