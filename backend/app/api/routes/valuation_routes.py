@@ -141,33 +141,12 @@ async def save_peers(request: SavePeersRequest):
 
 
 # =============================================================================
-# STEP 4 REQUEST/RESPONSE MODELS
+# STEP 4: PEER DISCOVERY
 # =============================================================================
 
-class DiscoverPeersRequest(BaseModel):
-    """Step 4: Discover peers request model"""
-    session_id: str
-    ticker: str
-    market: str = "international"
-    max_peers: int = 10
-    method: Optional[str] = None
 
-
-class DiscoverPeersResponse(BaseModel):
-    """Step 4: Discover peers response model"""
-    status: str
-    session_id: str
-    method: str
-    market: str
-    suggested_peers: List[Dict[str, Any]]
-    peer_count: int
-    message: str
-    mandatory: Optional[bool] = False
-    min_peers_recommended: Optional[int] = None
-
-
-@router.post("/step-4-discover-peers", response_model=DiscoverPeersResponse)
-async def discover_peers_endpoint(request: DiscoverPeersRequest, req: Request):
+@router.post("/step-4-discover-peers", response_model=UnifiedStep4Response)
+async def discover_peers_endpoint(request: UnifiedStep4Request, req: Request):
     """
     Step 4: Discover peer companies automatically.
     Routes to method-specific discovery service based on valuation method.
@@ -182,41 +161,33 @@ async def discover_peers_endpoint(request: DiscoverPeersRequest, req: Request):
         if not session:
             raise HTTPException(status_code=404, detail="Session not found")
 
-        # Get method from parameter or session (fallback to session if not provided)
-        valuation_method = request.method or session.get("method")
-
-        if not valuation_method:
-            raise HTTPException(
-                status_code=400,
-                detail="Method must be provided either as parameter or stored in session"
-            )
-
-        valuation_method = valuation_method.lower()
+        # Get method from request (already validated by Pydantic)
+        valuation_method = request.method.value
 
         # Route to appropriate discovery service based on method
         # All discovery functions are now async, so we need to await them
         if valuation_method == "dcf":
             discovery_result = await dcf_discover_peers(
                 session_id=request.session_id,
-                ticker=request.ticker,
-                market=request.market,
-                max_peers=request.max_peers,
+                ticker=session.get("ticker", ""),
+                market=request.market.value,
+                max_peers=request.max_peers or 10,
                 request=req
             )
         elif valuation_method == "dupont":
             discovery_result = await dupont_discover_peers(
                 session_id=request.session_id,
-                ticker=request.ticker,
-                market=request.market,
-                max_peers=request.max_peers,
+                ticker=session.get("ticker", ""),
+                market=request.market.value,
+                max_peers=request.max_peers or 10,
                 request=req
             )
         elif valuation_method == "comps":
             discovery_result = await comps_discover_peers(
                 session_id=request.session_id,
-                ticker=request.ticker,
-                market=request.market,
-                max_peers=request.max_peers,
+                ticker=session.get("ticker", ""),
+                market=request.market.value,
+                max_peers=request.max_peers or 10,
                 request=req
             )
         else:
@@ -225,17 +196,16 @@ async def discover_peers_endpoint(request: DiscoverPeersRequest, req: Request):
                 detail=f"Invalid valuation method: {valuation_method}. Must be 'dcf', 'dupont', or 'comps'"
             )
 
-        # Return method-specific discovery result
-        return DiscoverPeersResponse(
+        # Return unified response with peer discovery results
+        return UnifiedStep4Response(
             status="success",
             session_id=request.session_id,
             method=valuation_method,
-            market=request.market,
-            suggested_peers=discovery_result.get("suggested_peers", []),
-            peer_count=discovery_result.get("peer_count", 0),
-            message=discovery_result.get("message", ""),
-            mandatory=discovery_result.get("mandatory", False),
-            min_peers_recommended=discovery_result.get("min_peers_recommended")
+            market=request.market.value,
+            target_company=session.get("ticker", ""),
+            suggested_peers=[PeerCompany(**peer) for peer in discovery_result.get("suggested_peers", [])],
+            selected_peers=[],
+            message=discovery_result.get("message", "Peer discovery completed")
         )
 
     except HTTPException:
