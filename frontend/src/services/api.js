@@ -71,7 +71,7 @@ aiApi.interceptors.request.use(
 export const searchCompanies = async (query, market = 'international') => {
   // Use unified POST endpoint for ALL markets - no routing based on market
   try {
-    const response = await api.post('/step-1-search', { query, market });
+    const response = await api.post('/step-1-search', { query, market: market.toUpperCase() });
     return transformVietnameseResponse(response.data, market);
   } catch (error) {
     console.error('Search companies error:', error);
@@ -110,9 +110,9 @@ const transformVietnameseResponse = (data, market) => {
 export const suggestPeers = async (ticker, market = 'international', maxPeers = 10, method = null, sessionId = null) => {
   const response = await api.post('/step-4-discover-peers', {
     ticker,
-    market,
+    market: market.toUpperCase(),
     max_peers: maxPeers,
-    method: method, // Pass selected valuation method for method-specific peer criteria
+    method: method ? method.toUpperCase() : null, // Pass selected valuation method for method-specific peer criteria
     session_id: sessionId // Include session_id to store suggestions and prevent re-fetching loop
   });
   return response.data;
@@ -120,7 +120,7 @@ export const suggestPeers = async (ticker, market = 'international', maxPeers = 
 
 // Step 2: Select Company (Create Session)
 export const selectCompany = async (sessionId, ticker, market = 'international') => {
-  const response = await api.post('/step-2-create-session', { session_id: sessionId, ticker, market });
+  const response = await api.post('/step-2-create-session', { session_id: sessionId, ticker, market: market.toUpperCase() });
   return response.data;
 };
 
@@ -135,7 +135,7 @@ export const validateManualPeers = async (sessionId, tickers, market = 'internat
   const response = await api.post('/step-5-validate-manual-peers', {
     session_id: sessionId,
     tickers,
-    market
+    market: market.toUpperCase()
   });
   return response.data;
 };
@@ -146,7 +146,7 @@ export const selectModels = async (sessionId, method, market = 'international') 
   const response = await api.post('/step-3-select-models', {
     session_id: sessionId,
     method: method.toUpperCase(),
-    market: market.toLowerCase()
+    market: market.toUpperCase()
   });
   return response.data;
 };
@@ -156,7 +156,7 @@ export const prepareAssumptions = async (sessionId, method, market = 'internatio
   const response = await api.post('/step-5-prepare-assumptions', {
     session_id: sessionId,
     method: method.toUpperCase(),
-    market: market.toLowerCase(),
+    market: market.toUpperCase(),
     generate_ai: generateAi
   });
   return response.data;
