@@ -36,9 +36,9 @@ const ForecastDriversStep = ({
         inflation_rate: [], 
         opex_growth: [], 
         capital_expenditure: [], 
-        ar_days: [], 
-        inv_days: [], 
-        ap_days: [], 
+        receivables_days: [], // Changed from ar_days to match backend metric_registry.py
+        inventory_days: [],   // Changed from inv_days to match backend metric_registry.py
+        payables_days: [],    // Changed from ap_days to match backend metric_registry.py
         tax_rate: [] 
       },
       base_case: { 
@@ -46,9 +46,9 @@ const ForecastDriversStep = ({
         inflation_rate: [], 
         opex_growth: [], 
         capital_expenditure: [], 
-        ar_days: [], 
-        inv_days: [], 
-        ap_days: [], 
+        receivables_days: [], // Changed from ar_days to match backend metric_registry.py
+        inventory_days: [],   // Changed from inv_days to match backend metric_registry.py
+        payables_days: [],    // Changed from ap_days to match backend metric_registry.py
         tax_rate: [] 
       },
       worst_case: { 
@@ -56,9 +56,9 @@ const ForecastDriversStep = ({
         inflation_rate: [], 
         opex_growth: [], 
         capital_expenditure: [], 
-        ar_days: [], 
-        inv_days: [], 
-        ap_days: [], 
+        receivables_days: [], // Changed from ar_days to match backend metric_registry.py
+        inventory_days: [],   // Changed from inv_days to match backend metric_registry.py
+        payables_days: [],    // Changed from ap_days to match backend metric_registry.py
         tax_rate: [] 
       }
     }
@@ -147,12 +147,12 @@ const ForecastDriversStep = ({
             }));
           }
         } else if (category === 'working_capital') {
-          if (suggestion.ar_days !== undefined) {
+          if (suggestion.receivables_days !== undefined) {
             setLocalForecastDrivers(prev => ({
               ...prev,
               [activeScenario]: {
                 ...prev[activeScenario],
-                ar_days: prev[activeScenario].ar_days.map(() => suggestion.ar_days)
+                receivables_days: prev[activeScenario].receivables_days.map(() => suggestion.receivables_days)
               }
             }));
           }
@@ -161,16 +161,16 @@ const ForecastDriversStep = ({
               ...prev,
               [activeScenario]: {
                 ...prev[activeScenario],
-                inv_days: prev[activeScenario].inv_days.map(() => suggestion.inventory_days)
+                inventory_days: prev[activeScenario].inventory_days.map(() => suggestion.inventory_days)
               }
             }));
           }
-          if (suggestion.ap_days !== undefined) {
+          if (suggestion.payables_days !== undefined) {
             setLocalForecastDrivers(prev => ({
               ...prev,
               [activeScenario]: {
                 ...prev[activeScenario],
-                ap_days: prev[activeScenario].ap_days.map(() => suggestion.ap_days)
+                payables_days: prev[activeScenario].payables_days.map(() => suggestion.payables_days)
               }
             }));
           }
@@ -532,14 +532,14 @@ const ForecastDriversStep = ({
             {aiSuggestions.working_capital && (
               <div style={{ marginTop: '12px', padding: '8px', background: '#e3f2fd', borderRadius: '4px', fontSize: '12px' }}>
                 <strong>✓ Applied:</strong>
-                {aiSuggestions.working_capital.ar_days && (
-                  <div>AR Days: {aiSuggestions.working_capital.ar_days.toFixed(0)}</div>
+                {aiSuggestions.working_capital.receivables_days && (
+                  <div>Receivables Days: {aiSuggestions.working_capital.receivables_days.toFixed(0)}</div>
                 )}
                 {aiSuggestions.working_capital.inventory_days && (
                   <div>Inventory Days: {aiSuggestions.working_capital.inventory_days.toFixed(0)}</div>
                 )}
-                {aiSuggestions.working_capital.ap_days && (
-                  <div>AP Days: {aiSuggestions.working_capital.ap_days.toFixed(0)}</div>
+                {aiSuggestions.working_capital.payables_days && (
+                  <div>Payables Days: {aiSuggestions.working_capital.payables_days.toFixed(0)}</div>
                 )}
               </div>
             )}
@@ -636,9 +636,9 @@ const ForecastDriversStep = ({
         {renderForecastDriverRow(activeScenario, 'inflation_rate', 'Inflation Rate', 0.001, true)}
         {renderForecastDriverRow(activeScenario, 'opex_growth', 'OpEx Growth', 0.01, true)}
         {renderForecastDriverRow(activeScenario, 'capital_expenditure', 'CapEx (% of Revenue)', 0.01, true)}
-        {renderForecastDriverRow(activeScenario, 'ar_days', 'AR Days', 1, false)}
-        {renderForecastDriverRow(activeScenario, 'inv_days', 'Inventory Days', 1, false)}
-        {renderForecastDriverRow(activeScenario, 'ap_days', 'AP Days', 1, false)}
+        {renderForecastDriverRow(activeScenario, 'receivables_days', 'Receivables Days', 1, false)}
+        {renderForecastDriverRow(activeScenario, 'inventory_days', 'Inventory Days', 1, false)}
+        {renderForecastDriverRow(activeScenario, 'payables_days', 'Payables Days', 1, false)}
         {renderForecastDriverRow(activeScenario, 'tax_rate', 'Tax Rate', 0.01, true)}
       </div>
 
