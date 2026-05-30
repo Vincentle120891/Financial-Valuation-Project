@@ -108,11 +108,11 @@ class UnifiedStep1Request(BaseModel):
             # If None or empty string, use default
             return MarketType.INTERNATIONAL
         if isinstance(v, str):
-            # Convert to uppercase to match enum keys
-            v_upper = v.upper()
-            if v_upper == 'INTERNATIONAL':
+            # Convert to lowercase to match enum values
+            v_lower = v.lower()
+            if v_lower == 'international':
                 return MarketType.INTERNATIONAL
-            elif v_upper == 'VIETNAM':
+            elif v_lower == 'vietnam':
                 return MarketType.VIETNAM
         return v
 
@@ -157,11 +157,11 @@ class UnifiedStep2Request(BaseModel):
             # If None or empty string, use default
             return MarketType.INTERNATIONAL
         if isinstance(v, str):
-            # Convert to uppercase to match enum keys
-            v_upper = v.upper()
-            if v_upper == 'INTERNATIONAL':
+            # Convert to lowercase to match enum values
+            v_lower = v.lower()
+            if v_lower == 'international':
                 return MarketType.INTERNATIONAL
-            elif v_upper == 'VIETNAM':
+            elif v_lower == 'vietnam':
                 return MarketType.VIETNAM
         return v
 
@@ -242,11 +242,11 @@ class UnifiedStep3Request(BaseModel):
             # If None or empty string, use default
             return MarketType.INTERNATIONAL
         if isinstance(v, str):
-            # Convert to uppercase to match enum keys
-            v_upper = v.upper()
-            if v_upper == 'INTERNATIONAL':
+            # Convert to lowercase to match enum values
+            v_lower = v.lower()
+            if v_lower == 'international':
                 return MarketType.INTERNATIONAL
-            elif v_upper == 'VIETNAM':
+            elif v_lower == 'vietnam':
                 return MarketType.VIETNAM
         return v
 
@@ -298,7 +298,7 @@ class UnifiedStep4Request(BaseModel):
     def validate_method(cls, v):
         if isinstance(v, str):
             # Convert to uppercase to match enum values
-            v_upper = v.upper()
+            v_lower = v.lower()
             if v_upper in ['DCF', 'DUPONT', 'COMPS']:
                 return v_upper
         return v
@@ -310,11 +310,11 @@ class UnifiedStep4Request(BaseModel):
             # If None or empty string, use default
             return MarketType.INTERNATIONAL
         if isinstance(v, str):
-            # Convert to uppercase to match enum keys
-            v_upper = v.upper()
-            if v_upper == 'INTERNATIONAL':
+            # Convert to lowercase to match enum values
+            v_lower = v.lower()
+            if v_lower == 'international':
                 return MarketType.INTERNATIONAL
-            elif v_upper == 'VIETNAM':
+            elif v_lower == 'vietnam':
                 return MarketType.VIETNAM
         return v
 
@@ -376,11 +376,11 @@ class UnifiedStep5Request(BaseModel):
             # If None or empty string, use default
             return MarketType.INTERNATIONAL
         if isinstance(v, str):
-            # Convert to uppercase to match enum keys
-            v_upper = v.upper()
-            if v_upper == 'INTERNATIONAL':
+            # Convert to lowercase to match enum values
+            v_lower = v.lower()
+            if v_lower == 'international':
                 return MarketType.INTERNATIONAL
-            elif v_upper == 'VIETNAM':
+            elif v_lower == 'vietnam':
                 return MarketType.VIETNAM
         return v
 
@@ -538,11 +538,11 @@ class UnifiedStep6Request(BaseModel):
             # If None or empty string, use default
             return MarketType.INTERNATIONAL
         if isinstance(v, str):
-            # Convert to uppercase to match enum keys
-            v_upper = v.upper()
-            if v_upper == 'INTERNATIONAL':
+            # Convert to lowercase to match enum values
+            v_lower = v.lower()
+            if v_lower == 'international':
                 return MarketType.INTERNATIONAL
-            elif v_upper == 'VIETNAM':
+            elif v_lower == 'vietnam':
                 return MarketType.VIETNAM
         return v
 
@@ -625,11 +625,11 @@ class UnifiedStep7Request(BaseModel):
             # If None or empty string, use default
             return MarketType.INTERNATIONAL
         if isinstance(v, str):
-            # Convert to uppercase to match enum keys
-            v_upper = v.upper()
-            if v_upper == 'INTERNATIONAL':
+            # Convert to lowercase to match enum values
+            v_lower = v.lower()
+            if v_lower == 'international':
                 return MarketType.INTERNATIONAL
-            elif v_upper == 'VIETNAM':
+            elif v_lower == 'vietnam':
                 return MarketType.VIETNAM
         return v
 
@@ -774,11 +774,11 @@ class UnifiedStep8Request(BaseModel):
             # If None or empty string, use default
             return MarketType.INTERNATIONAL
         if isinstance(v, str):
-            # Convert to uppercase to match enum keys
-            v_upper = v.upper()
-            if v_upper == 'INTERNATIONAL':
+            # Convert to lowercase to match enum values
+            v_lower = v.lower()
+            if v_lower == 'international':
                 return MarketType.INTERNATIONAL
-            elif v_upper == 'VIETNAM':
+            elif v_lower == 'vietnam':
                 return MarketType.VIETNAM
         return v
 
@@ -847,11 +847,11 @@ class UnifiedStep9Request(BaseModel):
             # If None or empty string, use default
             return MarketType.INTERNATIONAL
         if isinstance(v, str):
-            # Convert to uppercase to match enum keys
-            v_upper = v.upper()
-            if v_upper == 'INTERNATIONAL':
+            # Convert to lowercase to match enum values
+            v_lower = v.lower()
+            if v_lower == 'international':
                 return MarketType.INTERNATIONAL
-            elif v_upper == 'VIETNAM':
+            elif v_lower == 'vietnam':
                 return MarketType.VIETNAM
         return v
 
@@ -907,11 +907,11 @@ class UnifiedStep10Request(BaseModel):
             # If None or empty string, use default
             return MarketType.INTERNATIONAL
         if isinstance(v, str):
-            # Convert to uppercase to match enum keys
-            v_upper = v.upper()
-            if v_upper == 'INTERNATIONAL':
+            # Convert to lowercase to match enum values
+            v_lower = v.lower()
+            if v_lower == 'international':
                 return MarketType.INTERNATIONAL
-            elif v_upper == 'VIETNAM':
+            elif v_lower == 'vietnam':
                 return MarketType.VIETNAM
         return v
 

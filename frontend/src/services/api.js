@@ -71,7 +71,7 @@ aiApi.interceptors.request.use(
 export const searchCompanies = async (query, market = 'international') => {
   // Use unified POST endpoint for ALL markets - no routing based on market
   try {
-    const response = await api.post('/step-1-search', { query, market: market.toUpperCase() });
+    const response = await api.post('/step-1-search', { query, market: market.toLowerCase() });
     return transformVietnameseResponse(response.data, market);
   } catch (error) {
     console.error('Search companies error:', error);
@@ -109,7 +109,8 @@ const transformVietnameseResponse = (data, market) => {
 // Step 4: Suggest Peers (after model selection)
 export const suggestPeers = async (ticker, market = 'international', maxPeers = 10, method = null, sessionId = null) => {
   const response = await api.post('/step-4-discover-peers', {
-    market,
+    ticker,
+    market: market.toLowerCase(),
     max_peers: maxPeers,
     method: method ? method.toUpperCase() : null, // Pass selected valuation method for method-specific peer criteria
     session_id: sessionId // Include session_id to store suggestions and prevent re-fetching loop
@@ -120,7 +121,7 @@ export const suggestPeers = async (ticker, market = 'international', maxPeers = 
 
 // Step 2: Select Company (Create Session)
 export const selectCompany = async (sessionId, ticker, market = 'international') => {
-  const response = await api.post('/step-2-create-session', { session_id: sessionId, ticker, market: market.toUpperCase() });
+  const response = await api.post('/step-2-create-session', { session_id: sessionId, ticker, market: market.toLowerCase() });
   return response.data;
 };
 
@@ -135,7 +136,7 @@ export const validateManualPeers = async (sessionId, tickers, market = 'internat
   const response = await api.post('/step-5-validate-manual-peers', {
     session_id: sessionId,
     tickers,
-    market: market.toUpperCase()
+    market: market.toLowerCase()
   });
   return response.data;
 };
@@ -146,7 +147,7 @@ export const selectModels = async (sessionId, method, market = 'international') 
   const response = await api.post('/step-3-select-models', {
     session_id: sessionId,
     method: method.toUpperCase(),
-    market: market.toUpperCase()
+    market: market.toLowerCase()
   });
   return response.data;
 };
@@ -156,7 +157,7 @@ export const prepareAssumptions = async (sessionId, method, market = 'internatio
   const response = await api.post('/step-5-prepare-assumptions', {
     session_id: sessionId,
     method: method.toUpperCase(),
-    market: market.toUpperCase(),
+    market: market.toLowerCase(),
     generate_ai: generateAi
   });
   return response.data;
@@ -169,7 +170,7 @@ export const fetchApiData = async (sessionId, method, market = 'international') 
   const response = await api.post('/step-6-fetch-api-data', {
     session_id: sessionId,
     method,
-    market: market.toUpperCase()
+    market: market.toLowerCase()
   });
   return response.data;
 };
@@ -181,7 +182,7 @@ export const retrieveHistoricalData = async (sessionId, method, market = 'intern
     const response = await aiApi.post('/step-7-retrieve-historical-data', {
       session_id: sessionId,
       method,
-      market: market.toUpperCase()
+      market: market.toLowerCase()
     });
     return response.data;
   } catch (error) {
@@ -199,7 +200,7 @@ export const initializeStep8Assumptions = async (sessionId, method, market = 'in
     const response = await api.post('/step-8-initialize', {
       session_id: sessionId,
       method,
-      market: market.toUpperCase()
+      market: market.toLowerCase()
     });
     return response.data;
   } catch (error) {
@@ -218,7 +219,7 @@ export const generateAISuggestion = async (sessionId, category, method, market =
       session_id: sessionId,
       category,
       method,
-      market: market.toUpperCase()
+      market: market.toLowerCase()
     });
     return response.data;
   } catch (error) {
@@ -237,7 +238,7 @@ export const confirmAssumptions = async (sessionId, confirmedValues, scenario = 
     confirmed_values: confirmedValues,
     scenario,
     method,
-    market: market.toUpperCase()
+    market: market.toLowerCase()
   });
   return response.data;
 };
@@ -249,7 +250,7 @@ export const runValuation = async (sessionId, method, scenario = 'base_case', ma
     session_id: sessionId,
     method,
     scenario,
-    market: market.toUpperCase()
+    market: market.toLowerCase()
   });
   return response.data;
 };
@@ -260,7 +261,7 @@ export const runValuationMulti = async (sessionId, methods, market = 'internatio
   const response = await api.post('/step-10-valuate-multi', {
     session_id: sessionId,
     methods,
-    market: market.toUpperCase()
+    market: market.toLowerCase()
   });
   return response.data;
 };

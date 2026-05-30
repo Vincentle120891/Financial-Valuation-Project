@@ -37,8 +37,8 @@ const SearchStep = ({
 
   const performSearch = async () => {
     if (searchQuery.trim()) {
-      // Force uppercase format matching the backend Enum constraints (MarketType: "INTERNATIONAL" | "VIETNAM")
-      await onSearch(searchQuery, market.toUpperCase()); 
+      // Keep it lowercase ("international" / "vietnam") to match the Enum VALUES
+      await onSearch(searchQuery, market.toLowerCase()); 
     }
   };
 
