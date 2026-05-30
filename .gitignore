@@ -1,59 +1,41 @@
-Nothing should be ignored in this case, as only a Python source file was modified and no build artifacts, dependencies, or temporary files were detected.
-```python
-# Python
+```
+# Compiled Python files
+*.pyc
 __pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
 
-# Environment
-.env
-.venv/
-env/
-ENV/
+# Dependencies
 venv/
-virtualenv/
-!.env.example
-!.env.sample
+.venv/
+node_modules/
 
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
+# Logs and temporary files
+*.log
 *.tmp
 
-# Logs
-*.log
+# Environment variables
+.env
+.env.local
+*.env.*
 
-# Coverage
+# Editors
+.vscode/
+.idea/
+
+# Coverage reports
 .coverage
 coverage/
 htmlcov/
-.coverage.*
 
-# Testing
-.pytest_cache/
+# Python cache
 .mypy_cache/
+.pytest_cache/
 
-# OS
+# Build directories
+dist/
+build/
+target/
+
+# OS generated files
 .DS_Store
 Thumbs.db
 ```
