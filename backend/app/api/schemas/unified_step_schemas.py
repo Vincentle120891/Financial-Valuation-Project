@@ -101,6 +101,21 @@ class UnifiedStep1Request(BaseModel):
     market: MarketType = Field(MarketType.INTERNATIONAL, description="Market to search in")
     limit: int = Field(10, ge=1, le=50, description="Maximum results to return")
 
+    @field_validator('market', mode='before')
+    @classmethod
+    def validate_market(cls, v):
+        if v is None or (isinstance(v, str) and v.strip() == ''):
+            # If None or empty string, use default
+            return MarketType.INTERNATIONAL
+        if isinstance(v, str):
+            # Convert to uppercase to match enum keys
+            v_upper = v.upper()
+            if v_upper == 'INTERNATIONAL':
+                return MarketType.INTERNATIONAL
+            elif v_upper == 'VIETNAM':
+                return MarketType.VIETNAM
+        return v
+
 
 class CompanySearchResult(BaseModel):
     """Individual company search result"""
@@ -134,6 +149,21 @@ class UnifiedStep2Request(BaseModel):
     ticker: str
     market: MarketType
     company_name: Optional[str] = None
+
+    @field_validator('market', mode='before')
+    @classmethod
+    def validate_market(cls, v):
+        if v is None or (isinstance(v, str) and v.strip() == ''):
+            # If None or empty string, use default
+            return MarketType.INTERNATIONAL
+        if isinstance(v, str):
+            # Convert to uppercase to match enum keys
+            v_upper = v.upper()
+            if v_upper == 'INTERNATIONAL':
+                return MarketType.INTERNATIONAL
+            elif v_upper == 'VIETNAM':
+                return MarketType.VIETNAM
+        return v
 
 
 class MarketDataPoint(BaseModel):
@@ -205,6 +235,21 @@ class UnifiedStep3Request(BaseModel):
     method: ValuationMethod
     market: MarketType
 
+    @field_validator('market', mode='before')
+    @classmethod
+    def validate_market(cls, v):
+        if v is None or (isinstance(v, str) and v.strip() == ''):
+            # If None or empty string, use default
+            return MarketType.INTERNATIONAL
+        if isinstance(v, str):
+            # Convert to uppercase to match enum keys
+            v_upper = v.upper()
+            if v_upper == 'INTERNATIONAL':
+                return MarketType.INTERNATIONAL
+            elif v_upper == 'VIETNAM':
+                return MarketType.VIETNAM
+        return v
+
 
 class UnifiedStep3Response(BaseModel):
     """Step 3: Method selection confirmation"""
@@ -265,10 +310,12 @@ class UnifiedStep4Request(BaseModel):
             # If None or empty string, use default
             return MarketType.INTERNATIONAL
         if isinstance(v, str):
-            # Convert to lowercase to match enum values
-            v_lower = v.lower()
-            if v_lower in ['international', 'vietnam']:
-                return v_lower
+            # Convert to uppercase to match enum keys
+            v_upper = v.upper()
+            if v_upper == 'INTERNATIONAL':
+                return MarketType.INTERNATIONAL
+            elif v_upper == 'VIETNAM':
+                return MarketType.VIETNAM
         return v
 
 
@@ -321,6 +368,21 @@ class UnifiedStep5Request(BaseModel):
     method: ValuationMethod
     market: MarketType
     generate_ai: bool = True
+
+    @field_validator('market', mode='before')
+    @classmethod
+    def validate_market(cls, v):
+        if v is None or (isinstance(v, str) and v.strip() == ''):
+            # If None or empty string, use default
+            return MarketType.INTERNATIONAL
+        if isinstance(v, str):
+            # Convert to uppercase to match enum keys
+            v_upper = v.upper()
+            if v_upper == 'INTERNATIONAL':
+                return MarketType.INTERNATIONAL
+            elif v_upper == 'VIETNAM':
+                return MarketType.VIETNAM
+        return v
 
 
 class UnifiedStep5Response(BaseModel):
@@ -469,6 +531,21 @@ class UnifiedStep6Request(BaseModel):
     include_quarterly: bool = Field(True, description="Include quarterly data")
     use_cache: bool = Field(True, description="Use cached data if available")
 
+    @field_validator('market', mode='before')
+    @classmethod
+    def validate_market(cls, v):
+        if v is None or (isinstance(v, str) and v.strip() == ''):
+            # If None or empty string, use default
+            return MarketType.INTERNATIONAL
+        if isinstance(v, str):
+            # Convert to uppercase to match enum keys
+            v_upper = v.upper()
+            if v_upper == 'INTERNATIONAL':
+                return MarketType.INTERNATIONAL
+            elif v_upper == 'VIETNAM':
+                return MarketType.VIETNAM
+        return v
+
 
 class UnifiedStep6Response(BaseModel):
     """
@@ -540,6 +617,21 @@ class UnifiedStep7Request(BaseModel):
     method: ValuationMethod
     market: MarketType
     adjustments: Optional[Dict[str, Any]] = None
+
+    @field_validator('market', mode='before')
+    @classmethod
+    def validate_market(cls, v):
+        if v is None or (isinstance(v, str) and v.strip() == ''):
+            # If None or empty string, use default
+            return MarketType.INTERNATIONAL
+        if isinstance(v, str):
+            # Convert to uppercase to match enum keys
+            v_upper = v.upper()
+            if v_upper == 'INTERNATIONAL':
+                return MarketType.INTERNATIONAL
+            elif v_upper == 'VIETNAM':
+                return MarketType.VIETNAM
+        return v
 
 
 class UnifiedStep7Response(BaseModel):
@@ -675,6 +767,21 @@ class UnifiedStep8Request(BaseModel):
     method: ValuationMethod = Field(..., description="Valuation method")
     market: MarketType = Field(..., description="Market type")
 
+    @field_validator('market', mode='before')
+    @classmethod
+    def validate_market(cls, v):
+        if v is None or (isinstance(v, str) and v.strip() == ''):
+            # If None or empty string, use default
+            return MarketType.INTERNATIONAL
+        if isinstance(v, str):
+            # Convert to uppercase to match enum keys
+            v_upper = v.upper()
+            if v_upper == 'INTERNATIONAL':
+                return MarketType.INTERNATIONAL
+            elif v_upper == 'VIETNAM':
+                return MarketType.VIETNAM
+        return v
+
 
 class UnifiedStep8InitializeRequest(UnifiedStep8Request):
     """Step 8: Initialize assumptions with historical trendlines"""
@@ -733,6 +840,21 @@ class UnifiedStep9Request(BaseModel):
     market: MarketType
     confirmed_assumptions: Dict[str, Any]
 
+    @field_validator('market', mode='before')
+    @classmethod
+    def validate_market(cls, v):
+        if v is None or (isinstance(v, str) and v.strip() == ''):
+            # If None or empty string, use default
+            return MarketType.INTERNATIONAL
+        if isinstance(v, str):
+            # Convert to uppercase to match enum keys
+            v_upper = v.upper()
+            if v_upper == 'INTERNATIONAL':
+                return MarketType.INTERNATIONAL
+            elif v_upper == 'VIETNAM':
+                return MarketType.VIETNAM
+        return v
+
 
 class UnifiedStep9Response(BaseModel):
     """Step 9: Assumptions confirmed"""
@@ -777,6 +899,21 @@ class UnifiedStep10Request(BaseModel):
     market: MarketType
     run_sensitivity: bool = True
     scenario_analysis: bool = True
+
+    @field_validator('market', mode='before')
+    @classmethod
+    def validate_market(cls, v):
+        if v is None or (isinstance(v, str) and v.strip() == ''):
+            # If None or empty string, use default
+            return MarketType.INTERNATIONAL
+        if isinstance(v, str):
+            # Convert to uppercase to match enum keys
+            v_upper = v.upper()
+            if v_upper == 'INTERNATIONAL':
+                return MarketType.INTERNATIONAL
+            elif v_upper == 'VIETNAM':
+                return MarketType.VIETNAM
+        return v
 
 
 class UnifiedStep10Response(BaseModel):
