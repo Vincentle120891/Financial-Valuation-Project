@@ -32,6 +32,8 @@ from app.api.schemas import (
     PeerCompany,
     AssumptionCategory,
     DataField,
+    MultiMethodValuateRequest,
+    MultiMethodValuateResponse,
     DataStatus,
     MissingDataSummary,
     MarketType,
