@@ -1,5 +1,1 @@
-```
-# Documentation and guides
-API_RESPONSE_FORMAT_REFERENCE.md
-BACKEND_SCHEMA_INTEGRATION_GUIDE.md
-```
+Nothing should be ignored based on the provided file changes. The only modified file is a Python source file (`backend/app/api/routes/valuation_routes.py`), which should not be added to .gitignore. There are no build artifacts, dependencies, temporary files, or other items that need to be ignored in the provided change list.

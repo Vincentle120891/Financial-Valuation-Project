@@ -35,10 +35,17 @@ from app.api.schemas.unified_step_schemas import (
     UnifiedStep4Response,
     UnifiedStep5Request,
     UnifiedStep5Response,
+    UnifiedStep6Request,
     UnifiedStep6Response,
+    UnifiedStep7Request,
     UnifiedStep7Response,
+    UnifiedStep8InitializeRequest,
+    UnifiedStep8GenerateAISuggestionRequest,
+    UnifiedStep8ApplyOverrideRequest,
     UnifiedStep8Response,
+    UnifiedStep9Request,
     UnifiedStep9Response,
+    UnifiedStep10Request,
     UnifiedStep10Response,
     PeerCompany,
     AssumptionCategory,
@@ -46,8 +53,10 @@ from app.api.schemas.unified_step_schemas import (
     DataStatus,
     MissingDataSummary,
     MarketType,
-    ValuationMethod
+    ValuationMethod,
+    AssumptionCategoryType
 )
+from app.utils.api_key_resolver import check_api_keys_status, get_api_key
 
 # Import Step 4 method-specific discovery services
 from app.services.international.step4_dcf_discovery import process as dcf_discover_peers
@@ -132,33 +141,12 @@ async def save_peers(request: SavePeersRequest):
 
 
 # =============================================================================
-# STEP 4 REQUEST/RESPONSE MODELS
+# STEP 4: PEER DISCOVERY
 # =============================================================================
 
-class DiscoverPeersRequest(BaseModel):
-    """Step 4: Discover peers request model"""
-    session_id: str
-    ticker: str
-    market: str = "international"
-    max_peers: int = 10
-    method: Optional[str] = None
 
-
-class DiscoverPeersResponse(BaseModel):
-    """Step 4: Discover peers response model"""
-    status: str
-    session_id: str
-    method: str
-    market: str
-    suggested_peers: List[Dict[str, Any]]
-    peer_count: int
-    message: str
-    mandatory: Optional[bool] = False
-    min_peers_recommended: Optional[int] = None
-
-
-@router.post("/step-4-discover-peers", response_model=DiscoverPeersResponse)
-async def discover_peers_endpoint(request: DiscoverPeersRequest, req: Request):
+@router.post("/step-4-discover-peers", response_model=UnifiedStep4Response)
+async def discover_peers_endpoint(request: UnifiedStep4Request, req: Request):
     """
     Step 4: Discover peer companies automatically.
     Routes to method-specific discovery service based on valuation method.
@@ -173,41 +161,33 @@ async def discover_peers_endpoint(request: DiscoverPeersRequest, req: Request):
         if not session:
             raise HTTPException(status_code=404, detail="Session not found")
 
-        # Get method from parameter or session (fallback to session if not provided)
-        valuation_method = request.method or session.get("method")
-
-        if not valuation_method:
-            raise HTTPException(
-                status_code=400,
-                detail="Method must be provided either as parameter or stored in session"
-            )
-
-        valuation_method = valuation_method.lower()
+        # Get method from request (already validated by Pydantic)
+        valuation_method = request.method.value
 
         # Route to appropriate discovery service based on method
         # All discovery functions are now async, so we need to await them
         if valuation_method == "dcf":
             discovery_result = await dcf_discover_peers(
                 session_id=request.session_id,
-                ticker=request.ticker,
-                market=request.market,
-                max_peers=request.max_peers,
+                ticker=session.get("ticker", ""),
+                market=request.market.value,
+                max_peers=request.max_peers or 10,
                 request=req
             )
         elif valuation_method == "dupont":
             discovery_result = await dupont_discover_peers(
                 session_id=request.session_id,
-                ticker=request.ticker,
-                market=request.market,
-                max_peers=request.max_peers,
+                ticker=session.get("ticker", ""),
+                market=request.market.value,
+                max_peers=request.max_peers or 10,
                 request=req
             )
         elif valuation_method == "comps":
             discovery_result = await comps_discover_peers(
                 session_id=request.session_id,
-                ticker=request.ticker,
-                market=request.market,
-                max_peers=request.max_peers,
+                ticker=session.get("ticker", ""),
+                market=request.market.value,
+                max_peers=request.max_peers or 10,
                 request=req
             )
         else:
@@ -216,17 +196,16 @@ async def discover_peers_endpoint(request: DiscoverPeersRequest, req: Request):
                 detail=f"Invalid valuation method: {valuation_method}. Must be 'dcf', 'dupont', or 'comps'"
             )
 
-        # Return method-specific discovery result
-        return DiscoverPeersResponse(
+        # Return unified response with peer discovery results
+        return UnifiedStep4Response(
             status="success",
             session_id=request.session_id,
             method=valuation_method,
-            market=request.market,
-            suggested_peers=discovery_result.get("suggested_peers", []),
-            peer_count=discovery_result.get("peer_count", 0),
-            message=discovery_result.get("message", ""),
-            mandatory=discovery_result.get("mandatory", False),
-            min_peers_recommended=discovery_result.get("min_peers_recommended")
+            market=request.market.value,
+            target_company=session.get("ticker", ""),
+            suggested_peers=[PeerCompany(**peer) for peer in discovery_result.get("suggested_peers", [])],
+            selected_peers=[],
+            message=discovery_result.get("message", "Peer discovery completed")
         )
 
     except HTTPException:
@@ -433,7 +412,7 @@ async def prepare_assumptions(request: UnifiedStep5Request):
 
 
 @router.post("/step-6-fetch-api-data", response_model=UnifiedStep6Response)
-async def fetch_api_data(request: FetchDataRequest):
+async def fetch_api_data(request: UnifiedStep6Request):
     """
     Step 6: Fetch financial data from APIs and calculate metrics.
     Uses SessionService for session management, APIAdapter for data fetching,
@@ -458,13 +437,13 @@ async def fetch_api_data(request: FetchDataRequest):
         ticker = session.get("ticker")
         peer_tickers = session.get("peer_tickers", [])
         # Use market from request ONLY (no fallback to session)
-        market = request.market.lower() if request.market else "international"
+        market = request.market.value if isinstance(request.market, MarketType) else request.market.lower()
 
         # Validate method is provided
         if not request.method:
             raise HTTPException(status_code=400, detail="Method parameter is required")
 
-        method = request.method.upper()
+        method = request.method.value if isinstance(request.method, ValuationMethod) else request.method.upper()
 
         # Create validation middleware for this method
         validator = create_validation_middleware(method)
@@ -564,7 +543,7 @@ async def fetch_api_data(request: FetchDataRequest):
 
 
 @router.post("/step-7-retrieve-historical-data", response_model=UnifiedStep7Response)
-async def retrieve_historical_data(request: GenerateAIRequest):
+async def retrieve_historical_data(request: UnifiedStep7Request):
     """
     Step 7: Retrieve Historical Data Using AI Extraction
 
@@ -602,13 +581,13 @@ async def retrieve_historical_data(request: GenerateAIRequest):
 
         ticker = session.get("ticker")
         # Use market/method from request ONLY (no fallback)
-        market = request.market.lower() if request.market else "international"
+        market = request.market.value if isinstance(request.market, MarketType) else request.market.lower()
 
         # Validate method is provided
         if not request.method:
             raise HTTPException(status_code=400, detail="Method parameter is required")
 
-        method = request.method.upper()
+        method = request.method.value if isinstance(request.method, ValuationMethod) else request.method.upper()
 
         # Get financial data from the specific valuation track
         financial_data = session_service.get_session_value(
@@ -859,7 +838,7 @@ async def fetch_sec_edgar_for_step7(
 
 
 @router.post("/step-8-initialize", response_model=UnifiedStep8Response)
-async def initialize_step8_assumptions(request: GenerateAISuggestionRequest):
+async def initialize_step8_assumptions(request: UnifiedStep8InitializeRequest):
     """
     Step 8: Initialize assumptions with historical trendlines from Step 6.
 
@@ -883,13 +862,13 @@ async def initialize_step8_assumptions(request: GenerateAISuggestionRequest):
 
         ticker = session.get("ticker")
         # Use market/method from request ONLY (no fallback)
-        market = request.market.lower() if hasattr(request, 'market') and request.market else "international"
+        market = request.market.value if isinstance(request.market, MarketType) else request.market.lower()
 
         # Validate method is provided
         if not hasattr(request, 'method') or not request.method:
             raise HTTPException(status_code=400, detail="Method parameter is required")
 
-        method = request.method.upper()
+        method = request.method.value if isinstance(request.method, ValuationMethod) else request.method.upper()
 
         # Get data from the specific valuation track
         step6_data = session_service.get_session_value(
@@ -934,7 +913,7 @@ async def initialize_step8_assumptions(request: GenerateAISuggestionRequest):
 
 
 @router.post("/step-8-generate-ai-suggestion", response_model=AISuggestionCategoryResponse)
-async def generate_ai_suggestion(request: GenerateAISuggestionRequest):
+async def generate_ai_suggestion(request: UnifiedStep8GenerateAISuggestionRequest):
     """
     Step 8: Generate AI suggestions for a specific assumption category.
 
@@ -962,13 +941,13 @@ async def generate_ai_suggestion(request: GenerateAISuggestionRequest):
 
         ticker = session.get("ticker")
         # Use market/method from request ONLY (no fallback)
-        market = request.market.lower() if hasattr(request, 'market') and request.market else "international"
+        market = request.market.value if isinstance(request.market, MarketType) else request.market.lower()
 
         # Validate method is provided
         if not hasattr(request, 'method') or not request.method:
             raise HTTPException(status_code=400, detail="Method parameter is required")
 
-        method = request.method.upper()
+        method = request.method.value if isinstance(request.method, ValuationMethod) else request.method.upper()
 
         # Get data from the specific valuation track
         step6_data = session_service.get_session_value(
@@ -1032,7 +1011,7 @@ async def generate_ai_suggestion(request: GenerateAISuggestionRequest):
 
 
 @router.post("/step-9-confirm-assumptions", response_model=UnifiedStep9Response)
-async def confirm_assumptions(request: ConfirmAssumptionsRequest):
+async def confirm_assumptions(request: UnifiedStep9Request):
     """
     Step 9: Confirmation Processing - Consolidates Steps 6-8 inputs for Step 10.
 
@@ -1060,13 +1039,13 @@ async def confirm_assumptions(request: ConfirmAssumptionsRequest):
 
         ticker = session.get("ticker")
         # Use market/method from request ONLY (no fallback)
-        market = request.market.lower() if request.market else "international"
+        market = request.market.value if isinstance(request.market, MarketType) else request.market.lower()
 
         # Validate method is provided
         if not request.method:
             raise HTTPException(status_code=400, detail="Method parameter is required")
 
-        method = request.method.upper()
+        method = request.method.value if isinstance(request.method, ValuationMethod) else request.method.upper()
 
         # Get data from the specific valuation track
         # Step 6: Aggregated historical financials and market data
@@ -1162,7 +1141,7 @@ async def confirm_assumptions(request: ConfirmAssumptionsRequest):
 
 
 @router.post("/step-10-valuate", response_model=UnifiedStep10Response)
-async def valuate(request: ValuateRequest):
+async def valuate(request: UnifiedStep10Request):
     """
     Step 10: Final Valuation - Uses ONLY Step 9 outputs.
 
@@ -1191,13 +1170,13 @@ async def valuate(request: ValuateRequest):
 
         ticker = session.get("ticker")
         # Use market/method from request ONLY (no fallback)
-        market = request.market.lower() if request.market else "international"
+        market = request.market.value if isinstance(request.market, MarketType) else request.market.lower()
 
         # Validate method is provided
         if not request.method:
             raise HTTPException(status_code=400, detail="Method parameter is required")
 
-        method = request.method.upper()
+        method = request.method.value if isinstance(request.method, ValuationMethod) else request.method.upper()
 
         # CRITICAL: Get Step 9 confirmed outputs (Step 10 can ONLY use this)
         # Step 10 cannot access step6_data, step7_data, or step8_final_inputs directly
@@ -1436,14 +1415,20 @@ async def save_api_keys(request: SaveApiKeysRequest):
 
 
 @router.get("/check-api-keys")
-async def check_api_keys(session_id: str):
+async def check_api_keys(request: Request, session_id: str):
     """
     Step 6: Check which API keys are configured for a session.
     
     Returns the status of all API keys stored in the session.
     Used by frontend to show configuration status and enable/disable buttons.
     
+    Uses centralized API key resolver with fallback chain:
+    1. Request headers (highest priority)
+    2. Session storage
+    3. Environment variables
+    
     Args:
+        request: FastAPI request object (for header extraction)
         session_id: Session identifier
         
     Returns:
@@ -1455,24 +1440,11 @@ async def check_api_keys(session_id: str):
         if not session:
             raise HTTPException(status_code=404, detail="Session not found")
         
-        # Get stored API keys from session
-        stored_keys = session_service.get_session_value(
-            session_id,
-            "api_keys",
-            {}
-        )
-        
-        # Check which keys are configured
-        keys_status = {
-            "openrouter": stored_keys.get("openrouter_api_key") is not None and len(stored_keys.get("openrouter_api_key", "")) > 0,
-            "alpha_vantage": stored_keys.get("alpha_vantage_key") is not None and len(stored_keys.get("alpha_vantage_key", "")) > 0,
-            "groq": stored_keys.get("groq_api_key") is not None and len(stored_keys.get("groq_api_key", "")) > 0,
-            "gemini": stored_keys.get("gemini_api_key") is not None and len(stored_keys.get("gemini_api_key", "")) > 0,
-            "qwen": stored_keys.get("qwen_api_key") is not None and len(stored_keys.get("qwen_api_key", "")) > 0,
-        }
+        # Use centralized API key resolver with fallback chain
+        keys_status = check_api_keys_status(request=request, session_id=session_id)
         
         # Add overall status
-        keys_status["all_required_configured"] = keys_status["openrouter"]
+        keys_status["all_required_configured"] = keys_status.get("openrouter", False)
         keys_status["total_configured"] = sum(1 for v in keys_status.values() if v and isinstance(v, bool))
         
         return keys_status
