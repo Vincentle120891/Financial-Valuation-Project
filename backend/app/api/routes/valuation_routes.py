@@ -38,6 +38,7 @@ from app.api.schemas import (
     ValuationMethod,
     AssumptionCategoryType,
     AssumptionCategoryResponse,
+    AISuggestionCategoryResponse,
     UnifiedStep10Response as MultiMethodValuateResponse,
     UnifiedStep10Request as MultiMethodValuateRequest,
 )
