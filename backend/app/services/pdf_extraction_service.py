@@ -227,22 +227,28 @@ class VietnamesePDFExtractor:
             import pytesseract
             self.pytesseract = pytesseract
             logger.debug("pytesseract loaded successfully")
-        except ImportError:
-            logger.warning("pytesseract not available. Install with: pip install pytesseract")
+        except ImportError as e:
+            import traceback
+            traceback.print_exc()
+            logger.warning(f"pytesseract not available. Install with: pip install pytesseract (Actual Exception: {e})")
         
         try:
             from pdf2image import pdf2page
             self.pdf2image = pdf2page
             logger.debug("pdf2image loaded successfully")
-        except ImportError:
-            logger.warning("pdf2image not available. Install with: pip install pdf2image")
+        except ImportError as e:
+            import traceback
+            traceback.print_exc()
+            logger.warning(f"pdf2image not available. Install with: pip install pdf2image (Actual Exception: {e})")
         
         try:
             from pyvi import VITokenizer
             self.pyvi = VITokenizer
             logger.debug("pyvi loaded successfully")
-        except ImportError:
-            logger.warning("pyvi not available. Install with: pip install pyvi")
+        except ImportError as e:
+            import traceback
+            traceback.print_exc()
+            logger.warning(f"pyvi not available. Install with: pip install pyvi (Actual Exception: {e})")
     
     def extract_from_file(self, file_path: str) -> ExtractedFinancialData:
         """
