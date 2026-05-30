@@ -298,7 +298,7 @@ class UnifiedStep4Request(BaseModel):
     def validate_method(cls, v):
         if isinstance(v, str):
             # Convert to uppercase to match enum values
-            v_lower = v.lower()
+            v_upper = v.upper()
             if v_upper in ['DCF', 'DUPONT', 'COMPS']:
                 return v_upper
         return v

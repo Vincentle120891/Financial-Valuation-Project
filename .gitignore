@@ -1,12 +1,13 @@
+```gitignore
 # Compiled and build artifacts
 *.pyc
 __pycache__/
 *.o
 *.obj
-*.class
 *.so
 *.dll
 *.exe
+*.class
 *.out
 
 # Dependencies
@@ -20,58 +21,26 @@ venv/
 *.log
 *.tmp
 *.swp
+*.swo
 
 # Editors
 .vscode/
 .idea/
-*.swp
-*.swo
 
-# Build and distribution
-dist/
+# Build directories
 build/
+dist/
 target/
-*.tar.gz
-*.zip
-*.gz
-*.tar
-*.bz2
-*.xz
-*.7z
-*.rar
-*.zst
-*.lz4
-*.lzh
-*.cab
-*.arj
-*.rpm
-*.deb
-*.Z
-*.lz
-*.lzo
+*.egg-info/
 
-# Coverage reports
+# Testing and coverage
+.coverage
 coverage/
 htmlcov/
-.coverage
+.pytest_cache/
+.mypy_cache/
 
-# Python specific
-*.pyc
-__pycache__/
-*.pyo
-*.pyd
-.Python
-*.so
-.Python
-*.egg-info/
-.eggs/
-
-# System files
+# OS generated files
 .DS_Store
 Thumbs.db
-*.tmp
-*.temp
-
-# MyPy cache
-.mypy_cache/
-.pytest_cache/
+```
