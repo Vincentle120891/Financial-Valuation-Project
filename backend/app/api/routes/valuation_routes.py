@@ -35,10 +35,17 @@ from app.api.schemas.unified_step_schemas import (
     UnifiedStep4Response,
     UnifiedStep5Request,
     UnifiedStep5Response,
+    UnifiedStep6Request,
     UnifiedStep6Response,
+    UnifiedStep7Request,
     UnifiedStep7Response,
+    UnifiedStep8InitializeRequest,
+    UnifiedStep8GenerateAISuggestionRequest,
+    UnifiedStep8ApplyOverrideRequest,
     UnifiedStep8Response,
+    UnifiedStep9Request,
     UnifiedStep9Response,
+    UnifiedStep10Request,
     UnifiedStep10Response,
     PeerCompany,
     AssumptionCategory,
@@ -46,7 +53,8 @@ from app.api.schemas.unified_step_schemas import (
     DataStatus,
     MissingDataSummary,
     MarketType,
-    ValuationMethod
+    ValuationMethod,
+    AssumptionCategoryType
 )
 
 # Import Step 4 method-specific discovery services
@@ -433,7 +441,7 @@ async def prepare_assumptions(request: UnifiedStep5Request):
 
 
 @router.post("/step-6-fetch-api-data", response_model=UnifiedStep6Response)
-async def fetch_api_data(request: FetchDataRequest):
+async def fetch_api_data(request: UnifiedStep6Request):
     """
     Step 6: Fetch financial data from APIs and calculate metrics.
     Uses SessionService for session management, APIAdapter for data fetching,
@@ -458,13 +466,13 @@ async def fetch_api_data(request: FetchDataRequest):
         ticker = session.get("ticker")
         peer_tickers = session.get("peer_tickers", [])
         # Use market from request ONLY (no fallback to session)
-        market = request.market.lower() if request.market else "international"
+        market = request.market.value if isinstance(request.market, MarketType) else request.market.lower()
 
         # Validate method is provided
         if not request.method:
             raise HTTPException(status_code=400, detail="Method parameter is required")
 
-        method = request.method.upper()
+        method = request.method.value if isinstance(request.method, ValuationMethod) else request.method.upper()
 
         # Create validation middleware for this method
         validator = create_validation_middleware(method)
@@ -564,7 +572,7 @@ async def fetch_api_data(request: FetchDataRequest):
 
 
 @router.post("/step-7-retrieve-historical-data", response_model=UnifiedStep7Response)
-async def retrieve_historical_data(request: GenerateAIRequest):
+async def retrieve_historical_data(request: UnifiedStep7Request):
     """
     Step 7: Retrieve Historical Data Using AI Extraction
 
@@ -602,13 +610,13 @@ async def retrieve_historical_data(request: GenerateAIRequest):
 
         ticker = session.get("ticker")
         # Use market/method from request ONLY (no fallback)
-        market = request.market.lower() if request.market else "international"
+        market = request.market.value if isinstance(request.market, MarketType) else request.market.lower()
 
         # Validate method is provided
         if not request.method:
             raise HTTPException(status_code=400, detail="Method parameter is required")
 
-        method = request.method.upper()
+        method = request.method.value if isinstance(request.method, ValuationMethod) else request.method.upper()
 
         # Get financial data from the specific valuation track
         financial_data = session_service.get_session_value(
@@ -859,7 +867,7 @@ async def fetch_sec_edgar_for_step7(
 
 
 @router.post("/step-8-initialize", response_model=UnifiedStep8Response)
-async def initialize_step8_assumptions(request: GenerateAISuggestionRequest):
+async def initialize_step8_assumptions(request: UnifiedStep8InitializeRequest):
     """
     Step 8: Initialize assumptions with historical trendlines from Step 6.
 
@@ -883,13 +891,13 @@ async def initialize_step8_assumptions(request: GenerateAISuggestionRequest):
 
         ticker = session.get("ticker")
         # Use market/method from request ONLY (no fallback)
-        market = request.market.lower() if hasattr(request, 'market') and request.market else "international"
+        market = request.market.value if isinstance(request.market, MarketType) else request.market.lower()
 
         # Validate method is provided
         if not hasattr(request, 'method') or not request.method:
             raise HTTPException(status_code=400, detail="Method parameter is required")
 
-        method = request.method.upper()
+        method = request.method.value if isinstance(request.method, ValuationMethod) else request.method.upper()
 
         # Get data from the specific valuation track
         step6_data = session_service.get_session_value(
@@ -934,7 +942,7 @@ async def initialize_step8_assumptions(request: GenerateAISuggestionRequest):
 
 
 @router.post("/step-8-generate-ai-suggestion", response_model=AISuggestionCategoryResponse)
-async def generate_ai_suggestion(request: GenerateAISuggestionRequest):
+async def generate_ai_suggestion(request: UnifiedStep8GenerateAISuggestionRequest):
     """
     Step 8: Generate AI suggestions for a specific assumption category.
 
@@ -962,13 +970,13 @@ async def generate_ai_suggestion(request: GenerateAISuggestionRequest):
 
         ticker = session.get("ticker")
         # Use market/method from request ONLY (no fallback)
-        market = request.market.lower() if hasattr(request, 'market') and request.market else "international"
+        market = request.market.value if isinstance(request.market, MarketType) else request.market.lower()
 
         # Validate method is provided
         if not hasattr(request, 'method') or not request.method:
             raise HTTPException(status_code=400, detail="Method parameter is required")
 
-        method = request.method.upper()
+        method = request.method.value if isinstance(request.method, ValuationMethod) else request.method.upper()
 
         # Get data from the specific valuation track
         step6_data = session_service.get_session_value(
@@ -1032,7 +1040,7 @@ async def generate_ai_suggestion(request: GenerateAISuggestionRequest):
 
 
 @router.post("/step-9-confirm-assumptions", response_model=UnifiedStep9Response)
-async def confirm_assumptions(request: ConfirmAssumptionsRequest):
+async def confirm_assumptions(request: UnifiedStep9Request):
     """
     Step 9: Confirmation Processing - Consolidates Steps 6-8 inputs for Step 10.
 
@@ -1060,13 +1068,13 @@ async def confirm_assumptions(request: ConfirmAssumptionsRequest):
 
         ticker = session.get("ticker")
         # Use market/method from request ONLY (no fallback)
-        market = request.market.lower() if request.market else "international"
+        market = request.market.value if isinstance(request.market, MarketType) else request.market.lower()
 
         # Validate method is provided
         if not request.method:
             raise HTTPException(status_code=400, detail="Method parameter is required")
 
-        method = request.method.upper()
+        method = request.method.value if isinstance(request.method, ValuationMethod) else request.method.upper()
 
         # Get data from the specific valuation track
         # Step 6: Aggregated historical financials and market data
@@ -1162,7 +1170,7 @@ async def confirm_assumptions(request: ConfirmAssumptionsRequest):
 
 
 @router.post("/step-10-valuate", response_model=UnifiedStep10Response)
-async def valuate(request: ValuateRequest):
+async def valuate(request: UnifiedStep10Request):
     """
     Step 10: Final Valuation - Uses ONLY Step 9 outputs.
 
@@ -1191,13 +1199,13 @@ async def valuate(request: ValuateRequest):
 
         ticker = session.get("ticker")
         # Use market/method from request ONLY (no fallback)
-        market = request.market.lower() if request.market else "international"
+        market = request.market.value if isinstance(request.market, MarketType) else request.market.lower()
 
         # Validate method is provided
         if not request.method:
             raise HTTPException(status_code=400, detail="Method parameter is required")
 
-        method = request.method.upper()
+        method = request.method.value if isinstance(request.method, ValuationMethod) else request.method.upper()
 
         # CRITICAL: Get Step 9 confirmed outputs (Step 10 can ONLY use this)
         # Step 10 cannot access step6_data, step7_data, or step8_final_inputs directly
