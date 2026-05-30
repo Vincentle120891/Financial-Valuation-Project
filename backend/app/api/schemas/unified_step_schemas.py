@@ -244,6 +244,7 @@ class UnifiedStep4Request(BaseModel):
     session_id: str
     method: ValuationMethod
     market: MarketType = MarketType.INTERNATIONAL
+    max_peers: Optional[int] = Field(10, ge=1, le=50, description="Maximum number of peer companies to suggest")
     suggested_peers: Optional[List[str]] = None
     custom_peers: Optional[List[str]] = None
 
