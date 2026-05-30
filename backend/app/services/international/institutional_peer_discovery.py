@@ -41,6 +41,56 @@ def get_fmp_api_key(request: Optional[Request] = None) -> str:
     return default_key
 
 
+def _enrich_peer_with_yfinance(symbol: str) -> Optional[Dict[str, Any]]:
+    """
+    Enrich peer candidate with sector/industry data from yfinance.
+    
+    This is called when FMP profile data is missing industry/sector information.
+    Uses yfinance as a secondary source to fill in these critical fields.
+    
+    Args:
+        symbol: Stock ticker symbol
+        
+    Returns:
+        Dict with sector, industry, and other metadata, or None if fetch fails
+    """
+    try:
+        import yfinance as yf
+        
+        logger.info(f"[yfinance Enrichment] Fetching profile for {symbol}")
+        ticker = yf.Ticker(symbol)
+        info = ticker.info
+        
+        if not info:
+            logger.warning(f"[yfinance Enrichment] No info returned for {symbol}")
+            return None
+        
+        # Extract sector and industry
+        sector = info.get('sector')
+        industry = info.get('industry')
+        
+        # Also get additional useful data
+        market_cap = info.get('marketCap')
+        exchange = info.get('exchange', 'UNKNOWN')
+        company_name = info.get('longName', info.get('shortName', symbol))
+        
+        result = {
+            'sector': sector,
+            'industry': industry,
+            'market_cap': market_cap,
+            'exchange': exchange,
+            'company_name': company_name,
+            'source': 'yfinance'
+        }
+        
+        logger.info(f"[yfinance Enrichment] Successfully enriched {symbol}: sector={sector}, industry={industry}")
+        return result
+        
+    except Exception as e:
+        logger.warning(f"[yfinance Enrichment] Failed to enrich {symbol}: {e}")
+        return None
+
+
 class PeerDiscoveryRequest(BaseModel):
     """Request for peer discovery."""
     target_ticker: str
@@ -224,7 +274,8 @@ class InstitutionalPeerDiscoveryService:
 
     async def discover_peers(self, request_obj: PeerDiscoveryRequest) -> PeerDiscoveryResponse:
         """
-        Master discovery method executing Option B with Option A failover.
+        Master discovery method executing Option B with Option A failover,
+        2-hop expansion, real scoring, and strict filtering.
 
         Args:
             request_obj: PeerDiscoveryRequest with target ticker and method
@@ -232,6 +283,8 @@ class InstitutionalPeerDiscoveryService:
         Returns:
             PeerDiscoveryResponse with ranked peer candidates
         """
+        import math
+        
         target_symbol = request_obj.target_ticker.upper()
         _, target_country = extract_market_context(target_symbol)
 
@@ -242,15 +295,51 @@ class InstitutionalPeerDiscoveryService:
             'target_country': target_country
         }
 
-        # --- STEP 1: Execute Option B Strategy ---
-        candidate_symbols = _get_live_fmp_peers(target_symbol, self.request)
+        # --- STEP 1: Get Target Context for Scoring ---
+        target_profile_data = None
+        target_endpoints = [
+            f"https://financialmodelingprep.com/api/v3/profile/{target_symbol}?apikey={self.fmp_api_key}",
+            f"https://financialmodelingprep.com/stable/company-profile?symbol={target_symbol}&apikey={self.fmp_api_key}",
+        ]
+        for url in target_endpoints:
+            try:
+                resp = requests.get(url, timeout=5)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    if data and isinstance(data, list) and len(data) > 0:
+                        target_profile_data = data[0]
+                        break
+                    elif data and isinstance(data, dict) and "companyName" in data:
+                        target_profile_data = data
+                        break
+            except:
+                continue
+        
+        # Enrich target with yfinance if needed
+        if not target_profile_data or not target_profile_data.get("sector"):
+            yf_target = _enrich_peer_with_yfinance(target_symbol)
+            if yf_target:
+                if not target_profile_data:
+                    target_profile_data = {}
+                target_profile_data['sector'] = yf_target.get('sector')
+                target_profile_data['industry'] = yf_target.get('industry')
+                target_profile_data['marketCap'] = yf_target.get('market_cap', target_profile_data.get('marketCap'))
+        
+        target_sector = (target_profile_data.get("sector") or "").lower() if target_profile_data else ""
+        target_industry = (target_profile_data.get("industry") or "").lower() if target_profile_data else ""
+        target_market_cap = target_profile_data.get("marketCap", 0) if target_profile_data else 0
+        target_pe = target_profile_data.get("priceEarningsRatio") if target_profile_data else None
+        target_ev_ebitda = target_profile_data.get("evToEBITDA") if target_profile_data else None
 
-        # --- STEP 2: Automated Hybrid Transition ---
-        if not candidate_symbols:
+        # --- STEP 2: Execute Option B Strategy ---
+        candidate_symbols_raw = _get_live_fmp_peers(target_symbol, self.request)
+
+        # --- STEP 3: Automated Hybrid Transition ---
+        if not candidate_symbols_raw:
             warnings.append("Option B (FMP API) returned no results. Triggering Option A fallback.")
-            candidate_symbols = _get_local_fallback_peers(target_symbol)
+            candidate_symbols_raw = _get_local_fallback_peers(target_symbol)
 
-        if not candidate_symbols:
+        if not candidate_symbols_raw:
             logger.error(f"Peer discovery pipeline completely exhausted for {target_symbol}. Returning 0 assets.")
             return PeerDiscoveryResponse(
                 target_ticker=target_symbol,
@@ -260,40 +349,36 @@ class InstitutionalPeerDiscoveryService:
                 warnings=warnings + ["No peers found via Option B or Option A"]
             )
 
-        # --- STEP 3: Normalize Candidates & Fetch Profiles (Hybrid Best-Effort) ---
-        verified_peers = []
+        # Normalize to symbols list
+        candidate_symbols = []
+        for c in candidate_symbols_raw:
+            if isinstance(c, dict):
+                sym = c.get('symbol')
+                if sym:
+                    candidate_symbols.append(sym)
+            elif isinstance(c, str):
+                candidate_symbols.append(c)
+        
+        # --- STEP 4: 2-Hop Expansion (if initial list is small) ---
+        if len(candidate_symbols) < 8:
+            candidate_symbols = _expand_peer_network(candidate_symbols, target_symbol, expansion_count=3)
 
-        for candidate in candidate_symbols:
-            # Handle both dict format (from FMP API) and string format (from fallback)
-            if isinstance(candidate, dict):
-                symbol = candidate.get('symbol')
-                if not symbol:
-                    logger.warning(f"Skipping candidate without symbol: {candidate}")
-                    continue
-            else:
-                symbol = candidate
-            
-            # Ensure symbol is a string
-            if not isinstance(symbol, str):
-                logger.warning(f"Skipping invalid symbol type: {type(symbol)}")
-                continue
-                
-            # Prevent cross-contamination: Ensure peers align with target country
+        # --- STEP 5: Fetch Profiles, Enrich, Score & Filter ---
+        verified_peers = []
+        
+        for symbol in candidate_symbols:
+            # Market Boundary Check
             _, peer_country = extract_market_context(symbol)
             if peer_country != target_country:
                 continue
 
-            # Hybrid Approach: Try to fetch profile, but accept peer even if it fails
+            # Fetch profile
             profile_data = None
             profile_fetch_success = False
             exchange = "UNKNOWN"
+            
+            peer_from_list = next((p for p in candidate_symbols_raw if isinstance(p, dict) and p.get('symbol') == symbol), None)
 
-            # Use the stable stock-peers endpoint data if available (already fetched)
-            # The stock-peers endpoint returns: symbol, companyName, price, mktCap
-            # We'll use this as fallback and try to enhance with profile data
-            peer_from_list = next((p for p in candidate_symbols if isinstance(p, dict) and p.get('symbol') == symbol), None)
-
-            # Try multiple profile endpoints (legacy -> stable)
             profile_endpoints = [
                 f"https://financialmodelingprep.com/api/v3/profile/{symbol}?apikey={self.fmp_api_key}",
                 f"https://financialmodelingprep.com/stable/company-profile?symbol={symbol}&apikey={self.fmp_api_key}",
@@ -308,24 +393,16 @@ class InstitutionalPeerDiscoveryService:
                             profile_data = p_resp_json[0]
                             profile_fetch_success = True
                             exchange = profile_data.get("exchangeShortName", "UNKNOWN")
-                            logger.info(f"Profile fetched successfully for {symbol} via {profile_url[:60]}...")
                             break
                         elif p_resp_json and isinstance(p_resp_json, dict) and "companyName" in p_resp_json:
-                            # Handle single object response format
                             profile_data = p_resp_json
                             profile_fetch_success = True
                             exchange = profile_data.get("exchangeShortName", "UNKNOWN")
-                            logger.info(f"Profile fetched successfully for {symbol} via {profile_url[:60]}...")
                             break
-                    else:
-                        logger.debug(f"Profile fetch returned status {p_resp.status_code} for {symbol} on {profile_url[:50]}...")
                 except Exception as e:
-                    logger.debug(f"Profile fetch failed for {symbol} on {profile_url[:50]}...: {e}")
                     continue
 
             if not profile_fetch_success:
-                logger.warning(f"Profile fetch failed for {symbol}, accepting as unverified peer (Hybrid Mode)")
-                # Create minimal profile from symbol only, using data from stock-peers endpoint if available
                 profile_data = {
                     "companyName": peer_from_list.get('companyName', symbol) if peer_from_list else symbol,
                     "sector": None,
@@ -337,21 +414,92 @@ class InstitutionalPeerDiscoveryService:
                     "exchangeShortName": "UNKNOWN"
                 }
                 exchange = "UNKNOWN"
+            
+            # ENHANCEMENT: yfinance enrichment for missing sector/industry
+            if not profile_data.get("sector") or not profile_data.get("industry"):
+                yf_data = _enrich_peer_with_yfinance(symbol)
+                if yf_data:
+                    if yf_data.get('sector'):
+                        profile_data["sector"] = yf_data['sector']
+                    if yf_data.get('industry'):
+                        profile_data["industry"] = yf_data['industry']
+                    if not profile_data.get("marketCap") and yf_data.get('market_cap'):
+                        profile_data["marketCap"] = yf_data['market_cap']
+                    if profile_data.get("exchangeShortName") == "UNKNOWN" and yf_data.get('exchange'):
+                        profile_data["exchangeShortName"] = yf_data['exchange']
+                        exchange = yf_data['exchange']
+                    if profile_data.get("companyName") == symbol and yf_data.get('company_name'):
+                        profile_data["companyName"] = yf_data['company_name']
 
-            # Relaxed exchange validation: Accept all peers, but flag major exchanges
+            # --- STRICT FILTERING ---
+            p_sector = (profile_data.get("sector") or "").lower()
+            p_industry = (profile_data.get("industry") or "").lower()
+            
+            # Must share sector OR industry with target
+            sector_match = target_sector and p_sector and target_sector == p_sector
+            industry_match = target_industry and p_industry and target_industry == p_industry
+            
+            if not (sector_match or industry_match):
+                # Skip companies that don't share sector or industry
+                logger.debug(f"Filtered out {symbol}: sector={p_sector}, industry={p_industry} (no match with target)")
+                continue
+
+            # --- REAL SCORING ---
+            score = 0.0
+            reasons = []
+            
+            # Sector match score
+            if sector_match:
+                score += 40
+                reasons.append("Sector Match")
+            
+            # Industry match score (more specific = higher score)
+            if industry_match:
+                score += 30
+                reasons.append("Industry Match")
+            
+            # Market cap similarity (log-normal)
+            p_market_cap = profile_data.get("marketCap", 0)
+            if target_market_cap > 0 and p_market_cap and p_market_cap > 0:
+                ratio = math.log(max(p_market_cap, 1)) / math.log(max(target_market_cap, 1))
+                cap_similarity = 1 - abs(1 - ratio)
+                if cap_similarity > 0.3:
+                    score += 30 * cap_similarity
+                    reasons.append(f"Market Cap Similarity ({cap_similarity:.2f}x)")
+            
+            # PE ratio alignment
+            p_pe = profile_data.get("priceEarningsRatio")
+            if target_pe is not None and p_pe is not None:
+                pe_diff = abs(target_pe - p_pe)
+                pe_score = max(0, 15 - pe_diff)
+                score += pe_score
+                if pe_score > 7:
+                    reasons.append("PE Ratio Alignment")
+            
+            # EV/EBITDA alignment
+            p_ev = profile_data.get("evToEBITDA")
+            if target_ev_ebitda is not None and p_ev is not None:
+                ev_diff = abs(target_ev_ebitda - p_ev)
+                ev_score = max(0, 15 - ev_diff)
+                score += ev_score
+                if ev_score > 7:
+                    reasons.append("EV/EBITDA Alignment")
+            
+            # Data quality bonus
             major_exchanges = ["NYSE", "NASDAQ", "HOSE", "HNX", "TSE", "NYQ", "NMS", "AMEX", "LSE", "EURONEXT"]
             is_major_exchange = exchange in major_exchanges
-
-            # Calculate match score based on data quality
             if profile_fetch_success and is_major_exchange:
-                match_score = 0.8  # High confidence: verified + major exchange
-                verification_status = "Verified"
+                score += 10
+                reasons.append("Verified + Major Exchange")
             elif profile_fetch_success:
-                match_score = 0.6  # Medium confidence: verified but minor exchange
-                verification_status = "Verified (Minor Exchange)"
-            else:
-                match_score = 0.4  # Lower confidence: unverified but accepted
-                verification_status = "Unverified (Profile Unavailable)"
+                score += 5
+                reasons.append("Verified")
+            
+            # 2-hop penalty
+            is_expanded = symbol not in [c if isinstance(c, str) else c.get('symbol') for c in candidate_symbols_raw[:max(1, len(candidate_symbols_raw) - 2)]]
+            if is_expanded:
+                score *= 0.85
+                reasons.append("2nd Degree Connection")
 
             peer = PeerCandidate(
                 symbol=symbol,
@@ -363,19 +511,19 @@ class InstitutionalPeerDiscoveryService:
                 industry=profile_data.get("industry"),
                 market_cap=profile_data.get("marketCap"),
                 marketCap=profile_data.get("marketCap"),
-                match_score=match_score,
+                match_score=round(score, 2),
                 segments={},
                 pe_ratio=profile_data.get("priceEarningsRatio"),
                 ev_to_ebitda=profile_data.get("evToEBITDA"),
                 ps_ratio=profile_data.get("priceToSalesRatio"),
-                match_reasons=[
-                    f"Peer via {'Option B' if len(warnings) == 0 else 'Option A'}",
-                    f"Status: {verification_status}"
-                ]
+                match_reasons=reasons
             )
             verified_peers.append(peer)
 
-        logger.info(f"Pipeline complete. {len(verified_peers)} peers returned ({sum(1 for p in verified_peers if p.match_score >= 0.8)} verified, {sum(1 for p in verified_peers if p.match_score < 0.8)} unverified/partial).")
+        # Sort by score descending
+        verified_peers.sort(key=lambda x: x.match_score, reverse=True)
+        
+        logger.info(f"Pipeline complete. {len(verified_peers)} peers after strict filtering ({sum(1 for p in verified_peers if p.match_score >= 0.8)} high-quality).")
 
         return PeerDiscoveryResponse(
             target_ticker=target_symbol,
