@@ -169,7 +169,7 @@ export const fetchApiData = async (sessionId, method, market = 'international') 
   const response = await api.post('/step-6-fetch-api-data', {
     session_id: sessionId,
     method,
-    market
+    market: market.toUpperCase()
   });
   return response.data;
 };
@@ -181,7 +181,7 @@ export const retrieveHistoricalData = async (sessionId, method, market = 'intern
     const response = await aiApi.post('/step-7-retrieve-historical-data', {
       session_id: sessionId,
       method,
-      market
+      market: market.toUpperCase()
     });
     return response.data;
   } catch (error) {
@@ -199,7 +199,7 @@ export const initializeStep8Assumptions = async (sessionId, method, market = 'in
     const response = await api.post('/step-8-initialize', {
       session_id: sessionId,
       method,
-      market
+      market: market.toUpperCase()
     });
     return response.data;
   } catch (error) {
@@ -218,7 +218,7 @@ export const generateAISuggestion = async (sessionId, category, method, market =
       session_id: sessionId,
       category,
       method,
-      market
+      market: market.toUpperCase()
     });
     return response.data;
   } catch (error) {
@@ -237,7 +237,7 @@ export const confirmAssumptions = async (sessionId, confirmedValues, scenario = 
     confirmed_values: confirmedValues,
     scenario,
     method,
-    market
+    market: market.toUpperCase()
   });
   return response.data;
 };
@@ -249,7 +249,7 @@ export const runValuation = async (sessionId, method, scenario = 'base_case', ma
     session_id: sessionId,
     method,
     scenario,
-    market
+    market: market.toUpperCase()
   });
   return response.data;
 };
@@ -260,7 +260,7 @@ export const runValuationMulti = async (sessionId, methods, market = 'internatio
   const response = await api.post('/step-10-valuate-multi', {
     session_id: sessionId,
     methods,
-    market
+    market: market.toUpperCase()
   });
   return response.data;
 };
