@@ -56,6 +56,7 @@ from app.api.schemas.unified_step_schemas import (
     ValuationMethod,
     AssumptionCategoryType
 )
+from app.utils.api_key_resolver import check_api_keys_status, get_api_key
 
 # Import Step 4 method-specific discovery services
 from app.services.international.step4_dcf_discovery import process as dcf_discover_peers
@@ -1444,14 +1445,20 @@ async def save_api_keys(request: SaveApiKeysRequest):
 
 
 @router.get("/check-api-keys")
-async def check_api_keys(session_id: str):
+async def check_api_keys(request: Request, session_id: str):
     """
     Step 6: Check which API keys are configured for a session.
     
     Returns the status of all API keys stored in the session.
     Used by frontend to show configuration status and enable/disable buttons.
     
+    Uses centralized API key resolver with fallback chain:
+    1. Request headers (highest priority)
+    2. Session storage
+    3. Environment variables
+    
     Args:
+        request: FastAPI request object (for header extraction)
         session_id: Session identifier
         
     Returns:
@@ -1463,24 +1470,11 @@ async def check_api_keys(session_id: str):
         if not session:
             raise HTTPException(status_code=404, detail="Session not found")
         
-        # Get stored API keys from session
-        stored_keys = session_service.get_session_value(
-            session_id,
-            "api_keys",
-            {}
-        )
-        
-        # Check which keys are configured
-        keys_status = {
-            "openrouter": stored_keys.get("openrouter_api_key") is not None and len(stored_keys.get("openrouter_api_key", "")) > 0,
-            "alpha_vantage": stored_keys.get("alpha_vantage_key") is not None and len(stored_keys.get("alpha_vantage_key", "")) > 0,
-            "groq": stored_keys.get("groq_api_key") is not None and len(stored_keys.get("groq_api_key", "")) > 0,
-            "gemini": stored_keys.get("gemini_api_key") is not None and len(stored_keys.get("gemini_api_key", "")) > 0,
-            "qwen": stored_keys.get("qwen_api_key") is not None and len(stored_keys.get("qwen_api_key", "")) > 0,
-        }
+        # Use centralized API key resolver with fallback chain
+        keys_status = check_api_keys_status(request=request, session_id=session_id)
         
         # Add overall status
-        keys_status["all_required_configured"] = keys_status["openrouter"]
+        keys_status["all_required_configured"] = keys_status.get("openrouter", False)
         keys_status["total_configured"] = sum(1 for v in keys_status.values() if v and isinstance(v, bool))
         
         return keys_status
