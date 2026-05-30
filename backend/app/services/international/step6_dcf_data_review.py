@@ -238,29 +238,56 @@ class DCFStep6Processor:
             def build_financials_from_api_data(api_data_dict):
                 """Build pseudo time-series from APIAdapter flat data"""
                 if not api_data_dict:
-                    return None
-                # Extract all metric values into a single-period DataFrame
-                # Since APIAdapter returns current/latest values only
-                # IMPORTANT: Metrics must be in the INDEX (rows), not columns
-                # because _extract_metric_from_financials() searches df.index
-                metrics_data = {}
-                periods = ["Latest"]  # Single period for now
+                    return None, None, None
+                
+                # Categorize metrics by financial statement type based on metric registry
+                from app.core.metric_registry import METRIC_REGISTRY, MetricCategory
+                
+                income_metrics = {}
+                balance_sheet_metrics = {}
+                cash_flow_metrics = {}
+                
+                periods = ["Latest"]  # Single period for now (APIAdapter returns latest values)
+                
                 for metric_id, metric_info in api_data_dict.items():
-                    if isinstance(metric_info, dict) and "value" in metric_info:
-                        # Store metric_id as the INDEX key, value as the data
-                        metrics_data[metric_id] = metric_info["value"]
-                if not metrics_data:
-                    return None
-                # Create DataFrame with metrics as INDEX, not columns
-                df = pd.DataFrame.from_dict(metrics_data, orient='index', columns=periods)
-                logger.debug(f"[Step6DCF] Built financials_df with {len(df)} rows (metrics) and {len(df.columns)} periods")
-                logger.debug(f"[Step6DCF] financials_df.index (first 10): {list(df.index)[:10]}")
-                return df
+                    if not isinstance(metric_info, dict) or "value" not in metric_info:
+                        continue
+                    
+                    value = metric_info["value"]
+                    if value is None:
+                        continue
+                    
+                    # Get category from metric registry to determine which DataFrame
+                    metric_def = METRIC_REGISTRY.get(metric_id, {})
+                    category = metric_def.get("category")
+                    
+                    if category == MetricCategory.INCOME_STATEMENT:
+                        income_metrics[metric_id] = value
+                    elif category == MetricCategory.BALANCE_SHEET:
+                        balance_sheet_metrics[metric_id] = value
+                    elif category == MetricCategory.CASH_FLOW:
+                        cash_flow_metrics[metric_id] = value
+                    else:
+                        # Default to income statement for unknown categories
+                        income_metrics[metric_id] = value
+                
+                # Build DataFrames with metrics as INDEX (rows), not columns
+                # This is critical because _extract_metric_from_financials() searches df.index
+                income_df = pd.DataFrame.from_dict(income_metrics, orient='index', columns=periods) if income_metrics else None
+                balance_df = pd.DataFrame.from_dict(balance_sheet_metrics, orient='index', columns=periods) if balance_sheet_metrics else None
+                cashflow_df = pd.DataFrame.from_dict(cash_flow_metrics, orient='index', columns=periods) if cash_flow_metrics else None
+                
+                if income_df is not None:
+                    logger.debug(f"[Step6DCF] Built income_df with {len(income_df)} rows (metrics): {list(income_df.index)[:10]}...")
+                if balance_df is not None:
+                    logger.debug(f"[Step6DCF] Built balance_df with {len(balance_df)} rows (metrics): {list(balance_df.index)[:10]}...")
+                if cashflow_df is not None:
+                    logger.debug(f"[Step6DCF] Built cashflow_df with {len(cashflow_df)} rows (metrics): {list(cashflow_df.index)[:10]}...")
+                
+                return income_df, balance_df, cashflow_df
 
-            # Build DataFrames from API data
-            financials_df = build_financials_from_api_data(api_data)
-            balance_sheet_df = None  # Would need separate balance sheet API call
-            cashflow_df = None  # Would need separate cash flow API call
+            # Build DataFrames from API data - now returns all three DataFrames
+            financials_df, balance_sheet_df, cashflow_df = build_financials_from_api_data(api_data)
 
 
             historical_data = historical_data or {
