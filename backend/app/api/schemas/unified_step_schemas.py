@@ -900,6 +900,21 @@ class UnifiedStep10Request(BaseModel):
     run_sensitivity: bool = True
     scenario_analysis: bool = True
 
+    @field_validator('market', mode='before')
+    @classmethod
+    def validate_market(cls, v):
+        if v is None or (isinstance(v, str) and v.strip() == ''):
+            # If None or empty string, use default
+            return MarketType.INTERNATIONAL
+        if isinstance(v, str):
+            # Convert to uppercase to match enum keys
+            v_upper = v.upper()
+            if v_upper == 'INTERNATIONAL':
+                return MarketType.INTERNATIONAL
+            elif v_upper == 'VIETNAM':
+                return MarketType.VIETNAM
+        return v
+
 
 class UnifiedStep10Response(BaseModel):
     """Step 10: Valuation completed"""
