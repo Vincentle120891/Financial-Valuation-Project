@@ -71,7 +71,7 @@ aiApi.interceptors.request.use(
 export const searchCompanies = async (query, market = 'international') => {
   // Use unified POST endpoint for ALL markets - no routing based on market
   try {
-    const response = await api.post('/step-1-search', { query, market: market.toUpperCase() });
+    const response = await api.post('/step-1-search', { query, market: market.toLowerCase() });
     return transformVietnameseResponse(response.data, market);
   } catch (error) {
     console.error('Search companies error:', error);

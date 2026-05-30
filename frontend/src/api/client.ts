@@ -134,25 +134,25 @@ export const valuationApi = {
   // Step 1: Search Company
   searchCompany: (query: string, market: string = 'international') =>
     typedApiClient.POST('/api/step-1-search', {
-      body: { query, market: market.toUpperCase() }
+      body: { query, market: market.toLowerCase() }
     }),
 
   // Step 2: Create Session
   createSession: (sessionId: string, ticker: string, market: string = 'international') =>
     typedApiClient.POST('/api/step-2-create-session', {
-      body: { session_id: sessionId, ticker, market: market.toUpperCase() }
+      body: { session_id: sessionId, ticker, market: market.toLowerCase() }
     }),
 
   // Step 3: Select Model
   selectModel: (sessionId: string, method: string, market: string = 'international') =>
     typedApiClient.POST('/api/step-3-select-models', {
-      body: { session_id: sessionId, method: method.toUpperCase(), market: market.toUpperCase() }
+      body: { session_id: sessionId, method: method.toUpperCase(), market: market.toLowerCase() }
     }),
 
   // Step 4: Discover Peers
   discoverPeers: (sessionId: string, ticker: string, market: string, method: string, maxPeers: number = 10) =>
     typedApiClient.POST('/api/step-4-discover-peers', {
-      body: { session_id: sessionId, ticker, market: market.toUpperCase(), method: method.toUpperCase(), max_peers: maxPeers }
+      body: { session_id: sessionId, ticker, market: market.toLowerCase(), method: method.toUpperCase(), max_peers: maxPeers }
     }),
 
   // Step 4: Save Selected Peers
@@ -164,49 +164,49 @@ export const valuationApi = {
   // Step 5: Prepare Assumptions
   prepareAssumptions: (sessionId: string, method: string, market: string, generateAi: boolean = true) =>
     typedApiClient.POST('/api/step-5-prepare-assumptions', {
-      body: { session_id: sessionId, method: method.toUpperCase(), market: market.toUpperCase(), generate_ai: generateAi }
+      body: { session_id: sessionId, method: method.toUpperCase(), market: market.toLowerCase(), generate_ai: generateAi }
     }),
 
   // Step 6: Fetch API Data
   fetchApiData: (sessionId: string, method: string, market: string) =>
     typedApiClient.POST('/api/step-6-fetch-api-data', {
-      body: { session_id: sessionId, method: method.toUpperCase(), market: market.toUpperCase() }
+      body: { session_id: sessionId, method: method.toUpperCase(), market: market.toLowerCase() }
     }),
 
   // Step 7: Retrieve Historical Data
   retrieveHistoricalData: (sessionId: string, method: string, market: string) =>
     typedApiClient.POST('/api/step-7-retrieve-historical-data', {
-      body: { session_id: sessionId, method: method.toUpperCase(), market: market.toUpperCase() }
+      body: { session_id: sessionId, method: method.toUpperCase(), market: market.toLowerCase() }
     }),
 
   // Step 8: Initialize Assumptions
   initializeAssumptions: (sessionId: string, method: string, market: string) =>
     typedApiClient.POST('/api/step-8-initialize', {
-      body: { session_id: sessionId, method: method.toUpperCase(), market: market.toUpperCase() }
+      body: { session_id: sessionId, method: method.toUpperCase(), market: market.toLowerCase() }
     }),
 
   // Step 8: Generate AI Suggestion
   generateAiSuggestion: (sessionId: string, category: string, method: string, market: string) =>
     typedApiClient.POST('/api/step-8-generate-ai-suggestion', {
-      body: { session_id: sessionId, category, method: method.toUpperCase(), market: market.toUpperCase() }
+      body: { session_id: sessionId, category, method: method.toUpperCase(), market: market.toLowerCase() }
     }),
 
   // Step 9: Confirm Assumptions
   confirmAssumptions: (sessionId: string, confirmedValues: any, scenario: string, method: string, market: string) =>
     typedApiClient.POST('/api/step-9-confirm-assumptions', {
-      body: { session_id: sessionId, confirmed_values: confirmedValues, scenario, method: method.toUpperCase(), market: market.toUpperCase() }
+      body: { session_id: sessionId, confirmed_values: confirmedValues, scenario, method: method.toUpperCase(), market: market.toLowerCase() }
     }),
 
   // Step 10: Run Valuation (Single)
   runValuation: (sessionId: string, method: string, scenario: string, market: string) =>
     typedApiClient.POST('/api/step-10-valuate', {
-      body: { session_id: sessionId, method: method.toUpperCase(), scenario, market: market.toUpperCase() }
+      body: { session_id: sessionId, method: method.toUpperCase(), scenario, market: market.toLowerCase() }
     }),
 
   // Step 10: Run Valuation (Multi)
   runValuationMulti: (sessionId: string, methods: string[], market: string) =>
     typedApiClient.POST('/api/step-10-valuate-multi', {
-      body: { session_id: sessionId, methods: methods.map(m => m.toUpperCase()), market: market.toUpperCase() }
+      body: { session_id: sessionId, methods: methods.map(m => m.toUpperCase()), market: market.toLowerCase() }
     }),
 };
 

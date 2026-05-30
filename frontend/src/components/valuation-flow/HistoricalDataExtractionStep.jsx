@@ -85,7 +85,7 @@ const HistoricalDataExtractionStep = ({
       formData.append('file', file);
       formData.append('session_id', sessionId);
       formData.append('method', selectedModel || 'DCF');
-      formData.append('market', market.toUpperCase());
+      formData.append('market', market.toLowerCase());
 
       const response = await fetch('/api/step-7-upload-pdf', {
         method: 'POST',
@@ -138,7 +138,7 @@ const HistoricalDataExtractionStep = ({
           ticker: ticker,
           company_name: companyName || ticker,
           method: selectedModel || 'DCF',
-          market: market.toUpperCase()
+          market: market.toLowerCase()
         })
       });
 
@@ -185,7 +185,7 @@ const HistoricalDataExtractionStep = ({
           company_name: companyName || ticker,
           email: secEdgarEmail,
           method: selectedModel || 'DCF',
-          market: market.toUpperCase()
+          market: market.toLowerCase()
         })
       });
 
