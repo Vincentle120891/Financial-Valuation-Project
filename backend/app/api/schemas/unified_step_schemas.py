@@ -58,6 +58,7 @@ class DataField(BaseModel):
     - Source attribution
     - Manual override flags
     - Confidence scoring
+    - Multi-year vs single-year input detection
     """
     value: Optional[Any] = Field(None, description="Field value (any type)")
     status: DataStatus = Field(DataStatus.RETRIEVED, description="Data status")
@@ -71,6 +72,7 @@ class DataField(BaseModel):
     reporting_period: Optional[str] = Field(None, description="Reporting period (FY2023, Q1-2024, etc.)")
     last_updated: Optional[datetime] = Field(None, description="Last update timestamp")
     description: Optional[str] = Field(None, description="Field description for UI display")
+    is_multi_year: bool = Field(False, description="Flag indicating if this field requires multi-year input (year-by-year) vs single value")
 
 class MissingDataSummary(BaseModel):
     """Comprehensive summary of missing data for any step"""
