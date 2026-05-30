@@ -37,8 +37,12 @@ from app.api.schemas.unified_step_schemas import (
     MarketType,
     ValuationMethod,
     AssumptionCategoryType,
-    AISuggestionCategoryResponse,
+    AssumptionCategoryResponse,
 )
+
+# Backward compatibility alias
+AISuggestionCategoryResponse = AssumptionCategoryResponse
+
 from app.utils.api_key_resolver import check_api_keys_status, get_api_key
 
 # Import Step 4 method-specific discovery services
