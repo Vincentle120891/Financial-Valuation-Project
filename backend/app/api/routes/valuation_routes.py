@@ -38,7 +38,8 @@ from app.api.schemas import (
     ValuationMethod,
     AssumptionCategoryType,
     AssumptionCategoryResponse,
-    AISuggestionCategoryResponse,
+    UnifiedStep10Response as MultiMethodValuateResponse,
+    UnifiedStep10Request as MultiMethodValuateRequest,
 )
 
 from app.utils.api_key_resolver import check_api_keys_status, get_api_key
