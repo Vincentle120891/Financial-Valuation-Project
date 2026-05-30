@@ -17,6 +17,7 @@ from app.api.schemas import (
     TickerSelectRequest,
 )
 from app.services.international.step2_market_data_processor import Step2MarketDataProcessor
+from app.utils.api_key_resolver import check_api_keys_status
 
 logger = get_logger(__name__)
 

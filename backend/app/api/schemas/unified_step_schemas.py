@@ -58,6 +58,7 @@ class DataField(BaseModel):
     - Source attribution
     - Manual override flags
     - Confidence scoring
+    - Multi-year vs single-year input detection
     """
     value: Optional[Any] = Field(None, description="Field value (any type)")
     status: DataStatus = Field(DataStatus.RETRIEVED, description="Data status")
@@ -71,6 +72,7 @@ class DataField(BaseModel):
     reporting_period: Optional[str] = Field(None, description="Reporting period (FY2023, Q1-2024, etc.)")
     last_updated: Optional[datetime] = Field(None, description="Last update timestamp")
     description: Optional[str] = Field(None, description="Field description for UI display")
+    is_multi_year: bool = Field(False, description="Flag indicating if this field requires multi-year input (year-by-year) vs single value")
 
 class MissingDataSummary(BaseModel):
     """Comprehensive summary of missing data for any step"""
@@ -638,27 +640,34 @@ class FullAssumptionsResponse(BaseModel):
     message: str = Field("", description="Overall message or instructions")
 
 
-class UnifiedStep8InitializeRequest(BaseModel):
-    """Step 8: Initialize assumptions with historical trendlines"""
+# =============================================================================
+# STEP 8: ASSUMPTIONS & AI SUGGESTION
+# =============================================================================
+
+class UnifiedStep8Request(BaseModel):
+    """Step 8: Base request for all assumption operations
+    
+    This is the base schema that all Step 8 operations inherit from.
+    Specific operations (initialize, generate_ai, apply_override) have
+    their own specialized request schemas below.
+    """
     session_id: str = Field(..., description="Session identifier")
     method: ValuationMethod = Field(..., description="Valuation method")
     market: MarketType = Field(..., description="Market type")
+
+
+class UnifiedStep8InitializeRequest(UnifiedStep8Request):
+    """Step 8: Initialize assumptions with historical trendlines"""
     include_ai_suggestions: bool = Field(False, description="Whether to include AI suggestions on initialization")
 
 
-class UnifiedStep8GenerateAISuggestionRequest(BaseModel):
+class UnifiedStep8GenerateAISuggestionRequest(UnifiedStep8Request):
     """Step 8: Generate AI suggestions for a specific category"""
-    session_id: str = Field(..., description="Session identifier")
-    method: ValuationMethod = Field(..., description="Valuation method")
-    market: MarketType = Field(..., description="Market type")
     category: AssumptionCategoryType = Field(..., description="Category to generate suggestions for")
 
 
-class UnifiedStep8ApplyOverrideRequest(BaseModel):
+class UnifiedStep8ApplyOverrideRequest(UnifiedStep8Request):
     """Step 8: Apply user override or accept AI suggestion"""
-    session_id: str = Field(..., description="Session identifier")
-    method: ValuationMethod = Field(..., description="Valuation method")
-    market: MarketType = Field(..., description="Market type")
     category: AssumptionCategoryType = Field(..., description="Category of the assumption")
     metric: str = Field(..., description="Metric name to override")
     override_value: Optional[float] = Field(None, description="User-provided override value")
