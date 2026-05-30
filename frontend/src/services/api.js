@@ -114,6 +114,7 @@ export const suggestPeers = async (ticker, market = 'international', maxPeers = 
     max_peers: maxPeers,
     method: method ? method.toUpperCase() : null, // Pass selected valuation method for method-specific peer criteria
     session_id: sessionId // Include session_id to store suggestions and prevent re-fetching loop
+    // Note: ticker is NOT sent - backend extracts it from session using session_id
   });
   return response.data;
 };
