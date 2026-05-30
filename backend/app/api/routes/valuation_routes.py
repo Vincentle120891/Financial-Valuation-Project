@@ -12,7 +12,7 @@ from fastapi import APIRouter, HTTPException, UploadFile, File, Request
 from pydantic import BaseModel, Field
 from app.core.logging_config import get_logger
 from app.core.session_service import session_service
-from app.api.schemas.unified_step_schemas import (
+from app.api.schemas import (
     UnifiedStep4Request,
     UnifiedStep4Response,
     UnifiedStep5Request,
@@ -38,10 +38,8 @@ from app.api.schemas.unified_step_schemas import (
     ValuationMethod,
     AssumptionCategoryType,
     AssumptionCategoryResponse,
+    AISuggestionCategoryResponse,
 )
-
-# Backward compatibility alias
-AISuggestionCategoryResponse = AssumptionCategoryResponse
 
 from app.utils.api_key_resolver import check_api_keys_status, get_api_key
 

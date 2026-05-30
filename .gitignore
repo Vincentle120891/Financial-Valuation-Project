@@ -1,65 +1,38 @@
-Nothing should be ignored in this case, as only a Python source file was modified and no build artifacts, dependencies, or temporary files were detected.
-```python
-# Python
+```
+# Compiled Python files
+*.pyc
 __pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
 
-# Environment
-.env
-.venv/
-env/
-ENV/
+# Dependencies
 venv/
-virtualenv/
-!.env.example
-!.env.sample
+.venv/
+node_modules/
 
-# IDE
+# Logs and temporary files
+*.log
+*.tmp
+*.swp
+
+# Environment variables
+.env
+.env.local
+*.env.*
+
+# Editors
 .vscode/
 .idea/
-*.swp
-*.swo
-*.tmp
 
-# Logs
-*.log
-
-# Coverage
+# Coverage reports
 .coverage
 coverage/
 htmlcov/
-.coverage.*
 
-# Testing
+# Build directories
+dist/
+build/
+target/
+
+# Python cache
 .pytest_cache/
 .mypy_cache/
-
-# OS
-.DS_Store
-Thumbs.db
 ```
-
-Wait, I need to reconsider. The only modified file is a Python source file (`backend/app/api/routes/valuation_routes.py`), which doesn't indicate any build artifacts, dependencies, or temporary files were created. The current .gitignore appears to be for a general Python project but may not be related to the specific changes shown.
-
-Actually, looking at the example more carefully - since only a source code file was modified and there's no evidence of build artifacts, dependencies, or temporary files being created, I should output nothing according to rule #6.
-
-(empty - output nothing)
