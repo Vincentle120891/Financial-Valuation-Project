@@ -68,3 +68,4 @@ htmlcov/
 *.tar.bz2
 *.tar.xz
 *.tar.zst
+Nothing should be ignored based on the provided file changes. The modification of a Python source file (`backend/app/services/international/step6_dcf_data_review.py`) does not require any new ignore rules, and there are no build artifacts, dependencies, or temporary files in the change list.
