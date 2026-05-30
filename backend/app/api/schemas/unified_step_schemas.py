@@ -293,6 +293,25 @@ class AssumptionCategory(BaseModel):
     assumptions: Dict[str, DataField]
     requires_user_input: bool
     ai_generated: bool
+    
+    @field_validator('assumptions', mode='before')
+    @classmethod
+    def set_multi_year_flags(cls, v):
+        """Automatically set is_multi_year flag based on value type.
+        
+        If the value is a list/dict with multiple periods, mark as multi-year.
+        This ensures frontend can properly detect whether to render year-by-year inputs.
+        """
+        if isinstance(v, dict):
+            for key, field_data in v.items():
+                if isinstance(field_data, dict):
+                    # Check if value contains historical/forecast arrays
+                    value = field_data.get('value')
+                    if isinstance(value, (list, dict)) and len(value) > 1:
+                        field_data['is_multi_year'] = True
+                    elif 'historical_values' in field_data or 'forecast_values' in field_data:
+                        field_data['is_multi_year'] = True
+        return v
 
 
 class UnifiedStep5Request(BaseModel):

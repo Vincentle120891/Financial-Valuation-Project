@@ -12,24 +12,6 @@ from fastapi import APIRouter, HTTPException, UploadFile, File, Request
 from pydantic import BaseModel, Field
 from app.core.logging_config import get_logger
 from app.core.session_service import session_service
-from app.api.schemas import (
-    ModelSelectRequest,
-    ModelSelectResponse,
-    PrepareInputsRequest,
-    PrepareInputsResponse,
-    FetchDataRequest,
-    FetchDataResponse,
-    GenerateAIRequest,
-    GenerateAIResponse,
-    GenerateAISuggestionRequest,
-    AISuggestionCategoryResponse,
-    ConfirmAssumptionsRequest,
-    ConfirmAssumptionsResponse,
-    ValuateRequest,
-    ValuateResponse,
-    MultiMethodValuateRequest,
-    MultiMethodValuateResponse
-)
 from app.api.schemas.unified_step_schemas import (
     UnifiedStep4Request,
     UnifiedStep4Response,
@@ -54,7 +36,8 @@ from app.api.schemas.unified_step_schemas import (
     MissingDataSummary,
     MarketType,
     ValuationMethod,
-    AssumptionCategoryType
+    AssumptionCategoryType,
+    AISuggestionCategoryResponse,
 )
 from app.utils.api_key_resolver import check_api_keys_status, get_api_key
 
@@ -1331,13 +1314,20 @@ async def valuate_multi_method(request: MultiMethodValuateRequest):
 # ============================================================================
 
 class SaveApiKeysRequest(BaseModel):
-    """Request to save API keys to session"""
+    """Request to save API keys to session
+    
+    Uses standardized service names matching api_key_resolver.py config.
+    Frontend should send keys using these exact field names.
+    """
     session_id: str
-    openrouter_api_key: Optional[str] = None
-    alpha_vantage_key: Optional[str] = None
-    groq_api_key: Optional[str] = None
-    gemini_api_key: Optional[str] = None
-    qwen_api_key: Optional[str] = None
+    fmp: Optional[str] = Field(None, description="Financial Modeling Prep API key")
+    alpha_vantage: Optional[str] = Field(None, description="Alpha Vantage API key")
+    fred: Optional[str] = Field(None, description="FRED API key")
+    sec_edgar: Optional[str] = Field(None, description="SEC EDGAR email/identifier")
+    openrouter: Optional[str] = Field(None, description="OpenRouter AI API key")
+    groq: Optional[str] = Field(None, description="Groq AI API key")
+    gemini: Optional[str] = Field(None, description="Google Gemini API key")
+    qwen: Optional[str] = Field(None, description="Qwen/DashScope AI API key")
 
 
 class SaveApiKeysResponse(BaseModel):
@@ -1356,9 +1346,10 @@ async def save_api_keys(request: SaveApiKeysRequest):
     Keys are encrypted and stored per-session.
     
     Required Keys:
-    - openrouter_api_key: Primary AI provider for Step 7-8
-    - alpha_vantage_key: Financial data API (optional if using yfinance)
-    - groq_api_key, gemini_api_key, qwen_api_key: Alternative AI providers
+    - openrouter: Primary AI provider for Step 7-8
+    - alpha_vantage: Financial data API (optional if using yfinance)
+    - groq, gemini, qwen: Alternative AI providers
+    - fmp, fred, sec_edgar: Financial data APIs
     
     Args:
         request: SaveApiKeysRequest with session_id and API keys
@@ -1372,18 +1363,24 @@ async def save_api_keys(request: SaveApiKeysRequest):
         if not session:
             raise HTTPException(status_code=404, detail="Session not found")
         
-        # Build keys dictionary from request
+        # Build keys dictionary from request using standardized service names
         api_keys = {}
-        if request.openrouter_api_key:
-            api_keys["openrouter_api_key"] = request.openrouter_api_key
-        if request.alpha_vantage_key:
-            api_keys["alpha_vantage_key"] = request.alpha_vantage_key
-        if request.groq_api_key:
-            api_keys["groq_api_key"] = request.groq_api_key
-        if request.gemini_api_key:
-            api_keys["gemini_api_key"] = request.gemini_api_key
-        if request.qwen_api_key:
-            api_keys["qwen_api_key"] = request.qwen_api_key
+        if request.fmp:
+            api_keys["fmp"] = request.fmp
+        if request.alpha_vantage:
+            api_keys["alpha_vantage"] = request.alpha_vantage
+        if request.fred:
+            api_keys["fred"] = request.fred
+        if request.sec_edgar:
+            api_keys["sec_edgar"] = request.sec_edgar
+        if request.openrouter:
+            api_keys["openrouter"] = request.openrouter
+        if request.groq:
+            api_keys["groq"] = request.groq
+        if request.gemini:
+            api_keys["gemini"] = request.gemini
+        if request.qwen:
+            api_keys["qwen"] = request.qwen
         
         # Store keys in session under dedicated 'api_keys' section
         session_service.update_session_data(
@@ -1392,13 +1389,16 @@ async def save_api_keys(request: SaveApiKeysRequest):
             api_keys
         )
         
-        # Return status of all keys
+        # Return status of all keys using standardized service names
         keys_configured = {
-            "openrouter": request.openrouter_api_key is not None,
-            "alpha_vantage": request.alpha_vantage_key is not None,
-            "groq": request.groq_api_key is not None,
-            "gemini": request.gemini_api_key is not None,
-            "qwen": request.qwen_api_key is not None,
+            "fmp": request.fmp is not None,
+            "alpha_vantage": request.alpha_vantage is not None,
+            "fred": request.fred is not None,
+            "sec_edgar": request.sec_edgar is not None,
+            "openrouter": request.openrouter is not None,
+            "groq": request.groq is not None,
+            "gemini": request.gemini is not None,
+            "qwen": request.qwen is not None,
         }
         
         return SaveApiKeysResponse(
@@ -1443,9 +1443,13 @@ async def check_api_keys(request: Request, session_id: str):
         # Use centralized API key resolver with fallback chain
         keys_status = check_api_keys_status(request=request, session_id=session_id)
         
-        # Add overall status
+        # Add overall status - openrouter is required for AI features
         keys_status["all_required_configured"] = keys_status.get("openrouter", False)
-        keys_status["total_configured"] = sum(1 for v in keys_status.values() if v and isinstance(v, bool))
+        # Count only boolean values (service statuses), not metadata fields
+        keys_status["total_configured"] = sum(
+            1 for k, v in keys_status.items() 
+            if isinstance(v, bool) and k not in ["all_required_configured", "total_configured"]
+        )
         
         return keys_status
         
