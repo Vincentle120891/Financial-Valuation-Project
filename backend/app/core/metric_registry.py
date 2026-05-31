@@ -29,7 +29,7 @@ METRIC_REGISTRY: Dict[str, Dict[str, Any]] = {
         "type": DataType.FLOAT,
         "unit": "currency",
         "sources": {
-            "yfinance": "Total Revenue",  # From financials index
+            "yfinance": "TotalRevenue",  # From financials index (CamelCase without spaces for yfinance v1.3.0+)
             "alpha_vantage": "totalRevenue",
             "financial_modeling_prep": "revenue"
         },
@@ -42,7 +42,7 @@ METRIC_REGISTRY: Dict[str, Dict[str, Any]] = {
         "type": DataType.FLOAT,
         "unit": "currency",
         "sources": {
-            "yfinance": "Operating Income",  # From financials index
+            "yfinance": "OperatingIncome",  # From financials index (CamelCase without spaces for yfinance v1.3.0+)
             "alpha_vantage": "operatingIncome",
             "financial_modeling_prep": "operating_income"
         },
@@ -55,7 +55,7 @@ METRIC_REGISTRY: Dict[str, Dict[str, Any]] = {
         "type": DataType.FLOAT,
         "unit": "currency",
         "sources": {
-            "yfinance": "Net Income Common Stockholders",  # From financials index
+            "yfinance": "NetIncomeCommonStockholders",  # From financials index (CamelCase without spaces for yfinance v1.3.0+)
             "alpha_vantage": "netIncome",
             "financial_modeling_prep": "net_income"
         },
@@ -82,7 +82,7 @@ METRIC_REGISTRY: Dict[str, Dict[str, Any]] = {
         "type": DataType.FLOAT,
         "unit": "currency",
         "sources": {
-            "yfinance": "Reconciled Depreciation",  # From financials index
+            "yfinance": "ReconciledDepreciation",  # From financials index (CamelCase without spaces for yfinance v1.3.0+)
             "alpha_vantage": "depreciationAndAmortization",
             "financial_modeling_prep": "depreciation_and_amortization"
         },
@@ -97,7 +97,7 @@ METRIC_REGISTRY: Dict[str, Dict[str, Any]] = {
         "type": DataType.FLOAT,
         "unit": "currency",
         "sources": {
-            "yfinance": "Total Assets",  # From balance sheet index
+            "yfinance": "TotalAssets",  # From balance sheet index (CamelCase without spaces for yfinance v1.3.0+)
             "alpha_vantage": "totalAssets",
             "financial_modeling_prep": "total_assets"
         },
@@ -110,7 +110,7 @@ METRIC_REGISTRY: Dict[str, Dict[str, Any]] = {
         "type": DataType.FLOAT,
         "unit": "currency",
         "sources": {
-            "yfinance": "Total Liabilities Net Minority Interest",  # From balance sheet
+            "yfinance": "TotalLiabilitiesNetMinorityInterest",  # From balance sheet (CamelCase without spaces for yfinance v1.3.0+)
             "alpha_vantage": "totalLiabilities",
             "financial_modeling_prep": "total_liabilities"
         },
@@ -123,7 +123,7 @@ METRIC_REGISTRY: Dict[str, Dict[str, Any]] = {
         "type": DataType.FLOAT,
         "unit": "currency",
         "sources": {
-            "yfinance": "Stockholders Equity",  # From balance sheet
+            "yfinance": "StockholdersEquity",  # From balance sheet (CamelCase without spaces for yfinance v1.3.0+)
             "alpha_vantage": "totalShareholderEquity",
             "financial_modeling_prep": "total_equity"
         },
@@ -136,7 +136,7 @@ METRIC_REGISTRY: Dict[str, Dict[str, Any]] = {
         "type": DataType.FLOAT,
         "unit": "currency",
         "sources": {
-            "yfinance": "Cash And Cash Equivalents",  # From balance sheet
+            "yfinance": "CashAndCashEquivalents",  # From balance sheet (CamelCase without spaces for yfinance v1.3.0+)
             "alpha_vantage": "cashAndCashEquivalents",
             "financial_modeling_prep": "cash_and_short_term_investments"
         },
@@ -149,7 +149,7 @@ METRIC_REGISTRY: Dict[str, Dict[str, Any]] = {
         "type": DataType.FLOAT,
         "unit": "currency",
         "sources": {
-            "yfinance": "Total Debt",  # From balance sheet
+            "yfinance": "TotalDebt",  # From balance sheet (CamelCase without spaces for yfinance v1.3.0+)
             "alpha_vantage": "totalDebt",
             "financial_modeling_prep": "total_debt"
         },
@@ -165,7 +165,7 @@ METRIC_REGISTRY: Dict[str, Dict[str, Any]] = {
         "type": DataType.FLOAT,
         "unit": "currency",
         "sources": {
-            "yfinance": "Operating Cash Flow",  # From cash flow
+            "yfinance": "OperatingCashFlow",  # From cash flow (CamelCase without spaces for yfinance v1.3.0+)
             "alpha_vantage": "operatingCashflow",
             "financial_modeling_prep": "operating_cash_flow"
         },
@@ -178,7 +178,7 @@ METRIC_REGISTRY: Dict[str, Dict[str, Any]] = {
         "type": DataType.FLOAT,
         "unit": "currency",
         "sources": {
-            "yfinance": "Capital Expenditure",  # From cash flow
+            "yfinance": "CapitalExpenditure",  # From cash flow (CamelCase without spaces for yfinance v1.3.0+)
             "alpha_vantage": "capitalExpenditure",
             "financial_modeling_prep": "capital_expenditure"
         },
@@ -192,7 +192,7 @@ METRIC_REGISTRY: Dict[str, Dict[str, Any]] = {
         "type": DataType.FLOAT,
         "unit": "currency",
         "sources": {
-            "yfinance": "Free Cash Flow",  # From cash flow
+            "yfinance": "FreeCashFlow",  # From cash flow (CamelCase without spaces for yfinance v1.3.0+)
             "alpha_vantage": "freeCashflow",
             "financial_modeling_prep": "free_cash_flow"
         },
