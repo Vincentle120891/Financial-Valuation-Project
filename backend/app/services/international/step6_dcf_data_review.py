@@ -121,7 +121,7 @@ class DCFDataReviewResponse(BaseModel):
     valuation_model: str = "DCF"
     historical_financials: Optional[HistoricalFinancialsDisplay] = None
     forecast_drivers: Optional[ForecastDriversDisplay] = None
-    market_data: Optional[MarketDataDisplay] = None
+    market_ Optional[MarketDataDisplay] = None
     peer_comparables: Optional[PeerComparablesDisplay] = None
     calculated_metrics: Optional[CalculatedMetricsDisplay] = None
     missing_data_summary: Optional[MissingDataSummary] = None
@@ -140,7 +140,7 @@ class DCFStep6Processor:
     - Opening Balances (Net Working Capital, Net PP&E, Total Debt)
     - Peer Comparables for WACC (Beta, Market Cap, Cost of Debt, Tax Rate)
     - Intermediate Metrics (Growth rates, Margins - NOT WACC/TV/Fair Value)
-    
+
     INTEGRATION: Uses APIAdapter with audit logging and versioning support
     """
 
@@ -154,9 +154,9 @@ class DCFStep6Processor:
         self,
         ticker: str,
         market: str = "international",
-        historical_data: Optional[Dict] = None,
-        market_data: Optional[Dict] = None,
-        forecast_data: Optional[Dict] = None,
+        historical_ Optional[Dict] = None,
+        market_ Optional[Dict] = None,
+        forecast_ Optional[Dict] = None,
         retrieved_assumptions: Optional[Dict] = None,
         user_overrides: Optional[Dict[str, Any]] = None,
         session_cache: Optional[Dict] = None  # NEW: Session cache for "Fetch Once, Use Many"
@@ -170,9 +170,9 @@ class DCFStep6Processor:
         Args:
             ticker: Stock ticker symbol
             market: Market identifier
-            historical_data: Historical financial data (optional, will fetch if not provided)
-            market_data: Market data (optional, will fetch if not provided)
-            forecast_data: Forecast/analyst estimates (optional)
+            historical_ Historical financial data (optional, will fetch if not provided)
+            market_ Market data (optional, will fetch if not provided)
+            forecast_ Forecast/analyst estimates (optional)
             retrieved_assumptions: Retrieved assumptions including peer data
             user_overrides: Manual overrides applied by user
             session_cache: Session cache dict to check before fetching (implements "Fetch Once, Use Many")
@@ -185,7 +185,7 @@ class DCFStep6Processor:
         if session_id:
             self._audit_logger = get_audit_logger(session_id)
             self._versioning_service = get_versioning_service(session_id)
-        
+
         # GAP 1 FIX: Check session cache before fetching - implements "Fetch Once, Use Many"
         if session_cache and 'international_market_data' in session_cache:
             cached_data = session_cache['international_market_data']
@@ -203,11 +203,11 @@ class DCFStep6Processor:
         # If data is not provided (and not in cache), fetch it using APIAdapter
         if historical_data is None or market_data is None or forecast_data is None or retrieved_assumptions is None:
             logger.info(f"Fetching data for DCF analysis of {ticker} using APIAdapter")
-            
+
             # Get required metrics for DCF from metric registry
             from app.core.metric_registry import get_required_metrics_for_method
             required_metrics = get_required_metrics_for_method("DCF")
-            
+
             # Fetch and map data using APIAdapter (includes audit logging + versioning)
             raw_result = self.api_adapter.fetch_raw_data(ticker, required_metrics)
             mapped_result = self.api_adapter.map_and_normalize(raw_result, ticker, session_id)
@@ -233,61 +233,80 @@ class DCFStep6Processor:
             cash_flow_dict = all_data.get("cash_flow", {})
 
             # FIX: Properly construct DataFrames using APIAdapter data structure
-            # APIAdapter returns flat dict {metric_id: {value, source, status, ...}}
-            # We need to convert this to time-series format for historical display
+            # APIAdapter returns nested dict: {"income_statement": {timestamp: {metric: value}}, ...}
+            # We need to convert this to DataFrame format with metrics in INDEX (rows)
             def build_financials_from_api_data(api_data_dict):
                 """Build pseudo time-series from APIAdapter flat data"""
                 if not api_data_dict:
-                    return None, None, None
-                
-                # Categorize metrics by financial statement type based on metric registry
-                from app.core.metric_registry import METRIC_REGISTRY, MetricCategory
-                
-                income_metrics = {}
-                balance_sheet_metrics = {}
-                cash_flow_metrics = {}
-                
-                periods = ["Latest"]  # Single period for now (APIAdapter returns latest values)
-                
+                    return None
+                # Extract all metric values into a single-period DataFrame
+                # Since APIAdapter returns current/latest values only
+                # IMPORTANT: Metrics must be in the INDEX (rows), not columns
+                # because _extract_metric_from_financials() searches df.index
+                metrics_data = {}
+                periods = ["Latest"]  # Single period for now
                 for metric_id, metric_info in api_data_dict.items():
-                    if not isinstance(metric_info, dict) or "value" not in metric_info:
-                        continue
-                    
-                    value = metric_info["value"]
-                    if value is None:
-                        continue
-                    
-                    # Get category from metric registry to determine which DataFrame
-                    metric_def = METRIC_REGISTRY.get(metric_id, {})
-                    category = metric_def.get("category")
-                    
-                    if category == MetricCategory.INCOME_STATEMENT:
-                        income_metrics[metric_id] = value
-                    elif category == MetricCategory.BALANCE_SHEET:
-                        balance_sheet_metrics[metric_id] = value
-                    elif category == MetricCategory.CASH_FLOW:
-                        cash_flow_metrics[metric_id] = value
-                    else:
-                        # Default to income statement for unknown categories
-                        income_metrics[metric_id] = value
-                
-                # Build DataFrames with metrics as INDEX (rows), not columns
-                # This is critical because _extract_metric_from_financials() searches df.index
-                income_df = pd.DataFrame.from_dict(income_metrics, orient='index', columns=periods) if income_metrics else None
-                balance_df = pd.DataFrame.from_dict(balance_sheet_metrics, orient='index', columns=periods) if balance_sheet_metrics else None
-                cashflow_df = pd.DataFrame.from_dict(cash_flow_metrics, orient='index', columns=periods) if cash_flow_metrics else None
-                
-                if income_df is not None:
-                    logger.debug(f"[Step6DCF] Built income_df with {len(income_df)} rows (metrics): {list(income_df.index)[:10]}...")
-                if balance_df is not None:
-                    logger.debug(f"[Step6DCF] Built balance_df with {len(balance_df)} rows (metrics): {list(balance_df.index)[:10]}...")
-                if cashflow_df is not None:
-                    logger.debug(f"[Step6DCF] Built cashflow_df with {len(cashflow_df)} rows (metrics): {list(cashflow_df.index)[:10]}...")
-                
-                return income_df, balance_df, cashflow_df
+                    if isinstance(metric_info, dict) and "value" in metric_info:
+                        # Store metric_id as the INDEX key, value as the data
+                        metrics_data[metric_id] = metric_info["value"]
+                if not metrics_
+                    return None
+                # Create DataFrame with metrics as INDEX, not columns
+                df = pd.DataFrame.from_dict(metrics_data, orient='index', columns=periods)
+                logger.debug(f"[Step6DCF] Built financials_df with {len(df)} rows (metrics) and {len(df.columns)} periods")
+                logger.debug(f"[Step6DCF] financials_df.index (first 10): {list(df.index)[:10]}")
+                return df
 
-            # Build DataFrames from API data - now returns all three DataFrames
-            financials_df, balance_sheet_df, cashflow_df = build_financials_from_api_data(api_data)
+            def build_balance_sheet_df(raw_data):
+                """Build balance sheet DataFrame from APIAdapter raw data"""
+                bs_data = raw_data.get("balance_sheet", {})
+                if not bs_
+                    logger.debug("[Step6DCF] No balance_sheet data in raw_data")
+                    return None
+                try:
+                    # APIAdapter returns: {timestamp: {metric: value, ...}}
+                    # Get most recent timestamp
+                    if isinstance(bs_data, dict) and bs_
+                        latest_ts = list(bs_data.keys())[0]
+                        latest_data = bs_data[latest_ts]
+                        if isinstance(latest_data, dict):
+                            # Convert to DataFrame with metrics as INDEX
+                            df = pd.DataFrame.from_dict(latest_data, orient='index', columns=["Latest"])
+                            logger.debug(f"[Step6DCF] Built balance_sheet_df with {len(df)} rows")
+                            logger.debug(f"[Step6DCF] balance_sheet_df.index (first 10): {list(df.index)[:10]}")
+                            return df
+                except Exception as e:
+                    logger.error(f"[Step6DCF] Error building balance_sheet_df: {e}")
+                return None
+
+            def build_cashflow_df(raw_data):
+                """Build cash flow DataFrame from APIAdapter raw data"""
+                cf_data = raw_data.get("cash_flow", {})
+                if not cf_
+                    logger.debug("[Step6DCF] No cash_flow data in raw_data")
+                    return None
+                try:
+                    # APIAdapter returns: {timestamp: {metric: value, ...}}
+                    # Get most recent timestamp
+                    if isinstance(cf_data, dict) and cf_
+                        latest_ts = list(cf_data.keys())[0]
+                        latest_data = cf_data[latest_ts]
+                        if isinstance(latest_data, dict):
+                            # Convert to DataFrame with metrics as INDEX
+                            df = pd.DataFrame.from_dict(latest_data, orient='index', columns=["Latest"])
+                            logger.debug(f"[Step6DCF] Built cashflow_df with {len(df)} rows")
+                            logger.debug(f"[Step6DCF] cashflow_df.index (first 10): {list(df.index)[:10]}")
+                            return df
+                except Exception as e:
+                    logger.error(f"[Step6DCF] Error building cashflow_df: {e}")
+                return None
+
+            # Build ALL THREE DataFrames from APIAdapter raw data
+            financials_df = build_financials_from_api_data(api_data)
+            balance_sheet_df = build_balance_sheet_df(mapped_result.get("raw_data", {}))
+            cashflow_df = build_cashflow_df(mapped_result.get("raw_data", {}))
+
+            logger.info(f"[Step6DCF] Built DataFrames: financials={financials_df is not None}, balance_sheet={balance_sheet_df is not None}, cashflow={cashflow_df is not None}")
 
 
             historical_data = historical_data or {
@@ -359,7 +378,7 @@ class DCFStep6Processor:
 
     def _process_dcf_historical(
         self,
-        historical_data: Dict,
+        historical_ Dict,
         user_overrides: Dict
     ) -> HistoricalFinancialsDisplay:
         """Process DCF historical financials (comprehensive field list)"""
@@ -780,7 +799,7 @@ class DCFStep6Processor:
                             values.append(None)
                     logger.debug(f"[Step6DCF] Found {field_name} using key '{key}': {values}")
                     return values if values else None
-                    
+
             # DEBUG: Log which keys were tried but not found
             logger.debug(f"[Step6DCF] Tried keys {keys_to_try} for {field_name} but none found in df.index: {list(df_to_use.index)[:20]}...")
 
@@ -788,7 +807,7 @@ class DCFStep6Processor:
 
     def _process_dcf_market_data(
         self,
-        market_data: Dict,
+        market_ Dict,
         user_overrides: Dict
     ) -> MarketDataDisplay:
         """Process DCF market data (6 fields)"""
@@ -832,7 +851,7 @@ class DCFStep6Processor:
             logger.debug(f"Looking for {field_name} with keys: {possible_keys}")
 
             for key in possible_keys:
-                if key in market_data:
+                if key in market_
                     value = market_data[key]
                     logger.debug(f"Found {field_name} using key '{key}': {value}")
                     break
@@ -872,7 +891,7 @@ class DCFStep6Processor:
 
     def _process_dcf_opening_balances(
         self,
-        historical_data: Dict,
+        historical_ Dict,
         user_overrides: Dict
     ) -> ForecastDriversDisplay:
         """Process DCF opening balances (3 fields)"""

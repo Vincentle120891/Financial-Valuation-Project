@@ -88,7 +88,7 @@ class CompsDataReviewResponse(BaseModel):
     timestamp: datetime
     valuation_model: str = "COMPS"
     historical_financials: Optional[HistoricalFinancialsDisplay] = None
-    market_data: Optional[MarketDataDisplay] = None
+    market_ Optional[MarketDataDisplay] = None
     peer_comparables: Optional[PeerComparablesDisplay] = None
     calculated_metrics: Optional[CalculatedMetricsDisplay] = None
     missing_data_summary: Optional[MissingDataSummary] = None
@@ -105,8 +105,8 @@ class CompsStep6Processor:
         self,
         ticker: str,
         market: str = "international",
-        historical_data: Optional[Dict] = None,
-        market_data: Optional[Dict] = None,
+        historical_ Optional[Dict] = None,
+        market_ Optional[Dict] = None,
         retrieved_assumptions: Optional[Dict] = None,
         user_overrides: Optional[Dict[str, Any]] = None,
         session_cache: Optional[Dict] = None  # NEW: Session cache for "Fetch Once, Use Many"
@@ -118,8 +118,8 @@ class CompsStep6Processor:
         Args:
             ticker: Stock ticker symbol
             market: Market identifier
-            historical_data: Historical financial data (optional, will fetch if not provided)
-            market_data: Market data (optional, will fetch if not provided)
+            historical_ Historical financial data (optional, will fetch if not provided)
+            market_ Market data (optional, will fetch if not provided)
             retrieved_assumptions: Retrieved assumptions including peer data
             user_overrides: Manual overrides applied by user
             session_cache: Session cache dict to check before fetching (implements "Fetch Once, Use Many")
@@ -141,12 +141,67 @@ class CompsStep6Processor:
                     market_data = market_data or cached_data.get('market_data')
                     retrieved_assumptions = retrieved_assumptions or cached_data.get('retrieved_assumptions')
 
-        # If data is not provided (and not in cache), fetch it
+        # If data is not provided (and not in cache), fetch it via APIAdapter (unified approach)
         if historical_data is None or market_data is None or retrieved_assumptions is None:
             logger.info(f"Fetching data for Comps analysis of {ticker}")
-            all_data = self.yfinance_service.fetch_all_data(ticker, market)
-            historical_data = historical_data or {'financials': None, 'balance_sheet': None, 'cashflow': None}
-            market_data = market_data or all_data.get('key_stats', {})
+            from ..api_adapter import APIAdapter
+            adapter = APIAdapter()
+
+            # Fetch all financial data via unified adapter (includes raw_data for DataFrame construction)
+            mapped_result = await adapter.fetch_and_map_financials(ticker, market)
+            raw_data = mapped_result.get("raw_data", {})
+
+            # Build DataFrames from raw yfinance data (same pattern as DCF)
+            def build_financials_from_api_data(api_data):
+                """Build income statement DataFrame from APIAdapter response"""
+                if not api_
+                    return None
+                periods = api_data.get('periods', [])
+                data_rows = {k: v for k, v in api_data.items() if k != 'periods' and isinstance(v, list)}
+                if not data_rows or not periods:
+                    return None
+                df = pd.DataFrame(data_rows, index=periods).T
+                df.columns = pd.to_datetime(df.columns)
+                return df
+
+            def build_balance_sheet_df(raw_data):
+                """Build balance sheet DataFrame from APIAdapter raw data"""
+                bs_data = raw_data.get('balance_sheet', {})
+                if not bs_
+                    return None
+                periods = bs_data.get('periods', [])
+                data_rows = {k: v for k, v in bs_data.items() if k != 'periods' and isinstance(v, list)}
+                if not data_rows or not periods:
+                    return None
+                df = pd.DataFrame(data_rows, index=periods).T
+                df.columns = pd.to_datetime(df.columns)
+                return df
+
+            def build_cashflow_df(raw_data):
+                """Build cash flow DataFrame from APIAdapter raw data"""
+                cf_data = raw_data.get('cash_flow', {})
+                if not cf_
+                    return None
+                periods = cf_data.get('periods', [])
+                data_rows = {k: v for k, v in cf_data.items() if k != 'periods' and isinstance(v, list)}
+                if not data_rows or not periods:
+                    return None
+                df = pd.DataFrame(data_rows, index=periods).T
+                df.columns = pd.to_datetime(df.columns)
+                return df
+
+            financials_df = build_financials_from_api_data(raw_data.get('income_statement', {}))
+            balance_sheet_df = build_balance_sheet_df(raw_data)
+            cashflow_df = build_cashflow_df(raw_data)
+
+            logger.info(f"[Step6Comps] Built DataFrames: financials={financials_df is not None}, balance_sheet={balance_sheet_df is not None}, cashflow={cashflow_df is not None}")
+
+            historical_data = historical_data or {
+                'financials': financials_df,
+                'balance_sheet': balance_sheet_df,
+                'cashflow': cashflow_df
+            }
+            market_data = market_data or mapped_result.get('data', {})
             retrieved_assumptions = retrieved_assumptions or {}
 
         user_overrides = user_overrides or {}
@@ -185,7 +240,7 @@ class CompsStep6Processor:
             message="Comps data aggregated successfully." if ready else "Missing critical Comps data."
         )
 
-    def _process_comps_historical(self, historical_data: Dict, user_overrides: Dict) -> HistoricalFinancialsDisplay:
+    def _process_comps_historical(self, historical_ Dict, user_overrides: Dict) -> HistoricalFinancialsDisplay:
         """Process Trading Comps historical financials (3-year data for multiples calculation)"""
         financials_df = historical_data.get('financials')
         balance_sheet_df = historical_data.get('balance_sheet')
@@ -280,7 +335,7 @@ class CompsStep6Processor:
 
         return values if values else None
 
-    def _process_comps_market_data(self, market_data: Dict, user_overrides: Dict) -> MarketDataDisplay:
+    def _process_comps_market_data(self, market_ Dict, user_overrides: Dict) -> MarketDataDisplay:
         """Process Trading Comps market data (current market metrics for multiples)"""
         data_fields = []
 
@@ -344,10 +399,10 @@ class CompsStep6Processor:
         for peer_ticker in peers:
             try:
                 logger.info(f"Fetching data for peer company: {peer_ticker}")
-                
+
                 # Use get_ticker_info which provides direct access to valuation multiples
                 peer_info = self.yfinance_service.get_ticker_info(peer_ticker)
-                
+
                 if not peer_info:
                     logger.warning(f"No info available for peer {peer_ticker}")
                     companies.append(PeerCompany(
@@ -355,7 +410,7 @@ class CompsStep6Processor:
                         name="Data unavailable"
                     ))
                     continue
-                
+
                 # Extract valuation multiples directly from yfinance info
                 # These are more reliable than calculating from financials
                 trailing_pe = peer_info.get('trailingPE')
@@ -363,18 +418,18 @@ class CompsStep6Processor:
                 ev_to_ebitda = peer_info.get('enterpriseToEbitda')
                 ev_to_revenue = peer_info.get('enterpriseToRevenue')
                 price_to_book = peer_info.get('priceToBook')
-                
+
                 # Get market data
                 market_cap = peer_info.get('marketCap')
                 enterprise_value = peer_info.get('enterpriseValue')
-                
+
                 # Use direct multiples from yfinance as primary source
                 # Fallback to calculation only if direct values not available
                 pe_ratio = trailing_pe  # Use trailing PE as primary
                 ev_ebitda = ev_to_ebitda
                 ev_revenue = ev_to_revenue
                 pb_ratio = price_to_book
-                
+
                 # If direct multiples not available, try to calculate from financials
                 if pe_ratio is None and market_cap:
                     # Try to calculate P/E from net income
@@ -386,7 +441,7 @@ class CompsStep6Processor:
                             net_income = income_stmt.loc['Net Income', latest_col] if 'Net Income' in income_stmt.index else None
                             if net_income and net_income != 0:
                                 pe_ratio = market_cap / abs(net_income)
-                
+
                 if ev_ebitda is None and enterprise_value:
                     # Try to calculate EV/EBITDA from EBITDA
                     peer_financials = self.yfinance_service.get_financial_statements(peer_ticker)
@@ -397,7 +452,7 @@ class CompsStep6Processor:
                             ebitda = income_stmt.loc['EBITDA', latest_col] if 'EBITDA' in income_stmt.index else None
                             if ebitda and ebitda != 0:
                                 ev_ebitda = enterprise_value / abs(ebitda)
-                
+
                 if ev_revenue is None and enterprise_value:
                     # Try to calculate EV/Revenue from revenue
                     peer_financials = self.yfinance_service.get_financial_statements(peer_ticker)
@@ -408,7 +463,7 @@ class CompsStep6Processor:
                             revenue = income_stmt.loc['Total Revenue', latest_col] if 'Total Revenue' in income_stmt.index else None
                             if revenue and revenue != 0:
                                 ev_revenue = enterprise_value / abs(revenue)
-                
+
                 if pb_ratio is None and market_cap:
                     # Try to calculate P/B from book value
                     peer_financials = self.yfinance_service.get_financial_statements(peer_ticker)

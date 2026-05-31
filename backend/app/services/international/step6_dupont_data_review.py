@@ -82,7 +82,7 @@ class DuPontDataReviewResponse(BaseModel):
     timestamp: datetime
     valuation_model: str = "DUPONT"
     historical_financials: Optional[HistoricalFinancialsDisplay] = None
-    market_data: Optional[MarketDataDisplay] = None
+    market_ Optional[MarketDataDisplay] = None
     calculated_metrics: Optional[CalculatedMetricsDisplay] = None
     missing_data_summary: Optional[MissingDataSummary] = None
     manual_overrides_applied: Dict[str, Any] = {}
@@ -93,7 +93,7 @@ class DuPontDataReviewResponse(BaseModel):
 class DuPontStep6Processor:
     """
     Dedicated Step 6 processor for DuPont valuation method.
-    
+
     This processor handles ONLY DuPont-specific data aggregation:
     - Historical Financials (Revenue, Net Income, Total Assets, Shareholders Equity)
     - Market Data (Price, Market Cap, Book Value)
@@ -107,8 +107,8 @@ class DuPontStep6Processor:
         self,
         ticker: str,
         market: str = "international",
-        historical_data: Optional[Dict] = None,
-        market_data: Optional[Dict] = None,
+        historical_ Optional[Dict] = None,
+        market_ Optional[Dict] = None,
         retrieved_assumptions: Optional[Dict] = None,
         user_overrides: Optional[Dict[str, Any]] = None,
         session_cache: Optional[Dict] = None  # NEW: Session cache for "Fetch Once, Use Many"
@@ -116,16 +116,16 @@ class DuPontStep6Processor:
         """
         Main entry point for DuPont Step 6 data review.
         Aggregates all retrieved DuPont data without performing final calculations.
-        
+
         Args:
             ticker: Stock ticker symbol
             market: Market identifier
-            historical_data: Historical financial data (optional, will fetch if not provided)
-            market_data: Market data (optional, will fetch if not provided)
+            historical_ Historical financial data (optional, will fetch if not provided)
+            market_ Market data (optional, will fetch if not provided)
             retrieved_assumptions: Retrieved assumptions including peer data
             user_overrides: Manual overrides applied by user
             session_cache: Session cache dict to check before fetching (implements "Fetch Once, Use Many")
-            
+
         Returns:
             DuPontDataReviewResponse with aggregated DuPont data
         """
@@ -142,37 +142,68 @@ class DuPontStep6Processor:
                     historical_data = historical_data or cached_data.get('historical_data')
                     market_data = market_data or cached_data.get('market_data')
                     retrieved_assumptions = retrieved_assumptions or cached_data.get('retrieved_assumptions')
-        
-        # If data is not provided (and not in cache), fetch it
+
+        # If data is not provided (and not in cache), fetch it via APIAdapter (unified approach)
         if historical_data is None or market_data is None:
             logger.info(f"Fetching data for DuPont analysis of {ticker}")
-            all_data = self.yfinance_service.fetch_all_data(ticker, market)
+            from ..api_adapter import APIAdapter
+            adapter = APIAdapter()
 
-            income_stmt_dict = all_data.get('income_statement', {})
-            balance_sheet_dict = all_data.get('balance_sheet', {})
+            # Fetch all financial data via unified adapter (includes raw_data for DataFrame construction)
+            mapped_result = await adapter.fetch_and_map_financials(ticker, market)
+            raw_data = mapped_result.get("raw_data", {})
 
-            # FIX: Properly construct DataFrames using 'periods' as index, then transpose
-            # This prevents the "1970" year issue caused by converting integer column indices to datetime
-            def build_financials_df(data_dict):
-                """Build DataFrame from yfinance dict format with periods as columns"""
-                if not data_dict:
+            # Build DataFrames from raw yfinance data (same pattern as DCF)
+            def build_financials_from_api_data(api_data):
+                """Build income statement DataFrame from APIAdapter response"""
+                if not api_
                     return None
-                periods = data_dict.get('periods', [])
-                data_rows = {k: v for k, v in data_dict.items() if k != 'periods' and isinstance(v, list)}
+                periods = api_data.get('periods', [])
+                data_rows = {k: v for k, v in api_data.items() if k != 'periods' and isinstance(v, list)}
                 if not data_rows or not periods:
                     return None
                 df = pd.DataFrame(data_rows, index=periods).T
                 df.columns = pd.to_datetime(df.columns)
                 return df
-            
-            financials_df = build_financials_df(income_stmt_dict)
-            balance_sheet_df = build_financials_df(balance_sheet_dict)
+
+            def build_balance_sheet_df(raw_data):
+                """Build balance sheet DataFrame from APIAdapter raw data"""
+                bs_data = raw_data.get('balance_sheet', {})
+                if not bs_
+                    return None
+                periods = bs_data.get('periods', [])
+                data_rows = {k: v for k, v in bs_data.items() if k != 'periods' and isinstance(v, list)}
+                if not data_rows or not periods:
+                    return None
+                df = pd.DataFrame(data_rows, index=periods).T
+                df.columns = pd.to_datetime(df.columns)
+                return df
+
+            def build_cashflow_df(raw_data):
+                """Build cash flow DataFrame from APIAdapter raw data"""
+                cf_data = raw_data.get('cash_flow', {})
+                if not cf_
+                    return None
+                periods = cf_data.get('periods', [])
+                data_rows = {k: v for k, v in cf_data.items() if k != 'periods' and isinstance(v, list)}
+                if not data_rows or not periods:
+                    return None
+                df = pd.DataFrame(data_rows, index=periods).T
+                df.columns = pd.to_datetime(df.columns)
+                return df
+
+            financials_df = build_financials_from_api_data(raw_data.get('income_statement', {}))
+            balance_sheet_df = build_balance_sheet_df(raw_data)
+            cashflow_df = build_cashflow_df(raw_data)
+
+            logger.info(f"[Step6DuPont] Built DataFrames: financials={financials_df is not None}, balance_sheet={balance_sheet_df is not None}, cashflow={cashflow_df is not None}")
 
             historical_data = historical_data or {
                 'financials': financials_df,
-                'balance_sheet': balance_sheet_df
+                'balance_sheet': balance_sheet_df,
+                'cashflow': cashflow_df
             }
-            market_data = market_data or all_data.get('key_stats', {})
+            market_data = market_data or mapped_result.get('data', {})
             retrieved_assumptions = retrieved_assumptions or {}
 
         user_overrides = user_overrides or {}
@@ -197,7 +228,7 @@ class DuPontStep6Processor:
         missing_summary = self._aggregate_missing_data(all_displays)
 
         ready = len(missing_summary.critical_missing) == 0
-        
+
         # GAP 1 FIX: Store fetched data in session cache for "Fetch Once, Use Many"
         if session_cache is not None:
             from datetime import datetime
@@ -225,7 +256,7 @@ class DuPontStep6Processor:
 
     def _process_dupont_historical(
         self,
-        historical_data: Dict,
+        historical_ Dict,
         user_overrides: Dict
     ) -> HistoricalFinancialsDisplay:
         """Process DuPont historical financials (ROE decomposition inputs)"""
@@ -306,7 +337,7 @@ class DuPontStep6Processor:
 
     def _process_dupont_market_data(
         self,
-        market_data: Dict,
+        market_ Dict,
         user_overrides: Dict
     ) -> MarketDataDisplay:
         """Process DuPont market data"""
