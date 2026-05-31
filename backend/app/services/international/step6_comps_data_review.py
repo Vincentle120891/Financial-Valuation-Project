@@ -88,7 +88,7 @@ class CompsDataReviewResponse(BaseModel):
     timestamp: datetime
     valuation_model: str = "COMPS"
     historical_financials: Optional[HistoricalFinancialsDisplay] = None
-    market_ Optional[MarketDataDisplay] = None
+    market_data: Optional[MarketDataDisplay] = None
     peer_comparables: Optional[PeerComparablesDisplay] = None
     calculated_metrics: Optional[CalculatedMetricsDisplay] = None
     missing_data_summary: Optional[MissingDataSummary] = None
@@ -105,8 +105,8 @@ class CompsStep6Processor:
         self,
         ticker: str,
         market: str = "international",
-        historical_ Optional[Dict] = None,
-        market_ Optional[Dict] = None,
+        historical_data: Optional[Dict] = None,
+        market_data: Optional[Dict] = None,
         retrieved_assumptions: Optional[Dict] = None,
         user_overrides: Optional[Dict[str, Any]] = None,
         session_cache: Optional[Dict] = None  # NEW: Session cache for "Fetch Once, Use Many"
@@ -118,8 +118,8 @@ class CompsStep6Processor:
         Args:
             ticker: Stock ticker symbol
             market: Market identifier
-            historical_ Historical financial data (optional, will fetch if not provided)
-            market_ Market data (optional, will fetch if not provided)
+            historical_data: Historical financial data (optional, will fetch if not provided)
+            market_data: Market data (optional, will fetch if not provided)
             retrieved_assumptions: Retrieved assumptions including peer data
             user_overrides: Manual overrides applied by user
             session_cache: Session cache dict to check before fetching (implements "Fetch Once, Use Many")
@@ -154,7 +154,7 @@ class CompsStep6Processor:
             # Build DataFrames from raw yfinance data (same pattern as DCF)
             def build_financials_from_api_data(api_data):
                 """Build income statement DataFrame from APIAdapter response"""
-                if not api_
+                if not api_data:
                     return None
                 periods = api_data.get('periods', [])
                 data_rows = {k: v for k, v in api_data.items() if k != 'periods' and isinstance(v, list)}
@@ -167,7 +167,7 @@ class CompsStep6Processor:
             def build_balance_sheet_df(raw_data):
                 """Build balance sheet DataFrame from APIAdapter raw data"""
                 bs_data = raw_data.get('balance_sheet', {})
-                if not bs_
+                if not bs_data:
                     return None
                 periods = bs_data.get('periods', [])
                 data_rows = {k: v for k, v in bs_data.items() if k != 'periods' and isinstance(v, list)}
@@ -180,7 +180,7 @@ class CompsStep6Processor:
             def build_cashflow_df(raw_data):
                 """Build cash flow DataFrame from APIAdapter raw data"""
                 cf_data = raw_data.get('cash_flow', {})
-                if not cf_
+                if not cf_data:
                     return None
                 periods = cf_data.get('periods', [])
                 data_rows = {k: v for k, v in cf_data.items() if k != 'periods' and isinstance(v, list)}
@@ -240,7 +240,7 @@ class CompsStep6Processor:
             message="Comps data aggregated successfully." if ready else "Missing critical Comps data."
         )
 
-    def _process_comps_historical(self, historical_ Dict, user_overrides: Dict) -> HistoricalFinancialsDisplay:
+    def _process_comps_historical(self, historical_data: Dict, user_overrides: Dict) -> HistoricalFinancialsDisplay:
         """Process Trading Comps historical financials (3-year data for multiples calculation)"""
         financials_df = historical_data.get('financials')
         balance_sheet_df = historical_data.get('balance_sheet')
@@ -335,7 +335,7 @@ class CompsStep6Processor:
 
         return values if values else None
 
-    def _process_comps_market_data(self, market_ Dict, user_overrides: Dict) -> MarketDataDisplay:
+    def _process_comps_market_data(self, market_data: Dict, user_overrides: Dict) -> MarketDataDisplay:
         """Process Trading Comps market data (current market metrics for multiples)"""
         data_fields = []
 

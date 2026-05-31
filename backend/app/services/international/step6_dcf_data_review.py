@@ -121,7 +121,7 @@ class DCFDataReviewResponse(BaseModel):
     valuation_model: str = "DCF"
     historical_financials: Optional[HistoricalFinancialsDisplay] = None
     forecast_drivers: Optional[ForecastDriversDisplay] = None
-    market_ Optional[MarketDataDisplay] = None
+    market_data: Optional[MarketDataDisplay] = None
     peer_comparables: Optional[PeerComparablesDisplay] = None
     calculated_metrics: Optional[CalculatedMetricsDisplay] = None
     missing_data_summary: Optional[MissingDataSummary] = None
@@ -154,9 +154,9 @@ class DCFStep6Processor:
         self,
         ticker: str,
         market: str = "international",
-        historical_ Optional[Dict] = None,
-        market_ Optional[Dict] = None,
-        forecast_ Optional[Dict] = None,
+        historical_data: Optional[Dict] = None,
+        market_data: Optional[Dict] = None,
+        forecast_data: Optional[Dict] = None,
         retrieved_assumptions: Optional[Dict] = None,
         user_overrides: Optional[Dict[str, Any]] = None,
         session_cache: Optional[Dict] = None  # NEW: Session cache for "Fetch Once, Use Many"
@@ -170,9 +170,9 @@ class DCFStep6Processor:
         Args:
             ticker: Stock ticker symbol
             market: Market identifier
-            historical_ Historical financial data (optional, will fetch if not provided)
-            market_ Market data (optional, will fetch if not provided)
-            forecast_ Forecast/analyst estimates (optional)
+            historical_data: Historical financial data (optional, will fetch if not provided)
+            market_data: Market data (optional, will fetch if not provided)
+            forecast_data: Forecast/analyst estimates (optional)
             retrieved_assumptions: Retrieved assumptions including peer data
             user_overrides: Manual overrides applied by user
             session_cache: Session cache dict to check before fetching (implements "Fetch Once, Use Many")
@@ -239,6 +239,7 @@ class DCFStep6Processor:
                 """Build pseudo time-series from APIAdapter flat data"""
                 if not api_data_dict:
                     return None
+                
                 # Extract all metric values into a single-period DataFrame
                 # Since APIAdapter returns current/latest values only
                 # IMPORTANT: Metrics must be in the INDEX (rows), not columns
@@ -249,8 +250,13 @@ class DCFStep6Processor:
                     if isinstance(metric_info, dict) and "value" in metric_info:
                         # Store metric_id as the INDEX key, value as the data
                         metrics_data[metric_id] = metric_info["value"]
-                if not metrics_
+                    elif not isinstance(metric_info, dict):
+                        # Fallback if the value is already parsed as a flat primitive
+                        metrics_data[metric_id] = metric_info
+                        
+                if not metrics_data:
                     return None
+                    
                 # Create DataFrame with metrics as INDEX, not columns
                 df = pd.DataFrame.from_dict(metrics_data, orient='index', columns=periods)
                 logger.debug(f"[Step6DCF] Built financials_df with {len(df)} rows (metrics) and {len(df.columns)} periods")
@@ -260,18 +266,31 @@ class DCFStep6Processor:
             def build_balance_sheet_df(raw_data):
                 """Build balance sheet DataFrame from APIAdapter raw data"""
                 bs_data = raw_data.get("balance_sheet", {})
-                if not bs_
+                if not bs_data:
                     logger.debug("[Step6DCF] No balance_sheet data in raw_data")
                     return None
                 try:
-                    # APIAdapter returns: {timestamp: {metric: value, ...}}
-                    # Get most recent timestamp
-                    if isinstance(bs_data, dict) and bs_
-                        latest_ts = list(bs_data.keys())[0]
-                        latest_data = bs_data[latest_ts]
-                        if isinstance(latest_data, dict):
+                    # APIAdapter returns: {timestamp: {metric: value, ...}} or flat dict
+                    # FIXED: Completed trailing conditional clause
+                    if isinstance(bs_data, dict) and bs_data:
+                        # Check if the structure uses timestamp strings as top-level keys
+                        first_key = list(bs_data.keys())[0]
+                        if isinstance(bs_data[first_key], dict) and "value" not in bs_data[first_key]:
+                            latest_data = bs_data[first_key]
+                        else:
+                            latest_data = bs_data
+                        
+                        # Cleanly separate metric values from metadata wrappers
+                        metrics_data = {}
+                        for metric_id, metric_info in latest_data.items():
+                            if isinstance(metric_info, dict) and "value" in metric_info:
+                                metrics_data[metric_id] = metric_info["value"]
+                            elif not isinstance(metric_info, dict):
+                                metrics_data[metric_id] = metric_info
+                        
+                        if metrics_data:
                             # Convert to DataFrame with metrics as INDEX
-                            df = pd.DataFrame.from_dict(latest_data, orient='index', columns=["Latest"])
+                            df = pd.DataFrame.from_dict(metrics_data, orient='index', columns=["Latest"])
                             logger.debug(f"[Step6DCF] Built balance_sheet_df with {len(df)} rows")
                             logger.debug(f"[Step6DCF] balance_sheet_df.index (first 10): {list(df.index)[:10]}")
                             return df
@@ -282,18 +301,31 @@ class DCFStep6Processor:
             def build_cashflow_df(raw_data):
                 """Build cash flow DataFrame from APIAdapter raw data"""
                 cf_data = raw_data.get("cash_flow", {})
-                if not cf_
+                if not cf_data:
                     logger.debug("[Step6DCF] No cash_flow data in raw_data")
                     return None
                 try:
-                    # APIAdapter returns: {timestamp: {metric: value, ...}}
-                    # Get most recent timestamp
-                    if isinstance(cf_data, dict) and cf_
-                        latest_ts = list(cf_data.keys())[0]
-                        latest_data = cf_data[latest_ts]
-                        if isinstance(latest_data, dict):
+                    # APIAdapter returns: {timestamp: {metric: value, ...}} or flat dict
+                    # FIXED: Completed trailing conditional clause
+                    if isinstance(cf_data, dict) and cf_data:
+                        # Check if the structure uses timestamp strings as top-level keys
+                        first_key = list(cf_data.keys())[0]
+                        if isinstance(cf_data[first_key], dict) and "value" not in cf_data[first_key]:
+                            latest_data = cf_data[first_key]
+                        else:
+                            latest_data = cf_data
+                        
+                        # Cleanly separate metric values from metadata wrappers
+                        metrics_data = {}
+                        for metric_id, metric_info in latest_data.items():
+                            if isinstance(metric_info, dict) and "value" in metric_info:
+                                metrics_data[metric_id] = metric_info["value"]
+                            elif not isinstance(metric_info, dict):
+                                metrics_data[metric_id] = metric_info
+                        
+                        if metrics_data:
                             # Convert to DataFrame with metrics as INDEX
-                            df = pd.DataFrame.from_dict(latest_data, orient='index', columns=["Latest"])
+                            df = pd.DataFrame.from_dict(metrics_data, orient='index', columns=["Latest"])
                             logger.debug(f"[Step6DCF] Built cashflow_df with {len(df)} rows")
                             logger.debug(f"[Step6DCF] cashflow_df.index (first 10): {list(df.index)[:10]}")
                             return df
@@ -378,7 +410,7 @@ class DCFStep6Processor:
 
     def _process_dcf_historical(
         self,
-        historical_ Dict,
+        historical_data: Dict,
         user_overrides: Dict
     ) -> HistoricalFinancialsDisplay:
         """Process DCF historical financials (comprehensive field list)"""
@@ -807,7 +839,7 @@ class DCFStep6Processor:
 
     def _process_dcf_market_data(
         self,
-        market_ Dict,
+        market_data: Dict,
         user_overrides: Dict
     ) -> MarketDataDisplay:
         """Process DCF market data (6 fields)"""
@@ -851,7 +883,7 @@ class DCFStep6Processor:
             logger.debug(f"Looking for {field_name} with keys: {possible_keys}")
 
             for key in possible_keys:
-                if key in market_
+                if key in market_data:
                     value = market_data[key]
                     logger.debug(f"Found {field_name} using key '{key}': {value}")
                     break
@@ -891,7 +923,7 @@ class DCFStep6Processor:
 
     def _process_dcf_opening_balances(
         self,
-        historical_ Dict,
+        historical_data: Dict,
         user_overrides: Dict
     ) -> ForecastDriversDisplay:
         """Process DCF opening balances (3 fields)"""

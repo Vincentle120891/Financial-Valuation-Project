@@ -82,7 +82,7 @@ class DuPontDataReviewResponse(BaseModel):
     timestamp: datetime
     valuation_model: str = "DUPONT"
     historical_financials: Optional[HistoricalFinancialsDisplay] = None
-    market_ Optional[MarketDataDisplay] = None
+    market_data: Optional[MarketDataDisplay] = None
     calculated_metrics: Optional[CalculatedMetricsDisplay] = None
     missing_data_summary: Optional[MissingDataSummary] = None
     manual_overrides_applied: Dict[str, Any] = {}
@@ -107,8 +107,8 @@ class DuPontStep6Processor:
         self,
         ticker: str,
         market: str = "international",
-        historical_ Optional[Dict] = None,
-        market_ Optional[Dict] = None,
+        historical_data: Optional[Dict] = None,
+        market_data: Optional[Dict] = None,
         retrieved_assumptions: Optional[Dict] = None,
         user_overrides: Optional[Dict[str, Any]] = None,
         session_cache: Optional[Dict] = None  # NEW: Session cache for "Fetch Once, Use Many"
@@ -120,8 +120,8 @@ class DuPontStep6Processor:
         Args:
             ticker: Stock ticker symbol
             market: Market identifier
-            historical_ Historical financial data (optional, will fetch if not provided)
-            market_ Market data (optional, will fetch if not provided)
+            historical_data: Historical financial data (optional, will fetch if not provided)
+            market_data: Market data (optional, will fetch if not provided)
             retrieved_assumptions: Retrieved assumptions including peer data
             user_overrides: Manual overrides applied by user
             session_cache: Session cache dict to check before fetching (implements "Fetch Once, Use Many")
@@ -156,7 +156,7 @@ class DuPontStep6Processor:
             # Build DataFrames from raw yfinance data (same pattern as DCF)
             def build_financials_from_api_data(api_data):
                 """Build income statement DataFrame from APIAdapter response"""
-                if not api_
+                if not api_data:
                     return None
                 periods = api_data.get('periods', [])
                 data_rows = {k: v for k, v in api_data.items() if k != 'periods' and isinstance(v, list)}
@@ -169,7 +169,7 @@ class DuPontStep6Processor:
             def build_balance_sheet_df(raw_data):
                 """Build balance sheet DataFrame from APIAdapter raw data"""
                 bs_data = raw_data.get('balance_sheet', {})
-                if not bs_
+                if not bs_data:
                     return None
                 periods = bs_data.get('periods', [])
                 data_rows = {k: v for k, v in bs_data.items() if k != 'periods' and isinstance(v, list)}
@@ -182,7 +182,7 @@ class DuPontStep6Processor:
             def build_cashflow_df(raw_data):
                 """Build cash flow DataFrame from APIAdapter raw data"""
                 cf_data = raw_data.get('cash_flow', {})
-                if not cf_
+                if not cf_data:
                     return None
                 periods = cf_data.get('periods', [])
                 data_rows = {k: v for k, v in cf_data.items() if k != 'periods' and isinstance(v, list)}
@@ -256,7 +256,7 @@ class DuPontStep6Processor:
 
     def _process_dupont_historical(
         self,
-        historical_ Dict,
+        historical_data: Dict,
         user_overrides: Dict
     ) -> HistoricalFinancialsDisplay:
         """Process DuPont historical financials (ROE decomposition inputs)"""
@@ -337,7 +337,7 @@ class DuPontStep6Processor:
 
     def _process_dupont_market_data(
         self,
-        market_ Dict,
+        market_data: Dict,
         user_overrides: Dict
     ) -> MarketDataDisplay:
         """Process DuPont market data"""
