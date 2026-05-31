@@ -95,7 +95,7 @@ class APIAdapter:
         # Implementation placeholder
         return {}
 
-    def map_and_normalize(self, raw_ Dict[str, Any], ticker: str, session_id: Optional[str] = None) -> Dict[str, Any]:
+    def map_and_normalize(self, raw_data: Dict[str, Any], ticker: str, session_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Map raw API data to internal metric IDs and normalize values.
         Returns structured data with validation status.
@@ -169,33 +169,60 @@ class APIAdapter:
             "raw_data": raw_data  # Include raw data for DataFrame construction
         }
 
-    def _extract_value(self, raw_ Dict[str, Any], source_key: str) -> Optional[Any]:
-        """Extract specific value from raw API response."""
+    def _extract_value(self, raw_data: Dict[str, Any], source_key: str) -> Optional[Any]:
+        """
+        Extract specific value from raw API response.
+        Intelligently sorts period keys to ensure the absolute latest date is grabbed,
+        and defensively unwraps dictionary-wrapped primitives (e.g., {'raw': val}).
+        """
         # Search through different sections of raw data
         sections = ["info", "income_statement", "balance_sheet", "cash_flow"]
 
         for section in sections:
-            if section in raw_
+            if section in raw_data:
                 section_data = raw_data[section]
 
                 # Handle info section (flat dict)
                 if section == "info" and isinstance(section_data, dict):
-                    if source_key in section_
-                        return section_data[source_key]
+                    if source_key in section_data:
+                        value = section_data[source_key]
+                        # Defensively unwrap if wrapped in a dict like {'raw': ...} or {'value': ...}
+                        if isinstance(value, dict):
+                            return value.get("raw", value.get("value", value))
+                        return value
 
-                # Handle financial statements (dict with timestamps as keys)
+                # Handle financial statements (dict with timestamps/dates as keys)
                 # Structure: {Timestamp: {metric_name: value, ...}, ...}
-                elif isinstance(section_data, dict):
-                    # Get most recent timestamp's data
-                    if section_
-                        # Get first key (most recent timestamp)
-                        most_recent_key = list(section_data.keys())[0]
+                elif isinstance(section_data, dict) and section_data:
+                    try:
+                        # CRITICAL FIX: Sort keys descending to ensure we always get the 
+                        # absolute latest chronological period, regardless of provider sorting.
+                        # ISO date strings (YYYY-MM-DD) sort perfectly natively.
+                        sorted_keys = sorted(list(section_data.keys()), reverse=True)
+                        
+                        # Prioritize "TTM" (Trailing Twelve Months) if present in keys
+                        most_recent_key = sorted_keys[0]
+                        for key in sorted_keys:
+                            if str(key).upper() == "TTM":
+                                most_recent_key = key
+                                break
+                                
                         period_data = section_data[most_recent_key]
-                        if isinstance(period_data, dict) and source_key in period_
-                            return period_data[source_key]
+                        
+                        if isinstance(period_data, dict) and source_key in period_data:
+                            value = period_data[source_key]
+                            
+                            # Defensively unwrap wrapped numeric primitives from raw vendor formats
+                            if isinstance(value, dict):
+                                return value.get("raw", value.get("value", value))
+                            return value
+                            
+                    except Exception as e:
+                        logger.error(f"[APIAdapter] Error parsing sorted periods in section {section}: {e}")
+                        continue
 
         return None
-
+        
     def _normalize_value(self, value: Any, definition: Dict[str, Any]) -> Any:
         """Normalize value based on definition rules."""
         if value is None:
@@ -212,6 +239,8 @@ class APIAdapter:
                 normalized = int(float(value))
             else:
                 normalized = value
+                
+            return normalized
         except (ValueError, TypeError):
             return None
 
@@ -242,7 +271,7 @@ class APIAdapter:
 
         return True, None
 
-    def calculate_derived_metrics(self, fetched_ Dict[str, Any]) -> Dict[str, Any]:
+    def calculate_derived_metrics(self, fetched_data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Calculate metrics that have formulas based on fetched data.
         Only calculates if all required dependencies are available.
@@ -317,7 +346,7 @@ class APIAdapter:
         # Fetch raw
         raw_data = self.fetch_raw_data(ticker, required_metrics)
 
-        if not raw_
+        if not raw_data:
             return {
                 "ticker": ticker,
                 "success": False,
