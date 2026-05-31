@@ -67,10 +67,11 @@ class APIAdapter:
             import yfinance as yf
             stock = yf.Ticker(ticker)
 
-            # Fetch financials
-            income_stmt = stock.financials
-            balance_sheet = stock.balance_sheet
-            cashflow = stock.cashflow
+            # Fetch financials using get_* methods for yfinance v1.3.0+ compatibility
+            # These return CamelCase without spaces (e.g., TotalRevenue)
+            income_stmt = stock.get_income_stmt()
+            balance_sheet = stock.get_balance_sheet()
+            cashflow = stock.get_cash_flow()
 
             # Fetch info
             info = stock.info
@@ -94,7 +95,7 @@ class APIAdapter:
         # Implementation placeholder
         return {}
 
-    def map_and_normalize(self, raw_data: Dict[str, Any], ticker: str, session_id: Optional[str] = None) -> Dict[str, Any]:
+    def map_and_normalize(self, raw_ Dict[str, Any], ticker: str, session_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Map raw API data to internal metric IDs and normalize values.
         Returns structured data with validation status.
@@ -164,32 +165,33 @@ class APIAdapter:
             "calculated": calculated_metrics,
             "ticker": ticker,
             "provider": self.provider,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.utcnow().isoformat(),
+            "raw_data": raw_data  # Include raw data for DataFrame construction
         }
 
-    def _extract_value(self, raw_data: Dict[str, Any], source_key: str) -> Optional[Any]:
+    def _extract_value(self, raw_ Dict[str, Any], source_key: str) -> Optional[Any]:
         """Extract specific value from raw API response."""
         # Search through different sections of raw data
         sections = ["info", "income_statement", "balance_sheet", "cash_flow"]
 
         for section in sections:
-            if section in raw_data:
+            if section in raw_
                 section_data = raw_data[section]
 
                 # Handle info section (flat dict)
                 if section == "info" and isinstance(section_data, dict):
-                    if source_key in section_data:
+                    if source_key in section_
                         return section_data[source_key]
 
                 # Handle financial statements (dict with timestamps as keys)
                 # Structure: {Timestamp: {metric_name: value, ...}, ...}
                 elif isinstance(section_data, dict):
                     # Get most recent timestamp's data
-                    if section_data:
+                    if section_
                         # Get first key (most recent timestamp)
                         most_recent_key = list(section_data.keys())[0]
                         period_data = section_data[most_recent_key]
-                        if isinstance(period_data, dict) and source_key in period_data:
+                        if isinstance(period_data, dict) and source_key in period_
                             return period_data[source_key]
 
         return None
@@ -240,7 +242,7 @@ class APIAdapter:
 
         return True, None
 
-    def calculate_derived_metrics(self, fetched_data: Dict[str, Any]) -> Dict[str, Any]:
+    def calculate_derived_metrics(self, fetched_ Dict[str, Any]) -> Dict[str, Any]:
         """
         Calculate metrics that have formulas based on fetched data.
         Only calculates if all required dependencies are available.
@@ -315,7 +317,7 @@ class APIAdapter:
         # Fetch raw
         raw_data = self.fetch_raw_data(ticker, required_metrics)
 
-        if not raw_data:
+        if not raw_
             return {
                 "ticker": ticker,
                 "success": False,
