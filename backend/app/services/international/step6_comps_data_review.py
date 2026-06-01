@@ -5,7 +5,7 @@ It eliminates conditional branching by focusing exclusively on Comps-specific da
 """
 import logging
 from typing import Dict, List, Optional, Any
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from enum import Enum
 from datetime import datetime
 import pandas as pd
@@ -77,9 +77,20 @@ class CalculatedMetricsDisplay(BaseModel):
 
 
 class MissingDataSummary(BaseModel):
-    critical_missing: List[str] = []
-    optional_missing: List[str] = []
-    total_missing: int = 0
+    """Aggregation metrics summarizing data completeness for frontend components"""
+    total_fields: int
+    retrieved_count: int
+    calculated_count: int
+    missing_count: int
+    critical_missing: List[str] = Field(default_factory=list)
+    optional_missing: List[str] = Field(default_factory=list)
+    completion_percentage: float
+    data_quality_score: float
+    valuation_ready: bool
+    estimated_count: int = 0
+    manual_override_count: int = 0
+    warnings: List[str] = Field(default_factory=list)
+    recommendations: List[str] = Field(default_factory=list)
 
 
 class CompsDataReviewResponse(BaseModel):
@@ -210,9 +221,29 @@ class CompsStep6Processor:
         peer_display = self._process_comps_peer_comparables(retrieved_assumptions, user_overrides)
         calculated_display = self._calculate_comps_intermediate_metrics(historical_display, market_display, peer_display)
 
-        all_displays = [historical_display, market_display]
-        missing_summary = self._aggregate_missing_data(all_displays)
-        ready = len(missing_summary.critical_missing) == 0
+        # Build response object first for scope encapsulation
+        response_obj = CompsDataReviewResponse(
+            session_id=f"step6_comps_{ticker}_{datetime.now().strftime('%Y%m%d%H%M%S')}",
+            ticker=ticker,
+            timestamp=datetime.now(),
+            valuation_model="COMPS",
+            historical_financials=historical_display,
+            market_data=market_display,
+            peer_comparables=peer_display,
+            calculated_metrics=calculated_display,
+            missing_data_summary=None,
+            manual_overrides_applied=user_overrides,
+            data_complete=False,
+            message=""
+        )
+
+        # Aggregate missing data - pass response_obj to fix scope encapsulation
+        missing_summary = self._aggregate_missing_data(response_obj)
+        
+        # Attach computed data quality parameters back onto the response instance 
+        response_obj.missing_data_summary = missing_summary
+        response_obj.data_complete = missing_summary.valuation_ready
+        response_obj.message = "Comps data aggregated successfully." if missing_summary.valuation_ready else "Missing critical Comps data."
 
         # GAP 1 FIX: Store fetched data in session cache for "Fetch Once, Use Many"
         if session_cache is not None:
@@ -225,20 +256,7 @@ class CompsStep6Processor:
             }
             logger.info(f"Cached market data for {ticker} in session")
 
-        return CompsDataReviewResponse(
-            session_id=f"step6_comps_{ticker}_{datetime.now().strftime('%Y%m%d%H%M%S')}",
-            ticker=ticker,
-            timestamp=datetime.now(),
-            valuation_model="COMPS",
-            historical_financials=historical_display,
-            market_data=market_display,
-            peer_comparables=peer_display,
-            calculated_metrics=calculated_display,
-            missing_data_summary=missing_summary,
-            manual_overrides_applied=user_overrides,
-            data_complete=ready,
-            message="Comps data aggregated successfully." if ready else "Missing critical Comps data."
-        )
+        return response_obj
 
     def _process_comps_historical(self, historical_data: Dict, user_overrides: Dict) -> HistoricalFinancialsDisplay:
         """Process Trading Comps historical financials (3-year data for multiples calculation)"""
@@ -715,24 +733,61 @@ class CompsStep6Processor:
         else:
             return sorted_values[n//2]
 
-    def _aggregate_missing_data(self, displays: List) -> MissingDataSummary:
-        """Aggregate missing data from all displays"""
+    def _aggregate_missing_data(self, response_obj: 'CompsDataReviewResponse') -> MissingDataSummary:
+        """
+        Evaluates field-level status metrics inside the response object to build a 
+        comprehensive data quality report for frontend validation and rendering.
+        """
         critical_missing = []
         optional_missing = []
+        retrieved_count = 0
+        calculated_count = 0
 
-        for display in displays:
-            if hasattr(display, 'data_fields'):
-                for field in display.data_fields:
-                    if field.status == DataStatus.MISSING:
-                        if field.is_critical:
-                            critical_missing.append(field.display_name or field.field_name)
-                        else:
-                            optional_missing.append(field.display_name or field.field_name)
+        # Scan each financial and macro parameter container inside the response object 
+        for container_name in ["historical_financials", "market_data", "peer_comparables", "calculated_metrics"]:
+            container = getattr(response_obj, container_name, None)
+            if container and hasattr(container, 'data_fields'):
+                for field in container.data_fields:
+                    if field and hasattr(field, "status"):
+                        status_str = str(field.status)
+                        
+                        # Process status and categorize missing data by criticality flags 
+                        if "MISSING" in status_str:
+                            if getattr(field, "is_critical", False):
+                                critical_missing.append(getattr(field, "display_name", None) or field.field_name)
+                            else:
+                                optional_missing.append(getattr(field, "display_name", None) or field.field_name)
+                        elif "RETRIEVED" in status_str:
+                            retrieved_count += 1
+                        elif "CALCULATED" in status_str:
+                            calculated_count += 1
+
+        # Calculate metrics matching your application's schema requirements 
+        total_fields = retrieved_count + calculated_count + len(critical_missing) + len(optional_missing)
+        completion_percentage = ((retrieved_count + calculated_count) / total_fields * 100) if total_fields > 0 else 0
+        data_quality_score = (retrieved_count * 1.0 + calculated_count * 0.8) / total_fields * 100 if total_fields > 0 else 0
+
+        # Generate warnings to prevent uncommunicative UI drops
+        warnings = []
+        recommendations = []
+        if critical_missing:
+            warnings.append(f"Missing {len(critical_missing)} critical financial field assets.")
+            recommendations.append("Apply a manual user override configuration or re-verify vendor API connectivity.")
 
         return MissingDataSummary(
+            total_fields=total_fields,
+            retrieved_count=retrieved_count,
+            calculated_count=calculated_count,
+            missing_count=len(critical_missing) + len(optional_missing),
             critical_missing=critical_missing,
             optional_missing=optional_missing,
-            total_missing=len(critical_missing) + len(optional_missing)
+            completion_percentage=completion_percentage,
+            data_quality_score=data_quality_score,
+            valuation_ready=len(critical_missing) == 0,
+            estimated_count=0,
+            manual_override_count=0,
+            warnings=warnings,
+            recommendations=recommendations
         )
 
 
