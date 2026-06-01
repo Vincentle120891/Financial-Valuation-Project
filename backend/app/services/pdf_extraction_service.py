@@ -233,8 +233,8 @@ class VietnamesePDFExtractor:
             logger.warning(f"pytesseract not available. Install with: pip install pytesseract (Actual Exception: {e})")
         
         try:
-            from pdf2image import pdf2page
-            self.pdf2image = pdf2page
+            import pdf2image
+            self.pdf2image = pdf2image
             logger.debug("pdf2image loaded successfully")
         except ImportError as e:
             import traceback
@@ -242,8 +242,8 @@ class VietnamesePDFExtractor:
             logger.warning(f"pdf2image not available. Install with: pip install pdf2image (Actual Exception: {e})")
         
         try:
-            from pyvi import VITokenizer
-            self.pyvi = VITokenizer
+            from pyvi import ViTokenizer
+            self.pyvi = ViTokenizer
             logger.debug("pyvi loaded successfully")
         except ImportError as e:
             import traceback
@@ -567,18 +567,15 @@ class VietnamesePDFExtractor:
             return result
         
         try:
-            from pdf2image import convert_from_path
-            import pytesseract
-            
-            # Convert PDF to images
-            images = convert_from_path(file_path, dpi=300)
+            # Convert PDF to images using the loaded module
+            images = self.pdf2image.convert_from_path(file_path, dpi=300)
             logger.info(f"Converted {len(images)} pages to images for OCR")
             
             full_text = []
             
             for i, image in enumerate(images):
                 # Perform OCR
-                text = pytesseract.image_to_string(image, lang='vie+eng')
+                text = self.pytesseract.image_to_string(image, lang='vie+eng')
                 full_text.append(text)
             
             full_text_str = "\n".join(full_text)
