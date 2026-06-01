@@ -158,8 +158,12 @@ class CompsStep6Processor:
             from ..api_adapter import APIAdapter
             adapter = APIAdapter()
 
-            # Fetch all financial data via unified adapter (includes raw_data for DataFrame construction)
-            mapped_result = await adapter.fetch_and_map_financials(ticker, market)
+            # GAP 2 FIX: Use correct two-step process (fetch_raw_data -> map_and_normalize) matching DCF pattern
+            required_metrics = ["revenue", "net_income", "ebitda", "total_assets", "shareholders_equity",
+                               "current_stock_price", "shares_outstanding", "market_cap", "enterprise_value",
+                               "total_debt", "cash_and_equivalents", "tax_rate"]
+            raw_result = adapter.fetch_raw_data(ticker, required_metrics)
+            mapped_result = adapter.map_and_normalize(raw_result, ticker)
             raw_data = mapped_result.get("raw_data", {})
 
             # Build DataFrames from raw yfinance data (same pattern as DCF)
@@ -239,8 +243,8 @@ class CompsStep6Processor:
 
         # Aggregate missing data - pass response_obj to fix scope encapsulation
         missing_summary = self._aggregate_missing_data(response_obj)
-        
-        # Attach computed data quality parameters back onto the response instance 
+
+        # Attach computed data quality parameters back onto the response instance
         response_obj.missing_data_summary = missing_summary
         response_obj.data_complete = missing_summary.valuation_ready
         response_obj.message = "Comps data aggregated successfully." if missing_summary.valuation_ready else "Missing critical Comps data."
@@ -735,7 +739,7 @@ class CompsStep6Processor:
 
     def _aggregate_missing_data(self, response_obj: 'CompsDataReviewResponse') -> MissingDataSummary:
         """
-        Evaluates field-level status metrics inside the response object to build a 
+        Evaluates field-level status metrics inside the response object to build a
         comprehensive data quality report for frontend validation and rendering.
         """
         critical_missing = []
@@ -743,15 +747,15 @@ class CompsStep6Processor:
         retrieved_count = 0
         calculated_count = 0
 
-        # Scan each financial and macro parameter container inside the response object 
+        # Scan each financial and macro parameter container inside the response object
         for container_name in ["historical_financials", "market_data", "peer_comparables", "calculated_metrics"]:
             container = getattr(response_obj, container_name, None)
             if container and hasattr(container, 'data_fields'):
                 for field in container.data_fields:
                     if field and hasattr(field, "status"):
                         status_str = str(field.status)
-                        
-                        # Process status and categorize missing data by criticality flags 
+
+                        # Process status and categorize missing data by criticality flags
                         if "MISSING" in status_str:
                             if getattr(field, "is_critical", False):
                                 critical_missing.append(getattr(field, "display_name", None) or field.field_name)
@@ -762,7 +766,7 @@ class CompsStep6Processor:
                         elif "CALCULATED" in status_str:
                             calculated_count += 1
 
-        # Calculate metrics matching your application's schema requirements 
+        # Calculate metrics matching your application's schema requirements
         total_fields = retrieved_count + calculated_count + len(critical_missing) + len(optional_missing)
         completion_percentage = ((retrieved_count + calculated_count) / total_fields * 100) if total_fields > 0 else 0
         data_quality_score = (retrieved_count * 1.0 + calculated_count * 0.8) / total_fields * 100 if total_fields > 0 else 0

@@ -1,17 +1,3 @@
-"""Step 6: DCF Data Review Layer - Pure Data Aggregation for DCF Method
-
-This is a dedicated processor for DCF valuation method only.
-It eliminates conditional branching by focusing exclusively on DCF-specific data requirements.
-
-Features:
-- DCF-specific historical financials processing (11 fields)
-- DCF market data aggregation (6 fields)
-- DCF balance sheet opening balances (3 fields)
-- DCF peer comparables for WACC calculation (5 fields × N peers)
-- DCF intermediate metrics calculation (growth rates, margins - NOT final valuations)
-
-INTEGRATION: Uses APIAdapter with Audit Logging and Data Versioning
-"""
 import logging
 from typing import Dict, List, Optional, Any
 from pydantic import BaseModel, Field
@@ -19,10 +5,9 @@ from enum import Enum
 from datetime import datetime, timedelta
 import pandas as pd
 
-from app.services.api_adapter import APIAdapter
-from app.services.audit_logger import get_audit_logger
-from app.services.data_versioning import get_versioning_service
-from app.middleware.validation_middleware import ValidationMiddleware
+from ..api_adapter import APIAdapter
+from ..audit_logger import get_audit_logger
+from ..data_versioning import get_versioning_service
 
 logger = logging.getLogger(__name__)
 
@@ -249,7 +234,7 @@ class DCFStep6Processor:
                 """Build pseudo time-series from APIAdapter flat data"""
                 if not api_data_dict:
                     return None
-                
+
                 # Extract all metric values into a single-period DataFrame
                 # Since APIAdapter returns current/latest values only
                 # IMPORTANT: Metrics must be in the INDEX (rows), not columns
@@ -263,10 +248,10 @@ class DCFStep6Processor:
                     elif not isinstance(metric_info, dict):
                         # Fallback if the value is already parsed as a flat primitive
                         metrics_data[metric_id] = metric_info
-                        
+
                 if not metrics_data:
                     return None
-                    
+
                 # Create DataFrame with metrics as INDEX, not columns
                 df = pd.DataFrame.from_dict(metrics_data, orient='index', columns=periods)
                 logger.debug(f"[Step6DCF] Built financials_df with {len(df)} rows (metrics) and {len(df.columns)} periods")
@@ -289,7 +274,7 @@ class DCFStep6Processor:
                             latest_data = bs_data[first_key]
                         else:
                             latest_data = bs_data
-                        
+
                         # Cleanly separate metric values from metadata wrappers
                         metrics_data = {}
                         for metric_id, metric_info in latest_data.items():
@@ -297,7 +282,7 @@ class DCFStep6Processor:
                                 metrics_data[metric_id] = metric_info["value"]
                             elif not isinstance(metric_info, dict):
                                 metrics_data[metric_id] = metric_info
-                        
+
                         if metrics_data:
                             # Convert to DataFrame with metrics as INDEX
                             df = pd.DataFrame.from_dict(metrics_data, orient='index', columns=["Latest"])
@@ -324,7 +309,7 @@ class DCFStep6Processor:
                             latest_data = cf_data[first_key]
                         else:
                             latest_data = cf_data
-                        
+
                         # Cleanly separate metric values from metadata wrappers
                         metrics_data = {}
                         for metric_id, metric_info in latest_data.items():
@@ -332,7 +317,7 @@ class DCFStep6Processor:
                                 metrics_data[metric_id] = metric_info["value"]
                             elif not isinstance(metric_info, dict):
                                 metrics_data[metric_id] = metric_info
-                        
+
                         if metrics_data:
                             # Convert to DataFrame with metrics as INDEX
                             df = pd.DataFrame.from_dict(metrics_data, orient='index', columns=["Latest"])
@@ -385,7 +370,7 @@ class DCFStep6Processor:
         all_displays = [historical_display, market_display, opening_display, calculated_display]
         if peer_display and peer_display.data_fields:
             all_displays.append(HistoricalFinancialsDisplay(data_fields=peer_display.data_fields))
-        
+
         # Create response object first to pass into _aggregate_missing_data
         response_obj = DCFDataReviewResponse(
             session_id=f"step6_dcf_{ticker}_{datetime.now().strftime('%Y%m%d%H%M%S')}",
@@ -404,15 +389,15 @@ class DCFStep6Processor:
             data_complete=False,
             message=""
         )
-        
+
         # Ensure mandatory placeholders exist before aggregating missing data
         self._ensure_mandatory_placeholders(response_obj)
-        
+
         # Pass response_obj into _aggregate_missing_data to fix scope issue
         missing_summary = self._aggregate_missing_data_from_response(response_obj)
-        
+
         ready = len(missing_summary.critical_missing) == 0
-        
+
         # GAP 1 FIX: Store fetched data in session cache for "Fetch Once, Use Many"
         if session_cache is not None:
             session_cache['international_market_data'] = {
@@ -423,11 +408,11 @@ class DCFStep6Processor:
                 'retrieved_assumptions': retrieved_assumptions
             }
             logger.info(f"Cached market data for {ticker} in session")
-        
+
         response_obj.missing_data_summary = missing_summary
         response_obj.data_complete = ready
         response_obj.message = "DCF data aggregated successfully. Ready for next steps." if ready else "Missing critical DCF data. Please retrieve missing inputs."
-        
+
         return response_obj
 
     def _process_dcf_historical(
@@ -1375,10 +1360,10 @@ class DCFStep6Processor:
         """
         hist = response_obj.historical_financials
         mkt = response_obj.market_data
-        
+
         if not hist or not hist.data_fields:
             return
-            
+
         if not mkt or not mkt.data_fields:
             return
 
@@ -1429,7 +1414,7 @@ class DCFStep6Processor:
 
     def _aggregate_missing_data_from_response(self, response_obj: DCFDataReviewResponse) -> MissingDataSummary:
         """
-        Evaluates field-level status metrics inside the response object to build a 
+        Evaluates field-level status metrics inside the response object to build a
         comprehensive data quality report for frontend validation and rendering.
         This method fixes the scope issue by explicitly accepting response_obj as parameter.
         """
@@ -1438,7 +1423,7 @@ class DCFStep6Processor:
         retrieved_count = 0
         calculated_count = 0
 
-        # Scan each financial and macro parameter container inside the response object 
+        # Scan each financial and macro parameter container inside the response object
         containers = [
             ("historical_financials", response_obj.historical_financials),
             ("market_data", response_obj.market_data),
@@ -1446,23 +1431,23 @@ class DCFStep6Processor:
             ("calculated_metrics", response_obj.calculated_metrics),
             ("peer_comparables", response_obj.peer_comparables)
         ]
-        
+
         for container_name, container in containers:
             if container is None:
                 continue
-                
+
             # Handle different container types
             data_fields = []
             if hasattr(container, 'data_fields'):
                 data_fields = container.data_fields
             elif isinstance(container, dict) and 'data_fields' in container:
                 data_fields = container['data_fields']
-            
+
             for field in data_fields:
                 if field and hasattr(field, "status"):
                     status_str = str(field.status)
-                    
-                    # Process status and categorize missing data by criticality flags 
+
+                    # Process status and categorize missing data by criticality flags
                     if "MISSING" in status_str:
                         if getattr(field, "is_critical", False):
                             critical_missing.append(getattr(field, "display_name", None) or field.field_name)
@@ -1473,7 +1458,7 @@ class DCFStep6Processor:
                     elif "CALCULATED" in status_str:
                         calculated_count += 1
 
-        # Calculate metrics matching your application's schema requirements 
+        # Calculate metrics matching your application's schema requirements
         total_fields = retrieved_count + calculated_count + len(critical_missing) + len(optional_missing)
         completion_percentage = ((retrieved_count + calculated_count) / total_fields * 100) if total_fields > 0 else 0
         data_quality_score = (retrieved_count * 1.0 + calculated_count * 0.8) / total_fields * 100 if total_fields > 0 else 0
@@ -1502,38 +1487,26 @@ class DCFStep6Processor:
         )
 
     def _aggregate_missing_data(
-        self, 
+        self,
         displays: List
     ) -> MissingDataSummary:
         """Aggregate missing data from all displays and calculate statistics"""
-        retrieved_count = 0
-        calculated_count = 0
         critical_missing = []
         optional_missing = []
+        retrieved_count = 0
+        calculated_count = 0
 
-        # Iterate over sections directly via response_obj
-        for section_name, section_obj in [
-            ("historical_financials", response_obj.historical_financials),
-            ("market_data", response_obj.market_data),
-            ("balance_sheet_opening", response_obj.balance_sheet_opening)
-        ]:
-            if section_obj:
-                fields_dict = section_obj if isinstance(section_obj, dict) else dict(section_obj)
-                for field_name, field in fields_dict.items():
-                    if not field:
-                        continue
-                        
-                    # FIX: Cast to uppercase string to clear out cross-file Enum mismatches
-                    status_str = str(getattr(field, "status", "")).upper()
-                    
-                    if "MISSING" in status_str or field.value is None:
-                        if getattr(field, "is_critical", False):
-                            critical_missing.append(getattr(field, "display_name", None) or field_name)
+        for display in displays:
+            if hasattr(display, 'data_fields'):
+                for field in display.data_fields:
+                    if field.status == DataStatus.MISSING:
+                        if field.is_critical:
+                            critical_missing.append(field.display_name or field.field_name)
                         else:
-                            optional_missing.append(getattr(field, "display_name", None) or field_name)
-                    elif "RETRIEVED" in status_str:
+                            optional_missing.append(field.display_name or field.field_name)
+                    elif field.status == DataStatus.RETRIEVED:
                         retrieved_count += 1
-                    elif "CALCULATED" in status_str:
+                    elif field.status == DataStatus.CALCULATED:
                         calculated_count += 1
 
         total_fields = retrieved_count + calculated_count + len(critical_missing) + len(optional_missing)
