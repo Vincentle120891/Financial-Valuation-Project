@@ -1078,7 +1078,7 @@ const ValuationFlow = () => {
         // After clicking Continue, user goes to Step 5: Requirements Review
         return (
           <PeerSelectionStep
-            suggestedPeers={suggestedPeers}
+            discoveredPeers={suggestedPeers}
             selectedPeers={selectedPeers}
             onTogglePeer={handleTogglePeer}
             onContinue={handleContinueToRequirementsReview}
