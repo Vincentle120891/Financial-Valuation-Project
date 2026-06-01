@@ -5,7 +5,6 @@ Separates mapping logic from fetching logic using the Metric Registry.
 Integrates Audit Logging and Data Versioning for full traceability.
 """
 import logging
-import re
 from typing import Dict, List, Any, Optional, Tuple
 from datetime import datetime
 
@@ -56,15 +55,13 @@ class APIAdapter:
         logger.info(f"Fetching raw data for {ticker} from {self.provider}")
 
         if self.provider == "yfinance":
-            return self._fetch_yfinance_raw(ticker)
+            return self._fetch_yfinance_raw(ticker, metrics)
         elif self.provider == "alpha_vantage":
-            return self._fetch_alpha_vantage_raw(ticker)
-        elif self.provider == "fmp":
-            return self._fetch_fmp_raw(ticker)
+            return self._fetch_alpha_vantage_raw(ticker, metrics)
         else:
             raise ValueError(f"Unsupported provider: {self.provider}")
 
-    def _fetch_yfinance_raw(self, ticker: str) -> Dict[str, Any]:
+    def _fetch_yfinance_raw(self, ticker: str, metrics: List[str]) -> Dict[str, Any]:
         """Fetch raw data from yfinance."""
         try:
             import yfinance as yf
@@ -93,80 +90,10 @@ class APIAdapter:
             logger.error(f"Error fetching yfinance data for {ticker}: {e}")
             return {}
 
-    def _fetch_alpha_vantage_raw(self, ticker: str) -> Dict[str, Any]:
-        """Fetch raw data from Alpha Vantage via AlphaVantageService."""
-        try:
-            from app.services.international.alphavantage_service import AlphaVantageService
-            
-            av_service = AlphaVantageService()
-            if not av_service.api_key:
-                logger.warning("AlphaVantage API key not configured, skipping fetch")
-                return {}
-            
-            av_data = av_service.fetch_all_data(ticker, market="international")
-            return av_data if av_data else {}
-        except Exception as e:
-            logger.error(f"Error fetching AlphaVantage data for {ticker}: {e}")
-            return {}
-
-    def _fetch_fmp_raw(self, ticker: str) -> Dict[str, Any]:
-        """Fetch raw data from Financial Modeling Prep (FMP)."""
-        try:
-            import os
-            import requests
-            
-            api_key = os.getenv('FMP_API_KEY')
-            if not api_key:
-                logger.warning("FMP_API_KEY not configured, skipping fetch")
-                return {}
-            
-            base_url = "https://financialmodelingprep.com/api/v3"
-            
-            # Fetch income statement
-            income_resp = requests.get(
-                f"{base_url}/income-statement/{ticker}?apikey={api_key}&limit=5",
-                timeout=30
-            )
-            income_stmt = income_resp.json() if income_resp.status_code == 200 else []
-            
-            # Fetch balance sheet
-            balance_resp = requests.get(
-                f"{base_url}/balance-sheet-statement/{ticker}?apikey={api_key}&limit=5",
-                timeout=30
-            )
-            balance_sheet = balance_resp.json() if balance_resp.status_code == 200 else []
-            
-            # Fetch cash flow
-            cashflow_resp = requests.get(
-                f"{base_url}/cash-flow-statement/{ticker}?apikey={api_key}&limit=5",
-                timeout=30
-            )
-            cashflow = cashflow_resp.json() if cashflow_resp.status_code == 200 else []
-            
-            # Fetch company profile
-            profile_resp = requests.get(
-                f"{base_url}/profile/{ticker}?apikey={api_key}",
-                timeout=30
-            )
-            profile = profile_resp.json()[0] if profile_resp.status_code == 200 and profile_resp.json() else {}
-            
-            # Fetch key metrics
-            metrics_resp = requests.get(
-                f"{base_url}/key-metrics-ttm/{ticker}?apikey={api_key}",
-                timeout=30
-            )
-            key_metrics = metrics_resp.json()[0] if metrics_resp.status_code == 200 and metrics_resp.json() else {}
-            
-            return {
-                "income_statement": {"columns": [list(d.keys()) for d in income_stmt], "data": income_stmt} if income_stmt else {},
-                "balance_sheet": {"columns": [list(d.keys()) for d in balance_sheet], "data": balance_sheet} if balance_sheet else {},
-                "cash_flow": {"columns": [list(d.keys()) for d in cashflow], "data": cashflow} if cashflow else {},
-                "info": {**profile, **key_metrics},
-                "history": {}  # FMP historical data requires separate endpoint
-            }
-        except Exception as e:
-            logger.error(f"Error fetching FMP data for {ticker}: {e}")
-            return {}
+    def _fetch_alpha_vantage_raw(self, ticker: str, metrics: List[str]) -> Dict[str, Any]:
+        """Fetch raw data from Alpha Vantage."""
+        # Implementation placeholder
+        return {}
 
     def map_and_normalize(self, raw_data: Dict[str, Any], ticker: str, session_id: Optional[str] = None) -> Dict[str, Any]:
         """
@@ -256,6 +183,7 @@ class APIAdapter:
         def normalize(s: str) -> str:
             if not s:
                 return ""
+            import re
             # Remove text inside parentheses (e.g., "(COGS)", "(CapEx)")
             s = re.sub(r'\(.*?\)', '', s)
             # Remove symbols like /, &, _, - and spaces, convert to lowercase
@@ -290,7 +218,7 @@ class APIAdapter:
                         if normalize(k) in allowed_matches or k == source_key:
                             matched_key = k
                             break
-                    
+
                     if matched_key:
                         value = section_data[matched_key]
                         if isinstance(value, dict):
@@ -301,16 +229,16 @@ class APIAdapter:
                 elif isinstance(section_data, dict) and section_data:
                     try:
                         sorted_keys = sorted(list(section_data.keys()), reverse=True)
-                        
+
                         # Prioritize "TTM" if present
                         most_recent_key = sorted_keys[0]
                         for key in sorted_keys:
                             if str(key).upper() == "TTM":
                                 most_recent_key = key
                                 break
-                                
+
                         period_data = section_data[most_recent_key]
-                        
+
                         if isinstance(period_data, dict):
                             # Search through keys with normalized fallback matching
                             matched_key = None
@@ -318,13 +246,13 @@ class APIAdapter:
                                 if normalize(k) in allowed_matches or k == source_key:
                                     matched_key = k
                                     break
-                            
+
                             if matched_key:
                                 value = period_data[matched_key]
                                 if isinstance(value, dict):
                                     return value.get("raw", value.get("value", value))
                                 return value
-                                
+
                     except Exception as e:
                         logger.error(f"[APIAdapter] Error parsing sorted periods in section {section}: {e}")
                         continue
@@ -347,7 +275,7 @@ class APIAdapter:
                 normalized = int(float(value))
             else:
                 normalized = value
-                
+
         except (ValueError, TypeError):
             return None
 
@@ -406,6 +334,7 @@ class APIAdapter:
                     if dep_metric in safe_formula:
                         if dep_metric in data_values:
                             # Use word boundary replacement to avoid partial matches
+                            import re
                             pattern = r'\b' + re.escape(dep_metric) + r'\b'
                             safe_formula = re.sub(pattern, str(data_values[dep_metric]), safe_formula)
                         else:
@@ -417,6 +346,7 @@ class APIAdapter:
                     continue
 
                 # Verify no variable names remain in formula (should be all numbers now)
+                import re
                 remaining_vars = re.findall(r'\b[a-zA-Z_][a-zA-Z0-9_]*\b', safe_formula)
                 if remaining_vars:
                     logger.warning(f"Cannot calculate {metric_id}: unresolved variables {remaining_vars} in formula '{formula}'")
