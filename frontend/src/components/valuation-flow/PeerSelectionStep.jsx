@@ -1,123 +1,102 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
+import { ArrowRight, Users, CheckCircle, XCircle, AlertCircle, Search } from 'lucide-react';
 
 /**
- * PeerSelectionStep - Step 4
- * Displays auto-discovered peer companies with similarity scores in table format
- * Allows users to select/deselect peers for valuation models
- * 
- * STYLED TO MATCH: ResultsStep.jsx (Step 8)
+ * PeerSelectionStep - Step 4 (Part 2)
+ * Displays discovered peers with similarity scores and allows selection
+ * Shows match reasons and filters out invalid index tickers
+ *
+ * STYLED TO MATCH: ResultsStep.jsx (Step 11)
  */
 const PeerSelectionStep = ({
-  suggestedPeers,
-  selectedPeers,
+  discoveredPeers = [],
+  selectedPeers = [],
   onTogglePeer,
+  onSelectAll,
   onContinue,
   onBack,
-  loading,
-  onFindPeers,
-  selectedCompany,
-  market
+  loading = false,
+  onFindPeers = null,
+  targetCompany = null
 }) => {
-  const [localError, setLocalError] = useState(null);
-  const [hasFoundPeers, setHasFoundPeers] = useState(false);
-  const [showFindPeersButton, setShowFindPeersButton] = useState(!suggestedPeers || suggestedPeers.length === 0);
+  const [localLoading, setLocalLoading] = useState(false);
 
-  // Initialize button state based on existing peers
-  useEffect(() => {
-    if (suggestedPeers && suggestedPeers.length > 0) {
-      setHasFoundPeers(true);
-      setShowFindPeersButton(false);
-    }
-  }, [suggestedPeers]);
+  const handleFindPeersAgain = async () => {
+    if (!onFindPeers || !targetCompany) return;
 
-  const handleFindPeers = () => {
-    if (selectedCompany && onFindPeers && !loading) {
-      setHasFoundPeers(true);
-      setShowFindPeersButton(false);
-      onFindPeers(selectedCompany);
+    setLocalLoading(true);
+    try {
+      await onFindPeers(targetCompany);
+    } catch (err) {
+      console.error('Failed to find peers:', err);
+    } finally {
+      setLocalLoading(false);
     }
   };
 
-  const handleTogglePeer = (peer) => {
-    setLocalError(null);
-    onTogglePeer(peer);
+  const isInvalidPeer = (ticker) => {
+    const invalidPatterns = ['^VNI', '^VNINDEX', '^HNX', '^UPCOM'];
+    return invalidPatterns.some(pattern => ticker.toUpperCase().includes(pattern));
   };
 
-  const handleSelectAll = () => {
-    if (selectedPeers.length === suggestedPeers.length) {
-      suggestedPeers.forEach(peer => {
-        const peerId = peer.ticker || peer.symbol;
-        if (selectedPeers.find(p => (p.ticker || p.symbol) === peerId)) {
-          onTogglePeer(peer);
-        }
-      });
-    } else {
-      suggestedPeers.forEach(peer => {
-        const peerId = peer.ticker || peer.symbol;
-        if (!selectedPeers.find(p => (p.ticker || p.symbol) === peerId)) {
-          onTogglePeer(peer);
-        }
-      });
-    }
-  };
+  const validPeers = discoveredPeers.filter(peer => !isInvalidPeer(peer.ticker || peer.symbol));
+  const invalidPeers = discoveredPeers.filter(peer => isInvalidPeer(peer.ticker || peer.symbol));
 
-  if (!suggestedPeers || suggestedPeers.length === 0) {
+  const allValidSelected = validPeers.length > 0 &&
+    validPeers.every(peer => selectedPeers.includes(peer.ticker || peer.symbol));
+
+  if (discoveredPeers.length === 0 && !loading) {
     return (
-      <div className="step-container">
-        <h2>Step 4: Peer Selection</h2>
-        <p className="text-gray-600" style={{ marginBottom: '24px' }}>
-          Discover peer companies automatically based on your selected valuation model.
-        </p>
+      <div className="max-w-5xl mx-auto space-y-6 animate-fade-in">
+        <div className="text-center mb-8">
+          <h2 className="text-3xl font-bold text-slate-900 mb-2">Step 4: Select Peers</h2>
+          <p className="text-slate-600">Review and select comparable companies for your valuation analysis.</p>
+        </div>
 
-        {!showFindPeersButton ? (
-          <div className="bg-blue-50 border-l-4 border-blue-400 p-4 rounded">
-            <div className="flex items-center gap-2">
-              <svg className="animate-spin h-5 w-5 text-blue-600" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-              </svg>
-              <p className="text-blue-700">
-                Loading peer companies for {selectedCompany?.ticker || selectedCompany?.symbol}...
-              </p>
-            </div>
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-12 text-center">
+          <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Users size={40} className="text-slate-400" />
           </div>
-        ) : (
-          <div className="bg-white border border-gray-200 p-6 rounded-lg text-center">
-            <svg className="w-16 h-16 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">No Peers Discovered Yet</h3>
-            <p className="text-gray-600 mb-6">
-              Click the button below to discover peer companies for {selectedCompany?.ticker || selectedCompany?.symbol} based on industry, sector, and market cap.
-            </p>
+          <h3 className="text-xl font-semibold text-slate-900 mb-2">No Peers Discovered Yet</h3>
+          <p className="text-slate-600 mb-6 max-w-md mx-auto">
+            Click "Find Peers" to automatically discover comparable companies based on your selected valuation model.
+          </p>
+          {onFindPeers && (
             <button
-              onClick={handleFindPeers}
-              disabled={loading}
-              className="btn-primary inline-flex items-center gap-2"
+              onClick={handleFindPeersAgain}
+              disabled={localLoading}
+              className="px-6 py-3 rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-medium hover:shadow-lg hover:-translate-y-0.5 transition-all flex items-center gap-2 mx-auto disabled:opacity-50"
             >
-              {loading ? (
+              {localLoading ? (
                 <>
-                  <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
                   Finding Peers...
                 </>
               ) : (
                 <>
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                  </svg>
-                  Find Peers
+                  <Search size={18} />
+                  Find Peers Now
                 </>
               )}
             </button>
-          </div>
-        )}
+          )}
+        </div>
 
-        <div className="mt-8">
-          <button onClick={onBack} className="btn-secondary" disabled={loading}>
-            ← Back to Model Selection
+        <div className="flex justify-between pt-4">
+          <button
+            onClick={onBack}
+            disabled={loading}
+            className="px-6 py-2.5 rounded-lg border border-slate-300 text-slate-700 font-medium hover:bg-slate-50 transition-colors disabled:opacity-50"
+          >
+            ← Back
+          </button>
+          <button
+            onClick={onContinue}
+            disabled={true}
+            className="px-6 py-2.5 rounded-lg bg-slate-300 text-slate-500 font-medium cursor-not-allowed flex items-center gap-2"
+          >
+            Select Peers First
+            <ArrowRight size={18} />
           </button>
         </div>
       </div>
@@ -125,182 +104,155 @@ const PeerSelectionStep = ({
   }
 
   return (
-    <div className="step-container">
-      <h2>Step 4: Review/Adjust Peer Companies</h2>
-      <p style={{ marginBottom: '24px', color: '#666' }}>
-        Review and select peer companies for comparable analysis. These peers will be used in DCF valuation for WACC calculation and trading multiples.
-      </p>
-
-      {/* Summary Bar */}
-      <div className="summary-box" style={{ marginBottom: '24px', background: '#eff6ff', border: '1px solid #bfdbfe' }}>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <span className="text-blue-800 font-medium">
-              {selectedPeers.length} of {suggestedPeers.length} peers selected
-            </span>
-          </div>
-          <button
-            onClick={handleSelectAll}
-            className="text-blue-600 hover:text-blue-800 font-medium text-sm"
-          >
-            {selectedPeers.length === suggestedPeers.length ? 'Deselect All' : 'Select All'}
-          </button>
-        </div>
+    <div className="max-w-5xl mx-auto space-y-6 animate-fade-in">
+      {/* Header */}
+      <div className="text-center mb-8">
+        <h2 className="text-3xl font-bold text-slate-900 mb-2">Step 4: Select Peers</h2>
+        <p className="text-slate-600">
+          Review the discovered peers and select the most comparable companies for your analysis.
+        </p>
       </div>
 
-      {/* Peer Table */}
-      <div className="summary-box" style={{ marginBottom: '24px', padding: '0', overflow: 'hidden' }}>
+      {/* Summary Bar */}
+      {discoveredPeers.length > 0 && (
+        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Users size={20} className="text-blue-600" />
+              <div>
+                <p className="text-sm font-medium text-blue-900">
+                  {selectedPeers.length} of {validPeers.length} valid peers selected
+                </p>
+                {invalidPeers.length > 0 && (
+                  <p className="text-xs text-blue-600 mt-1">
+                    {invalidPeers.length} invalid index ticker(s) excluded
+                  </p>
+                )}
+              </div>
+            </div>
+            <button
+              onClick={onSelectAll}
+              className="text-sm font-medium text-blue-600 hover:text-blue-800 transition-colors"
+            >
+              {allValidSelected ? 'Deselect All' : 'Select All Valid'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Peers Table */}
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12">Select</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ticker</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Company Name</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Industry</th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Market Cap</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-48">Similarity Score</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Match Reasons</th>
-                <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-24">Status</th>
+          <table className="w-full">
+            <thead>
+              <tr className="bg-slate-50 border-b border-slate-200">
+                <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                  Select
+                </th>
+                <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                  Ticker
+                </th>
+                <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                  Company Name
+                </th>
+                <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                  Industry
+                </th>
+                <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                  Market Cap
+                </th>
+                <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                  Similarity
+                </th>
+                <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                  Match Reasons
+                </th>
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {suggestedPeers.map((peer) => {
-                const peerId = peer.ticker || peer.symbol;
-                const isSelected = selectedPeers.find(p => (p.ticker || p.symbol) === peerId);
-                
-                const isInvalidPeer = 
-                  peer.ticker?.startsWith('^') ||
-                  peer.symbol?.startsWith('^') ||
-                  peer.ticker?.includes('INDEX') ||
-                  peer.symbol?.includes('INDEX') ||
-                  peer.ticker?.includes('IDX') ||
-                  peer.symbol?.includes('IDX') ||
-                  !peer.market_cap ||
-                  peer.market_cap <= 0;
-
+            <tbody className="divide-y divide-slate-100">
+              {validPeers.map((peer) => {
                 const ticker = peer.ticker || peer.symbol;
-                const name = peer.company_name || peer.name;
-                const marketCap = peer.market_cap || peer.marketCap;
+                const isSelected = selectedPeers.includes(ticker);
+                const isInvalid = isInvalidPeer(ticker);
 
                 return (
-                  <tr 
+                  <tr
                     key={ticker}
-                    className={`transition-all ${
-                      isInvalidPeer
-                        ? 'bg-red-50 opacity-60'
-                        : isSelected
-                        ? 'bg-green-50 hover:bg-green-100'
-                        : 'hover:bg-gray-50'
-                    }`}
+                    className={`hover:bg-slate-50 transition-colors ${isInvalid ? 'bg-slate-50 opacity-50' : ''}`}
                   >
-                    <td className="px-4 py-3">
-                      <button
-                        onClick={() => !isInvalidPeer && handleTogglePeer(peer)}
-                        disabled={isInvalidPeer}
-                        className={`w-6 h-6 rounded flex items-center justify-center transition-all ${
-                          isInvalidPeer
-                            ? 'bg-gray-200 cursor-not-allowed'
-                            : isSelected
-                            ? 'bg-green-600 text-white hover:bg-green-700 cursor-pointer'
-                            : 'bg-gray-200 text-gray-400 hover:bg-gray-300 cursor-pointer'
-                        }`}
-                        title={isSelected ? 'Deselect peer' : 'Select peer'}
-                      >
-                        {isSelected ? (
-                          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                          </svg>
-                        ) : (
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                          </svg>
-                        )}
-                      </button>
+                    <td className="px-6 py-4">
+                      {!isInvalid && (
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => onTogglePeer(ticker)}
+                          className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
+                        />
+                      )}
+                      {isInvalid && (
+                        <XCircle size={16} className="text-slate-400" />
+                      )}
                     </td>
-
-                    <td className="px-4 py-3">
-                      <span className="text-sm font-semibold text-indigo-600">{ticker}</span>
-                    </td>
-
-                    <td className="px-4 py-3">
-                      <span className="text-sm text-gray-900">{name}</span>
-                    </td>
-
-                    <td className="px-4 py-3">
-                      <span className="text-sm text-gray-700">{peer.industry || 'N/A'}</span>
-                    </td>
-
-                    <td className="px-4 py-3 text-right">
-                      <span className="text-sm text-gray-900">
-                        {marketCap ? `$${(() => {
-                          if (marketCap >= 1e12) return `${(marketCap / 1e12).toFixed(2)}T`;
-                          if (marketCap >= 1e9) return `${(marketCap / 1e9).toFixed(2)}B`;
-                          if (marketCap >= 1e6) return `${(marketCap / 1e6).toFixed(2)}M`;
-                          return marketCap.toLocaleString();
-                        })()}` : 'N/A'}
+                    <td className="px-6 py-4">
+                      <span className={`font-mono text-sm font-semibold ${isInvalid ? 'text-slate-400' : 'text-slate-900'}`}>
+                        {ticker}
                       </span>
                     </td>
-
-                    <td className="px-4 py-3">
-                      <div className="flex flex-col">
-                        <div className="flex items-center justify-between text-xs mb-1">
-                          <span className={`font-semibold ${
-                            (peer.match_score || peer.score || 0) >= 80 ? 'text-green-600' :
-                            (peer.match_score || peer.score || 0) >= 60 ? 'text-yellow-600' : 'text-gray-600'
-                          }`}>
-                            {peer.match_score || peer.score || 0}/100
-                          </span>
-                        </div>
-                        <div className="w-full bg-gray-200 rounded-full h-2">
+                    <td className="px-6 py-4">
+                      <span className={`text-sm ${isInvalid ? 'text-slate-400' : 'text-slate-900'}`}>
+                        {peer.company_name || peer.name || 'N/A'}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="text-sm text-slate-600">
+                        {peer.industry || 'N/A'}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="text-sm font-medium text-slate-900">
+                        {(() => {
+                          const cap = peer.market_cap || peer.marketCap;
+                          if (!cap) return 'N/A';
+                          if (cap >= 1e12) return `$${(cap / 1e12).toFixed(2)}T`;
+                          if (cap >= 1e9) return `$${(cap / 1e9).toFixed(2)}B`;
+                          if (cap >= 1e6) return `$${(cap / 1e6).toFixed(2)}M`;
+                          return `$${cap.toLocaleString()}`;
+                        })()}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 h-2 bg-slate-200 rounded-full overflow-hidden max-w-[100px]">
                           <div
-                            className={`h-2 rounded-full ${
-                              (peer.match_score || peer.score || 0) >= 80 ? 'bg-green-500' :
-                              (peer.match_score || peer.score || 0) >= 60 ? 'bg-yellow-500' : 'bg-gray-400'
+                            className={`h-full rounded-full transition-all ${
+                              peer.similarity_score >= 80 ? 'bg-green-500' :
+                              peer.similarity_score >= 60 ? 'bg-yellow-500' :
+                              'bg-orange-500'
                             }`}
-                            style={{ width: `${peer.match_score || peer.score || 0}%` }}
+                            style={{ width: `${Math.min(peer.similarity_score || 0, 100)}%` }}
                           />
                         </div>
+                        <span className="text-sm font-medium text-slate-700 min-w-[3rem]">
+                          {peer.similarity_score?.toFixed(0) || 0}%
+                        </span>
                       </div>
                     </td>
-
-                    <td className="px-4 py-3">
-                      {peer.match_reasons && peer.match_reasons.length > 0 ? (
-                        <ul className="text-xs text-gray-600 space-y-1">
-                          {peer.match_reasons.slice(0, 2).map((reason, idx) => (
-                            <li key={idx} className="flex items-center gap-1">
-                              <svg className="w-3 h-3 text-gray-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                              </svg>
-                              <span className="truncate">{reason}</span>
-                            </li>
-                          ))}
-                          {peer.match_reasons.length > 2 && (
-                            <li className="text-gray-500">+{peer.match_reasons.length - 2} more</li>
-                          )}
-                        </ul>
-                      ) : peer.match_reason ? (
-                        <span className="text-xs text-gray-600">{peer.match_reason}</span>
-                      ) : (
-                        <span className="text-xs text-gray-400">No match reasons</span>
-                      )}
-                    </td>
-
-                    <td className="px-4 py-3 text-center">
-                      {isInvalidPeer ? (
-                        <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-red-200 text-red-800">
-                          ⚠️ Invalid
-                        </span>
-                      ) : (
-                        <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${
-                          isSelected ? 'bg-green-200 text-green-800' : 'bg-gray-200 text-gray-800'
-                        }`}>
-                          {isSelected ? '✓ Selected' : '○ Not Selected'}
-                        </span>
-                      )}
+                    <td className="px-6 py-4">
+                      <div className="flex flex-wrap gap-1 max-w-xs">
+                        {(peer.match_reasons || []).slice(0, 2).map((reason, idx) => (
+                          <span
+                            key={idx}
+                            className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700"
+                          >
+                            {reason}
+                          </span>
+                        ))}
+                        {(peer.match_reasons || []).length > 2 && (
+                          <span className="text-xs text-slate-500">
+                            +{(peer.match_reasons || []).length - 2} more
+                          </span>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );
@@ -308,30 +260,68 @@ const PeerSelectionStep = ({
             </tbody>
           </table>
         </div>
+
+        {/* Invalid Peers Warning */}
+        {invalidPeers.length > 0 && (
+          <div className="bg-slate-50 border-t border-slate-200 px-6 py-4">
+            <div className="flex items-start gap-3">
+              <AlertCircle size={20} className="text-slate-500 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium text-slate-700">
+                  {invalidPeers.length} Invalid Ticker(s) Excluded
+                </p>
+                <p className="text-sm text-slate-600 mt-1">
+                  The following tickers appear to be market indices and cannot be used as peers:{' '}
+                  <span className="font-mono text-slate-900">
+                    {invalidPeers.map(p => p.ticker || p.symbol).join(', ')}
+                  </span>
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
-      {localError && (
-        <div className="bg-red-50 border-l-4 border-red-400 p-4 rounded" style={{ marginBottom: '24px' }}>
-          <p className="text-red-700">{localError}</p>
-        </div>
-      )}
-
-      <div className="flex justify-between items-center mt-8 gap-4">
+      {/* Navigation Buttons */}
+      <div className="flex justify-between items-center pt-4">
         <button
           onClick={onBack}
-          className="btn-secondary"
           disabled={loading}
+          className="px-6 py-2.5 rounded-lg border border-slate-300 text-slate-700 font-medium hover:bg-slate-50 transition-colors disabled:opacity-50"
         >
-          ← Back to Model Selection
+          ← Back
         </button>
 
-        <button
-          onClick={onContinue}
-          disabled={selectedPeers.length === 0 || loading}
-          className="btn-success"
-        >
-          Continue to Step 5: Requirements Review →
-        </button>
+        <div className="flex gap-4">
+          {!loading && discoveredPeers.length > 0 && (
+            <button
+              onClick={handleFindPeersAgain}
+              disabled={localLoading}
+              className="px-6 py-2.5 rounded-lg border border-purple-300 text-purple-700 font-medium hover:bg-purple-50 transition-colors disabled:opacity-50 flex items-center gap-2"
+            >
+              <Search size={18} />
+              Find Peers Again
+            </button>
+          )}
+
+          <button
+            onClick={onContinue}
+            disabled={loading || selectedPeers.length === 0}
+            className="px-6 py-2.5 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-medium hover:shadow-lg hover:-translate-y-0.5 transition-all flex items-center gap-2 disabled:opacity-50 disabled:hover:translate-y-0"
+          >
+            {selectedPeers.length === 0 ? (
+              <>
+                Select at Least One Peer
+                <ArrowRight size={18} />
+              </>
+            ) : (
+              <>
+                Continue to Requirements
+                <ArrowRight size={18} />
+              </>
+            )}
+          </button>
+        </div>
       </div>
     </div>
   );

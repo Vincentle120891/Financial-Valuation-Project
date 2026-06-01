@@ -330,7 +330,7 @@ class APIAdapter:
                         continue
 
         return None
-        
+
     def _normalize_value(self, value: Any, definition: Dict[str, Any]) -> Any:
         """Normalize value based on definition rules."""
         if value is None:
@@ -347,6 +347,7 @@ class APIAdapter:
                 normalized = int(float(value))
             else:
                 normalized = value
+                
         except (ValueError, TypeError):
             return None
 
