@@ -408,12 +408,12 @@ const ValuationFlow = () => {
       console.log('Select company response:', data);
       if (data.session_id) {
         setSessionId(data.session_id);
-        
+
         // Consume confirmed and market fields from backend response
         const isConfirmed = data.confirmed !== undefined ? data.confirmed : true;
         const responseMarket = data.market || market;
         const dataQualityScore = data.data_quality_score !== undefined ? data.data_quality_score : 0;
-        
+
         // Merge backend company data with search results
         const enrichedCompany = { ...company };
         if (data.company_name) {
@@ -421,7 +421,7 @@ const ValuationFlow = () => {
         }
         // Store data quality score for display in Step 2
         enrichedCompany.dataQualityScore = dataQualityScore;
-        
+
         // Map unified schema market_data array to flat properties
         if (data.market_data && Array.isArray(data.market_data)) {
           data.market_data.forEach(item => {
@@ -442,7 +442,7 @@ const ValuationFlow = () => {
             }
           });
         }
-        
+
         // Also check risk_metrics object for any missing values
         if (data.risk_metrics) {
           if (data.risk_metrics.beta?.value !== undefined && enrichedCompany.beta === undefined) {
@@ -455,7 +455,7 @@ const ValuationFlow = () => {
             enrichedCompany.marketRiskPremium = data.risk_metrics.market_risk_premium.value;
           }
         }
-        
+
         // Get sector/industry from ticker_info if available
         if (data.ticker_info) {
           if (data.ticker_info.sector !== undefined) {
@@ -506,15 +506,21 @@ const ValuationFlow = () => {
       if (data.message) {
         // After selecting model, move to Step 4: Find & Review Peers
         // User will click "Find Peers" button in Step 4 to discover peers using model-specific criteria
+        // Reset loading BEFORE changing step to ensure button is clickable in Step 4
+        setLoading(false);
         setCurrentStep(4);
+        return; // Early return to avoid double setLoading(false)
       }
     } catch (err) {
       console.error('Select model error:', err);
       setError('Failed to select model');
     } finally {
-      setLoading(false);
+      // Only run finally if we didn't already set loading to false above
+      if (loading) {
+        setLoading(false);
+      }
     }
-  }, [sessionId, market]);
+  }, [sessionId, market, loading]);
 
   // ==================== BACK TO MODEL SELECTION (STEP 4) ====================
   const handleBackToModelSelection = () => {
@@ -546,7 +552,7 @@ const ValuationFlow = () => {
     setAiError(null); // Clear AI errors
     setPeerData(null);
     // Keep peers when going back to model selection - they are method-agnostic
-    // setSuggestedPeers([]); 
+    // setSuggestedPeers([]);
     // setSelectedPeers([]);
     // Reset only the current method's results, preserve others
     setValuationResults(prev => ({
@@ -597,21 +603,29 @@ const ValuationFlow = () => {
 
       if (result.success && result.data) {
         const step8Response = result.data;
-        
+
         // Store the initialized assumptions in matrix structure
         setValuationData(method, step8Response);
 
         // Also store in component state for backward compatibility
         setForecastDrivers(method, step8Response);
+
+        // Reset loading BEFORE navigation to ensure Step 8 buttons are clickable
+        setLoading(false);
+        setCurrentStep(8);
+        return; // Early return to avoid double setLoading(false) in finally block
       }
     } catch (err) {
       console.error('Failed to initialize Step 8:', err);
       // Continue anyway - user can still manually input data
     } finally {
-      setLoading(false);
+      // Only run finally if we didn't already set loading to false above
+      if (loading) {
+        setLoading(false);
+      }
       setCurrentStep(8);
     }
-  }, [sessionId, selectedModels, market]);
+  }, [sessionId, selectedModels, market, loading]);
 
   // ==================== CONTINUE TO ASSUMPTIONS (STEP 9) ====================
   const handleContinueToAssumptions = useCallback(() => {
@@ -690,7 +704,7 @@ const ValuationFlow = () => {
         market,
         includeHistoricalAI: true // Enable AI gap-filling on first fetch
       });
-      
+
       console.log('Retrieve data result:', result);
 
       if (result.success && result.data) {
@@ -735,9 +749,13 @@ const ValuationFlow = () => {
           setCalculatedMetrics(financialData.calculated_metrics);
         }
 
+        // Reset loading BEFORE navigation to ensure Step 6 buttons are clickable
+        setLoading(false);
+
         // Auto-navigate to Step 6 (ApiDataStep) to show retrieved data
         // Step 5 is Requirements Review (before fetch), Step 6 is ApiDataStep (after fetch)
         setCurrentStep(6);
+        return; // Early return to avoid double setLoading(false) in finally block
       } else if (!result.success) {
         setError(result.error || 'Failed to retrieve data');
       }
@@ -868,7 +886,10 @@ const ValuationFlow = () => {
       const data = await confirmAssumptions(sessionId, confirmedValues, selectedScenario, method, market);
       console.log('Confirm assumptions response:', data);
       if (data.status) {
+        // Reset loading BEFORE navigation to ensure Step 10 buttons are clickable
+        setLoading(false);
         setCurrentStep(10);
+        return; // Early return to avoid double setLoading(false) in finally block
       }
     } catch (err) {
       console.error('Confirm assumptions error:', err);
@@ -918,7 +939,10 @@ const ValuationFlow = () => {
           }
         }));
 
+        // Reset loading BEFORE navigation to ensure Step 11 buttons are clickable
+        setLoading(false);
         setCurrentStep(10);
+        return; // Early return to avoid double setLoading(false) in finally block
       } else {
         setError(data.detail || 'Failed to run valuation');
       }
@@ -1043,9 +1067,9 @@ const ValuationFlow = () => {
         // Model selection determines the criteria for peer discovery in Step 4
         // Auto-advance to Step 4 after model selection
         return (
-          <ModelSelectionStep 
-            onSelectModel={handleSelectModel} 
-            selectedModels={selectedModels} 
+          <ModelSelectionStep
+            onSelectModel={handleSelectModel}
+            selectedModels={selectedModels}
           />
         );
       case 4:
