@@ -17,16 +17,16 @@ const PeerSelectionStep = ({
   onBack,
   loading = false,
   onFindPeers = null,
-  targetCompany = null
+  selectedCompany = null
 }) => {
   const [localLoading, setLocalLoading] = useState(false);
 
   const handleFindPeersAgain = async () => {
-    if (!onFindPeers || !targetCompany) return;
+    if (!onFindPeers || !selectedCompany) return;
 
     setLocalLoading(true);
     try {
-      await onFindPeers(targetCompany);
+      await onFindPeers(selectedCompany);
     } catch (err) {
       console.error('Failed to find peers:', err);
     } finally {

@@ -307,7 +307,7 @@ const ValuationFlow = () => {
       const ticker = company.ticker || company.symbol;
       // Pass the selected model for method-specific peer discovery
       // Include session_id to store suggestions and prevent re-fetching loop
-      const data = await suggestPeers(ticker, company.market || market, 10, selectedModels, sessionId);
+      const data = await suggestPeers(ticker, market, 10, selectedModels, sessionId);
       console.log('Suggest peers response:', data);
       if (data.suggested_peers && data.suggested_peers.length > 0) {
         setSuggestedPeers(data.suggested_peers);
