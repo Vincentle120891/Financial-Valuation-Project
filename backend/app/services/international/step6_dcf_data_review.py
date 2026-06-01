@@ -8,6 +8,7 @@ import pandas as pd
 from ..api_adapter import APIAdapter
 from ..audit_logger import get_audit_logger
 from ..data_versioning import get_versioning_service
+from ...middleware.validation_middleware import ValidationMiddleware
 
 logger = logging.getLogger(__name__)
 
