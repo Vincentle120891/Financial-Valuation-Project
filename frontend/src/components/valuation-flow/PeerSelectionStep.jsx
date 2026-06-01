@@ -20,19 +20,43 @@ const PeerSelectionStep = ({
   selectedCompany = null
 }) => {
   const [localLoading, setLocalLoading] = useState(false);
+  
+  // Debug logging for component render
+  console.log('[PeerSelectionStep] Render:', {
+    selectedCompany: selectedCompany ? selectedCompany.ticker || selectedCompany.symbol : null,
+    hasOnFindPeers: !!onFindPeers,
+    discoveredPeersCount: discoveredPeers.length,
+    loading
+  });
 
   const handleFindPeersAgain = async () => {
-    if (!onFindPeers || !selectedCompany) return;
+    console.log('[PeerSelectionStep] handleFindPeersAgain called:', {
+      hasOnFindPeers: !!onFindPeers,
+      selectedCompany: selectedCompany ? selectedCompany.ticker || selectedCompany.symbol : null,
+      selectedCompanyFull: selectedCompany
+    });
+    
+    if (!onFindPeers) {
+      console.error('[PeerSelectionStep] onFindPeers callback is missing');
+      return;
+    }
+    
+    if (!selectedCompany) {
+      console.error('[PeerSelectionStep] selectedCompany is null or undefined');
+      return;
+    }
 
     setLocalLoading(true);
     try {
+      console.log('[PeerSelectionStep] Calling onFindPeers with:', selectedCompany.ticker || selectedCompany.symbol);
       await onFindPeers(selectedCompany);
     } catch (err) {
-      console.error('Failed to find peers:', err);
+      console.error('[PeerSelectionStep] Failed to find peers:', err);
     } finally {
       setLocalLoading(false);
     }
   };
+
 
   const isInvalidPeer = (ticker) => {
     const invalidPatterns = ['^VNI', '^VNINDEX', '^HNX', '^UPCOM'];
