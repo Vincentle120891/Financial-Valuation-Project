@@ -14,7 +14,7 @@ INTEGRATION: Uses APIAdapter with Audit Logging and Data Versioning
 """
 import logging
 from typing import Dict, List, Optional, Any
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from enum import Enum
 from datetime import datetime, timedelta
 import pandas as pd
@@ -105,9 +105,9 @@ class CalculatedMetricsDisplay(BaseModel):
 
 class MissingDataSummary(BaseModel):
     """Summary of missing data for DCF"""
-    critical_missing: List[str] = []
-    optional_missing: List[str] = []
-    total_missing: int = 0
+    is_complete: bool = True
+    missing_fields: List[str] = Field(default_factory=list)
+    diagnostics: Dict[str, str] = Field(default_factory=dict)
 
 
 class DCFDataReviewResponse(BaseModel):
@@ -1346,26 +1346,38 @@ class DCFStep6Processor:
         return CalculatedMetricsDisplay(data_fields=data_fields)
 
     def _aggregate_missing_data(
-        self,
+        self, 
         displays: List
     ) -> MissingDataSummary:
         """Aggregate missing data from all displays and calculate statistics"""
-        critical_missing = []
-        optional_missing = []
         retrieved_count = 0
         calculated_count = 0
+        critical_missing = []
+        optional_missing = []
 
-        for display in displays:
-            if hasattr(display, 'data_fields'):
-                for field in display.data_fields:
-                    if field.status == DataStatus.MISSING:
-                        if field.is_critical:
-                            critical_missing.append(field.display_name or field.field_name)
+        # Iterate over sections directly via response_obj
+        for section_name, section_obj in [
+            ("historical_financials", response_obj.historical_financials),
+            ("market_data", response_obj.market_data),
+            ("balance_sheet_opening", response_obj.balance_sheet_opening)
+        ]:
+            if section_obj:
+                fields_dict = section_obj if isinstance(section_obj, dict) else dict(section_obj)
+                for field_name, field in fields_dict.items():
+                    if not field:
+                        continue
+                        
+                    # FIX: Cast to uppercase string to clear out cross-file Enum mismatches
+                    status_str = str(getattr(field, "status", "")).upper()
+                    
+                    if "MISSING" in status_str or field.value is None:
+                        if getattr(field, "is_critical", False):
+                            critical_missing.append(getattr(field, "display_name", None) or field_name)
                         else:
-                            optional_missing.append(field.display_name or field.field_name)
-                    elif field.status == DataStatus.RETRIEVED:
+                            optional_missing.append(getattr(field, "display_name", None) or field_name)
+                    elif "RETRIEVED" in status_str:
                         retrieved_count += 1
-                    elif field.status == DataStatus.CALCULATED:
+                    elif "CALCULATED" in status_str:
                         calculated_count += 1
 
         total_fields = retrieved_count + calculated_count + len(critical_missing) + len(optional_missing)
