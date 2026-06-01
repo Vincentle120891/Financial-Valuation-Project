@@ -104,10 +104,20 @@ class CalculatedMetricsDisplay(BaseModel):
 
 
 class MissingDataSummary(BaseModel):
-    """Summary of missing data for DCF"""
-    is_complete: bool = True
-    missing_fields: List[str] = Field(default_factory=list)
-    diagnostics: Dict[str, str] = Field(default_factory=dict)
+    """Aggregation metrics summarizing data completeness for frontend components"""
+    total_fields: int = 0
+    retrieved_count: int = 0
+    calculated_count: int = 0
+    missing_count: int = 0
+    critical_missing: List[str] = []
+    optional_missing: List[str] = []
+    completion_percentage: float = 0.0
+    data_quality_score: float = 0.0
+    valuation_ready: bool = False
+    estimated_count: int = 0
+    manual_override_count: int = 0
+    warnings: List[str] = []
+    recommendations: List[str] = []
 
 
 class DCFDataReviewResponse(BaseModel):
@@ -375,22 +385,9 @@ class DCFStep6Processor:
         all_displays = [historical_display, market_display, opening_display, calculated_display]
         if peer_display and peer_display.data_fields:
             all_displays.append(HistoricalFinancialsDisplay(data_fields=peer_display.data_fields))
-        missing_summary = self._aggregate_missing_data(all_displays)
-
-        ready = len(missing_summary.critical_missing) == 0
-
-        # GAP 1 FIX: Store fetched data in session cache for "Fetch Once, Use Many"
-        if session_cache is not None:
-            session_cache['international_market_data'] = {
-                'timestamp': datetime.now(),
-                'historical_data': historical_data,
-                'market_data': market_data,
-                'forecast_data': forecast_data,
-                'retrieved_assumptions': retrieved_assumptions
-            }
-            logger.info(f"Cached market data for {ticker} in session")
-
-        return DCFDataReviewResponse(
+        
+        # Create response object first to pass into _aggregate_missing_data
+        response_obj = DCFDataReviewResponse(
             session_id=f"step6_dcf_{ticker}_{datetime.now().strftime('%Y%m%d%H%M%S')}",
             ticker=ticker,
             timestamp=datetime.now(),
@@ -402,11 +399,36 @@ class DCFStep6Processor:
             market_data=market_display,
             peer_comparables=peer_display,
             calculated_metrics=calculated_display,
-            missing_data_summary=missing_summary,
+            missing_data_summary=None,  # Will be set below
             manual_overrides_applied=user_overrides,
-            data_complete=ready,
-            message="DCF data aggregated successfully. Ready for next steps." if ready else "Missing critical DCF data. Please retrieve missing inputs."
+            data_complete=False,
+            message=""
         )
+        
+        # Ensure mandatory placeholders exist before aggregating missing data
+        self._ensure_mandatory_placeholders(response_obj)
+        
+        # Pass response_obj into _aggregate_missing_data to fix scope issue
+        missing_summary = self._aggregate_missing_data_from_response(response_obj)
+        
+        ready = len(missing_summary.critical_missing) == 0
+        
+        # GAP 1 FIX: Store fetched data in session cache for "Fetch Once, Use Many"
+        if session_cache is not None:
+            session_cache['international_market_data'] = {
+                'timestamp': datetime.now(),
+                'historical_data': historical_data,
+                'market_data': market_data,
+                'forecast_data': forecast_data,
+                'retrieved_assumptions': retrieved_assumptions
+            }
+            logger.info(f"Cached market data for {ticker} in session")
+        
+        response_obj.missing_data_summary = missing_summary
+        response_obj.data_complete = ready
+        response_obj.message = "DCF data aggregated successfully. Ready for next steps." if ready else "Missing critical DCF data. Please retrieve missing inputs."
+        
+        return response_obj
 
     def _process_dcf_historical(
         self,
@@ -1344,6 +1366,140 @@ class DCFStep6Processor:
                 ))
 
         return CalculatedMetricsDisplay(data_fields=data_fields)
+
+    def _ensure_mandatory_placeholders(self, response_obj: DCFDataReviewResponse):
+        """
+        Verifies that explicit mandatory lines exist as tracked properties
+        so that models cannot execute projections blindly without them.
+        Enforces existence of critical valuation anchors: CapEx, Operating Cash Flow, Risk-Free Rate.
+        """
+        hist = response_obj.historical_financials
+        mkt = response_obj.market_data
+        
+        if not hist or not hist.data_fields:
+            return
+            
+        if not mkt or not mkt.data_fields:
+            return
+
+        # Explicit CapEx check (Critical for calculating accurate reinvestment paths)
+        capex_keys = ["capex", "capitalExpenditure", "capital_expenditure"]
+        has_capex = any(f.field_name in capex_keys for f in hist.data_fields if f.value is not None)
+        if not has_capex:
+            hist.data_fields.append(DataField(
+                field_name="capitalExpenditure",
+                display_name="Capital Expenditure",
+                value=None,
+                status=DataStatus.MISSING,
+                unit="USD",
+                source="validation_check",
+                is_critical=True,
+                allow_override=True
+            ))
+
+        # Explicit Operating Cash Flow check (Critical for tracing Free Cash Flow to Firm)
+        ocf_keys = ["operating_cash_flow", "operatingCashFlow", "ocf"]
+        has_ocf = any(f.field_name in ocf_keys for f in hist.data_fields if f.value is not None)
+        if not has_ocf:
+            hist.data_fields.append(DataField(
+                field_name="operatingCashFlow",
+                display_name="Operating Cash Flow",
+                value=None,
+                status=DataStatus.MISSING,
+                unit="USD",
+                source="validation_check",
+                is_critical=True,
+                allow_override=True
+            ))
+
+        # Explicit Risk-Free Rate check (Critical for Cost of Equity / WACC parameters)
+        rfr_keys = ["risk_free_rate", "riskFreeRate", "rfr"]
+        has_rfr = any(f.field_name in rfr_keys for f in mkt.data_fields if f.value is not None)
+        if not has_rfr:
+            mkt.data_fields.append(DataField(
+                field_name="risk_free_rate",
+                display_name="Risk-Free Rate",
+                value=None,
+                status=DataStatus.MISSING,
+                unit="%",
+                source="validation_check",
+                is_critical=True,
+                allow_override=True
+            ))
+
+    def _aggregate_missing_data_from_response(self, response_obj: DCFDataReviewResponse) -> MissingDataSummary:
+        """
+        Evaluates field-level status metrics inside the response object to build a 
+        comprehensive data quality report for frontend validation and rendering.
+        This method fixes the scope issue by explicitly accepting response_obj as parameter.
+        """
+        critical_missing = []
+        optional_missing = []
+        retrieved_count = 0
+        calculated_count = 0
+
+        # Scan each financial and macro parameter container inside the response object 
+        containers = [
+            ("historical_financials", response_obj.historical_financials),
+            ("market_data", response_obj.market_data),
+            ("forecast_drivers", response_obj.forecast_drivers),
+            ("calculated_metrics", response_obj.calculated_metrics),
+            ("peer_comparables", response_obj.peer_comparables)
+        ]
+        
+        for container_name, container in containers:
+            if container is None:
+                continue
+                
+            # Handle different container types
+            data_fields = []
+            if hasattr(container, 'data_fields'):
+                data_fields = container.data_fields
+            elif isinstance(container, dict) and 'data_fields' in container:
+                data_fields = container['data_fields']
+            
+            for field in data_fields:
+                if field and hasattr(field, "status"):
+                    status_str = str(field.status)
+                    
+                    # Process status and categorize missing data by criticality flags 
+                    if "MISSING" in status_str:
+                        if getattr(field, "is_critical", False):
+                            critical_missing.append(getattr(field, "display_name", None) or field.field_name)
+                        else:
+                            optional_missing.append(getattr(field, "display_name", None) or field.field_name)
+                    elif "RETRIEVED" in status_str:
+                        retrieved_count += 1
+                    elif "CALCULATED" in status_str:
+                        calculated_count += 1
+
+        # Calculate metrics matching your application's schema requirements 
+        total_fields = retrieved_count + calculated_count + len(critical_missing) + len(optional_missing)
+        completion_percentage = ((retrieved_count + calculated_count) / total_fields * 100) if total_fields > 0 else 0
+        data_quality_score = (retrieved_count * 1.0 + calculated_count * 0.8) / total_fields * 100 if total_fields > 0 else 0
+
+        # Generate warnings to prevent uncommunicative UI drops
+        warnings = []
+        recommendations = []
+        if critical_missing:
+            warnings.append(f"Missing {len(critical_missing)} critical financial field assets.")
+            recommendations.append("Apply a manual user override configuration or re-verify vendor API connectivity.")
+
+        return MissingDataSummary(
+            total_fields=total_fields,
+            retrieved_count=retrieved_count,
+            calculated_count=calculated_count,
+            missing_count=len(critical_missing) + len(optional_missing),
+            critical_missing=critical_missing,
+            optional_missing=optional_missing,
+            completion_percentage=completion_percentage,
+            data_quality_score=data_quality_score,
+            valuation_ready=len(critical_missing) == 0,
+            estimated_count=0,
+            manual_override_count=0,
+            warnings=warnings,
+            recommendations=recommendations
+        )
 
     def _aggregate_missing_data(
         self, 
