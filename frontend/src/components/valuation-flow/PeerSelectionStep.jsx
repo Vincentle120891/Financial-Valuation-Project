@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
+import PropTypes from 'prop-types';
 import { ArrowRight, Users, CheckCircle, XCircle, AlertCircle, Search } from 'lucide-react';
+import { PeerSelectionStepProps } from '@/types/componentPropTypes';
 
 /**
  * PeerSelectionStep - Step 4 (Part 2)
@@ -7,6 +9,9 @@ import { ArrowRight, Users, CheckCircle, XCircle, AlertCircle, Search } from 'lu
  * Shows match reasons and filters out invalid index tickers
  *
  * STYLED TO MATCH: ResultsStep.jsx (Step 11)
+ * 
+ * PROP CONTRACT: Uses centralized PeerSelectionStepProps from componentPropTypes.js
+ * This ensures consistency across the application (prevents suggestedPeers vs discoveredPeers mismatches)
  */
 const PeerSelectionStep = ({
   discoveredPeers = [],
@@ -352,3 +357,16 @@ const PeerSelectionStep = ({
 };
 
 export default PeerSelectionStep;
+
+// Prop type validation using centralized definitions
+PeerSelectionStep.propTypes = PeerSelectionStepProps;
+
+// Default props for optional fields
+PeerSelectionStep.defaultProps = {
+  discoveredPeers: [],
+  selectedPeers: [],
+  loading: false,
+  onSelectAll: null,
+  onFindPeers: null,
+  selectedCompany: null,
+};
