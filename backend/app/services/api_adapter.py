@@ -169,13 +169,42 @@ class APIAdapter:
             "raw_data": raw_data  # Include raw data for DataFrame construction
         }
 
-    def _extract_value(self, raw_data: Dict[str, Any], source_key: str) -> Optional[Any]:
+def _extract_value(self, raw_data: Dict[str, Any], source_key: str) -> Optional[Any]:
         """
         Extract specific value from raw API response.
         Intelligently sorts period keys to ensure the absolute latest date is grabbed,
-        and defensively unwraps dictionary-wrapped primitives (e.g., {'raw': val}).
+        defensively unwraps dictionary-wrapped primitives, and performs normalized/fuzzy
+        matching to resolve vendor-specific naming mismatches (e.g., yfinance vs standard registry).
         """
-        # Search through different sections of raw data
+        if not source_key:
+            return None
+
+        # Helper function to normalize strings for robust comparison
+        def normalize(s: str) -> str:
+            if not s:
+                return ""
+            import re
+            # Remove text inside parentheses (e.g., "(COGS)", "(CapEx)")
+            s = re.sub(r'\(.*?\)', '', s)
+            # Remove symbols like /, &, _, - and spaces, convert to lowercase
+            return "".join(c for c in s.lower() if c.isalnum())
+
+        # Direct lookups/synonyms map for yfinance specific variations
+        yfinance_synonyms = {
+            normalize("Cost of Revenue (COGS)"): ["costofrevenue", "costofgoods_sold"],
+            normalize("Operating Expenses"): ["operatingexpense", "operatingexpenses"],
+            normalize("EBIT / Operating Income"): ["ebit", "operatingincome"],
+            normalize("Pre-Tax Income"): ["pretaxincome", "incomebeforetax"],
+            normalize("Depreciation & Amortization"): ["depreciationandamortization", "depreciation&amortization"],
+            normalize("Capital Expenditures (CapEx)"): ["capitalexpenditure", "capex"],
+            normalize("Cash & Equivalents"): ["cashandcashequivalents", "cashcashequivalents"],
+            normalize("Total Debt"): ["totaldebt", "longtermdebt", "currentdebt"],
+            normalize("Tax Provision"): ["taxprovision", "incomeincome_tax_expense"]
+        }
+
+        target_normalized = normalize(source_key)
+        allowed_matches = [target_normalized] + yfinance_synonyms.get(target_normalized, [])
+
         sections = ["info", "income_statement", "balance_sheet", "cash_flow"]
 
         for section in sections:
@@ -184,23 +213,24 @@ class APIAdapter:
 
                 # Handle info section (flat dict)
                 if section == "info" and isinstance(section_data, dict):
-                    if source_key in section_data:
-                        value = section_data[source_key]
-                        # Defensively unwrap if wrapped in a dict like {'raw': ...} or {'value': ...}
+                    matched_key = None
+                    for k in section_data.keys():
+                        if normalize(k) in allowed_matches or k == source_key:
+                            matched_key = k
+                            break
+                    
+                    if matched_key:
+                        value = section_data[matched_key]
                         if isinstance(value, dict):
                             return value.get("raw", value.get("value", value))
                         return value
 
                 # Handle financial statements (dict with timestamps/dates as keys)
-                # Structure: {Timestamp: {metric_name: value, ...}, ...}
                 elif isinstance(section_data, dict) and section_data:
                     try:
-                        # CRITICAL FIX: Sort keys descending to ensure we always get the 
-                        # absolute latest chronological period, regardless of provider sorting.
-                        # ISO date strings (YYYY-MM-DD) sort perfectly natively.
                         sorted_keys = sorted(list(section_data.keys()), reverse=True)
                         
-                        # Prioritize "TTM" (Trailing Twelve Months) if present in keys
+                        # Prioritize "TTM" if present
                         most_recent_key = sorted_keys[0]
                         for key in sorted_keys:
                             if str(key).upper() == "TTM":
@@ -209,14 +239,20 @@ class APIAdapter:
                                 
                         period_data = section_data[most_recent_key]
                         
-                        if isinstance(period_data, dict) and source_key in period_data:
-                            value = period_data[source_key]
+                        if isinstance(period_data, dict):
+                            # Search through keys with normalized fallback matching
+                            matched_key = None
+                            for k in period_data.keys():
+                                if normalize(k) in allowed_matches or k == source_key:
+                                    matched_key = k
+                                    break
                             
-                            # Defensively unwrap wrapped numeric primitives from raw vendor formats
-                            if isinstance(value, dict):
-                                return value.get("raw", value.get("value", value))
-                            return value
-                            
+                            if matched_key:
+                                value = period_data[matched_key]
+                                if isinstance(value, dict):
+                                    return value.get("raw", value.get("value", value))
+                                return value
+                                
                     except Exception as e:
                         logger.error(f"[APIAdapter] Error parsing sorted periods in section {section}: {e}")
                         continue
