@@ -1,5 +1,1 @@
-(frontend/src/components/valuation-flow/ModelSelectionStep.jsx is a source file, and there are no build artifacts, dependencies, or temporary files in the changes, so no .gitignore rules are needed)
-
-```gitignore
-
-```
+Nothing should be ignored since the changes only include source code files (.py files) and no build artifacts, dependencies, or temporary files.

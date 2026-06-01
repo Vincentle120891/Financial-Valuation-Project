@@ -258,7 +258,7 @@ def _extract_value(self, raw_data: Dict[str, Any], source_key: str) -> Optional[
                         continue
 
         return None
-        
+
     def _normalize_value(self, value: Any, definition: Dict[str, Any]) -> Any:
         """Normalize value based on definition rules."""
         if value is None:
@@ -276,7 +276,6 @@ def _extract_value(self, raw_data: Dict[str, Any], source_key: str) -> Optional[
             else:
                 normalized = value
                 
-            return normalized
         except (ValueError, TypeError):
             return None
 
