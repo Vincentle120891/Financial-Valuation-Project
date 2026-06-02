@@ -84,8 +84,12 @@ async def process(session_id: str, ticker: str, market: str, max_peers: int = 10
                 "company_name": peer.company_name,
                 "sector": peer.sector or "Unknown",
                 "industry": peer.industry or "Unknown",
-                "market_cap": peer.market_cap,  # Send raw number, NOT wrapped in object
-                "marketCap": peer.market_cap,   # Also provide camelCase for frontend flexibility
+                "market_cap": {
+                    "value": peer.market_cap,
+                    "status": "RETRIEVED",
+                    "source": "FMP",
+                    "unit": "USD"
+                },
                 "selected": False,
                 "match_score": similarity,  # Convert to 0-100 scale
                 "similarity_score": similarity,  # ADD THIS - frontend expects this field name
