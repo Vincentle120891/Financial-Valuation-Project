@@ -95,12 +95,19 @@ class Step4PeerManagementService:
         # DO NOT fetch expensive WACC data here - that happens in Step 10
         peer_list = []
         for peer in peers:
+            # Handle market_cap which can be a DataField object or a raw number
+            market_cap = peer.get('market_cap')
+            if isinstance(market_cap, dict) and 'value' in market_cap:
+                market_cap = market_cap.get('value')
+            elif market_cap is None:
+                market_cap = peer.get('marketCap')
+            
             peer_list.append({
                 "ticker": peer.get('symbol') or peer.get('ticker'),
                 "name": peer.get('name') or peer.get('company_name'),
                 "sector": peer.get('sector'),
                 "industry": peer.get('industry'),
-                "market_cap": peer.get('market_cap') or peer.get('marketCap'),
+                "market_cap": market_cap,
                 "similarity_score": peer.get('similarity_score') or peer.get('score', 0)
             })
         
