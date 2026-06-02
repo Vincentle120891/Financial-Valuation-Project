@@ -81,7 +81,12 @@ async def process(session_id: str, ticker: str, market: str, max_peers: int = 10
                 "company_name": peer.company_name,
                 "sector": peer.sector or "Unknown",
                 "industry": peer.industry or "Unknown",
-                "market_cap": {"value": peer.market_cap} if peer.market_cap else None,
+                "market_cap": {
+                    "value": peer.market_cap,
+                    "status": "RETRIEVED",
+                    "source": "FMP",
+                    "unit": "USD"
+                } if peer.market_cap else None,
                 "selected": False,
                 "match_score": peer.match_score * 100 if peer.match_score <= 1.0 else peer.match_score,  # Convert to 0-100 scale
                 "match_reasons": _generate_match_reasons(peer),  # Returns list of strings
