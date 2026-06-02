@@ -92,7 +92,6 @@ async def process(session_id: str, ticker: str, market: str, max_peers: int = 10
                 },
                 "selected": False,
                 "match_score": similarity,  # Convert to 0-100 scale
-                "similarity_score": similarity,  # ADD THIS - frontend expects this field name
                 "match_reasons": _generate_match_reasons(peer),  # Returns list of strings
                 "segments": peer.segments,
                 "pe_ratio": peer.pe_ratio,
