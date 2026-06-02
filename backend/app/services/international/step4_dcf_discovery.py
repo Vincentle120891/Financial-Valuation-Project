@@ -76,14 +76,19 @@ async def process(session_id: str, ticker: str, market: str, max_peers: int = 10
         # Transform response to expected format - using unified PeerCompany schema fields
         peers = []
         for peer in response.peers:
+            # Calculate similarity score (convert to 0-100 scale if needed)
+            similarity = peer.match_score * 100 if peer.match_score and peer.match_score <= 1.0 else (peer.match_score or 0)
+            
             peers.append({
                 "ticker": peer.ticker,
                 "company_name": peer.company_name,
                 "sector": peer.sector or "Unknown",
                 "industry": peer.industry or "Unknown",
-                "market_cap": {"value": peer.market_cap} if peer.market_cap else None,
+                "market_cap": peer.market_cap,  # Send raw number, NOT wrapped in object
+                "marketCap": peer.market_cap,   # Also provide camelCase for frontend flexibility
                 "selected": False,
-                "match_score": peer.match_score * 100 if peer.match_score <= 1.0 else peer.match_score,  # Convert to 0-100 scale
+                "match_score": similarity,  # Convert to 0-100 scale
+                "similarity_score": similarity,  # ADD THIS - frontend expects this field name
                 "match_reasons": _generate_match_reasons(peer),  # Returns list of strings
                 "segments": peer.segments,
                 "pe_ratio": peer.pe_ratio,
