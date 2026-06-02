@@ -320,7 +320,8 @@ const ValuationFlow = () => {
           return scoreB - scoreA;
         });
         const topPeers = sortedPeers.slice(0, Math.min(5, sortedPeers.length));
-        setSelectedPeers(topPeers);
+        // Store only tickers for consistency with PeerSelectionStep expectations
+        setSelectedPeers(topPeers.map(p => p.ticker || p.symbol));
 
         console.log(`Auto-selected ${topPeers.length} peers with highest scores:`, topPeers.map(p => p.symbol || p.ticker));
 
@@ -338,15 +339,13 @@ const ValuationFlow = () => {
   }, [market, selectedModels, sessionId]);
 
   // ==================== STEP 5: TOGGLE PEER SELECTION ====================
-  const handleTogglePeer = useCallback((peer) => {
+  const handleTogglePeer = useCallback((ticker) => {
     setSelectedPeers(prev => {
-      // Use ticker or symbol as the unique identifier for consistency
-      const peerId = peer.ticker || peer.symbol;
-      const exists = prev.find(p => (p.ticker || p.symbol) === peerId);
-      if (exists) {
-        return prev.filter(p => (p.ticker || p.symbol) !== peerId);
+      // selectedPeers now contains just ticker strings
+      if (prev.includes(ticker)) {
+        return prev.filter(p => p !== ticker);
       } else {
-        return [...prev, peer];
+        return [...prev, ticker];
       }
     });
   }, []);
