@@ -1,0 +1,49 @@
+# =============================================================================
+# FinGrid — Caddy Reverse Proxy Configuration
+# Auto-SSL, gzip, routing for backend API + frontend static
+# =============================================================================
+
+# Replace with your actual domain
+platform.yourdomain.com {
+
+    # Backend API: route /api/* to FastAPI with proxy headers
+    handle /api/* {
+        reverse_proxy backend:8000 {
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+            header_up X-Forwarded-For {remote_host}
+        }
+    }
+
+    # Backend docs (dev only — remove in production)
+    handle /docs* {
+        reverse_proxy backend:8000
+    }
+    handle /redoc* {
+        reverse_proxy backend:8000
+    }
+    handle /openapi.json {
+        reverse_proxy backend:8000
+    }
+
+    # Health checks
+    handle /health* {
+        reverse_proxy backend:8000
+    }
+
+    # Everything else → React frontend
+    handle {
+        reverse_proxy frontend:3000
+    }
+
+    # Modern compression for large financial table payloads
+    encode gzip zstd
+
+    # Security headers
+    header {
+        X-Content-Type-Options nosniff
+        X-Frame-Options DENY
+        Referrer-Policy strict-origin-when-cross-origin
+        -Server
+    }
+}

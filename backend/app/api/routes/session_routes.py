@@ -72,6 +72,18 @@ async def create_session(request: Request, payload: TickerSelectRequest):
         session_service.update_session_data(session_id, "confirmed", unified_response.confirmed)
         session_service.update_session_data(session_id, "market", unified_response.market)
         
+        # Store market_data and risk_metrics for Step 8 WACC pre-population
+        if hasattr(unified_response, 'market_data') and unified_response.market_data:
+            session_service.update_session_data(
+                session_id, "market_data",
+                [point.model_dump() for point in unified_response.market_data]
+            )
+        if hasattr(unified_response, 'risk_metrics') and unified_response.risk_metrics:
+            session_service.update_session_data(
+                session_id, "risk_metrics",
+                unified_response.risk_metrics.model_dump()
+            )
+        
         # Add ticker_info to response for frontend display
         if ticker_info:
             unified_response_dict = unified_response.model_dump()

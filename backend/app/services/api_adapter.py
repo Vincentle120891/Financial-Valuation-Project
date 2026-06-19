@@ -29,31 +29,64 @@ class DataValidationError(Exception):
 class APIAdapter:
     """
     Unified adapter for fetching and processing financial data from multiple providers.
+    
+    Enhanced with YFinanceService Strategy pattern for:
+    - Multi-year data preservation
+    - AlphaVantage fallback
+    - Data quality validation
+    - Caching
+    
+    Preserves from original APIAdapter:
+    - MetricRegistry integration
+    - Validation and normalization
+    - Audit logging and data versioning
     """
 
-    def __init__(self, provider: str = "yfinance"):
+    def __init__(self, provider: str = "yfinance", market: str = "international", enable_alphavantage: bool = True):
         """
-        Initialize adapter with a specific provider.
+        Initialize adapter with a specific provider and market.
         :param provider: 'yfinance', 'alpha_vantage', 'financial_modeling_prep'
+        :param market: 'international' or 'vietnam' (determines Strategy pattern)
+        :param enable_alphavantage: Whether to use AlphaVantage as fallback/enhancement.
+            Set to False for peer company fetches (yfinance-only for peers).
+            Keep True for target company (AlphaVantage fills gaps when yfinance has them).
         """
         self.provider = provider
+        self.market = market
+        self.enable_alphavantage = enable_alphavantage
         self.client = self._initialize_client()
+        self._yf_service = None  # Lazy-initialized YFinanceService
+
+    def _get_yf_service(self):
+        """Lazy-initialize YFinanceService for Strategy pattern fetching."""
+        if self._yf_service is None:
+            from app.services.international.yfinance_service import YFinanceService
+            self._yf_service = YFinanceService(enable_alphavantage_fallback=self.enable_alphavantage)
+        return self._yf_service
 
     def _initialize_client(self):
         """Initialize the API client based on provider."""
-        # Placeholder for actual client initialization
-        # In real implementation:
-        # if self.provider == "yfinance": return yfinance
-        # if self.provider == "alpha_vantage": return AlphaVantageClient()
         return None
 
     def fetch_raw_data(self, ticker: str, metrics: List[str]) -> Dict[str, Any]:
         """
         Fetch raw data for specific metrics from the provider.
-        Returns raw API response without mapping.
+        Uses YFinanceService Strategy pattern for multi-year data preservation.
+        Falls back to direct yfinance if Strategy fails.
         """
-        logger.info(f"Fetching raw data for {ticker} from {self.provider}")
+        logger.info(f"Fetching raw data for {ticker} from {self.provider} (market: {self.market})")
 
+        # Try YFinanceService Strategy pattern first (multi-year data)
+        try:
+            yf_service = self._get_yf_service()
+            data_package = yf_service.fetch_all_data(ticker, self.market)
+            if data_package:
+                # Convert YFinanceService format to APIAdapter-compatible format
+                return self._convert_yfs_to_raw(data_package)
+        except Exception as e:
+            logger.warning(f"YFinanceService Strategy failed for {ticker}: {e}, falling back to direct yfinance")
+
+        # Fallback: direct yfinance fetch (original behavior)
         if self.provider == "yfinance":
             return self._fetch_yfinance_raw(ticker, metrics)
         elif self.provider == "alpha_vantage":
@@ -61,24 +94,91 @@ class APIAdapter:
         else:
             raise ValueError(f"Unsupported provider: {self.provider}")
 
+    def _convert_yfs_to_raw(self, data_package: Dict[str, Any]) -> Dict[str, Any]:
+        """Convert YFinanceService output format to APIAdapter-compatible format.
+        
+        YFinanceService returns:
+        {"income_statement": {"periods": [...], "total_revenue": [...], ...}, ...}
+        
+        APIAdapter expects:
+        {"income_statement": {date: {metric: value}}, ...}
+        
+        This method converts the YFS format to a format that _extract_value() can handle,
+        while also preserving the original multi-year arrays for DataFrame construction.
+        """
+        result = {}
+        
+        # Convert income statement
+        is_data = data_package.get("income_statement", {})
+        if is_data and "periods" in is_data:
+            periods = is_data["periods"]
+            converted = {}
+            for key, values in is_data.items():
+                if key == "periods":
+                    continue
+                if isinstance(values, list):
+                    # Convert array to {date: value} format for _extract_value compatibility
+                    for i, period in enumerate(periods):
+                        if i < len(values) and values[i] is not None:
+                            if period not in converted:
+                                converted[period] = {}
+                            converted[period][key] = values[i]
+            result["income_statement"] = converted
+        
+        # Convert balance sheet
+        bs_data = data_package.get("balance_sheet", {})
+        if bs_data and "periods" in bs_data:
+            periods = bs_data["periods"]
+            converted = {}
+            for key, values in bs_data.items():
+                if key == "periods":
+                    continue
+                if isinstance(values, list):
+                    for i, period in enumerate(periods):
+                        if i < len(values) and values[i] is not None:
+                            if period not in converted:
+                                converted[period] = {}
+                            converted[period][key] = values[i]
+            result["balance_sheet"] = converted
+        
+        # Convert cash flow
+        cf_data = data_package.get("cash_flow", {})
+        if cf_data and "periods" in cf_data:
+            periods = cf_data["periods"]
+            converted = {}
+            for key, values in cf_data.items():
+                if key == "periods":
+                    continue
+                if isinstance(values, list):
+                    for i, period in enumerate(periods):
+                        if i < len(values) and values[i] is not None:
+                            if period not in converted:
+                                converted[period] = {}
+                            converted[period][key] = values[i]
+            result["cash_flow"] = converted
+        
+        # Pass through info/key_stats
+        result["info"] = data_package.get("key_stats", data_package.get("info", {}))
+        
+        # Preserve multi-year data for DataFrame construction
+        result["_multi_year"] = {
+            "income_statement": data_package.get("income_statement", {}),
+            "balance_sheet": data_package.get("balance_sheet", {}),
+            "cash_flow": data_package.get("cash_flow", {}),
+        }
+        
+        return result
+
     def _fetch_yfinance_raw(self, ticker: str, metrics: List[str]) -> Dict[str, Any]:
-        """Fetch raw data from yfinance."""
+        """Fetch raw data directly from yfinance (fallback)."""
         try:
             import yfinance as yf
             stock = yf.Ticker(ticker)
-
-            # Fetch financials using get_* methods for yfinance v1.3.0+ compatibility
-            # These return CamelCase without spaces (e.g., TotalRevenue)
             income_stmt = stock.get_income_stmt()
             balance_sheet = stock.get_balance_sheet()
             cashflow = stock.get_cash_flow()
-
-            # Fetch info
             info = stock.info
-
-            # Fetch history
             history = stock.history(period="5y")
-
             return {
                 "income_statement": income_stmt.to_dict() if income_stmt is not None else {},
                 "balance_sheet": balance_sheet.to_dict() if balance_sheet is not None else {},
@@ -91,8 +191,7 @@ class APIAdapter:
             return {}
 
     def _fetch_alpha_vantage_raw(self, ticker: str, metrics: List[str]) -> Dict[str, Any]:
-        """Fetch raw data from Alpha Vantage."""
-        # Implementation placeholder
+        """Fetch raw data from Alpha Vantage (placeholder)."""
         return {}
 
     def map_and_normalize(self, raw_data: Dict[str, Any], ticker: str, session_id: Optional[str] = None) -> Dict[str, Any]:

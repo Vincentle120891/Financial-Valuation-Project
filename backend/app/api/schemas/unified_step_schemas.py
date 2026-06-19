@@ -187,6 +187,7 @@ class MarketRiskMetrics(BaseModel):
     unlevered_beta: Optional[DataField] = Field(None, description="Unlevered beta")
     equity_risk_premium: Optional[DataField] = Field(None, description="Total equity risk premium")
     country_risk_premium: Optional[DataField] = Field(None, description="Country-specific risk premium")
+    gdp_growth: Optional[DataField] = Field(None, description="Real GDP growth rate (for terminal growth rate)")
     vnindex_performance: Optional[Dict[str, Any]] = Field(None, description="VNINDEX performance (Vietnam only)")
 
 
@@ -277,6 +278,7 @@ class PeerCompany(BaseModel):
     market_cap: Optional[DataField] = None
     selected: bool = False
     match_score: Optional[float] = Field(None, ge=0, le=100, description="Match score 0-100")
+    similarity_score: Optional[float] = Field(None, ge=0, le=100, description="Similarity score 0-100")
     match_reasons: Optional[List[str]] = Field(default_factory=list, description="Reasons for peer match")
     segments: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Business segments")
     pe_ratio: Optional[float] = Field(None, description="P/E ratio")
@@ -329,6 +331,20 @@ class UnifiedStep4Response(BaseModel):
     suggested_peers: List[PeerCompany]
     selected_peers: List[str]
     message: str
+
+
+class UnifiedStep4SavePeersRequest(BaseModel):
+    """Step 4: Save selected peers to session (unified schema)"""
+    session_id: str
+    peers: List[PeerCompany]
+
+
+class UnifiedStep4SavePeersResponse(BaseModel):
+    """Step 4: Response after saving peers (unified schema)"""
+    status: str
+    message: str
+    peers_saved: int
+    peer_list: Optional[List[Dict[str, Any]]] = None
 
 
 # =============================================================================
@@ -409,25 +425,75 @@ class HistoricalFinancialsData(BaseModel):
     # Income Statement
     revenue: Optional[DataField] = None
     cogs: Optional[DataField] = None
-    ebitda: Optional[DataField] = None
-    net_income: Optional[DataField] = None
+    gross_profit: Optional[DataField] = None
     operating_expenses: Optional[DataField] = None
-    sg_and_a: Optional[DataField] = None
+    research_development: Optional[DataField] = None
+    ebitda: Optional[DataField] = None
+    ebit: Optional[DataField] = None
+    interest_expense: Optional[DataField] = None
+    other_income: Optional[DataField] = None
+    pretax_income: Optional[DataField] = None
+    tax_provision: Optional[DataField] = None
+    net_income: Optional[DataField] = None
     depreciation: Optional[DataField] = None
+    sg_and_a: Optional[DataField] = None
 
     # Cash Flow
     capex: Optional[DataField] = None
     free_cash_flow: Optional[DataField] = None
     operating_cash_flow: Optional[DataField] = None
+    working_capital_changes: Optional[DataField] = None
+    interest_paid: Optional[DataField] = None
+    tax_paid: Optional[DataField] = None
+    share_buybacks: Optional[DataField] = None
+    debt_repayments: Optional[DataField] = None
+    debt_issuance: Optional[DataField] = None
+    dividends_paid: Optional[DataField] = None
 
     # Balance Sheet
     total_assets: Optional[DataField] = None
     total_debt: Optional[DataField] = None
+    long_term_debt: Optional[DataField] = None
+    current_debt: Optional[DataField] = None
     cash_and_equivalents: Optional[DataField] = None
     inventory: Optional[DataField] = None
     accounts_receivable: Optional[DataField] = None
     accounts_payable: Optional[DataField] = None
     shareholders_equity: Optional[DataField] = None
+    retained_earnings: Optional[DataField] = None
+    shares_outstanding: Optional[DataField] = None
+    interest_income: Optional[DataField] = None
+    working_capital: Optional[DataField] = None
+    ppe_gross: Optional[DataField] = None
+    accumulated_depreciation: Optional[DataField] = None
+    net_ppe: Optional[DataField] = Field(None, description="Net PP&E (needed for Asset Schedule)")
+    net_debt: Optional[DataField] = Field(None, description="Net Debt = Total Debt - Cash (needed for equity bridge)")
+    total_current_assets: Optional[DataField] = Field(None, description="Total Current Assets (needed for Balance Sheet opening)")
+    total_current_liabilities: Optional[DataField] = Field(None, description="Total Current Liabilities (needed for Balance Sheet opening)")
+    total_liabilities: Optional[DataField] = Field(None, description="Total Liabilities (needed for Balance Sheet opening)")
+    non_current_marketable_securities: Optional[DataField] = Field(None, description="Non-Current Marketable Securities (needed for EV-to-Equity bridge)")
+    other_current_liabilities: Optional[DataField] = Field(None, description="Other Current Liabilities (needed for CL identity)")
+    deferred_tax_liabilities: Optional[DataField] = Field(None, description="Deferred Tax Liabilities (needed for NCL identity)")
+    current_accrued_expenses: Optional[DataField] = Field(None, description="Current Accrued Expenses (needed for CL identity: CL = Payables + Accrued + Other CL + Curr Debt + Deferred)")
+    current_deferred_liabilities: Optional[DataField] = Field(None, description="Current Deferred Liabilities (needed for CL identity: CL = Payables + Accrued + Other CL + Curr Debt + Deferred)")
+    trade_and_other_payables_non_current: Optional[DataField] = Field(None, description="Trade and Other Payables Non Current (needed for NCL identity: NCL = LT Debt + Trade Payables NC + Other NC Liab)")
+    other_non_current_liabilities: Optional[DataField] = Field(None, description="Other Non Current Liabilities (needed for NCL identity)")
+    other_short_term_investments: Optional[DataField] = Field(None, description="Other Short Term Investments (needed for CA identity: CA = Cash + ST Inv + Receivables + Inventory + Other CA)")
+    other_current_assets: Optional[DataField] = Field(None, description="Other Current Assets (needed for CA identity)")
+    other_non_current_assets: Optional[DataField] = Field(None, description="Other Non Current Assets (needed for NCA identity: NCA = Net PPE + Accum Dep + Investments + Other NCA)")
+    common_stock: Optional[DataField] = Field(None, description="Common Stock (needed for Equity identity: Equity = Common Stock + RE + Other Equity)")
+    other_equity_adjustments: Optional[DataField] = Field(None, description="Other Equity Adjustments / AOCI (needed for Equity identity: Equity = Common Stock + RE + Other Equity)")
+
+    # Deferred Tax
+    deferred_tax: Optional[DataField] = Field(None, description="Deferred Tax (needed for tax schedule current/deferred split)")
+
+    # Working Capital Changes
+    working_capital_changes: Optional[DataField] = Field(None, description="Change in Working Capital (needed for DCF UFCF)")
+
+    # Cash Flow Financing
+    change_in_long_term_debt: Optional[DataField] = Field(None, description="Change in Long-Term Debt (CF financing section)")
+    change_in_common_equity: Optional[DataField] = Field(None, description="Change in Common Equity (CF financing section)")
+    change_in_revolver: Optional[DataField] = Field(None, description="Change in Revolving Credit Line (CF financing section)")
 
     # Calculated Metrics
     revenue_cagr: Optional[DataField] = None
@@ -584,6 +650,18 @@ class UnifiedStep6Response(BaseModel):
         description="Trading comparables multiples - NESTED structure"
     )
 
+    # Balance Sheet Opening Balances (for DCF model)
+    balance_sheet_opening: Optional[Dict[str, DataField]] = Field(
+        None,
+        description="Balance sheet opening balances (Net Debt, PP&E Gross, Accumulated Depreciation)"
+    )
+
+    # Peer Comparables Data (for DCF WACC calculation)
+    peer_comparables: Optional[Dict[str, DataField]] = Field(
+        None,
+        description="Peer comparison data (Market Caps, Betas, Total Debt, Cash, Tax Rates)"
+    )
+
     # Metadata
     data_source: str = Field(..., description="Primary data source (yfinance, vietstock, pdf_extraction)")
     fetch_timestamp: datetime = Field(..., description="When data was fetched")
@@ -665,8 +743,19 @@ class AssumptionCategoryType(str, Enum):
     WORKING_CAPITAL = "WORKING_CAPITAL"
     WACC_COMPONENTS = "WACC_COMPONENTS"
     TERMINAL_VALUE = "TERMINAL_VALUE"
+    FINANCING = "FINANCING"
     DUPONT_TARGETS = "DUPONT_TARGETS"
     COMPS_MULTIPLES = "COMPS_MULTIPLES"
+
+    @classmethod
+    def _missing_(cls, value):
+        """Accept lowercase or mixed-case values by normalizing to UPPERCASE."""
+        if isinstance(value, str):
+            normalized = value.upper()
+            for member in cls:
+                if member.value == normalized:
+                    return member
+        return None
 
 
 class HistoricalTrendPoint(BaseModel):
@@ -684,6 +773,14 @@ class HistoricalTrendline(BaseModel):
     cagr: Optional[float] = Field(None, description="Compound Annual Growth Rate")
     trend_direction: str = Field("stable", description="Trend direction: increasing, decreasing, stable")
     volatility: str = Field("low", description="Volatility level: low, medium, high")
+    # Enhanced statistical context
+    median: Optional[float] = Field(None, description="Median value across historical period")
+    min_value: Optional[float] = Field(None, description="Minimum value in period")
+    max_value: Optional[float] = Field(None, description="Maximum value in period")
+    standard_deviation: Optional[float] = Field(None, description="Standard deviation")
+    average_yoy_growth: Optional[float] = Field(None, description="Average year-over-year growth rate")
+    latest_value: Optional[float] = Field(None, description="Most recent period value")
+    oldest_value: Optional[float] = Field(None, description="Oldest period value")
 
 
 class AISuggestion(BaseModel):
@@ -703,6 +800,9 @@ class AssumptionInput(BaseModel):
     category: AssumptionCategoryType = Field(..., description="Category this assumption belongs to")
     description: str = Field(..., description="Description of what this assumption represents")
     unit: str = Field("%", description="Unit of measurement (%, days, x, ratio, etc.)")
+
+    # Data provenance — tells the user WHERE the value came from
+    data_source: Optional[str] = Field(None, description="Source attribution for the value (e.g., 'Market data (FRED 10Y Treasury yield)', 'Peer analysis (Hamada formula, 5 peers)', 'AI-generated', 'Calculated: Rf + Beta × (MRP + CRP)', 'Industry default')")
 
     # Historical context
     historical_trendline: Optional[HistoricalTrendline] = Field(None, description="Historical trend data")
@@ -824,6 +924,9 @@ class UnifiedStep8Response(BaseModel):
     total_validation_errors: List[str] = Field(default_factory=list, description="List of all validation errors")
     ready_for_calculation: bool = Field(False, description="Whether assumptions are ready for valuation calculation")
 
+    # Complete financial statements (merged Step 6 + Step 7) — eliminates separate GET call
+    complete_financial_statements: Optional[Dict[str, Any]] = Field(None, description="Merged Income Statement, Balance Sheet, Cash Flow from Step 6 + Step 7")
+
     # What-if preview
     sensitivity_preview: Optional[Dict[str, Any]] = Field(None, description="Mini sensitivity analysis preview")
     message: str = Field(..., description="Human-readable message")
@@ -838,7 +941,17 @@ class UnifiedStep9Request(BaseModel):
     session_id: str
     method: ValuationMethod
     market: MarketType
-    confirmed_assumptions: Dict[str, Any]
+    confirmed_assumptions: Dict[str, Any] = Field(default_factory=dict)
+    confirmed_values: Optional[Dict[str, Any]] = Field(None, description="Frontend alias for confirmed_assumptions (legacy)")
+    scenario: Optional[str] = Field("base_case", description="Scenario selection (base_case, best_case, worst_case)")
+
+    @field_validator('confirmed_assumptions', mode='before')
+    @classmethod
+    def merge_confirmed_values(cls, v, info):
+        """Merge confirmed_values into confirmed_assumptions if both present."""
+        # Pydantic V2: info.data contains already-validated fields
+        # We handle this in the route handler instead for cleaner separation
+        return v
 
     @field_validator('market', mode='before')
     @classmethod
@@ -857,7 +970,20 @@ class UnifiedStep9Request(BaseModel):
 
 
 class UnifiedStep9Response(BaseModel):
-    """Step 9: Assumptions confirmed"""
+    """Step 9: Assumptions confirmed — building block schedules calculated
+
+    Step 9 runs the DCF Engine to compute the "building block" schedules
+    that contribute to UFCF derivation. These are the projected financial
+    statements the user can review before proceeding to Step 10.
+
+    Building block schedules (shown in Step 9):
+    - Income Statement, Balance Sheet, Cash Flow Statement
+    - Working Capital, Depreciation, Asset Schedule
+    - Debt Schedules (Part 1 & 2), Equity Schedule
+    - Income Tax Schedules (Levered & Unlevered)
+
+    UFCF / DCF / Valuation schedules are deferred to Step 10.
+    """
     status: str
     session_id: str
     method: str
@@ -867,6 +993,10 @@ class UnifiedStep9Response(BaseModel):
     ready_for_valuation: bool
     validation_errors: List[str] = Field(default_factory=list)
     message: str
+
+    # Building block schedules from DCF Engine (Step 9 only)
+    # These are the projected financial statements that feed into UFCF.
+    calculated_schedules: Optional[Dict[str, Any]] = None
 
 
 # =============================================================================
@@ -897,6 +1027,7 @@ class UnifiedStep10Request(BaseModel):
     session_id: str
     method: ValuationMethod
     market: MarketType
+    scenario: str = Field("base_case", description="Scenario selection: base_case, best_case, worst_case")
     run_sensitivity: bool = True
     scenario_analysis: bool = True
 
@@ -917,7 +1048,7 @@ class UnifiedStep10Request(BaseModel):
 
 
 class UnifiedStep10Response(BaseModel):
-    """Step 10: Valuation completed"""
+    """Step 10: Valuation completed — projected schedules + valuation outputs"""
     status: str
     session_id: str
     method: str
@@ -928,6 +1059,10 @@ class UnifiedStep10Response(BaseModel):
     # Results
     valuation_summary: ValuationResultSummary
     detailed_outputs: Dict[str, Any]
+
+    # UFCF / DCF / Valuation schedules from DCFEngine (Outputs sheet equivalent)
+    # Building block schedules (IS, BS, CFS, WC, Dep, etc.) are in Step 9.
+    calculated_schedules: Optional[Dict[str, Any]] = None
 
     # Analysis
     sensitivity_analysis: Optional[SensitivityAnalysis] = None

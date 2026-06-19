@@ -39,15 +39,31 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
         """
 
         # Extract API keys from headers (lowercase as per HTTP/2 spec)
-        api_keys = {
+        raw_api_keys = {
             'alpha_vantage': request.headers.get('x-api-key-alphavantage'),
+            'rapidapi': request.headers.get('x-api-key-rapidapi'),
             'fmp': request.headers.get('x-api-key-fmp'),
             'fred': request.headers.get('x-api-key-fred'),
             'sec_edgar': request.headers.get('x-api-key-secedgar'),
+            'openrouter': request.headers.get('x-api-key-openrouter'),
+            'groq': request.headers.get('x-api-key-groq'),
+            'gemini': request.headers.get('x-api-key-gemini'),
+            'qwen': request.headers.get('x-api-key-qwen'),
         }
 
-        # Filter out None values
-        api_keys = {k: v for k, v in api_keys.items() if v}
+        # Parse comma-separated keys and register them in ApiKeyManager
+        from app.core.api_key_manager import api_key_manager
+        api_keys = {}
+        for service, raw_value in raw_api_keys.items():
+            if raw_value:
+                # Support comma-separated multiple keys
+                keys = [k.strip() for k in raw_value.split(',') if k.strip()]
+                if keys:
+                    # Store the first key for backward compatibility
+                    api_keys[service] = keys[0]
+                    # Register all keys in the manager for rotation
+                    for key in keys:
+                        api_key_manager.add_key(service, key, source='header')
 
         # Attach to request state for downstream access
         request.state.api_keys = api_keys

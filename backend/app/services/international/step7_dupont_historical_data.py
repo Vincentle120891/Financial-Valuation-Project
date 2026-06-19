@@ -8,7 +8,7 @@ Features:
 - DuPont-specific historical financials gap filling (ROE decomposition inputs)
 - AI-powered extraction from PDF reports, filings, and other sources
 - Deterministic fallback calculations when AI extraction fails
-- Ensures complete 3-5 year historical data for DuPont analysis
+- Ensures complete 3-4 year historical data for DuPont analysis
 
 AI Usage: STRICTLY for historical data extraction. NO forward-looking inputs.
 """
@@ -70,7 +70,7 @@ class DuPontStep7Processor:
 
     Uses AI to retrieve DuPont-specific historical financial data that APIs cannot provide:
     - Extracts data from PDF annual reports, filings, prospectuses
-    - Fills gaps in 3-5 year historical financial statements
+    - Fills gaps in 3-4 year historical financial statements
     - Ensures complete dataset before moving to assumption generation (Step 8)
 
     DuPont-Specific Metrics Tracked:
@@ -144,7 +144,7 @@ class DuPontStep7Processor:
             market: Market/country (e.g., "US", "International")
             step6_financial_data: DuPont historical data already fetched from APIs (Step 6 response)
             missing_metrics: Specific DuPont metrics that need to be filled (optional)
-            fiscal_years_needed: List of fiscal years requiring data (default: last 5 years)
+            fiscal_years_needed: List of fiscal years requiring data (default: last 4 years)
 
         Returns:
             DuPontHistoricalDataRetrievalResponse with AI-extracted historical data
@@ -154,7 +154,7 @@ class DuPontStep7Processor:
         # Determine which years need data
         current_year = datetime.now().year
         if fiscal_years_needed is None:
-            fiscal_years_needed = list(range(current_year - 5, current_year))
+            fiscal_years_needed = list(range(current_year - 4, current_year))
         
         # Extract missing metrics from Step 6 response format
         extracted_missing = await self._extract_missing_dupont_metrics_from_step6(step6_financial_data)

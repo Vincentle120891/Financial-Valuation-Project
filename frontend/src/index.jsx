@@ -1,7 +1,8 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import './index.css';
-import ValuationFlow from './components/ValuationFlow.jsx';
+import './i18n'; // Initialize i18n before app renders
+import ValuationFlow from './components/ValuationFlow.tsx';
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(

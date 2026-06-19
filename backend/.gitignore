@@ -1,84 +1,66 @@
---- .gitignore (原始)
-```
-# Compiled and build artifacts
+# ---------------------
+# Python
+# ---------------------
 *.pyc
 __pycache__/
+*.pyo
+*.pyd
+*.egg-info/
+.eggs/
+.tox/
+.mypy_cache/
+.dmypy.json
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+nosetests.xml
 
-# Dependencies
+# ---------------------
+# Virtual Environments
+# ---------------------
 .venv/
 venv/
-node_modules/
 
-# Logs and temp files
+# ---------------------
+# Environment & Secrets
+# ---------------------
+.env
+.env.local
+.env.*
+!.env.example
+
+# ---------------------
+# Session Persistence
+# ---------------------
+sessions/
+sessions/*.json
+sessions/*.json.tmp
+
+# ---------------------
+# Database Files
+# ---------------------
+*.db
+*.sqlite
+*.sqlite3
+
+# ---------------------
+# Logs & Temp
+# ---------------------
 *.log
 *.tmp
 *.swp
+*.swo
+pip-log.txt
 
-# Environment
-.env
-.env.local
-*.env.*
-
+# ---------------------
 # Editors
+# ---------------------
 .vscode/
 .idea/
 
-# Coverage reports
-coverage/
-htmlcov/
-.coverage
-
-# Python specific
-*.py[cod]
-*$py.class
-*.so
-.Python
-*.egg-info/
-.eggs/
-.installed.cfg
-pip-log.txt
-pip-delete-this-directory.txt
-.tox/
-.coverage.*
+# ---------------------
+# Misc
+# ---------------------
 .cache/
-nosetests.xml
-coverage.xml
-*.cover
-*.log
-.git/
-
-# Distribution / packaging
-.Python
-*.so
-.Python
-*.egg-info/
-.eggs/
-.installed.cfg
-pip-log.txt
-pip-delete-this-directory.txt
-.tox/
-.coverage.*
-.cache/
-nosetests.xml
-coverage.xml
-*.cover
-*.log
-.git/
-
-# MyPy
-.mypy_cache/
-.dmypy.json
-dmypy.json
-
-# Pytest
-.pytest_cache/
-
-# Jupyter Notebook
-.ipynb_checkpoints
-
-# Local configuration file (specific to avoid committing sensitive data)
-.env.local
-```
-
-+++ .gitignore (修改后)
-Nothing should be ignored based on the provided file changes. The only modified file is a Python source code file (`backend/comps_engine.py`), which should not be added to .gitignore.

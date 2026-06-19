@@ -100,15 +100,67 @@ class FREDService:
 
     def get_market_risk_premium(self) -> Optional[Dict[str, Any]]:
         """
-        Fetch estimated Equity Risk Premium (ERP).
-        Note: FRED doesn't directly provide ERP, so we use historical averages or
-        implied ERP from market data. This is a placeholder for future implementation.
-
-        For now, returns None to indicate data must be estimated or user-provided.
+        Calculate Equity Risk Premium (ERP) from S&P 500 historical returns vs risk-free rate.
+        
+        ERP = Average(S&P 500 annual returns over 10 years) - Average(10Y Treasury yield over 10 years)
+        
+        Uses FRED series:
+        - SP500: S&P 500 Index (monthly)
+        - DGS10: 10-Year Treasury Constant Maturity Rate
         """
-        # TODO: Implement implied ERP calculation from S&P 500 data
-        # Alternative: Use Damodaran's published ERP data via web scraping
-        logger.info("Market Risk Premium estimation requires external data source (e.g., Damodaran)")
+        if not self.fred:
+            return None
+
+        try:
+            # Fetch S&P 500 monthly index (last 10 years)
+            sp500 = self.fred.get_series('SP500')
+            treasury = self.fred.get_series('DGS10')
+
+            if sp500 is None or treasury is None:
+                return None
+
+            # Use last 10 years of data
+            cutoff = datetime.now() - timedelta(days=365 * 10)
+            sp500_monthly = sp500[sp500.index >= cutoff].dropna()
+            treasury_monthly = treasury[treasury.index >= cutoff].dropna()
+
+            if len(sp500_monthly) < 12 or len(treasury_monthly) < 12:
+                return None
+
+            # Calculate annual S&P 500 returns from monthly prices
+            sp500_annual_returns = []
+            sp500_monthly_values = sp500_monthly.resample('ME').last().dropna()
+            for i in range(12, len(sp500_monthly_values)):
+                prev = sp500_monthly_values.iloc[i - 12]
+                curr = sp500_monthly_values.iloc[i]
+                if prev > 0:
+                    sp500_annual_returns.append((curr / prev) - 1)
+
+            # Average 10Y Treasury yield
+            avg_risk_free = treasury_monthly.mean() / 100  # Convert from % to decimal
+
+            if not sp500_annual_returns or avg_risk_free is None:
+                return None
+
+            avg_market_return = sum(sp500_annual_returns) / len(sp500_annual_returns)
+            erp = avg_market_return - avg_risk_free
+
+            # Clamp to reasonable range (3% - 12%)
+            erp = max(0.03, min(0.12, erp))
+
+            logger.info(f"Calculated ERP from FRED: {erp:.2%} (S&P500 avg return: {avg_market_return:.2%}, avg Rf: {avg_risk_free:.2%})")
+
+            return {
+                'value': round(erp * 100, 2),  # Return as percentage
+                'unit': '%',
+                'source': 'FRED - Calculated from S&P 500 vs 10Y Treasury (10-year history)',
+                'series_id': 'SP500 / DGS10',
+                'last_updated': sp500_monthly.index[-1].isoformat(),
+                'status': 'CALCULATED'
+            }
+        except Exception as e:
+            logger.error(f"Error calculating ERP from FRED: {str(e)}")
+
         return None
 
     def get_inflation_rate(self) -> Optional[Dict[str, Any]]:

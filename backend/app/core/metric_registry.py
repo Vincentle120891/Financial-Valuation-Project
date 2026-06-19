@@ -36,6 +36,71 @@ METRIC_REGISTRY: Dict[str, Dict[str, Any]] = {
         "validation": {"min_value": 0},
         "required_for_methods": ["DCF", "COMPS"]
     },
+    "cost_of_revenue": {
+        "display_name": "Cost of Revenue (COGS)",
+        "category": MetricCategory.INCOME_STATEMENT,
+        "type": DataType.FLOAT,
+        "unit": "currency",
+        "sources": {
+            "yfinance": "CostOfRevenue",  # From financials index (CamelCase without spaces for yfinance v1.3.0+)
+            "alpha_vantage": "costOfRevenue",
+            "financial_modeling_prep": "cost_of_revenue"
+        },
+        "validation": {"min_value": 0},
+        "required_for_methods": ["DCF", "COMPS"]
+    },
+    "operating_expenses": {
+        "display_name": "Operating Expenses",
+        "category": MetricCategory.INCOME_STATEMENT,
+        "type": DataType.FLOAT,
+        "unit": "currency",
+        "sources": {
+            "yfinance": "OperatingExpense",  # From financials index (CamelCase without spaces for yfinance v1.3.0+)
+            "alpha_vantage": "operatingExpenses",
+            "financial_modeling_prep": "operating_expenses"
+        },
+        "validation": {"min_value": None},  # Can be negative
+        "required_for_methods": ["DCF"]
+    },
+    "interest_expense": {
+        "display_name": "Interest Expense",
+        "category": MetricCategory.INCOME_STATEMENT,
+        "type": DataType.FLOAT,
+        "unit": "currency",
+        "sources": {
+            "yfinance": "InterestExpense",  # From financials index (CamelCase without spaces for yfinance v1.3.0+)
+            "alpha_vantage": "interestExpense",
+            "financial_modeling_prep": "interest_expense"
+        },
+        "validation": {"min_value": None},  # Usually positive (expense)
+        "required_for_methods": ["DCF"]
+    },
+    "pretax_income": {
+        "display_name": "Pre-Tax Income",
+        "category": MetricCategory.INCOME_STATEMENT,
+        "type": DataType.FLOAT,
+        "unit": "currency",
+        "sources": {
+            "yfinance": "PretaxIncome",  # From financials index (CamelCase without spaces for yfinance v1.3.0+)
+            "alpha_vantage": "pretaxIncome",
+            "financial_modeling_prep": "pretax_income"
+        },
+        "validation": {"min_value": None},  # Can be negative
+        "required_for_methods": ["DCF"]
+    },
+    "tax_provision": {
+        "display_name": "Tax Provision",
+        "category": MetricCategory.INCOME_STATEMENT,
+        "type": DataType.FLOAT,
+        "unit": "currency",
+        "sources": {
+            "yfinance": "IncomeTaxExpense",  # From financials index (CamelCase without spaces for yfinance v1.3.0+)
+            "alpha_vantage": "incomeTaxExpense",
+            "financial_modeling_prep": "tax_provision"
+        },
+        "validation": {"min_value": None},  # Can be negative (tax benefit)
+        "required_for_methods": ["DCF"]
+    },
     "operating_income": {
         "display_name": "Operating Income (EBIT)",
         "category": MetricCategory.INCOME_STATEMENT,
@@ -89,6 +154,40 @@ METRIC_REGISTRY: Dict[str, Dict[str, Any]] = {
         "validation": {"min_value": 0},
         "required_for_methods": ["DCF"]
     },
+    "gross_profit": {
+        "display_name": "Gross Profit",
+        "category": MetricCategory.INCOME_STATEMENT,
+        "type": DataType.FLOAT,
+        "unit": "currency",
+        "sources": {
+            "yfinance": "GrossProfit",  # From financials index (CamelCase without spaces)
+        },
+        "validation": {"min_value": None},
+        "required_for_methods": ["DCF"],
+        "calculation_formula": "revenue - cost_of_revenue"
+    },
+    "sg_and_a": {
+        "display_name": "SG&A Expenses",
+        "category": MetricCategory.INCOME_STATEMENT,
+        "type": DataType.FLOAT,
+        "unit": "currency",
+        "sources": {
+            "yfinance": "SellingGeneralAndAdministration",  # From financials index
+        },
+        "validation": {"min_value": None},
+        "required_for_methods": ["DCF"]
+    },
+    "deferred_tax": {
+        "display_name": "Deferred Tax",
+        "category": MetricCategory.CASH_FLOW,
+        "type": DataType.FLOAT,
+        "unit": "currency",
+        "sources": {
+            "yfinance": "DeferredIncomeTax",  # From cashflow index
+        },
+        "validation": {"min_value": None},
+        "required_for_methods": ["DCF"]
+    },
 
     # --- Balance Sheet ---
     "total_assets": {
@@ -102,7 +201,59 @@ METRIC_REGISTRY: Dict[str, Dict[str, Any]] = {
             "financial_modeling_prep": "total_assets"
         },
         "validation": {"min_value": 0},
-        "required_for_methods": ["DuPont", "COMPS"]
+        "required_for_methods": ["DuPont", "COMPS", "DCF"]
+    },
+    "accounts_receivable": {
+        "display_name": "Accounts Receivable",
+        "category": MetricCategory.BALANCE_SHEET,
+        "type": DataType.FLOAT,
+        "unit": "currency",
+        "sources": {
+            "yfinance": "Receivables",  # From balance sheet (CamelCase without spaces for yfinance v1.3.0+)
+            "alpha_vantage": "receivables",
+            "financial_modeling_prep": "accounts_receivable"
+        },
+        "validation": {"min_value": 0},
+        "required_for_methods": ["DCF"]
+    },
+    "inventory": {
+        "display_name": "Inventory",
+        "category": MetricCategory.BALANCE_SHEET,
+        "type": DataType.FLOAT,
+        "unit": "currency",
+        "sources": {
+            "yfinance": "Inventories",  # From balance sheet (CamelCase without spaces for yfinance v1.3.0+)
+            "alpha_vantage": "inventory",
+            "financial_modeling_prep": "inventory"
+        },
+        "validation": {"min_value": 0},
+        "required_for_methods": ["DCF"]
+    },
+    "accounts_payable": {
+        "display_name": "Accounts Payable",
+        "category": MetricCategory.BALANCE_SHEET,
+        "type": DataType.FLOAT,
+        "unit": "currency",
+        "sources": {
+            "yfinance": "PayablesAndAccruedExpenses",  # From balance sheet (CamelCase without spaces for yfinance v1.3.0+)
+            "alpha_vantage": "payables",
+            "financial_modeling_prep": "accounts_payable"
+        },
+        "validation": {"min_value": 0},
+        "required_for_methods": ["DCF"]
+    },
+    "shareholders_equity": {
+        "display_name": "Shareholders Equity",
+        "category": MetricCategory.BALANCE_SHEET,
+        "type": DataType.FLOAT,
+        "unit": "currency",
+        "sources": {
+            "yfinance": "StockholdersEquity",  # From balance sheet (CamelCase without spaces for yfinance v1.3.0+)
+            "alpha_vantage": "totalShareholderEquity",
+            "financial_modeling_prep": "total_equity"
+        },
+        "validation": {"min_value": None},
+        "required_for_methods": ["DCF"]
     },
     "total_liabilities": {
         "display_name": "Total Liabilities",
@@ -157,8 +308,97 @@ METRIC_REGISTRY: Dict[str, Dict[str, Any]] = {
         "required_for_methods": ["DCF", "DuPont"],
         "calculation_formula": "short_term_debt + long_term_debt"
     },
+    "long_term_debt": {
+        "display_name": "Long-Term Debt",
+        "category": MetricCategory.BALANCE_SHEET,
+        "type": DataType.FLOAT,
+        "unit": "currency",
+        "sources": {
+            "yfinance": "LongTermDebt",
+        },
+        "validation": {"min_value": 0},
+        "required_for_methods": ["DCF"]
+    },
+    "net_debt": {
+        "display_name": "Net Debt",
+        "category": MetricCategory.BALANCE_SHEET,
+        "type": DataType.FLOAT,
+        "unit": "currency",
+        "sources": {
+            "yfinance": "NetDebt",
+        },
+        "validation": {"min_value": None},
+        "required_for_methods": ["DCF"],
+        "calculation_formula": "total_debt - cash_and_equivalents"
+    },
+    "ppe_net": {
+        "display_name": "PP&E (Net)",
+        "category": MetricCategory.BALANCE_SHEET,
+        "type": DataType.FLOAT,
+        "unit": "currency",
+        "sources": {
+            "yfinance": "NetPPE",
+        },
+        "validation": {"min_value": None},
+        "required_for_methods": ["DCF"]
+    },
+    "retained_earnings": {
+        "display_name": "Retained Earnings",
+        "category": MetricCategory.BALANCE_SHEET,
+        "type": DataType.FLOAT,
+        "unit": "currency",
+        "sources": {
+            "yfinance": "RetainedEarnings",
+        },
+        "validation": {"min_value": None},
+        "required_for_methods": ["DCF"]
+    },
+    "total_current_assets": {
+        "display_name": "Total Current Assets",
+        "category": MetricCategory.BALANCE_SHEET,
+        "type": DataType.FLOAT,
+        "unit": "currency",
+        "sources": {
+            "yfinance": "CurrentAssets",
+        },
+        "validation": {"min_value": 0},
+        "required_for_methods": ["DCF"]
+    },
+    "total_current_liabilities": {
+        "display_name": "Total Current Liabilities",
+        "category": MetricCategory.BALANCE_SHEET,
+        "type": DataType.FLOAT,
+        "unit": "currency",
+        "sources": {
+            "yfinance": "CurrentLiabilities",
+        },
+        "validation": {"min_value": 0},
+        "required_for_methods": ["DCF"]
+    },
 
     # --- Cash Flow ---
+    "working_capital_change": {
+        "display_name": "Change in Working Capital",
+        "category": MetricCategory.CASH_FLOW,
+        "type": DataType.FLOAT,
+        "unit": "currency",
+        "sources": {
+            "yfinance": "ChangeInWorkingCapital",
+        },
+        "validation": {"min_value": None},
+        "required_for_methods": ["DCF"]
+    },
+    "dividends_paid": {
+        "display_name": "Dividends Paid",
+        "category": MetricCategory.CASH_FLOW,
+        "type": DataType.FLOAT,
+        "unit": "currency",
+        "sources": {
+            "yfinance": "CashDividendsPaid",
+        },
+        "validation": {"min_value": None},
+        "required_for_methods": ["DCF"]
+    },
     "operating_cash_flow": {
         "display_name": "Operating Cash Flow",
         "category": MetricCategory.CASH_FLOW,
@@ -239,6 +479,19 @@ METRIC_REGISTRY: Dict[str, Dict[str, Any]] = {
             "financial_modeling_prep": "price"
         },
         "validation": {"min_value": 0},
+        "required_for_methods": ["DCF", "COMPS"]
+    },
+    "beta": {
+        "display_name": "Beta",
+        "category": MetricCategory.MARKET_DATA,
+        "type": DataType.FLOAT,
+        "unit": "ratio",
+        "sources": {
+            "yfinance": "beta",  # From info dict
+            "alpha_vantage": "beta",
+            "financial_modeling_prep": "beta"
+        },
+        "validation": {"min_value": -2.0, "max_value": 5.0},
         "required_for_methods": ["DCF", "COMPS"]
     },
 
@@ -362,7 +615,11 @@ METRIC_REGISTRY: Dict[str, Dict[str, Any]] = {
         "category": MetricCategory.FORECAST,
         "type": DataType.PERCENTAGE,
         "unit": "percent",
-        "sources": {},
+        "sources": {
+            "yfinance": "effectiveTaxRate",  # From info dict (key_stats)
+            "alpha_vantage": "taxRate",
+            "financial_modeling_prep": "effectiveTaxRate"
+        },
         "validation": {"min_value": 0, "max_value": 1.0},
         "required_for_methods": ["DCF"]
     },

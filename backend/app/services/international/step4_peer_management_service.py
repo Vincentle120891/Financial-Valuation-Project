@@ -9,6 +9,7 @@ import logging
 from typing import Dict, List, Any, Optional
 from datetime import datetime
 
+from app.api.schemas.unified_step_schemas import DataField
 from app.core.session_service import session_service
 from app.services.international.yfinance_service import YFinanceService
 from app.services.international.institutional_peer_discovery import InstitutionalPeerDiscoveryService, PeerDiscoveryRequest
@@ -91,8 +92,27 @@ class Step4PeerManagementService:
         session_service.update_session_data(session_id, "peer_tickers", peer_tickers)
         session_service.update_session_data(session_id, "selected_peers", peers)
         
+        # Fetch full market data for each peer (including valuation multiples)
+        # This populates the session so Step 6 DCF processor can read peer multiples
+        peer_market_data = {}
+        for peer_ticker in peer_tickers:
+            try:
+                result = self._fetch_peer_market_data(peer_ticker)
+                if result.data and not result.error:
+                    peer_market_data[peer_ticker] = result.data
+                    logger.info(f"Fetched market data for peer {peer_ticker}: "
+                              f"EV/EBITDA={result.data.get('enterpriseToEbitda')}, "
+                              f"P/E={result.data.get('trailingPE')}, "
+                              f"cash={result.data.get('totalCash')}")
+            except Exception as e:
+                logger.warning(f"Failed to fetch market data for peer {peer_ticker}: {e}")
+        
+        # Store peer market data in session for Step 6 retrieval
+        # The DCF processor reads from retrieved_assumptions using keys like peer_{ticker}_info
+        if peer_market_data:
+            session_service.update_session_data(session_id, "peer_market_data", peer_market_data)
+        
         # Build peer_list with BASIC INFO ONLY for UI display (Step 4-5)
-        # DO NOT fetch expensive WACC data here - that happens in Step 10
         peer_list = []
         for peer in peers:
             # Handle market_cap which can be a DataField object or a raw number
@@ -107,25 +127,28 @@ class Step4PeerManagementService:
                 "name": peer.get('name') or peer.get('company_name'),
                 "sector": peer.get('sector'),
                 "industry": peer.get('industry'),
-                "market_cap": market_cap,
+                "market_cap": market_cap.value if isinstance(market_cap, DataField) else market_cap,
                 "similarity_score": peer.get('similarity_score') or peer.get('score', 0)
             })
         
         # Store basic peer list in session for Step 5 requirements check
         session_service.update_shared_context(session_id, "peer_list", peer_list)
         
-        logger.info(f"Saved {len(peer_tickers)} peers with basic info for UI display: {peer_tickers}")
+        logger.info(f"Saved {len(peer_tickers)} peers with market data for UI display: {peer_tickers}")
         
         return {
             "status": "success",
-            "message": f"Saved {len(peer_tickers)} peers with basic info",
+            "message": f"Saved {len(peer_tickers)} peers with market data",
             "peers_saved": len(peer_tickers),
-            "peer_list": peer_list  # Basic info for UI, NOT full WACC data
+            "peer_list": peer_list
         }
     
     def _fetch_peer_market_data(self, ticker: str) -> PeerDataResult:
         """
         Fetch market data for a single peer company.
+        
+        Fetches BOTH WACC metrics (Beta, Debt, Cash, Tax Rate, Cost of Debt)
+        AND valuation multiples (EV/EBITDA, P/E, EV/Revenue, P/B) from yfinance.
         
         Args:
             ticker: Peer company ticker symbol
@@ -134,17 +157,30 @@ class Step4PeerManagementService:
             PeerDataResult with fetched data or error information
         """
         try:
-            # Fetch key stats for each peer (includes 5 WACC metrics + costOfDebt)
+            # Fetch WACC metrics from key stats
             peer_stats = self.yfinance_service.fetch_key_stats(ticker)
             
-            # Build standardized peer info dict
+            # Fetch valuation multiples from ticker.info via get_ticker_info
+            ticker_info = self.yfinance_service.get_ticker_info(ticker)
+            
+            # Build standardized peer info dict with BOTH WACC + multiples
             peer_info = {
+                # WACC metrics (from fetch_key_stats)
                 'marketCap': peer_stats.get('marketCap'),
                 'beta': peer_stats.get('beta'),
                 'totalDebt': peer_stats.get('totalDebt'),
                 'cash': peer_stats.get('cash'),
                 'effectiveTaxRate': peer_stats.get('effectiveTaxRate'),
-                'costOfDebt': peer_stats.get('costOfDebt'),  # Pre-tax cost of debt
+                'costOfDebt': peer_stats.get('costOfDebt'),
+                # Valuation multiples (from get_ticker_info / ticker.info)
+                'enterpriseValue': ticker_info.get('enterpriseValue') if ticker_info else None,
+                'enterpriseToEbitda': ticker_info.get('enterpriseToEbitda') if ticker_info else None,
+                'trailingPE': ticker_info.get('trailingPE') if ticker_info else None,
+                'enterpriseToRevenue': ticker_info.get('enterpriseToRevenue') if ticker_info else None,
+                'priceToBook': ticker_info.get('priceToBook') if ticker_info else None,
+                'currentPrice': ticker_info.get('currentPrice') if ticker_info else None,
+                'totalCash': ticker_info.get('totalCash') if ticker_info else None,
+                'name': ticker_info.get('shortName') if ticker_info else None,
                 'error': None
             }
             
@@ -159,6 +195,14 @@ class Step4PeerManagementService:
                 'cash': None,
                 'effectiveTaxRate': None,
                 'costOfDebt': None,
+                'enterpriseValue': None,
+                'enterpriseToEbitda': None,
+                'trailingPE': None,
+                'enterpriseToRevenue': None,
+                'priceToBook': None,
+                'currentPrice': None,
+                'totalCash': None,
+                'name': None,
                 'error': str(e)
             }
             return PeerDataResult(ticker=ticker, data=error_info, error=str(e))

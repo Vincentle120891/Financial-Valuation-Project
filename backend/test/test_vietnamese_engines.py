@@ -52,8 +52,8 @@ class TestVNTradingCompsAnalyzer:
 
         analyzer = VNTradingCompsAnalyzer(target, peers)
         assert analyzer is not None
-        assert analyzer.target_company.ticker == "VNM"
-        assert len(analyzer.peer_companies) == 1
+        assert analyzer.target.ticker == "VNM"
+        assert len(analyzer.all_peers) == 1
 
     def test_run_analysis_basic(self):
         """Test that run_analysis returns results without errors"""

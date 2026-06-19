@@ -1,7 +1,7 @@
 """Step 10: DuPont Report Generator
 
 Generates comprehensive DuPont ROE decomposition reports including:
-- ROE Trend Analysis (5-year historical + forecast)
+- ROE Trend Analysis (4-year historical + forecast)
 - 3-Step Decomposition (Margin × Turnover × Leverage)
 - 5-Step Decomposition (including Tax Burden & Interest Burden)
 - Peer Benchmark Comparison
@@ -29,7 +29,7 @@ class DuPontROEMetrics(BaseModel):
 
 
 class DuPontTrendAnalysis(BaseModel):
-    """5-year trend analysis for ROE and components."""
+    """4-year trend analysis for ROE and components."""
     years: List[str]
     roe_trend: List[float]
     profit_margin_trend: List[float]
@@ -74,7 +74,7 @@ class DuPontStep10Processor:
 
     Generates comprehensive DuPont ROE decomposition reports by:
     1. Calculating 3-step and 5-step ROE decomposition
-    2. Analyzing 5-year trends for ROE and components
+    2. Analyzing 4-year trends for ROE and components
     3. Comparing against peer benchmarks
     4. Generating strategic recommendations
     5. Identifying key value drivers and improvement opportunities
@@ -211,15 +211,15 @@ class DuPontStep10Processor:
         total_assets: List[float],
         shareholders_equity: List[float]
     ) -> DuPontTrendAnalysis:
-        """Calculate 5-year trend analysis for ROE components."""
+        """Calculate 4-year trend analysis for ROE components."""
         years = []
         roe_trend = []
         margin_trend = []
         turnover_trend = []
         multiplier_trend = []
 
-        # Process up to 5 years of data
-        num_years = min(len(revenue), 5) if revenue else 0
+        # Process up to 4 years of data
+        num_years = min(len(revenue), 4) if revenue else 0
 
         for i in range(-num_years, 0):
             year_idx = len(revenue) + i if i < 0 else i
@@ -388,11 +388,11 @@ class DuPontStep10Processor:
         if trend.roe_trend and len(trend.roe_trend) >= 2:
             roe_change = trend.roe_trend[-1] - trend.roe_trend[0]
             if roe_change > 0.02:
-                insights.append(f"ROE has improved by {roe_change:.1%} over the past 5 years.")
+                insights.append(f"ROE has improved by {roe_change:.1%} over the past 4 years.")
             elif roe_change < -0.02:
-                insights.append(f"ROE has declined by {abs(roe_change):.1%} over the past 5 years.")
+                insights.append(f"ROE has declined by {abs(roe_change):.1%} over the past 4 years.")
             else:
-                insights.append("ROE has remained relatively stable over the past 5 years.")
+                insights.append("ROE has remained relatively stable over the past 4 years.")
 
         # Driver insight
         if metrics.net_profit_margin > 0.15:

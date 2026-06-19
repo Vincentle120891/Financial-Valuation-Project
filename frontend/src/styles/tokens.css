@@ -1,0 +1,137 @@
+/* =============================================================================
+   DESIGN TOKENS — Bloomberg Modern / Editorial Light
+   Single source of truth for all visual parameters.
+   Editorial Light theme is the default; Dark terminal is opt-in via [data-theme="dark"].
+   
+   Rule: NO hardcoded hex values anywhere in component CSS or inline styles.
+   All colors MUST reference these CSS custom properties.
+   ============================================================================= */
+
+/* ======================== EDITORIAL LIGHT (Default) ======================== */
+:root {
+  /* Canvas — Warm parchment base */
+  --canvas-bg: #FBF3EB;
+  /* Card Surfaces — Slightly deeper warm tone */
+  --canvas-surface: #F3EBE3;
+  --canvas-surface-elevated: #EDE4DA;
+
+  /* Borders — Warm structural grid lines */
+  --border-default: #D7CFC7;
+  --border-subtle: #E4DDD5;
+  --border-strong: #C4BCB4;
+
+  /* Text Hierarchy — High contrast on warm background */
+  --text-primary: #1A1C1E;
+  --text-secondary: #60666D;
+  --text-tertiary: #8E949C;
+  --text-inverse: #FBF3EB;
+
+  /* Primary Interactive — Muted blue for tabs, buttons, confirmations */
+  --accent-primary: #2563EB;
+  --accent-primary-hover: #1D4ED8;
+  --accent-primary-subtle: rgba(37, 99, 235, 0.08);
+
+  /* Semantic Financial States — Strict information channels only */
+  --color-bullish: #15803D;          /* Deep Forest Green: valuation upside */
+  --color-bullish-bg: rgba(21, 128, 61, 0.08);
+  --color-bearish: #B91C1C;          /* Deep Crimson Red: valuation downside */
+  --color-bearish-bg: rgba(185, 28, 28, 0.08);
+  --color-neutral: #B45309;          /* Deep Amber: median benchmarks / alerts */
+  --color-neutral-bg: rgba(180, 83, 9, 0.08);
+
+  /* Data Quality Status */
+  --color-retrieved: #15803D;
+  --color-calculated: #2563EB;
+  --color-manual: #7C3AED;
+  --color-ai: #C2410C;
+  --color-missing: #B45309;
+
+  /* Step indicator */
+  --color-step-active: #4F46E5;
+  --color-step-current: #3730A3;
+
+  /* Spacing Scale — High density: 4/8/12 max for inner containers */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-lg: 16px;
+  --space-xl: 24px;
+  --space-2xl: 32px;
+
+  /* Radius — Tight, minimal curvature */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 6px;
+  --radius-xl: 8px;
+
+  /* Shadows — Eliminated; borders only for depth */
+  --shadow-sm: none;
+  --shadow-md: none;
+  --shadow-lg: none;
+
+  /* Font Stack — Geist dual-font system */
+  --font-sans: 'Geist Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'Geist Mono', 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+
+  /* Backdrop — No blur */
+  --backdrop-blur: none;
+
+  /* Contrast Lock — Processing panel states (Light: Financial Times Variant) */
+  --processing-bg: #EAE2DA;
+  --processing-text: #949A9F;
+  --processing-border: #BDB5AD;
+}
+
+/* ======================== DARK TERMINAL (Opt-In Toggle) ======================== */
+[data-theme="dark"] {
+  /* Canvas — Deep obsidian charcoal */
+  --canvas-bg: #080c14;
+  /* Card Surfaces — Rich midnight slate */
+  --canvas-surface: #0d1320;
+  --canvas-surface-elevated: #151d2e;
+
+  /* Borders — Razor-sharp structural lines */
+  --border-default: #2d3139;
+  --border-subtle: #1a1f27;
+  --border-strong: #3d434d;
+
+  /* Text Hierarchy */
+  --text-primary: #f0f2f5;
+  --text-secondary: #8b92a0;
+  --text-tertiary: #5a6170;
+  --text-inverse: #080c14;
+
+  /* Primary Interactive */
+  --accent-primary: #3b82f6;
+  --accent-primary-hover: #60a5fa;
+  --accent-primary-subtle: rgba(59, 130, 246, 0.12);
+
+  /* Semantic Financial States */
+  --color-bullish: #34d399;
+  --color-bullish-bg: rgba(52, 211, 153, 0.10);
+  --color-bearish: #fb7185;
+  --color-bearish-bg: rgba(251, 113, 133, 0.10);
+  --color-neutral: #fbbf24;
+  --color-neutral-bg: rgba(251, 191, 36, 0.10);
+
+  /* Data Quality Status */
+  --color-retrieved: #34d399;
+  --color-calculated: #60a5fa;
+  --color-manual: #a78bfa;
+  --color-ai: #fb923c;
+  --color-missing: #fbbf24;
+
+  /* Step indicator */
+  --color-step-active: #818cf8;
+  --color-step-current: #6366f1;
+
+  /* Shadows — None */
+  --shadow-sm: none;
+  --shadow-md: none;
+  --shadow-lg: none;
+
+  /* Contrast Lock — Processing panel states (Dark: Deep Sapphire Variant) */
+  --processing-bg: #0C111C;
+  --processing-text: #475569;
+  --processing-border: #1E293B;
+}

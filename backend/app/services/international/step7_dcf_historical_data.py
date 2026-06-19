@@ -8,7 +8,7 @@ Features:
 - DCF-specific historical financials gap filling (11 fields: Revenue, EBITDA, EBIT, Net Income, etc.)
 - AI-powered extraction from PDF reports, filings, and other sources
 - Deterministic fallback calculations when AI extraction fails
-- Ensures complete 3-5 year historical data for DCF modeling
+- Ensures complete 3-4 year historical data for DCF modeling
 
 AI Usage: STRICTLY for historical data extraction. NO forward-looking inputs.
 """
@@ -72,7 +72,7 @@ class DCFStep7Processor:
 
     Uses AI to retrieve DCF-specific historical financial data that APIs cannot provide:
     - Extracts data from PDF annual reports, filings, prospectuses
-    - Fills gaps in 3-5 year historical financial statements
+    - Fills gaps in 3-4 year historical financial statements
     - Ensures complete dataset before moving to assumption generation (Step 8)
 
     DCF-Specific Metrics Tracked:
@@ -108,8 +108,9 @@ class DCFStep7Processor:
         "CapEx",
     ]
     
-    # All DCF historical metrics
+    # All DCF historical metrics (matches Step 5 DCF_RETRIEVABLE_INPUTS)
     DCF_ALL_METRICS = [
+        # Income Statement
         "Revenue",
         "EBITDA",
         "Operating_Income",
@@ -120,7 +121,30 @@ class DCFStep7Processor:
         "CapEx",
         "Working_Capital_Change",
         "Depreciation_Amortization",
-        "Interest_Expense"
+        "Interest_Expense",
+        # New fields from Step 5 expansion
+        "Gross_Profit",
+        "SGA_Expenses",
+        "Deferred_Tax",
+        "Dividends_Paid",
+        "Change_Long_Term_Debt",
+        "Change_Common_Equity",
+        "Change_Revolving_Credit",
+        # Balance Sheet
+        "Net_PPE",
+        "Net_Debt",
+        "Total_Current_Assets",
+        "Total_Current_Liabilities",
+        "Total_Liabilities",
+        "Accounts_Receivable",
+        "Inventory",
+        "Accounts_Payable",
+        "Cash_And_Equivalents",
+        "Long_Term_Debt",
+        "Current_Debt",
+        "Retained_Earnings",
+        "Shares_Outstanding",
+        "Working_Capital",
     ]
 
     def __init__(self):
@@ -146,7 +170,7 @@ class DCFStep7Processor:
             market: Market/country (e.g., "US", "International")
             step6_financial_data: DCF historical data already fetched from APIs (Step 6 response)
             missing_metrics: Specific DCF metrics that need to be filled (optional)
-            fiscal_years_needed: List of fiscal years requiring data (default: last 5 years)
+            fiscal_years_needed: List of fiscal years requiring data (default: last 4 years)
 
         Returns:
             DCFHistoricalDataRetrievalResponse with AI-extracted historical data
@@ -156,7 +180,7 @@ class DCFStep7Processor:
         # Determine which years need data
         current_year = datetime.now().year
         if fiscal_years_needed is None:
-            fiscal_years_needed = list(range(current_year - 5, current_year))
+            fiscal_years_needed = list(range(current_year - 4, current_year))
         
         # Extract missing metrics from Step 6 response format
         extracted_missing = await self._extract_missing_dcf_metrics_from_step6(step6_financial_data)

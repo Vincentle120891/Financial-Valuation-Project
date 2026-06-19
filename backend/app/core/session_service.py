@@ -6,6 +6,11 @@ MATRIX WORKFLOW SUPPORT (Phase 1):
 - Nested structure: valuations[market][method] for parallel valuations
 - Shared context: Steps 1-3 data accessible by all methods
 - Backward compatibility: Legacy linear sessions auto-migrated
+
+FILE-BASED PERSISTENCE:
+- Sessions are saved to backend/sessions/{session_id}.json after every mutation
+- Sessions are loaded from disk on startup
+- Survives server restarts
 """
 from typing import Dict, Any, Optional, List
 from datetime import datetime
@@ -13,8 +18,13 @@ import uuid
 import asyncio
 import logging
 import re
+import os
+import json
 
 logger = logging.getLogger(__name__)
+
+# Session persistence directory
+_SESSIONS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "sessions")
 
 
 class SessionService:
@@ -56,10 +66,78 @@ class SessionService:
     """
     
     def __init__(self):
-        # In-memory storage (can be replaced with Redis/DB later)
+        # In-memory cache (backed by file-based persistence)
         self._sessions: Dict[str, Dict[str, Any]] = {}
         # Async lock for thread-safe session updates during parallel execution
         self._lock = asyncio.Lock()
+        # Load persisted sessions from disk
+        self._load_all_sessions()
+    
+    # =========================================================================
+    # FILE-BASED PERSISTENCE
+    # =========================================================================
+    
+    def _ensure_sessions_dir(self):
+        """Create the sessions directory if it doesn't exist."""
+        os.makedirs(_SESSIONS_DIR, exist_ok=True)
+    
+    def _session_file_path(self, session_id: str) -> str:
+        """Get the file path for a session."""
+        return os.path.join(_SESSIONS_DIR, f"{session_id}.json")
+    
+    def _persist_session(self, session_id: str):
+        """Save a single session to disk. Called after every mutation."""
+        try:
+            self._ensure_sessions_dir()
+            session = self._sessions.get(session_id)
+            if not session:
+                return
+            file_path = self._session_file_path(session_id)
+            # Write to temp file then rename for atomicity
+            tmp_path = file_path + ".tmp"
+            with open(tmp_path, 'w', encoding='utf-8') as f:
+                json.dump(session, f, indent=2, ensure_ascii=False, default=str)
+            os.replace(tmp_path, file_path)
+        except Exception as e:
+            logger.error(f"Failed to persist session {session_id}: {e}")
+    
+    def _load_all_sessions(self):
+        """Load all persisted sessions from disk on startup."""
+        try:
+            if not os.path.isdir(_SESSIONS_DIR):
+                logger.info("No sessions directory found, starting fresh")
+                return
+            
+            loaded = 0
+            for filename in os.listdir(_SESSIONS_DIR):
+                if not filename.endswith('.json'):
+                    continue
+                if filename.endswith('.json.tmp'):
+                    continue
+                session_id = filename[:-5]  # Remove .json
+                file_path = os.path.join(_SESSIONS_DIR, filename)
+                try:
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        session = json.load(f)
+                    if session and isinstance(session, dict):
+                        self._sessions[session_id] = session
+                        loaded += 1
+                except (json.JSONDecodeError, IOError) as e:
+                    logger.warning(f"Skipping corrupted session file {filename}: {e}")
+            
+            if loaded > 0:
+                logger.info(f"📂 Loaded {loaded} persisted session(s) from disk")
+        except Exception as e:
+            logger.error(f"Failed to load sessions from disk: {e}")
+    
+    def _delete_session_file(self, session_id: str):
+        """Delete a session file from disk."""
+        try:
+            file_path = self._session_file_path(session_id)
+            if os.path.exists(file_path):
+                os.remove(file_path)
+        except Exception as e:
+            logger.error(f"Failed to delete session file {session_id}: {e}")
     
     def _is_vietnamese_ticker(self, ticker: str) -> bool:
         """
@@ -319,6 +397,7 @@ class SessionService:
             session["valuations"][market][method.lower()]["last_updated"] = datetime.utcnow().isoformat()
         
         session["updated_at"] = datetime.utcnow().isoformat()
+        self._persist_session(session_id)
         return True
     
     def update_session_data(self, session_id: str, key: str, value: Any,
@@ -370,6 +449,7 @@ class SessionService:
                 session["data"][key] = value
         
         session["updated_at"] = datetime.utcnow().isoformat()
+        self._persist_session(session_id)
         return True
     
     def get_session_value(self, session_id: str, key: str, default: Any = None,
@@ -441,6 +521,7 @@ class SessionService:
             valid_keys.index(key) + 1
         )
         session["updated_at"] = datetime.utcnow().isoformat()
+        self._persist_session(session_id)
         return True
     
     def get_shared_context(self, session_id: str) -> Optional[Dict[str, Any]]:
@@ -487,6 +568,7 @@ class SessionService:
             session["valuations"][market][method]["status"] = status
             session["valuations"][market][method]["last_updated"] = datetime.utcnow().isoformat()
             session["updated_at"] = datetime.utcnow().isoformat()
+            self._persist_session(session_id)
             return True
         
         return False
@@ -549,6 +631,7 @@ class SessionService:
                 session["valuations"][market][method]["status"] = "completed"
                 session["valuations"][market][method]["last_updated"] = datetime.utcnow().isoformat()
                 session["updated_at"] = datetime.utcnow().isoformat()
+                self._persist_session(session_id)
                 return True
             
             return False
@@ -611,6 +694,7 @@ class SessionService:
         """
         if session_id in self._sessions:
             del self._sessions[session_id]
+            self._delete_session_file(session_id)
             return True
         return False
     

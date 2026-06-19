@@ -77,7 +77,6 @@ export type Step8InitializePath = paths['/api/step-8-initialize']['post'];
 export type Step8GenerateAiSuggestionPath = paths['/api/step-8-generate-ai-suggestion']['post'];
 export type Step9ConfirmAssumptionsPath = paths['/api/step-9-confirm-assumptions']['post'];
 export type Step10ValuatePath = paths['/api/step-10-valuate']['post'];
-export type Step10ValuateMultiPath = paths['/api/step-10-valuate-multi']['post'];
 
 // Request/Response body types for each endpoint
 export type Step1SearchBody = Step1SearchPath['requestBody']['content']['application/json'];
@@ -115,9 +114,6 @@ export type Step9ConfirmAssumptionsResponse = Step9ConfirmAssumptionsPath['respo
 
 export type Step10ValuateBody = Step10ValuatePath['requestBody']['content']['application/json'];
 export type Step10ValuateResponse = Step10ValuatePath['responses'][200]['content']['application/json'];
-
-export type Step10ValuateMultiBody = Step10ValuateMultiPath['requestBody']['content']['application/json'];
-export type Step10ValuateMultiResponse = Step10ValuateMultiPath['responses'][200]['content']['application/json'];
 
 // Enum value types (frozen constants for runtime use)
 export const DATA_STATUS = {

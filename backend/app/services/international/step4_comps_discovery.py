@@ -13,6 +13,7 @@ import os
 import logging
 from typing import Dict, Any, Optional, List
 from fastapi import Request
+from app.api.schemas.unified_step_schemas import PeerCompany, DataField
 from app.services.international.institutional_peer_discovery import (
     InstitutionalPeerDiscoveryService,
     PeerDiscoveryRequest,
@@ -76,25 +77,20 @@ async def process(session_id: str, ticker: str, market: str, max_peers: int = 10
         # Transform response to expected format - using unified PeerCompany schema fields
         peers = []
         for peer in response.peers:
-            peers.append({
-                "ticker": peer.ticker,
-                "company_name": peer.company_name,
-                "sector": peer.sector or "Unknown",
-                "industry": peer.industry or "Unknown",
-                "market_cap": {
-                    "value": peer.market_cap,
-                    "status": "RETRIEVED",
-                    "source": "FMP",
-                    "unit": "USD"
-                } if peer.market_cap else None,
-                "selected": False,
-                "match_score": peer.match_score * 100 if peer.match_score <= 1.0 else peer.match_score,  # Convert to 0-100 scale
-                "match_reasons": _generate_match_reasons(peer),  # Returns list of strings
-                "segments": peer.segments,
-                "pe_ratio": peer.pe_ratio,
-                "ev_to_ebitda": peer.ev_to_ebitda,
-                "ps_ratio": peer.ps_ratio
-            })
+            peers.append(PeerCompany(
+                ticker=peer.ticker,
+                company_name=peer.company_name,
+                sector=peer.sector or "Unknown",
+                industry=peer.industry or "Unknown",
+                market_cap=DataField(value=peer.market_cap, status="RETRIEVED", source="FMP", unit="USD") if peer.market_cap else None,
+                selected=False,
+                match_score=peer.match_score * 100 if peer.match_score <= 1.0 else peer.match_score,
+                match_reasons=_generate_match_reasons(peer),
+                segments=peer.segments or {},
+                pe_ratio=peer.pe_ratio,
+                ev_to_ebitda=peer.ev_to_ebitda,
+                ps_ratio=peer.ps_ratio
+            ))
         
         logger.info(f"Found {len(peers)} COMPS peers for {ticker}")
         
@@ -103,7 +99,7 @@ async def process(session_id: str, ticker: str, market: str, max_peers: int = 10
             "session_id": session_id,
             "method": "comps",
             "market": market,
-            "suggested_peers": peers,
+            "suggested_peers": [p.model_dump() for p in peers],
             "peer_count": len(peers),
             "message": f"Found {len(peers)} COMPS peers using multi-segment analysis",
             "search_criteria": response.search_criteria,

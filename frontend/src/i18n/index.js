@@ -1,26 +1,40 @@
 import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
-import vi from './vi';
 import en from './en';
+import vi from './vi';
 
 const resources = {
-  en: {
-    translation: en
-  },
-  vi: {
-    translation: vi
-  }
+  en: en,
+  vi: vi,
 };
+
+// Language persistence: read from localStorage, fallback to browser preference
+const savedLang = typeof localStorage !== 'undefined'
+  ? localStorage.getItem('fv-language')
+  : null;
+
+const browserLang = typeof navigator !== 'undefined'
+  ? navigator.language.startsWith('vi') ? 'vi' : 'en'
+  : 'en';
 
 i18n
   .use(initReactI18next)
   .init({
     resources,
-    lng: 'en', // default language
+    lng: savedLang || browserLang || 'en',
     fallbackLng: 'en',
     interpolation: {
-      escapeValue: false // react already safes from xss
-    }
+      escapeValue: false, // React already protects from XSS
+    },
   });
+
+// Persist language changes to localStorage
+i18n.on('languageChanged', (lng) => {
+  try {
+    localStorage.setItem('fv-language', lng);
+  } catch {
+    // localStorage unavailable — silent fail
+  }
+});
 
 export default i18n;

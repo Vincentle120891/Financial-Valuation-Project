@@ -2,13 +2,78 @@
 Vietnamese Step 6: Data Fetch Processor
 Orchestrates raw data retrieval from Vietnamese providers (Vietstock, FireAnt, etc.)
 Adheres to Model Integrity: No data dropping, explicit nulls for missing values.
+
+Enhancement: DataField status tracking wraps each financial field with:
+- Status (RETRIEVED / MISSING / CALCULATED)
+- Source attribution (vietstock, yfinance, ai_extraction, cache)
+- is_critical flag for required fields
+- Completion percentage calculation
 """
 from typing import Dict, List, Optional, Any
 from datetime import datetime, timedelta
 from pydantic import BaseModel, Field
+from enum import Enum
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# DataField Status Tracking
+# ──────────────────────────────────────────────────────────────────────────────
+
+class vn_DataFieldStatus(str, Enum):
+    """Status of a Vietnamese financial data field."""
+    RETRIEVED = "RETRIEVED"
+    MISSING = "MISSING"
+    CALCULATED = "CALCULATED"
+    AI_EXTRACTED = "AI_EXTRACTED"
+    CACHED = "CACHED"
+
+
+class vn_DataField(BaseModel):
+    """Per-field status tracking for Vietnamese financial data."""
+    field_name: str
+    tt99_code: Optional[str] = None
+    vietnamese_name: Optional[str] = None
+    value: Optional[float] = None
+    status: vn_DataFieldStatus = vn_DataFieldStatus.MISSING
+    source: Optional[str] = None
+    is_critical: bool = False
+    section: Optional[str] = None  # income_statement, balance_sheet, cash_flow
+
+
+# TT99 Code → English Field mapping (from plan)
+TT99_FIELD_MAP: Dict[str, Dict[str, str]] = {
+    # Income Statement
+    "01": {"english": "revenue", "vietnamese": "Doanh thu bán hàng", "section": "income_statement"},
+    "02": {"english": "revenue_deductions", "vietnamese": "Các khoản giảm trừ", "section": "income_statement"},
+    "10": {"english": "net_revenue", "vietnamese": "Doanh thu thuần", "section": "income_statement"},
+    "11": {"english": "cogs", "vietnamese": "Giá vốn hàng bán", "section": "income_statement"},
+    "20": {"english": "gross_profit", "vietnamese": "Lợi nhuận gộp", "section": "income_statement"},
+    "25": {"english": "selling_expenses", "vietnamese": "Chi phí bán hàng", "section": "income_statement"},
+    "26": {"english": "admin_expenses", "vietnamese": "Chi phí quản lý DNNN", "section": "income_statement"},
+    "30": {"english": "operating_income", "vietnamese": "Lợi nhuận từ HĐKD", "section": "income_statement"},
+    "51": {"english": "current_tax", "vietnamese": "Thuế TNDN hiện hành", "section": "income_statement"},
+    "52": {"english": "deferred_tax", "vietnamese": "Thuế TNDN hoãn lại", "section": "income_statement"},
+    "60": {"english": "net_income", "vietnamese": "Lợi nhuận sau thuế", "section": "income_statement"},
+    # Balance Sheet
+    "110": {"english": "cash", "vietnamese": "Tiền và tương đương tiền", "section": "balance_sheet"},
+    "120": {"english": "short_term_investments", "vietnamese": "Đầu tư ngắn hạn", "section": "balance_sheet"},
+    "130": {"english": "accounts_receivable", "vietnamese": "Phải thu ngắn hạn", "section": "balance_sheet"},
+    "140": {"english": "inventory", "vietnamese": "Hàng tồn kho", "section": "balance_sheet"},
+    "220": {"english": "ppe_net", "vietnamese": "TSCĐ hữu hình ròng", "section": "balance_sheet"},
+    "321": {"english": "short_term_debt", "vietnamese": "Vay ngắn hạn", "section": "balance_sheet"},
+    "339": {"english": "long_term_debt", "vietnamese": "Vay dài hạn", "section": "balance_sheet"},
+    "411": {"english": "shareholders_equity", "vietnamese": "Vốn chủ sở hữu", "section": "balance_sheet"},
+    "420": {"english": "retained_earnings", "vietnamese": "Lợi nhuận chưa phân phối", "section": "balance_sheet"},
+}
+
+# Critical fields for DCF/DuPont/Comps valuation
+CRITICAL_FIELDS = {
+    "net_revenue", "net_income", "cash", "accounts_receivable", "inventory",
+    "short_term_debt", "long_term_debt", "shareholders_equity",
+}
 
 
 class vn_DataFetchInput(BaseModel):
@@ -35,7 +100,10 @@ class vn_DataFetchInput(BaseModel):
 
 
 class RawDataBundle(BaseModel):
-    """Container for raw, unprocessed data fetched from sources."""
+    """Container for raw, unprocessed data fetched from sources.
+
+    Enhanced with DataField status tracking for per-field visibility.
+    """
     source_provider: str
     fetch_timestamp: datetime
     currency_unit: str  # e.g., "millions_VND", "VND"
@@ -52,6 +120,17 @@ class RawDataBundle(BaseModel):
     missing_periods: List[str] = Field(default_factory=list, description="Periods where data was unavailable")
     data_quality_flags: List[str] = Field(default_factory=list, description="Warnings about data consistency")
     pdf_sources_used: List[str] = Field(default_factory=list, description="List of PDF reports fetched for AI extraction")
+
+    # DataField status tracking (enhancement for Fix 2)
+    data_fields: Dict[str, vn_DataField] = Field(
+        default_factory=dict,
+        description="Per-field status tracking keyed by English field name",
+    )
+    completion_percentage: float = Field(0.0, description="Overall data completion percentage 0-100")
+    critical_missing: List[str] = Field(
+        default_factory=list,
+        description="Critical fields that are MISSING (blocks valuation)",
+    )
 
 
 class vn_DataFetchOutput(BaseModel):
@@ -301,7 +380,12 @@ class vn_Step6DataFetchProcessor:
                         peer_raw[peer_ticker] = self._generate_mock_data(peer_ticker, "METRICS")
                 sources_accessed.append("peer_data_fetch")
 
-            # 4. Compile Output
+            # 4. Wrap raw data with DataField status tracking
+            primary_source = sources_accessed[0] if sources_accessed else "unknown"
+            data_fields = self._wrap_raw_data_with_datafields(is_raw, bs_raw, cf_raw, primary_source)
+            completion_pct, critical_missing = self._calculate_completion_stats(data_fields)
+
+            # 5. Compile Output
             fetch_duration = (time.time() - start_time) * 1000
 
             data_bundle = RawDataBundle(
@@ -314,7 +398,10 @@ class vn_Step6DataFetchProcessor:
                 peer_data_raw=peer_raw,
                 missing_periods=missing_periods,
                 data_quality_flags=data_quality_flags,
-                pdf_sources_used=pdf_sources
+                pdf_sources_used=pdf_sources,
+                data_fields=data_fields,
+                completion_percentage=completion_pct,
+                critical_missing=critical_missing,
             )
 
             # GAP 1 FIX: Store fetched data in session cache for "Fetch Once, Use Many"
@@ -364,6 +451,98 @@ class vn_Step6DataFetchProcessor:
                 fetch_duration_ms=fetch_duration,
                 sources_accessed=sources_accessed
             )
+
+    # ──────────────────────────────────────────────────────────────────────────
+    # DataField Status Tracking (Fix 2)
+    # ──────────────────────────────────────────────────────────────────────────
+
+    def _wrap_raw_data_with_datafields(
+        self,
+        is_raw: Dict[str, Dict[str, Any]],
+        bs_raw: Dict[str, Dict[str, Any]],
+        cf_raw: Dict[str, Dict[str, Any]],
+        source: str,
+    ) -> Dict[str, vn_DataField]:
+        """
+        Wrap raw financial data with vn_DataField status tracking.
+
+        Iterates over the TT99 field map, looks up each field in the raw data,
+        and creates a vn_DataField with RETRIEVED or MISSING status.
+
+        Args:
+            is_raw: Raw income statement data {period: {tt99_code: value}}
+            bs_raw: Raw balance sheet data
+            cf_raw: Raw cash flow data
+            source: Data source name (e.g. "vietstock", "ai_extraction")
+
+        Returns:
+            Dict keyed by English field name → vn_DataField
+        """
+        data_fields: Dict[str, vn_DataField] = {}
+
+        # Map section → raw data
+        section_raw = {
+            "income_statement": is_raw,
+            "balance_sheet": bs_raw,
+            "cash_flow": cf_raw,
+        }
+
+        for tt99_code, field_info in TT99_FIELD_MAP.items():
+            english_name = field_info["english"]
+            section = field_info["section"]
+            raw_data = section_raw.get(section, {})
+
+            # Look for the value across all periods (use latest non-null)
+            value = None
+            status = vn_DataFieldStatus.MISSING
+            field_source = None
+
+            for period in sorted(raw_data.keys(), reverse=True):
+                period_data = raw_data[period]
+                if isinstance(period_data, dict) and tt99_code in period_data:
+                    val = period_data[tt99_code]
+                    if val is not None:
+                        value = float(val) if not isinstance(val, float) else val
+                        status = vn_DataFieldStatus.RETRIEVED
+                        field_source = source
+                        break
+
+            data_fields[english_name] = vn_DataField(
+                field_name=english_name,
+                tt99_code=tt99_code,
+                vietnamese_name=field_info["vietnamese"],
+                value=value,
+                status=status,
+                source=field_source,
+                is_critical=english_name in CRITICAL_FIELDS,
+                section=section,
+            )
+
+        return data_fields
+
+    @staticmethod
+    def _calculate_completion_stats(
+        data_fields: Dict[str, vn_DataField],
+    ) -> tuple:
+        """
+        Calculate completion percentage and critical missing fields.
+
+        Returns:
+            Tuple of (completion_percentage, critical_missing_list)
+        """
+        if not data_fields:
+            return 0.0, list(CRITICAL_FIELDS)
+
+        total = len(data_fields)
+        retrieved = sum(1 for f in data_fields.values() if f.status != vn_DataFieldStatus.MISSING)
+        completion = (retrieved / total * 100) if total > 0 else 0.0
+
+        critical_missing = [
+            f.field_name for f in data_fields.values()
+            if f.is_critical and f.status == vn_DataFieldStatus.MISSING
+        ]
+
+        return round(completion, 1), critical_missing
 
     def _generate_mock_data(self, ticker: str, data_type: str) -> Dict:
         """Generate mock data for development/testing."""

@@ -128,8 +128,8 @@ class MetricsCalculator:
         fcf_margins = calc_margin_hist(fcf, revenue)
         operating_margins = calc_margin_hist(operating_income, revenue)
         
-        # Calculate 3-year averages (most recent 3 periods)
-        def avg_last_n(values: List[float], n: int = 3) -> Optional[float]:
+        # Calculate 4-year averages (most recent 4 periods)
+        def avg_last_n(values: List[float], n: int = 4) -> Optional[float]:
             valid = [v for v in values[:n] if v is not None]
             return sum(valid) / len(valid) if valid else None
         
@@ -137,22 +137,22 @@ class MetricsCalculator:
             "ebitda_margin": {
                 "historical": ebitda_margins,
                 "latest": ebitda_margins[0] if ebitda_margins else None,
-                "avg_3y": avg_last_n(ebitda_margins),
+                "avg_5y": avg_last_n(ebitda_margins),
             },
             "net_margin": {
                 "historical": net_margins,
                 "latest": net_margins[0] if net_margins else None,
-                "avg_3y": avg_last_n(net_margins),
+                "avg_5y": avg_last_n(net_margins),
             },
             "fcf_margin": {
                 "historical": fcf_margins,
                 "latest": fcf_margins[0] if fcf_margins else None,
-                "avg_3y": avg_last_n(fcf_margins),
+                "avg_5y": avg_last_n(fcf_margins),
             },
             "operating_margin": {
                 "historical": operating_margins,
                 "latest": operating_margins[0] if operating_margins else None,
-                "avg_3y": avg_last_n(operating_margins),
+                "avg_5y": avg_last_n(operating_margins),
             },
             "gross_margin": None,  # Would need COGS data
         }
@@ -269,25 +269,25 @@ class MetricsCalculator:
             "dso": {
                 "historical": dso,
                 "latest": dso[0] if dso else None,
-                "avg_3y": avg_last_n(dso),
+                "avg_5y": avg_last_n(dso),
                 "description": "Days Sales Outstanding",
             },
             "dio": {
                 "historical": dio,
                 "latest": dio[0] if dio else None,
-                "avg_3y": avg_last_n(dio),
+                "avg_5y": avg_last_n(dio),
                 "description": "Days Inventory Outstanding",
             },
             "dpo": {
                 "historical": dpo,
                 "latest": dpo[0] if dpo else None,
-                "avg_3y": avg_last_n(dpo),
+                "avg_5y": avg_last_n(dpo),
                 "description": "Days Payables Outstanding",
             },
             "cash_conversion_cycle": {
                 "historical": ccc,
                 "latest": ccc[0] if ccc else None,
-                "avg_3y": avg_last_n(ccc),
+                "avg_5y": avg_last_n(ccc),
                 "description": "Cash Conversion Cycle (DSO + DIO - DPO)",
             },
         }
@@ -319,7 +319,7 @@ class MetricsCalculator:
         fcf_to_revenue = calc_ratio_hist(fcf, revenue)
         capex_to_ocf = calc_ratio_hist(capex, ocf)
         
-        def avg_last_n(values: List[float], n: int = 3) -> Optional[float]:
+        def avg_last_n(values: List[float], n: int = 4) -> Optional[float]:
             valid = [v for v in values[:n] if v is not None]
             return sum(valid) / len(valid) if valid else None
         
@@ -327,19 +327,19 @@ class MetricsCalculator:
             "capex_to_revenue": {
                 "historical": capex_to_revenue,
                 "latest": capex_to_revenue[0] if capex_to_revenue else None,
-                "avg_3y": avg_last_n(capex_to_revenue),
+                "avg_5y": avg_last_n(capex_to_revenue),
                 "description": "Capital Expenditure as % of Revenue",
             },
             "fcf_to_revenue": {
                 "historical": fcf_to_revenue,
                 "latest": fcf_to_revenue[0] if fcf_to_revenue else None,
-                "avg_3y": avg_last_n(fcf_to_revenue),
+                "avg_5y": avg_last_n(fcf_to_revenue),
                 "description": "Free Cash Flow as % of Revenue",
             },
             "capex_to_ocf": {
                 "historical": capex_to_ocf,
                 "latest": capex_to_ocf[0] if capex_to_ocf else None,
-                "avg_3y": avg_last_n(capex_to_ocf),
+                "avg_5y": avg_last_n(capex_to_ocf),
                 "description": "Capex Coverage Ratio (Capex / Operating CF)",
             },
         }
@@ -370,8 +370,8 @@ class MetricsCalculator:
             "implied_cost_of_debt": {
                 "historical": cost_of_debt,
                 "latest": cost_of_debt[0] if cost_of_debt else None,
-                "avg_3y": sum([v for v in cost_of_debt[:3] if v is not None]) / 
-                          len([v for v in cost_of_debt[:3] if v is not None]) if any(cost_of_debt[:3]) else None,
+                "avg_5y": sum([v for v in cost_of_debt[:5] if v is not None]) /
+                          len([v for v in cost_of_debt[:5] if v is not None]) if any(cost_of_debt[:5]) else None,
                 "formula": "Interest Expense / Total Debt",
             },
         }

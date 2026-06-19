@@ -5,7 +5,7 @@ Handles missing data retrieval with dynamic prompts and intelligent routing.
 import logging
 from typing import List, Dict, Any, Optional
 
-from app.core.metric_registry import METRIC_REGISTRY
+from app.core.metric_registry import METRIC_REGISTRY, get_metric_definition
 # Lazy imports for optional dependencies
 # from langchain_core.prompts import ChatPromptTemplate
 # from app.services.llm_service import LLMService
@@ -71,7 +71,7 @@ class Step7Resolver:
         }
 
         for metric_id in missing_metrics:
-            metric_def = METRIC_REGISTRY.get_metric(metric_id, method)
+            metric_def = get_metric_definition(metric_id)
             if not metric_def:
                 results["failed"].append({"metric": metric_id, "reason": "Unknown metric"})
                 continue

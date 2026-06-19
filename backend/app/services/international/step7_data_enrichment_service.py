@@ -152,25 +152,14 @@ class Step7DataEnrichmentService:
                 for key, value in merged_historical.items():
                     step6_data['historical_financials'][key] = value
             
-            # Calculate historical trends and averages
-            trend_analysis = calculate_historical_trends(
-                step6_data.get('historical_financials', {}) if step6_data else merged_historical
-            )
+            # NOTE: Trend analysis is now calculated in Step 8 after merger.
+            # Step 7 only stores raw extracted data.
             
             # Save updated financial data
             session_service.update_session_data(
                 session_id,
                 "financial_data",
                 step6_data,
-                market=market_lower,
-                method=method_lower
-            )
-            
-            # Store trend analysis for Step 8
-            session_service.update_session_data(
-                session_id,
-                "historical_trend_analysis",
-                trend_analysis,
                 market=market_lower,
                 method=method_lower
             )
@@ -188,7 +177,6 @@ class Step7DataEnrichmentService:
                 "extraction_method": result.extraction_method,
                 "confidence_score": result.confidence_score,
                 "extracted_metrics": merged_historical,
-                "trend_analysis": trend_analysis,
                 "notes": result.notes
             }
             
@@ -203,7 +191,9 @@ class Step7DataEnrichmentService:
         ticker: str,
         company_name: str,
         method: str,
-        market: str = "international"
+        market: str = "international",
+        api_keys: Optional[Dict[str, str]] = None,
+        custom_prompt: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Extract historical data using AI web search.
@@ -251,28 +241,48 @@ class Step7DataEnrichmentService:
             step6_data = session_service.get_session_value(session_id, "financial_data")
         
         # Perform AI web search and extraction
+        # Pass api_keys to enable request-level API key usage
+        if api_keys:
+            self.ai_extractor = AIWebSearchExtractor(api_keys=api_keys)
         result = await self.ai_extractor.extract_data(
             ticker=ticker,
             company_name=company_name,
             market=market,
-            context_data=step6_data
+            context_data=step6_data,
+            custom_prompt=custom_prompt
         )
         
         if not result.get("success"):
-            raise HTTPException(
-                status_code=500,
-                detail=result.get("error", "AI web search failed")
-            )
+            # Graceful degradation: return failure status instead of raising 500
+            # This allows the frontend to show a meaningful error message
+            error_msg = result.get("error", "AI web search failed")
+            logger.warning(f"⚠️ AI web search failed for {ticker}: {error_msg}")
+            return {
+                "success": False,
+                "message": f"AI web search failed: {error_msg}",
+                "provider_used": None,
+                "confidence_score": 0,
+                "sources": [],
+                "time_series": {},
+                "notes": f"All AI providers failed. Error: {error_msg}. "
+                         "You can manually enter historical data or try again later.",
+                "errors": result.get("errors", {})
+            }
+        
+        # Handle both response formats from extract_data()
+        extracted_data = result.get('data') or result.get('time_series') or {}
         
         # Build extraction metadata
+        # AIWebSearchExtractor returns metadata.provider_used (not metadata.provider)
+        provider = result.get('metadata', {}).get('provider_used') or result.get('metadata', {}).get('provider', 'unknown')
         extraction_metadata = {
             'source': 'AI Web Search',
-            'provider_used': result['metadata']['provider_used'],
-            'confidence_score': result['metadata']['confidence_score'],
-            'sources': result['metadata'].get('sources', []),
-            'notes': result['metadata'].get('notes', ''),
+            'provider_used': provider,
+            'confidence_score': result.get('metadata', {}).get('confidence_score', 0.85),
+            'sources': result.get('metadata', {}).get('sources', []),
+            'notes': result.get('metadata', {}).get('notes', ''),
             'search_timestamp': datetime.now().isoformat(),
-            'extracted_metrics': list(result['data'].keys()) if result['data'] else []
+            'extracted_metrics': list(extracted_data.keys()) if extracted_data else []
         }
         
         # Store results in session
@@ -280,32 +290,69 @@ class Step7DataEnrichmentService:
             session_id,
             "ai_web_search_results",
             {
-                'time_series': result['data'],
+                'time_series': extracted_data,
                 'metadata': extraction_metadata
             },
             market=market_lower,
             method=method_lower
         )
         
-        # Update historical data with AI-extracted values
+        # Build a unified time series from BOTH Step 6 data AND AI-extracted data
+        # Step 6 stores data as: {historical_financials: {revenue: {value: [{period, value}, ...], status}}}
+        # We need: {"2023-12-31": {"Revenue": 100B, "Net Income": 20B, ...}}
+        unified_time_series = {}
+
         if step6_data:
-            if 'historical_financials' not in step6_data:
-                step6_data['historical_financials'] = {}
-            
-            # Merge AI data into existing structure
-            for date_key, metrics in result['data'].items():
-                if date_key not in step6_data['historical_financials']:
-                    step6_data['historical_financials'][date_key] = metrics
-                else:
-                    # Fill gaps in existing data with AI data
-                    for metric, value in metrics.items():
-                        if step6_data['historical_financials'][date_key].get(metric) is None and value is not None:
-                            step6_data['historical_financials'][date_key][metric] = value
-        
-        # Calculate historical trends and averages
-        trend_analysis = calculate_historical_trends(
-            step6_data.get('historical_financials', {}) if step6_data else result['data']
-        )
+            hist = step6_data.get('historical_financials', {})
+            if isinstance(hist, dict):
+                # Convert Step 6 DataField format to time series
+                for field_name, field_data in hist.items():
+                    if field_name in ('data_fields', 'periods_covered'):
+                        continue
+                    if not isinstance(field_data, dict):
+                        continue
+                    field_value = field_data.get('value')
+                    if field_value is None:
+                        continue
+                    # Display name: snake_case → Title Case
+                    display_name = field_name.replace('_', ' ').title()
+                    # field_value can be: list of {period, value}, single value, or list of primitives
+                    if isinstance(field_value, list):
+                        for item in field_value:
+                            if isinstance(item, dict):
+                                period = item.get('period', '')
+                                val = item.get('value')
+                            else:
+                                continue
+                            if period and val is not None and not str(period).startswith("Period_"):
+                                if period not in unified_time_series:
+                                    unified_time_series[period] = {}
+                                try:
+                                    unified_time_series[period][display_name] = float(val)
+                                except (ValueError, TypeError):
+                                    pass
+                    elif isinstance(field_value, (int, float)):
+                        # Single value — use latest period from periods_covered
+                        periods = hist.get('periods_covered', [])
+                        if periods:
+                            period = periods[0] if isinstance(periods[0], str) else str(periods[0])
+                            if period not in unified_time_series:
+                                unified_time_series[period] = {}
+                            unified_time_series[period][display_name] = float(field_value)
+
+        # Merge AI-extracted data into the unified time series (AI fills gaps)
+        for date_key, metrics in extracted_data.items():
+            if date_key not in unified_time_series:
+                unified_time_series[date_key] = metrics
+            else:
+                for metric, value in metrics.items():
+                    if unified_time_series[date_key].get(metric) is None and value is not None:
+                        unified_time_series[date_key][metric] = value
+
+        # NOTE: Historical trend analysis is now calculated in Step 8
+        # after the FinancialStatementsMerger combines Step 6 + Step 7 data.
+        # Step 7 only stores raw extracted data.
+        trend_analysis = None
         
         # Save updated financial data
         session_service.update_session_data(
@@ -316,27 +363,20 @@ class Step7DataEnrichmentService:
             method=method_lower
         )
         
-        # Store trend analysis for Step 8
-        session_service.update_session_data(
-            session_id,
-            "historical_trend_analysis",
-            trend_analysis,
-            market=market_lower,
-            method=method_lower
-        )
+        # NOTE: Trend analysis is now calculated in Step 8 after merger.
+        # Step 7 only stores raw extracted data.
         
         logger.info(
             f"Successfully extracted data via AI web search for {ticker} ({company_name}) "
-            f"using {result['metadata']['provider_used']}"
+            f"using {provider}"
         )
         
         return {
             "success": True,
-            "message": f"Successfully extracted data using {result['metadata']['provider_used']}",
-            "provider_used": result['metadata']['provider_used'],
-            "confidence_score": result['metadata']['confidence_score'],
-            "sources": result['metadata'].get('sources', []),
-            "time_series": result['data'],
-            "trend_analysis": trend_analysis,
-            "notes": result['metadata'].get('notes', '')
+            "message": f"Successfully extracted data using {provider}",
+            "provider_used": provider,
+            "confidence_score": result.get('metadata', {}).get('confidence_score', 0.85),
+            "sources": result.get('metadata', {}).get('sources', []),
+            "time_series": extracted_data,
+            "notes": result.get('metadata', {}).get('notes', '')
         }

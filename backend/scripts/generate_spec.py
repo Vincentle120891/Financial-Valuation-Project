@@ -28,10 +28,10 @@ def export_spec():
     
     # Path where your frontend configuration resides
     output_path = (
-        Path(__file__).parent.parent 
-        / "frontend" 
-        / "src" 
-        / "api" 
+        Path(__file__).parent.parent.parent
+        / "frontend"
+        / "src"
+        / "api"
         / "openapi.json"
     )
     output_path.parent.mkdir(parents=True, exist_ok=True)

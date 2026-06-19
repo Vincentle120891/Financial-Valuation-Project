@@ -11,12 +11,27 @@ def calculate_cagr(start_value: float, end_value: float, periods: int) -> Option
     """
     Calculate Compound Annual Growth Rate (CAGR)
     Formula: (End/Start)^(1/n) - 1
+    
+    Handles negative values (e.g., negative growth rates) by using
+    the sign-adjusted formula when start and end have the same sign.
+    When signs differ (e.g., negative to positive), falls back to
+    arithmetic average growth rate.
     """
-    if start_value <= 0 or end_value <= 0 or periods <= 0:
+    if periods <= 0:
         return None
+    if start_value == 0 and end_value == 0:
+        return 0.0
+    if start_value == 0:
+        # Can't compute CAGR from zero — use arithmetic average proxy
+        return end_value / periods if periods > 0 else None
     try:
-        return (end_value / start_value) ** (1 / periods) - 1
-    except ZeroDivisionError:
+        # Same sign: standard CAGR works
+        if (start_value > 0 and end_value > 0) or (start_value < 0 and end_value < 0):
+            return (end_value / start_value) ** (1 / periods) - 1
+        # Different signs (e.g., negative to positive growth): use arithmetic average
+        # This avoids complex numbers from negative base with fractional exponent
+        return (end_value - start_value) / (abs(start_value) * periods)
+    except (ZeroDivisionError, ValueError, OverflowError):
         return None
 
 
@@ -80,6 +95,34 @@ def calculate_year_over_year_growth(values: List[float], years: List[int]) -> Li
             "current_value": values[i]
         })
     return growth_rates
+
+
+def calculate_weighted_growth(growth_rates: List[float]) -> Optional[float]:
+    """
+    Calculate weighted blended growth rate using linear decay weights.
+
+    For n growth rates (oldest to newest), assigns weights:
+    - 3 periods: 20% / 30% / 50%
+    - 2 periods: 40% / 60%
+    - 1 period: 100%
+
+    Args:
+        growth_rates: YoY growth rates sorted oldest to newest
+
+    Returns:
+        Weighted blended growth rate, or None if empty
+    """
+    if not growth_rates:
+        return None
+    n = len(growth_rates)
+    if n == 1:
+        return growth_rates[0]
+
+    # Linear decay weights: most recent gets highest weight
+    # For n periods, weight_i = (i+1) / sum(1..n)
+    total_weight = sum(range(1, n + 1))
+    weighted_sum = sum(rate * (i + 1) / total_weight for i, rate in enumerate(growth_rates))
+    return weighted_sum
 
 
 def extract_numeric_values(data_fields: List[DataField]) -> tuple[List[float], List[int]]:

@@ -1,0 +1,105 @@
+# =============================================================================
+# FinGrid — Production Docker Compose
+# EPYCHN-2 Hanoi VPS Deployment
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # Backend: FastAPI + Uvicorn
+  # ---------------------------------------------------------------------------
+  backend:
+    build:
+      context: ../backend
+      dockerfile: ../deploy/backend/Dockerfile
+    container_name: fingrid-backend
+    restart: always
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    volumes:
+      # Persistent storage for session data / future DB
+      - backend_data:/app/data
+      # Mount .env for runtime config
+      - ./.env:/app/.env:ro
+    env_file:
+      - ./.env
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    networks:
+      - fingrid
+
+  # ---------------------------------------------------------------------------
+  # Frontend: React (Vite) → Nginx static serving
+  # ---------------------------------------------------------------------------
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: ../deploy/frontend/Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-https://platform.yourdomain.com/api}
+    container_name: fingrid-frontend
+    restart: always
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    expose:
+      - "3000"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - fingrid
+
+  # ---------------------------------------------------------------------------
+  # Reverse Proxy: Caddy — auto-SSL + routing
+  # ---------------------------------------------------------------------------
+  caddy:
+    image: caddy:2-alpine
+    container_name: fingrid-caddy
+    restart: always
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_healthy
+    networks:
+      - fingrid
+
+# =============================================================================
+# Volumes — persistent data across container restarts
+# =============================================================================
+volumes:
+  backend_data:
+  caddy_data:
+  caddy_config:
+
+# =============================================================================
+# Network — internal Docker bridge
+# =============================================================================
+networks:
+  fingrid:
+    driver: bridge

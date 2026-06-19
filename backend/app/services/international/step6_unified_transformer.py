@@ -73,7 +73,8 @@ class Step6UnifiedTransformer:
     def transform_legacy_datafield_to_unified(
         legacy_field: LegacyDataField,
         currency: Optional[str] = "USD",
-        reporting_period: Optional[str] = None
+        reporting_period: Optional[str] = None,
+        years: Optional[List[str]] = None
     ) -> UnifiedDataField:
         """
         Convert legacy DataField to unified DataField format.
@@ -81,12 +82,28 @@ class Step6UnifiedTransformer:
         Legacy format: field_name, display_name, value, unit, status, source, formula, is_critical, allow_override
         Unified format: value, status, source, formula, confidence_score, is_missing, can_override,
                        unit, currency, reporting_period, last_updated
+        
+        If value is a flat list (e.g., [176B, 158B, 149B]) and years are provided,
+        converts to [{period: '2024', value: 176B}, {period: '2023', value: 158B}, ...]
+        for frontend compatibility.
         """
         if legacy_field is None:
             return UnifiedDataField(value=None, status=UnifiedDataStatus.MISSING, is_missing=True)
 
+        # Convert flat list values to {period, value} format for frontend
+        field_value = legacy_field.value
+        if isinstance(field_value, list) and field_value and years:
+            # Only convert if elements are primitives (not already {period, value} dicts)
+            if not isinstance(field_value[0], dict):
+                # Truncate to match years length — never generate placeholder Period_X keys
+                trimmed = field_value[:len(years)]
+                field_value = [
+                    {"period": years[i], "value": v}
+                    for i, v in enumerate(trimmed)
+                ]
+
         return UnifiedDataField(
-            value=legacy_field.value,
+            value=field_value,
             status=Step6UnifiedTransformer.transform_legacy_status_to_unified(legacy_field.status),
             source=legacy_field.source,
             formula=legacy_field.formula,
@@ -119,27 +136,36 @@ class Step6UnifiedTransformer:
         # Create mapping from field_name to LegacyDataField
         field_map = {f.field_name: f for f in historical_display.data_fields}
 
-        # Get reporting period from first available year
+        # Get reporting period and years list from historical display
         reporting_period = f"FY{historical_display.years[-1]}" if historical_display.years else None
+        years_list = historical_display.years if historical_display.years else None
 
         result = HistoricalFinancialsData()
 
         # Income Statement fields - ALWAYS create DataField objects (even if MISSING)
-        income_fields = [
-            "revenue", "ebitda", "net_income", "depreciation",
-            "cogs", "operating_expenses", "sg_and_a"
-        ]
+        # Maps: unified_schema_field_name -> legacy_field_name (if different)
+        income_field_mapping = {
+            "revenue": "revenue",
+            "cogs": "cogs",
+            "gross_profit": "gross_profit",
+            "operating_expenses": "operating_expenses",
+            "research_development": "research_development",
+            "ebitda": "ebitda",
+            "ebit": "ebit",
+            "interest_expense": "interest_expense",
+            "other_income": "other_income",
+            "pretax_income": "pretax_income",
+            "tax_provision": "tax_provision",
+            "net_income": "net_income",
+            "depreciation": "depreciation_amortization",
+            "sg_and_a": "sg_and_a",
+        }
 
-        for field_name in income_fields:
-            # Map DCF field names to unified schema names
-            legacy_key = field_name
-            if field_name == "depreciation":
-                legacy_key = "depreciation_amortization"
-
+        for field_name, legacy_key in income_field_mapping.items():
             if legacy_key in field_map:
                 legacy_field = field_map[legacy_key]
                 setattr(result, field_name, Step6UnifiedTransformer.transform_legacy_datafield_to_unified(
-                    legacy_field, currency="USD", reporting_period=reporting_period
+                    legacy_field, currency="USD", reporting_period=reporting_period, years=years_list
                 ))
             else:
                 # Create MISSING DataField for fields not in DCF response
@@ -154,14 +180,16 @@ class Step6UnifiedTransformer:
                 ))
 
         # Cash Flow fields - ALWAYS create DataField objects
-        cashflow_fields = ["capex", "free_cash_flow", "operating_cash_flow"]
+        cashflow_fields = ["capex", "free_cash_flow", "operating_cash_flow", "working_capital_changes",
+                           "interest_paid", "tax_paid", "share_buybacks", "debt_repayments",
+                           "debt_issuance", "dividends_paid"]
         for field_name in cashflow_fields:
             legacy_key = field_name  # DCF uses same names
 
             if legacy_key in field_map:
                 legacy_field = field_map[legacy_key]
                 setattr(result, field_name, Step6UnifiedTransformer.transform_legacy_datafield_to_unified(
-                    legacy_field, currency="USD", reporting_period=reporting_period
+                    legacy_field, currency="USD", reporting_period=reporting_period, years=years_list
                 ))
             else:
                 # Create MISSING DataField
@@ -177,14 +205,17 @@ class Step6UnifiedTransformer:
 
         # Balance Sheet fields - ALWAYS create DataField objects
         balance_fields = [
-            "total_assets", "total_debt", "cash_and_equivalents",
-            "inventory", "accounts_receivable", "accounts_payable", "shareholders_equity"
+            "total_assets", "total_debt", "long_term_debt", "current_debt",
+            "cash_and_equivalents", "inventory", "accounts_receivable", "accounts_payable",
+            "shareholders_equity", "retained_earnings", "shares_outstanding",
+            "interest_income", "working_capital",
+            "ppe_gross", "accumulated_depreciation"
         ]
         for field_name in balance_fields:
             if field_name in field_map:
                 legacy_field = field_map[field_name]
                 setattr(result, field_name, Step6UnifiedTransformer.transform_legacy_datafield_to_unified(
-                    legacy_field, currency="USD", reporting_period=reporting_period
+                    legacy_field, currency="USD", reporting_period=reporting_period, years=years_list
                 ))
             else:
                 # Create MISSING DataField
@@ -204,7 +235,7 @@ class Step6UnifiedTransformer:
             if field_name in field_map:
                 legacy_field = field_map[field_name]
                 setattr(result, field_name, Step6UnifiedTransformer.transform_legacy_datafield_to_unified(
-                    legacy_field, currency=None, reporting_period=reporting_period
+                    legacy_field, currency=None, reporting_period=reporting_period, years=years_list
                 ))
             else:
                 # Create MISSING DataField
@@ -338,6 +369,117 @@ class Step6UnifiedTransformer:
         dupont_metrics = None
         comps_multiples = None
 
+        # ---- Transform Balance Sheet Opening Balances ----
+        # The DCF processor puts opening balances in forecast_drivers.data_fields
+        # Extract them into a separate balance_sheet_opening dict for the frontend
+        balance_sheet_opening = {}
+        if dcf_response.forecast_drivers and dcf_response.forecast_drivers.data_fields:
+            opening_field_map = {f.field_name: f for f in dcf_response.forecast_drivers.data_fields}
+            opening_keys = ["net_debt_opening", "ppe_gross", "accumulated_depreciation"]
+            for key in opening_keys:
+                if key in opening_field_map:
+                    legacy_field = opening_field_map[key]
+                    transformed = cls.transform_legacy_datafield_to_unified(
+                        legacy_field, currency="USD", reporting_period="Opening"
+                    )
+                    balance_sheet_opening[key] = transformed
+                    # Also populate in historical_financials so merger can find them
+                    if hasattr(historical_financials, key):
+                        setattr(historical_financials, key, transformed)
+                else:
+                    # Create a MISSING DataField so frontend knows the field exists
+                    balance_sheet_opening[key] = UnifiedDataField(
+                        value=None,
+                        status=UnifiedDataStatus.MISSING,
+                        is_missing=True,
+                        unit="USD",
+                        reporting_period="Opening",
+                        confidence_score=0.0
+                    )
+
+        # ---- Transform Peer Comparables for DCF WACC ----
+        # The DCF processor stores peer data in peer_comparables.companies
+        peer_comparables = {}
+        if dcf_response.peer_comparables and dcf_response.peer_comparables.companies:
+            companies = dcf_response.peer_comparables.companies
+            # Aggregate peer data into arrays for frontend display
+            peer_comparables["peer_market_caps"] = UnifiedDataField(
+                value=[c.market_cap for c in companies if c.market_cap is not None],
+                status=UnifiedDataStatus.RETRIEVED if any(c.market_cap for c in companies) else UnifiedDataStatus.MISSING,
+                is_missing=not any(c.market_cap for c in companies),
+                source="yfinance",
+                unit="USD",
+                reporting_period="Current",
+                confidence_score=85.0 if any(c.market_cap for c in companies) else 0.0
+            )
+            peer_comparables["peer_betas"] = UnifiedDataField(
+                value=[c.beta for c in companies if c.beta is not None],
+                status=UnifiedDataStatus.RETRIEVED if any(c.beta for c in companies) else UnifiedDataStatus.MISSING,
+                is_missing=not any(c.beta for c in companies),
+                source="yfinance",
+                unit="x",
+                reporting_period="Current",
+                confidence_score=85.0 if any(c.beta for c in companies) else 0.0
+            )
+            peer_comparables["peer_total_debt"] = UnifiedDataField(
+                value=[c.total_debt for c in companies if c.total_debt is not None],
+                status=UnifiedDataStatus.RETRIEVED if any(c.total_debt for c in companies) else UnifiedDataStatus.MISSING,
+                is_missing=not any(c.total_debt for c in companies),
+                source="yfinance",
+                unit="USD",
+                reporting_period="Current",
+                confidence_score=85.0 if any(c.total_debt for c in companies) else 0.0
+            )
+            peer_comparables["peer_cash"] = UnifiedDataField(
+                value=[c.cash for c in companies if c.cash is not None],
+                status=UnifiedDataStatus.RETRIEVED if any(c.cash for c in companies) else UnifiedDataStatus.MISSING,
+                is_missing=not any(c.cash for c in companies),
+                source="yfinance",
+                unit="USD",
+                reporting_period="Current",
+                confidence_score=85.0 if any(c.cash for c in companies) else 0.0
+            )
+            peer_comparables["peer_tax_rates"] = UnifiedDataField(
+                value=[c.tax_rate for c in companies if c.tax_rate is not None],
+                status=UnifiedDataStatus.RETRIEVED if any(c.tax_rate for c in companies) else UnifiedDataStatus.MISSING,
+                is_missing=not any(c.tax_rate for c in companies),
+                source="yfinance",
+                unit="%",
+                reporting_period="Current",
+                confidence_score=85.0 if any(c.tax_rate for c in companies) else 0.0
+            )
+
+            # Also populate comps_multiples.companies for backward compatibility
+            comps_multiples = CompsMultiplesData()
+            comps_multiples.companies = [
+                {
+                    "ticker": c.ticker,
+                    "company_name": c.name or "",
+                    "market_cap": c.market_cap,
+                    "enterprise_value": c.enterprise_value,
+                    "ev_ebitda": c.ev_ebitda,
+                    "pe_ratio": c.pe_ratio,
+                    "ev_revenue": c.ev_revenue,
+                    "pb_ratio": c.pb_ratio,
+                    "beta": c.beta,
+                    "total_debt": c.total_debt,
+                    "cash": c.cash,
+                    "tax_rate": c.tax_rate,
+                }
+                for c in companies
+            ]
+        else:
+            # Create MISSING peer fields so frontend shows the expected structure
+            for key in ["peer_market_caps", "peer_betas", "peer_total_debt", "peer_cash", "peer_tax_rates"]:
+                peer_comparables[key] = UnifiedDataField(
+                    value=None,
+                    status=UnifiedDataStatus.MISSING,
+                    is_missing=True,
+                    unit="USD" if key != "peer_betas" and key != "peer_tax_rates" else ("x" if key == "peer_betas" else "%"),
+                    reporting_period="Current",
+                    confidence_score=0.0
+                )
+
         missing_summary = cls.transform_missing_data_summary(dcf_response.missing_data_summary)
 
         return UnifiedStep6Response(
@@ -351,6 +493,8 @@ class Step6UnifiedTransformer:
             market_data=market_data,
             dupont_metrics=dupont_metrics,
             comps_multiples=comps_multiples,
+            balance_sheet_opening=balance_sheet_opening if balance_sheet_opening else None,
+            peer_comparables=peer_comparables if peer_comparables else None,
             data_source="yfinance",
             fetch_timestamp=datetime.now(),
             cache_used=False,

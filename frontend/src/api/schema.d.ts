@@ -75,6 +75,7 @@ export interface paths {
          * Save Peers
          * @description Step 4: Save selected peer companies to session.
          *     Delegates to Step4PeerManagementService for all business logic.
+         *     Uses unified PeerCompany schema for strict validation.
          */
         post: operations["save_peers_api_step_4_save_peers_post"];
         delete?: never;
@@ -181,13 +182,11 @@ export interface paths {
         /**
          * Fetch Api Data
          * @description Step 6: Fetch financial data from APIs and calculate metrics.
-         *     Uses SessionService for session management, APIAdapter for data fetching,
-         *     and ValidationMiddleware for data quality checks.
          *
-         *     ENHANCED WITH NEW ARCHITECTURE:
-         *     - APIAdapter: Handles fetching, mapping, normalizing, and validating data
-         *     - MetricRegistry: Centralized field mappings and validation rules
-         *     - ValidationMiddleware: Pre-save validation with outlier detection
+         *     ARCHITECTURE (Option C - Processor-Owned Fetch):
+         *     Route passes None for data parameters. Each processor (DCF, DuPont, Comps)
+         *     has its own complete fetch logic via APIAdapter that runs when data is None.
+         *     This avoids data format mismatches between route-level and processor-level fetching.
          *
          *     MATRIX WORKFLOW:
          *     - Uses market/method from request parameters (REQUIRED - no fallback)
@@ -374,6 +373,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/complete-financial-statements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Complete Financial Statements
+         * @description Get complete merged financial statements (Income Statement, Balance Sheet, Cash Flow).
+         *
+         *     Returns the merged Step 6 + Step 7 data organized by financial statement type.
+         *     Created during Step 8 initialization, stored in session for user access.
+         */
+        get: operations["get_complete_financial_statements_api_complete_financial_statements_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/step-8-initialize": {
         parameters: {
             query?: never;
@@ -385,19 +407,15 @@ export interface paths {
         put?: never;
         /**
          * Initialize Step8 Assumptions
-         * @description Step 8: Initialize assumptions with historical trendlines from Step 6.
+         * @description Step 8: Initialize assumptions with historical trendlines.
          *
-         *     This endpoint loads historical data and prepares the assumption categories
-         *     with trendlines. No AI suggestions are generated yet - user must click
-         *     buttons to generate them per category.
+         *     1. MERGES Step 6 + Step 7 into complete_financial_statements
+         *     2. Stores merged data in session (user-accessible)
+         *     3. Builds assumption categories with trendlines from merged data
          *
          *     MATRIX WORKFLOW:
          *     - Uses market/method from request parameters (REQUIRED - no fallback)
          *     - Initializes assumptions for the specific valuation track
-         *
-         *     METHOD-AGNOSTIC DESIGN:
-         *     - Method MUST be provided in request.method - no session.selected_model fallback
-         *     - Each method operates independently with its own data track
          */
         post: operations["initialize_step8_assumptions_api_step_8_initialize_post"];
         delete?: never;
@@ -1804,6 +1822,62 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/debug/api-key-manager": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Debug Api Key Manager
+         * @description Debug endpoint showing full API key manager status.
+         *
+         *     Shows:
+         *     - All registered keys per service (masked)
+         *     - Key rotation status
+         *     - Usage statistics (requests, successes, failures, rate limits)
+         *     - Which key is currently active
+         *     - Error history per key
+         */
+        get: operations["debug_api_key_manager_api_debug_api_key_manager_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/session/{session_id}/export-pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Export Pdf
+         * @description Generate a PDF investment memorandum from valuation results.
+         *
+         *     Workflow:
+         *     1. Retrieve Step 9 confirmed outputs and Step 10 results from session
+         *     2. Build HTML template with all valuation data
+         *     3. Convert to PDF using ReportLab
+         *     4. Return binary PDF stream with Content-Disposition header
+         *
+         *     Returns:
+         *         StreamingResponse with PDF binary data
+         */
+        post: operations["export_pdf_api_session__session_id__export_pdf_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -2020,7 +2094,6 @@ export interface components {
         Body_extract_pdf_api_pdf_extract_post: {
             /**
              * File
-             * Format: binary
              * @description PDF file to extract
              */
             file: string;
@@ -2055,7 +2128,6 @@ export interface components {
         Body_upload_pdf_for_step7_api_step_7_upload_pdf_post: {
             /**
              * File
-             * Format: binary
              * @description PDF financial report to extract data from
              */
             file: string;
@@ -2283,6 +2355,40 @@ export interface components {
             currency?: string | null;
         };
         /**
+         * ExportPdfRequest
+         * @description Request to generate PDF export
+         */
+        ExportPdfRequest: {
+            /**
+             * Methods
+             * @description Valuation methods to include in report
+             * @default [
+             *       "DCF",
+             *       "DUPONT",
+             *       "COMPS"
+             *     ]
+             */
+            methods: string[];
+            /**
+             * Market
+             * @description Market type
+             * @default international
+             */
+            market: string;
+            /**
+             * Include Sensitivity
+             * @description Include sensitivity analysis tables
+             * @default true
+             */
+            include_sensitivity: boolean;
+            /**
+             * Include Peer Comparison
+             * @description Include peer comparison data
+             * @default true
+             */
+            include_peer_comparison: boolean;
+        };
+        /**
          * ExtractionResponse
          * @description Response model for PDF extraction
          */
@@ -2368,21 +2474,43 @@ export interface components {
         HistoricalFinancialsData: {
             revenue?: components["schemas"]["DataField"] | null;
             cogs?: components["schemas"]["DataField"] | null;
-            ebitda?: components["schemas"]["DataField"] | null;
-            net_income?: components["schemas"]["DataField"] | null;
+            gross_profit?: components["schemas"]["DataField"] | null;
             operating_expenses?: components["schemas"]["DataField"] | null;
-            sg_and_a?: components["schemas"]["DataField"] | null;
+            research_development?: components["schemas"]["DataField"] | null;
+            ebitda?: components["schemas"]["DataField"] | null;
+            ebit?: components["schemas"]["DataField"] | null;
+            interest_expense?: components["schemas"]["DataField"] | null;
+            other_income?: components["schemas"]["DataField"] | null;
+            pretax_income?: components["schemas"]["DataField"] | null;
+            tax_provision?: components["schemas"]["DataField"] | null;
+            net_income?: components["schemas"]["DataField"] | null;
             depreciation?: components["schemas"]["DataField"] | null;
+            sg_and_a?: components["schemas"]["DataField"] | null;
             capex?: components["schemas"]["DataField"] | null;
             free_cash_flow?: components["schemas"]["DataField"] | null;
             operating_cash_flow?: components["schemas"]["DataField"] | null;
+            working_capital_changes?: components["schemas"]["DataField"] | null;
+            interest_paid?: components["schemas"]["DataField"] | null;
+            tax_paid?: components["schemas"]["DataField"] | null;
+            share_buybacks?: components["schemas"]["DataField"] | null;
+            debt_repayments?: components["schemas"]["DataField"] | null;
+            debt_issuance?: components["schemas"]["DataField"] | null;
+            dividends_paid?: components["schemas"]["DataField"] | null;
             total_assets?: components["schemas"]["DataField"] | null;
             total_debt?: components["schemas"]["DataField"] | null;
+            long_term_debt?: components["schemas"]["DataField"] | null;
+            current_debt?: components["schemas"]["DataField"] | null;
             cash_and_equivalents?: components["schemas"]["DataField"] | null;
             inventory?: components["schemas"]["DataField"] | null;
             accounts_receivable?: components["schemas"]["DataField"] | null;
             accounts_payable?: components["schemas"]["DataField"] | null;
             shareholders_equity?: components["schemas"]["DataField"] | null;
+            retained_earnings?: components["schemas"]["DataField"] | null;
+            shares_outstanding?: components["schemas"]["DataField"] | null;
+            interest_income?: components["schemas"]["DataField"] | null;
+            working_capital?: components["schemas"]["DataField"] | null;
+            ppe_gross?: components["schemas"]["DataField"] | null;
+            accumulated_depreciation?: components["schemas"]["DataField"] | null;
             revenue_cagr?: components["schemas"]["DataField"] | null;
             avg_ebitda_margin?: components["schemas"]["DataField"] | null;
             avg_roe?: components["schemas"]["DataField"] | null;
@@ -2654,6 +2782,11 @@ export interface components {
              */
             match_score?: number | null;
             /**
+             * Similarity Score
+             * @description Similarity score 0-100
+             */
+            similarity_score?: number | null;
+            /**
              * Match Reasons
              * @description Reasons for peer match
              */
@@ -2813,32 +2946,34 @@ export interface components {
             };
         };
         /**
-         * SavePeersRequest
-         * @description Request to save selected peers to session
+         * SecEdgarFetchRequest
+         * @description Request body for SEC EDGAR filing fetch
          */
-        SavePeersRequest: {
+        SecEdgarFetchRequest: {
             /** Session Id */
             session_id: string;
-            /** Peers */
-            peers: {
-                [key: string]: unknown;
-            }[];
-        };
-        /**
-         * SavePeersResponse
-         * @description Response after saving peers
-         */
-        SavePeersResponse: {
-            /** Status */
-            status: string;
-            /** Message */
-            message: string;
-            /** Peers Saved */
-            peers_saved: number;
-            /** Peer Data */
-            peer_data?: {
-                [key: string]: unknown;
-            } | null;
+            /** Ticker */
+            ticker: string;
+            /**
+             * Company Name
+             * @default
+             */
+            company_name: string;
+            /**
+             * Email
+             * @default
+             */
+            email: string;
+            /**
+             * Method
+             * @default DCF
+             */
+            method: string;
+            /**
+             * Market
+             * @default international
+             */
+            market: string;
         };
         /**
          * SensitivityAnalysis
@@ -3107,6 +3242,32 @@ export interface components {
             message: string;
         };
         /**
+         * UnifiedStep4SavePeersRequest
+         * @description Step 4: Save selected peers to session (unified schema)
+         */
+        UnifiedStep4SavePeersRequest: {
+            /** Session Id */
+            session_id: string;
+            /** Peers */
+            peers: components["schemas"]["PeerCompany"][];
+        };
+        /**
+         * UnifiedStep4SavePeersResponse
+         * @description Step 4: Response after saving peers (unified schema)
+         */
+        UnifiedStep4SavePeersResponse: {
+            /** Status */
+            status: string;
+            /** Message */
+            message: string;
+            /** Peers Saved */
+            peers_saved: number;
+            /** Peer List */
+            peer_list?: {
+                [key: string]: unknown;
+            }[] | null;
+        };
+        /**
          * UnifiedStep5Request
          * @description Step 5: Prepare assumptions
          */
@@ -3206,6 +3367,20 @@ export interface components {
             dupont_metrics?: components["schemas"]["DuPontMetricsData"] | null;
             /** @description Trading comparables multiples - NESTED structure */
             comps_multiples?: components["schemas"]["CompsMultiplesData"] | null;
+            /**
+             * Balance Sheet Opening
+             * @description Balance sheet opening balances (Net Debt, PP&E Gross, Accumulated Depreciation)
+             */
+            balance_sheet_opening?: {
+                [key: string]: components["schemas"]["DataField"];
+            } | null;
+            /**
+             * Peer Comparables
+             * @description Peer comparison data (Market Caps, Betas, Total Debt, Cash, Tax Rates)
+             */
+            peer_comparables?: {
+                [key: string]: components["schemas"]["DataField"];
+            } | null;
             /**
              * Data Source
              * @description Primary data source (yfinance, vietstock, pdf_extraction)
@@ -3386,6 +3561,13 @@ export interface components {
              */
             ready_for_calculation: boolean;
             /**
+             * Complete Financial Statements
+             * @description Merged Income Statement, Balance Sheet, Cash Flow from Step 6 + Step 7
+             */
+            complete_financial_statements?: {
+                [key: string]: unknown;
+            } | null;
+            /**
              * Sensitivity Preview
              * @description Mini sensitivity analysis preview
              */
@@ -3557,6 +3739,10 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
+            /** Input */
+            input?: unknown;
+            /** Context */
+            ctx?: Record<string, never>;
         };
         /**
          * ValuationMethod
@@ -3923,7 +4109,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["SavePeersRequest"];
+                "application/json": components["schemas"]["UnifiedStep4SavePeersRequest"];
             };
         };
         responses: {
@@ -3933,7 +4119,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SavePeersResponse"];
+                    "application/json": components["schemas"]["UnifiedStep4SavePeersResponse"];
                 };
             };
             /** @description Validation Error */
@@ -4157,6 +4343,7 @@ export interface operations {
                 company_name: string;
                 method: string;
                 market?: string;
+                custom_prompt?: string;
             };
             header?: never;
             path?: never;
@@ -4186,13 +4373,43 @@ export interface operations {
     };
     fetch_sec_edgar_for_step7_api_step_7_fetch_sec_edgar_post: {
         parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SecEdgarFetchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_complete_financial_statements_api_complete_financial_statements_get: {
+        parameters: {
             query: {
                 session_id: string;
-                ticker: string;
-                company_name: string;
-                email: string;
-                method: string;
                 market?: string;
+                method?: string;
             };
             header?: never;
             path?: never;
@@ -5801,6 +6018,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+        };
+    };
+    debug_api_key_manager_api_debug_api_key_manager_get: {
+        parameters: {
+            query?: {
+                session_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_pdf_api_session__session_id__export_pdf_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExportPdfRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

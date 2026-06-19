@@ -45,7 +45,7 @@ async def analyze_web_search_results(
 SEARCH RESULTS:
 {formatted_results}
 
-Extract the following metrics for the last 5 available fiscal years (most recent first):
+Extract the following metrics for the last 4 available fiscal years (most recent first):
 - Revenue
 - Net Income
 - EBITDA
@@ -81,7 +81,7 @@ Return ONLY a JSON object with this structure:
             "working_capital": <number or null>,
             "free_cash_flow": <number or null>
         }},
-        ... (up to 5 years)
+        ... (up to 4 years)
     ],
     "source_urls": ["url1", "url2", ...],
     "confidence_score": <0.0 to 1.0>,
@@ -89,7 +89,7 @@ Return ONLY a JSON object with this structure:
 }}
 
 If exact values are not found for a specific year, omit that year or use null values.
-Prioritize the most recent 5 fiscal years."""
+Prioritize the most recent 4 fiscal years."""
 
     logger.info(f"🔍 Analyzing web search results for {ticker} ({len(search_results)} results)")
     
@@ -195,78 +195,104 @@ async def validate_and_clean_financial_data(
 ) -> Dict[str, Any]:
     """
     Validate and clean financial data extracted from web search.
+    Deterministic Python validation — no AI call needed.
     
     Args:
         raw_data: Raw extracted data dict
         ticker: Stock ticker
-        ai_engine: Optional AIFallbackEngine instance
+        ai_engine: Optional AIFallbackEngine instance (unused, kept for API compat)
     
     Returns:
         Cleaned and validated data dict
     """
-    engine = ai_engine or AIFallbackEngine()
+    import re
     
-    import json
-    raw_json = json.dumps(raw_data, indent=2)
+    logger.info(f"🧹 Validating and cleaning financial data for {ticker} (deterministic)")
     
-    prompt = f"""Validate and clean the following financial data extracted for {ticker}.
-
-RAW DATA:
-{raw_json}
-
-TASKS:
-1. Ensure all numeric values are numbers (not strings)
-2. Ensure years are integers
-3. Remove any markdown formatting
-4. Flag obvious errors (e.g., negative revenue for a healthy company, unrealistic growth rates)
-5. Ensure consistent currency across all years
-6. Sort fiscal years in descending order (most recent first)
-
-Return ONLY the cleaned JSON object with the same structure as the input.
-If you find errors, add them to a new 'validation_notes' field."""
-
-    logger.info(f"🧹 Validating and cleaning financial data for {ticker}")
+    validation_notes = []
+    cleaned = dict(raw_data)  # shallow copy
     
-    result = await engine.execute_with_fallback(
-        prompt=prompt,
-        task_name=f"validate_data_{ticker}",
-        provider_order=["groq", "gemini", "qwen"]
-    )
+    # 1. Clean fiscal_years
+    fiscal_years = cleaned.get("fiscal_years", [])
+    if not isinstance(fiscal_years, list):
+        validation_notes.append("fiscal_years was not a list, coerced to empty list")
+        fiscal_years = []
     
-    if not result["success"]:
-        logger.warning(f"⚠️ Validation failed for {ticker}, returning raw data")
-        return {
-            **raw_data,
-            "validation_notes": f"Validation failed: {result.get('error', 'Unknown error')}"
-        }
+    # Fields that should NOT be coerced to numeric
+    NON_NUMERIC_FIELDS = {"year", "period", "date", "fiscal_year", "quarter", "currency", "unit", "source", "notes"}
     
+    cleaned_years = []
+    for year_data in fiscal_years:
+        if not isinstance(year_data, dict):
+            continue
+        
+        entry = {}
+        for key, value in year_data.items():
+            if key.lower() in NON_NUMERIC_FIELDS:
+                # Keep as-is (string metadata)
+                entry[key] = value
+                continue
+            if key == "year":
+                # Ensure year is integer
+                try:
+                    entry["year"] = int(float(str(value).strip()))
+                except (ValueError, TypeError):
+                    validation_notes.append(f"Invalid year value: {value}, skipped entry")
+                    entry = None
+                    break
+            elif value is None:
+                entry[key] = None
+            else:
+                # Coerce numeric values: strip strings, handle "N/A", etc.
+                str_val = str(value).strip()
+                # Remove common non-numeric prefixes/suffixes
+                str_val = re.sub(r'[,$%\s]', '', str_val)
+                str_val = str_val.replace('−', '-').replace('–', '-')  # unicode minus
+                
+                if str_val in ('', 'N/A', 'n/a', 'NA', '-', '--', 'null', 'None'):
+                    entry[key] = None
+                else:
+                    try:
+                        entry[key] = float(str_val)
+                    except (ValueError, TypeError):
+                        validation_notes.append(f"Invalid numeric value for {key} in {year_data.get('year')}: {value}")
+                        entry[key] = None
+        
+        if entry is not None:
+            cleaned_years.append(entry)
+    
+    # 2. Sort fiscal years descending (most recent first)
+    cleaned_years.sort(key=lambda y: y.get("year", 0), reverse=True)
+    
+    # 3. Basic sanity checks
+    for yd in cleaned_years:
+        year = yd.get("year")
+        revenue = yd.get("revenue")
+        if revenue is not None and revenue < 0:
+            validation_notes.append(f"Negative revenue in {year}: {revenue}")
+        net_income = yd.get("net_income")
+        if net_income is not None and revenue is not None and revenue > 0:
+            margin = net_income / revenue
+            if abs(margin) > 2.0:
+                validation_notes.append(f"Unusual net margin in {year}: {margin:.1%}")
+    
+    cleaned["fiscal_years"] = cleaned_years
+    
+    # 4. Ensure source_urls is a list
+    if not isinstance(cleaned.get("source_urls"), list):
+        cleaned["source_urls"] = []
+    
+    # 5. Ensure confidence_score is a float
     try:
-        # Remove markdown code blocks if present
-        response_text = result["response"].strip()
-        if response_text.startswith("```"):
-            lines = response_text.split("\n")
-            response_text = "\n".join(lines[1:-1]) if len(lines) > 2 else response_text.strip("`")
-        
-        cleaned_data = json.loads(response_text)
-        
-        # Merge validation notes
-        validation_notes = cleaned_data.pop("validation_notes", "")
-        if validation_notes:
-            existing_notes = raw_data.get("notes", "")
-            cleaned_data["notes"] = f"{existing_notes}\nValidation: {validation_notes}".strip()
-        
-        logger.info(f"✅ Successfully validated and cleaned data for {ticker}")
-        return cleaned_data
-        
-    except json.JSONDecodeError as e:
-        logger.warning(f"⚠️ JSON parsing failed during validation, returning raw data: {e}")
-        return {
-            **raw_data,
-            "validation_notes": f"JSON parsing failed: {str(e)}"
-        }
-    except Exception as e:
-        logger.warning(f"⚠️ Unexpected error during validation, returning raw data: {e}")
-        return {
-            **raw_data,
-            "validation_notes": f"Validation error: {str(e)}"
-        }
+        cleaned["confidence_score"] = float(cleaned.get("confidence_score", 0.7))
+    except (ValueError, TypeError):
+        cleaned["confidence_score"] = 0.7
+    
+    # 6. Merge validation notes
+    if validation_notes:
+        existing = cleaned.get("notes", "")
+        cleaned["notes"] = f"{existing}\nValidation: {'; '.join(validation_notes)}".strip()
+        logger.warning(f"⚠️ Validation issues for {ticker}: {'; '.join(validation_notes)}")
+    
+    logger.info(f"✅ Validated and cleaned {len(cleaned_years)} fiscal years for {ticker}")
+    return cleaned

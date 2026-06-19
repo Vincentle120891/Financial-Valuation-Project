@@ -43,7 +43,7 @@ class Step5RequiredInputsProcessor:
         "historical_financials": [
             DataRetrievalField(
                 field_name="Total Revenue",
-                description="Annual revenue for past 3-5 years (historical)",
+                description="Annual revenue for past 4 years (historical)",
                 data_source="yfinance",
                 is_required=True,
                 api_endpoint="get_financials",
@@ -106,12 +106,52 @@ class Step5RequiredInputsProcessor:
                 example_response_key="Accounts Payable"
             ),
             DataRetrievalField(
+                field_name="Cost of Goods Sold (COGS)",
+                description="Direct costs of production (historical). Used for income statement and working capital (Inv/AP Days × COGS)",
+                data_source="yfinance",
+                is_required=True,
+                api_endpoint="get_financials",
+                example_response_key="Cost Of Revenue"
+            ),
+            DataRetrievalField(
+                field_name="SG&A Expenses",
+                description="Selling, General & Administrative expenses (historical). Income statement line item",
+                data_source="yfinance",
+                is_required=True,
+                api_endpoint="get_financials",
+                example_response_key="Selling General And Administration"
+            ),
+            DataRetrievalField(
+                field_name="Operating Expenses (Total)",
+                description="Total operating expenses from income statement (historical). Other OpEx derived as: Total OpEx - SG&A - R&D - D&A",
+                data_source="yfinance",
+                is_required=True,
+                api_endpoint="get_financials",
+                example_response_key="OperatingExpense / TotalOperatingExpenses"
+            ),
+            DataRetrievalField(
                 field_name="Interest Expense",
-                description="Historical interest expense",
+                description="Historical interest expense. MUST be populated for ALL historical periods to prevent ghost cash on Balance Sheet",
+                data_source="yfinance",
+                is_required=True,
+                api_endpoint="get_financials",
+                example_response_key="Interest Expense"
+            ),
+            DataRetrievalField(
+                field_name="Interest Income",
+                description="Interest earned on cash and marketable securities (historical). Must be tracked separately from Other Income/Expense to prevent double-counting.",
                 data_source="yfinance",
                 is_required=False,
                 api_endpoint="get_financials",
-                example_response_key="Interest Expense"
+                example_response_key="Interest Income"
+            ),
+            DataRetrievalField(
+                field_name="Other Income/Expense",
+                description="Non-operating items ONLY (FX gains/losses, equity investment adjustments, legal settlements). MUST NOT include Interest Income or Interest Expense (already tracked separately). If your API pulled the consolidated SEC line, subtract Interest Income and Interest Expense to avoid double-counting.",
+                data_source="yfinance",
+                is_required=False,
+                api_endpoint="get_financials",
+                example_response_key="Other Income/Expense"
             ),
             DataRetrievalField(
                 field_name="Tax Provision",
@@ -128,6 +168,78 @@ class Step5RequiredInputsProcessor:
                 is_required=False,
                 api_endpoint="get_financials",
                 example_response_key="Pretax Income"
+            ),
+            DataRetrievalField(
+                field_name="Net Income",
+                description="Bottom-line net income (historical). Used for Retained Earnings roll (RE = Prior RE + NI - Dividends) and cross-check",
+                data_source="yfinance",
+                is_required=True,
+                api_endpoint="get_financials",
+                example_response_key="Net Income"
+            ),
+            DataRetrievalField(
+                field_name="EBIT (Operating Income)",
+                description="Earnings Before Interest and Taxes / Operating Income (historical). Used for Unlevered Tax schedule and NOPAT calculation",
+                data_source="yfinance",
+                is_required=True,
+                api_endpoint="get_financials",
+                example_response_key="Operating Income"
+            ),
+            DataRetrievalField(
+                field_name="Gross Profit",
+                description="Revenue minus COGS (historical). Used for income statement structure and margin analysis",
+                data_source="yfinance",
+                is_required=True,
+                api_endpoint="get_financials",
+                example_response_key="Gross Profit"
+            ),
+            DataRetrievalField(
+                field_name="Deferred Tax",
+                description="Deferred tax expense/benefit (historical). Used in Income Tax Schedule for deferred vs current tax split",
+                data_source="yfinance",
+                is_required=False,
+                api_endpoint="get_financials",
+                example_response_key="Deferred Income Tax"
+            ),
+            DataRetrievalField(
+                field_name="Dividends Paid",
+                description="Cash dividends paid to shareholders (historical). Used in Cash Flow Statement financing section and Retained Earnings roll",
+                data_source="yfinance",
+                is_required=False,
+                api_endpoint="get_cash_flow",
+                example_response_key="Cash Dividends Paid"
+            ),
+            DataRetrievalField(
+                field_name="Change in Long-Term Debt",
+                description="Net change in long-term debt (historical). Used in Cash Flow Statement financing section. Derived: LTD_current - LTD_prior",
+                data_source="yfinance",
+                is_required=False,
+                api_endpoint="get_balance_sheet",
+                example_response_key="Long Term Debt (current - prior year)"
+            ),
+            DataRetrievalField(
+                field_name="Change in Common Equity",
+                description="Net change in common equity (historical). Used in Cash Flow Statement financing section. Derived: Equity_current - Equity_prior",
+                data_source="yfinance",
+                is_required=False,
+                api_endpoint="get_balance_sheet",
+                example_response_key="Stockholders Equity (current - prior year)"
+            ),
+            DataRetrievalField(
+                field_name="Change in Revolving Credit Line",
+                description="Net change in revolving credit / short-term borrowings (historical). Used in Cash Flow Statement financing section",
+                data_source="yfinance",
+                is_required=False,
+                api_endpoint="get_balance_sheet",
+                example_response_key="Other Short Term Debt / Capital Debt (current - prior year)"
+            ),
+            DataRetrievalField(
+                field_name="Share Buybacks / Repurchases",
+                description="Cash paid to repurchase shares (historical). Used in Cash Flow Statement financing section and share count projections.",
+                data_source="yfinance",
+                is_required=False,
+                api_endpoint="get_cash_flow",
+                example_response_key="Repurchase Of Capital Stock"
             )
         ],
         "market_data": [
@@ -182,7 +294,7 @@ class Step5RequiredInputsProcessor:
         ],
         "balance_sheet_opening": [
             DataRetrievalField(
-                field_name="Net Debt (Opening)",
+                field_name="Net Debt",
                 description="Calculated as Total Debt - Cash (can derive opening from prior year)",
                 data_source="yfinance",
                 is_required=False,
@@ -204,6 +316,206 @@ class Step5RequiredInputsProcessor:
                 is_required=False,
                 api_endpoint="get_balance_sheet",
                 example_response_key="Accumulated Depreciation"
+            ),
+            DataRetrievalField(
+                field_name="Deferred Tax Assets",
+                description="Non-current deferred tax assets for tax basis roll schedule",
+                data_source="yfinance",
+                is_required=False,
+                api_endpoint="get_balance_sheet",
+                example_response_key="Non Current Deferred Taxes Assets"
+            ),
+            DataRetrievalField(
+                field_name="Tax Loss Carryforwards",
+                description="Operating loss carryforwards for NOL schedule (SEC EDGAR XBRL)",
+                data_source="sec_edgar",
+                is_required=False,
+                api_endpoint="get_xbrl_companyfacts",
+                example_response_key="DeferredTaxAssetsOperatingLossCarryforwards"
+            ),
+            DataRetrievalField(
+                field_name="Tax Basis PP&E",
+                description="Tax basis of Property, Plant & Equipment for tax depreciation schedule (declining balance method)",
+                data_source="yfinance",
+                is_required=False,
+                api_endpoint="get_balance_sheet",
+                example_response_key="Net PPE (as proxy for tax basis)"
+            ),
+            DataRetrievalField(
+                field_name="Long-Term Debt",
+                description="Long-term debt at end of last historical year. Needed for projected Balance Sheet",
+                data_source="yfinance",
+                is_required=False,
+                api_endpoint="get_balance_sheet",
+                example_response_key="Long Term Debt"
+            ),
+            DataRetrievalField(
+                field_name="Common Equity",
+                description="Stockholders equity at end of last historical year. Needed for projected Balance Sheet",
+                data_source="yfinance",
+                is_required=False,
+                api_endpoint="get_balance_sheet",
+                example_response_key="Stockholders Equity"
+            ),
+            DataRetrievalField(
+                field_name="Retained Earnings",
+                description="Retained earnings at end of last historical year. Needed for projected Retained Earnings (RE = Prior RE + NI - Dividends)",
+                data_source="yfinance",
+                is_required=False,
+                api_endpoint="get_balance_sheet",
+                example_response_key="Retained Earnings"
+            ),
+            DataRetrievalField(
+                field_name="Cash",
+                description="Cash and cash equivalents at end of last historical year. Needed as beginning balance for Cash Flow Statement",
+                data_source="yfinance",
+                is_required=False,
+                api_endpoint="get_balance_sheet",
+                example_response_key="Cash And Cash Equivalents"
+            ),
+            DataRetrievalField(
+                field_name="PP&E (Net)",
+                description="Net Property, Plant & Equipment at end of last historical year. Needed for Asset Schedule (PP&E roll: Begin + Capex - Depreciation = End)",
+                data_source="yfinance",
+                is_required=False,
+                api_endpoint="get_balance_sheet",
+                example_response_key="Net PPE"
+            ),
+            DataRetrievalField(
+                field_name="Revolving Credit Line",
+                description="Short-term borrowings / revolving credit at end of last historical year. Needed for projected Balance Sheet and Cash Flow financing section",
+                data_source="yfinance",
+                is_required=False,
+                api_endpoint="get_balance_sheet",
+                example_response_key="Other Short Term Debt / Capital Debt"
+            ),
+            DataRetrievalField(
+                field_name="Total Current Assets",
+                description="Total current assets at end of last historical year. Needed for projected Balance Sheet structure",
+                data_source="yfinance",
+                is_required=False,
+                api_endpoint="get_balance_sheet",
+                example_response_key="Current Assets"
+            ),
+            DataRetrievalField(
+                field_name="Total Current Liabilities",
+                description="Total current liabilities at end of last historical year. Needed for projected Balance Sheet structure",
+                data_source="yfinance",
+                is_required=False,
+                api_endpoint="get_balance_sheet",
+                example_response_key="Current Liabilities"
+            ),
+            DataRetrievalField(
+                field_name="Total Assets",
+                description="Total assets at end of last historical year. Needed for projected Balance Sheet and DuPont asset turnover",
+                data_source="yfinance",
+                is_required=False,
+                api_endpoint="get_balance_sheet",
+                example_response_key="Total Assets"
+            ),
+            DataRetrievalField(
+                field_name="Total Liabilities",
+                description="Total liabilities at end of last historical year. Needed for projected Balance Sheet structure",
+                data_source="yfinance",
+                is_required=False,
+                api_endpoint="get_balance_sheet",
+                example_response_key="Total Liabilities Net Minority Interest"
+            ),
+            DataRetrievalField(
+                field_name="Non-Current Marketable Securities",
+                description="Long-term bond portfolio / non-current marketable securities. Critical for EV-to-Equity bridge: Equity Value = EV - Debt + Cash + ALL Securities",
+                data_source="yfinance",
+                is_required=False,
+                api_endpoint="get_balance_sheet",
+                example_response_key="Non Current Marketable Securities / Long Term Investments"
+            ),
+            DataRetrievalField(
+                field_name="Other Current Liabilities",
+                description="Accrued Expenses + Deferred Revenue (pre-paid services). Critical for accurate Change in Net Working Capital (ΔNWC) calculations",
+                data_source="yfinance",
+                is_required=False,
+                api_endpoint="get_balance_sheet",
+                example_response_key="Other Current Liabilities / Current Accrued Expenses"
+            ),
+            DataRetrievalField(
+                field_name="Deferred Tax Liabilities",
+                description="Net Deferred Tax Assets/Liabilities position. Non-cash timing differences between accounting and tax depreciation. Net DTA minus DTL.",
+                data_source="yfinance",
+                is_required=False,
+                api_endpoint="get_balance_sheet",
+                example_response_key="Net Non Current Deferred Tax Liabilities"
+            ),
+            DataRetrievalField(
+                field_name="Current Accrued Expenses",
+                description="Accrued expenses within current liabilities (e.g. accrued wages, accrued interest). Separate from Other Current Liabilities per balance sheet identity: CL = Payables + Accrued Expenses + Other CL + Current Debt + Deferred Liabilities",
+                data_source="yfinance",
+                is_required=False,
+                api_endpoint="get_balance_sheet",
+                example_response_key="CurrentAccruedExpenses / Payables And Accrued Expenses"
+            ),
+            DataRetrievalField(
+                field_name="Current Deferred Liabilities",
+                description="Deferred revenue and other deferred items within current liabilities (pre-paid services to be recognized). Part of Current Liabilities identity: CL = Payables + Accrued Expenses + Other CL + Current Debt + Deferred Liabilities",
+                data_source="yfinance",
+                is_required=False,
+                api_endpoint="get_balance_sheet",
+                example_response_key="CurrentDeferredRevenue / Deferred Revenue Current"
+            ),
+            DataRetrievalField(
+                field_name="Trade and Other Payables Non Current",
+                description="Non-current portion of trade payables and other long-term payables. Part of Non-Current Liabilities identity: NCL = LT Debt + Trade Payables NC + Other NC Liabilities",
+                data_source="yfinance",
+                is_required=False,
+                api_endpoint="get_balance_sheet",
+                example_response_key="NonCurrentPayables / Non Current Payables"
+            ),
+            DataRetrievalField(
+                field_name="Other Non Current Liabilities",
+                description="All other non-current liabilities not classified as long-term debt or deferred taxes. Part of Non-Current Liabilities identity: NCL = LT Debt + Trade Payables NC + Other NC Liabilities",
+                data_source="yfinance",
+                is_required=False,
+                api_endpoint="get_balance_sheet",
+                example_response_key="OtherNonCurrentLiabilities / Other Non Current Liabilities"
+            ),
+            DataRetrievalField(
+                field_name="Other Short Term Investments",
+                description="Short-term investments excluding cash equivalents (e.g. money market funds, T-bills, available-for-sale securities). Part of Current Assets identity: CA = Cash + ST Investments + Receivables + Inventory + Other CA",
+                data_source="yfinance",
+                is_required=False,
+                api_endpoint="get_balance_sheet",
+                example_response_key="OtherShortTermInvestments / Available For Sale Securities"
+            ),
+            DataRetrievalField(
+                field_name="Other Current Assets",
+                description="Current assets not classified as cash, receivables, or inventory (e.g. prepaid expenses, deferred tax assets current). Part of Current Assets identity: CA = Cash + ST Investments + Receivables + Inventory + Other CA",
+                data_source="yfinance",
+                is_required=False,
+                api_endpoint="get_balance_sheet",
+                example_response_key="OtherCurrentAssets / Other Current Assets"
+            ),
+            DataRetrievalField(
+                field_name="Other Non Current Assets",
+                description="Non-current assets not classified as PP&E, investments, or deferred taxes (e.g. goodwill, intangibles, long-term prepaids). Part of Non-Current Assets identity: NCA = Net PPE + Accum Dep + Investments + Other NCA + Deferred Assets",
+                data_source="yfinance",
+                is_required=False,
+                api_endpoint="get_balance_sheet",
+                example_response_key="OtherNonCurrentAssets / Other Non Current Assets"
+            ),
+            DataRetrievalField(
+                field_name="Common Stock",
+                description="Par value of common stock issued. Part of Equity identity: Total Equity = Common Stock + Retained Earnings + Other Equity Adjustments",
+                data_source="yfinance",
+                is_required=False,
+                api_endpoint="get_balance_sheet",
+                example_response_key="CommonStockEquity / Common Stock Equity"
+            ),
+            DataRetrievalField(
+                field_name="Other Equity Adjustments",
+                description="Accumulated Other Comprehensive Income (AOCI), treasury stock, and other equity adjustments. Calculated as: Total Equity - Common Stock - Retained Earnings. Part of Equity identity: Total Equity = Common Stock + RE + Other Equity",
+                data_source="yfinance",
+                is_required=False,
+                api_endpoint="get_balance_sheet",
+                example_response_key="Calculated: Total Equity - Common Stock - Retained Earnings"
             )
         ],
         "peer_comparables_for_wacc": [
@@ -246,6 +558,30 @@ class Step5RequiredInputsProcessor:
                 is_required=False,
                 api_endpoint="get_financials",
                 example_response_key="Tax Provision, Pretax Income (for each peer)"
+            ),
+            DataRetrievalField(
+                field_name="Peer Company Names",
+                description="Company names for 5 comparable companies (for identification and display in WACC peer table)",
+                data_source="yfinance",
+                is_required=False,
+                api_endpoint="get_company_info",
+                example_response_key="longName / shortName (for each peer)"
+            ),
+            DataRetrievalField(
+                field_name="Peer Country",
+                description="Country of incorporation for 5 comparable companies (needed for per-peer country risk premium in WACC calculation)",
+                data_source="yfinance",
+                is_required=False,
+                api_endpoint="get_company_info",
+                example_response_key="country (for each peer)"
+            ),
+            DataRetrievalField(
+                field_name="Peer EBITDA",
+                description="EBITDA for 5 comparable companies (needed for relative valuation cross-check and peer comparison)",
+                data_source="yfinance",
+                is_required=False,
+                api_endpoint="get_financials",
+                example_response_key="EBITDA (for each peer)"
             )
         ]
     }
@@ -255,7 +591,7 @@ class Step5RequiredInputsProcessor:
         "income_statement": [
             DataRetrievalField(
                 field_name="Net Income",
-                description="Bottom line earnings (historical 3-5 years)",
+                description="Bottom line earnings (historical 4 years)",
                 data_source="yfinance",
                 is_required=True,
                 api_endpoint="get_financials",
@@ -263,7 +599,7 @@ class Step5RequiredInputsProcessor:
             ),
             DataRetrievalField(
                 field_name="Total Revenue",
-                description="Top line sales (historical 3-5 years)",
+                description="Top line sales (historical 4 years)",
                 data_source="yfinance",
                 is_required=True,
                 api_endpoint="get_financials",
@@ -271,7 +607,7 @@ class Step5RequiredInputsProcessor:
             ),
             DataRetrievalField(
                 field_name="Operating Income (EBIT)",
-                description="Income from operations (historical 3-5 years)",
+                description="Income from operations (historical 4 years)",
                 data_source="yfinance",
                 is_required=True,
                 api_endpoint="get_financials",

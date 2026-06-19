@@ -1,1 +1,102 @@
-Nothing should be ignored based on the provided file changes. The only modified file is a source code file (`frontend/src/components/valuation-flow/PeerSelectionStep.jsx`), which should not be added to .gitignore.
+# =============================================================================
+# FinGrid — Root .gitignore
+# =============================================================================
+
+# ---------------------
+# Dependencies
+# ---------------------
+node_modules/
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# ---------------------
+# Environment & Secrets
+# ---------------------
+.env
+.env.local
+.env.production
+.env.*
+!.env.example
+!.env*.example
+
+# ---------------------
+# Build Output
+# ---------------------
+dist/
+build/
+*.egg-info/
+.eggs/
+
+# ---------------------
+# Session Persistence (file-based)
+# ---------------------
+backend/sessions/
+backend/sessions/*.json
+backend/sessions/*.json.tmp
+
+# ---------------------
+# SQLite / Database Files
+# ---------------------
+*.db
+*.sqlite
+*.sqlite3
+
+# ---------------------
+# Logs & Temp Files
+# ---------------------
+*.log
+*.tmp
+*.swp
+*.swo
+nohup.out
+pip-log.txt
+
+# ---------------------
+# OS & Editor
+# ---------------------
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.code-workspace
+
+# ---------------------
+# Testing & Coverage
+# ---------------------
+coverage/
+htmlcov/
+.coverage
+.coverage.*
+.pytest_cache/
+.tox/
+.nyc_output/
+nosetests.xml
+coverage.xml
+
+# ---------------------
+# MyPy / Type Checking
+# ---------------------
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# ---------------------
+# Jupyter
+# ---------------------
+.ipynb_checkpoints/
+
+# ---------------------
+# Docker (runtime artifacts, not build context)
+# ---------------------
+.docker/
+
+# ---------------------
+# Misc
+# ---------------------
+*.pem
+.cache/

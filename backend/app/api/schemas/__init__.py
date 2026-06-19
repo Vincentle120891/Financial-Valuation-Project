@@ -36,6 +36,8 @@ from .unified_step_schemas import (
     UnifiedStep3Response,
     UnifiedStep4Request,
     UnifiedStep4Response,
+    UnifiedStep4SavePeersRequest,
+    UnifiedStep4SavePeersResponse,
     PeerCompany,
     UnifiedStep5Request,
     UnifiedStep5Response,

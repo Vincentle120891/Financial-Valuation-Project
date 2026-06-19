@@ -6,6 +6,7 @@ Uses pydantic-settings for type validation and automatic env loading.
 """
 
 import os
+from pathlib import Path
 from typing import Optional, List
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
@@ -15,7 +16,7 @@ class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
     
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=str(Path(__file__).resolve().parent.parent / ".env"),
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore"
@@ -40,10 +41,10 @@ class Settings(BaseSettings):
     # API KEYS
     # =========================================================================
     
-    groq_api_key: Optional[str] = Field(default=None, description="Groq API key for AI engine")
-    gemini_api_key: Optional[str] = Field(default=None, description="Google Gemini API key")
-    qwen_api_key: Optional[str] = Field(default=None, description="Alibaba Qwen/DashScope API key")
-    openrouter_api_key: Optional[str] = Field(default=None, description="OpenRouter API key for unified AI access")
+    groq_api_key: Optional[str] = Field(default=None, description="Groq API key (optional fallback)")
+    gemini_api_key: Optional[str] = Field(default=None, description="Google Gemini API key (optional fallback)")
+    qwen_api_key: Optional[str] = Field(default=None, description="Alibaba Qwen/DashScope API key (optional fallback)")
+    openrouter_api_key: Optional[str] = Field(default=None, description="OpenRouter API key (PRIMARY AI provider)")
     alpha_vantage_key: Optional[str] = Field(default=None, description="Alpha Vantage API key")
     
     # Aliases for different env var naming conventions
@@ -51,6 +52,12 @@ class Settings(BaseSettings):
     dashscope_api_key: Optional[str] = Field(default=None)
     alpha_vantage_api_key: Optional[str] = Field(default=None)
     alphavantage_api_key: Optional[str] = Field(default=None)
+    
+    # AI Model Preferences (OpenRouter is PRIMARY)
+    openrouter_model: str = Field(default="openrouter/owl-alpha", description="OpenRouter model (PRIMARY)")
+    groq_model: Optional[str] = Field(default=None, description="Groq model (optional fallback)")
+    gemini_model: Optional[str] = Field(default=None, description="Gemini model (optional fallback)")
+    qwen_model: Optional[str] = Field(default=None, description="Qwen model (optional fallback)")
     
     @property
     def effective_gemini_key(self) -> Optional[str]:

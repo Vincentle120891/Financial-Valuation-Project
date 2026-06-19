@@ -304,7 +304,7 @@ async def get_key_statistics(
 async def get_dcf_historical_financials(
     ticker: str = Path(..., description="Ticker symbol"),
     market_code: str = Query("US", description="Market code"),
-    years: int = Query(5, description="Number of historical years (3-5)")
+    years: int = Query(4, description="Number of historical years (3-5)")
 ):
     """
     Get historical financial statements for DCF modeling.
@@ -756,7 +756,7 @@ async def get_dupont_profitability_drivers(
         
         financials = result.get('financials')
         
-        def extract_series(data, key, n_years=5):
+        def extract_series(data, key, n_years=4):
             if data is None or data.empty: return {}
             row = data.loc[key] if key in data.index else None
             if row is None: return {}
@@ -797,7 +797,7 @@ async def get_dupont_efficiency_drivers(
         financials = result.get('financials')
         balance_sheet = result.get('balance_sheet')
         
-        def extract_series(data, key, n_years=5):
+        def extract_series(data, key, n_years=4):
             if data is None or data.empty: return {}
             row = data.loc[key] if key in data.index else None
             if row is None: return {}
@@ -833,7 +833,7 @@ async def get_dupont_leverage_drivers(
         
         balance_sheet = result.get('balance_sheet')
         
-        def extract_series(data, key, n_years=5):
+        def extract_series(data, key, n_years=4):
             if data is None or data.empty: return {}
             row = data.loc[key] if key in data.index else None
             if row is None: return {}

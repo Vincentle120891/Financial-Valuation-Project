@@ -1,10 +1,18 @@
 """
-Vietnamese Step 8: AI Assumptions Processor
-Generates forward-looking assumptions calibrated for Vietnamese market conditions
+Vietnamese Step 8: AI Assumptions Processor — Assumption Studio
+
+Generates forward-looking assumptions calibrated for Vietnamese market conditions.
+
+Enhancements (Fix 4):
+- Historical trendlines from complete_statements (3-5 year CAGR, volatility)
+- Statistical analysis per metric (median, std_dev, min, max)
+- Validation guardrails per metric (bounded min/max reasonable)
+- Terminal growth bounded 2-6% (aligned with VN GDP)
 """
 from typing import Dict, Any, List, Optional, Literal
 from pydantic import BaseModel, Field, validator
 from datetime import datetime
+import statistics as stats_mod
 
 
 class vn_AIAssumptionsInput(BaseModel):
@@ -395,4 +403,156 @@ class vn_Step8AssumptionsProcessor:
             "sector": sector,
             "industry": industry,
             **sector_outlooks.get(sector, default_outlook)
+        }
+
+    # ──────────────────────────────────────────────────────────────────────────
+    # Trendlines & Statistical Analysis (Fix 4 — Assumption Studio)
+    # ──────────────────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _compute_trendline(values: List[float]) -> Dict[str, Any]:
+        """
+        Compute statistical summary for a time series.
+
+        Returns dict with: cagr, median, mean, std_dev, min, max, volatility, latest
+        """
+        if not values or len(values) < 2:
+            v = values[0] if values else 0.0
+            return {"cagr": 0.0, "median": v, "mean": v, "std_dev": 0.0,
+                    "min": v, "max": v, "volatility": "low", "latest": v}
+
+        # Filter out zeros for CAGR calculation
+        positive = [v for v in values if v > 0]
+        if len(positive) >= 2:
+            cagr = (positive[-1] / positive[0]) ** (1 / (len(positive) - 1)) - 1
+        else:
+            cagr = 0.0
+
+        mean_val = stats_mod.mean(values)
+        std_val = stats_mod.stdev(values) if len(values) > 1 else 0.0
+        cv = abs(std_val / mean_val) if mean_val != 0 else 0.0
+
+        if cv < 0.10:
+            volatility = "low"
+        elif cv < 0.25:
+            volatility = "medium"
+        else:
+            volatility = "high"
+
+        return {
+            "cagr": round(cagr, 4),
+            "median": round(stats_mod.median(values), 2),
+            "mean": round(mean_val, 2),
+            "std_dev": round(std_val, 2),
+            "min": round(min(values), 2),
+            "max": round(max(values), 2),
+            "volatility": volatility,
+            "latest": values[-1],
+        }
+
+    @staticmethod
+    def _extract_time_series(
+        historical: Dict[str, Any],
+        field_name: str,
+    ) -> List[float]:
+        """
+        Extract a time series from historical_financials dict.
+
+        historical_financials can be:
+        - {field: {period: value}} — nested dict
+        - {period: {field: value}} — period-first dict
+        - flat list [val1, val2, ...]
+        """
+        if not historical:
+            return []
+
+        # Try nested: {field: {period: value}}
+        field_data = historical.get(field_name)
+        if isinstance(field_data, dict):
+            return [float(v) for v in field_data.values() if v is not None]
+        if isinstance(field_data, list):
+            return [float(v) for v in field_data if v is not None]
+
+        # Try period-first: {period: {field: value}}
+        values = []
+        for key, val in historical.items():
+            if isinstance(val, dict) and field_name in val:
+                v = val[field_name]
+                if v is not None:
+                    values.append(float(v))
+
+        return values
+
+    def compute_historical_trendlines(
+        self,
+        historical_financials: Dict[str, Any],
+    ) -> Dict[str, Dict[str, Any]]:
+        """
+        Compute trendlines for key financial metrics from historical data.
+
+        Returns dict of {metric_name: trendline_stats}
+        """
+        key_metrics = [
+            "revenue", "net_income", "operating_income", "total_assets",
+            "total_equity", "operating_cash_flow", "free_cash_flow",
+        ]
+
+        trendlines = {}
+        for metric in key_metrics:
+            series = self._extract_time_series(historical_financials, metric)
+            if series:
+                trendlines[metric] = self._compute_trendline(series)
+
+        return trendlines
+
+    def validate_assumption(
+        self,
+        param_name: str,
+        suggested_value: float,
+        trendlines: Dict[str, Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        """
+        Validate an assumption against historical trendlines and VN guardrails.
+
+        Returns dict with: is_valid, warning, adjusted_value
+        """
+        warning = None
+        adjusted = suggested_value
+
+        # Terminal growth bounds (VN GDP aligned: 2-6%)
+        if param_name == "terminal_growth_rate":
+            if suggested_value < 0.02:
+                warning = f"Terminal growth {suggested_value:.1%} below VN floor (2%). Adjusting to 2%."
+                adjusted = 0.02
+            elif suggested_value > 0.06:
+                warning = f"Terminal growth {suggested_value:.1%} above VN ceiling (6%). Adjusting to 6%."
+                adjusted = 0.06
+
+        # Revenue growth — compare to historical CAGR
+        if param_name.startswith("revenue_growth_year_") and "revenue" in trendlines:
+            hist_cagr = trendlines["revenue"].get("cagr", 0)
+            if hist_cagr > 0 and suggested_value > hist_cagr * 2:
+                warning = (
+                    f"Growth {suggested_value:.1%} is >2x historical CAGR ({hist_cagr:.1%}). "
+                    f"Consider more conservative projection."
+                )
+
+        # Operating margin — compare to historical range
+        if param_name == "target_operating_margin":
+            # No direct trendline match, but check reasonable bounds
+            if suggested_value < 0.0:
+                warning = "Operating margin cannot be negative for projection."
+                adjusted = 0.0
+            elif suggested_value > 0.50:
+                warning = f"Operating margin {suggested_value:.1%} seems unusually high for VN market."
+
+        # Tax rate — Vietnam CIT is 20%
+        if param_name == "tax_rate":
+            if abs(suggested_value - 0.20) > 0.05:
+                warning = f"Tax rate {suggested_value:.1%} deviates significantly from VN standard CIT (20%)."
+
+        return {
+            "is_valid": warning is None,
+            "warning": warning,
+            "adjusted_value": adjusted,
         }

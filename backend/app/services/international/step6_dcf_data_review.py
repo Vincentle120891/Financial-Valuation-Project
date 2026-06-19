@@ -141,7 +141,8 @@ class DCFStep6Processor:
     """
 
     def __init__(self):
-        self.api_adapter = APIAdapter(provider="yfinance")
+        self.api_adapter = APIAdapter(provider="yfinance", enable_alphavantage=True)  # Target company: AV as gap-filler
+        self.peer_adapter = APIAdapter(provider="yfinance", enable_alphavantage=False)  # Peers: yfinance-only
         self._audit_logger = None
         self._versioning_service = None
         self._validator = ValidationMiddleware(method="DCF")
@@ -215,124 +216,210 @@ class DCFStep6Processor:
 
             logger.info(f"APIAdapter returned {len(api_data)} metrics for {ticker}, missing: {len(missing_from_api)}")
 
-            all_data = {
-                "income_statement": {"data": api_data, "periods": []},  # Wrap in dict with "data" key
-                "balance_sheet": {"data": {}, "periods": []},
-                "cash_flow": {"data": {}, "periods": []},
-                "key_stats": api_data,  # Use flat dict for market data
-                "analyst_estimates": forecast_data or {}
+            # --- Build multi-year DataFrames from YFinanceService output ---
+            # The enhanced APIAdapter passes through _multi_year data from YFinanceService
+            # which has format: {"income_statement": {"periods": [...], "total_revenue": [...], ...}}
+            
+            multi_year = mapped_result.get("raw_data", {}).get("_multi_year", {})
+            yfs_income = multi_year.get("income_statement", {})
+            yfs_bs = multi_year.get("balance_sheet", {})
+            yfs_cf = multi_year.get("cash_flow", {})
+            
+            # Mapping from MetricRegistry IDs to YFinanceService field names
+            INCOME_FIELDS = {
+                "revenue": "total_revenue",
+                "cost_of_revenue": "cost_of_revenue",
+                "gross_profit": "gross_profit",
+                "operating_expenses": "operating_expenses",
+                "sg_and_a": "sg_and_a",
+                "research_development": "research_development",
+                "interest_expense": "interest_expense",
+                "other_income": "other_income_expense",
+                "pretax_income": "pretax_income",
+                "tax_provision": "tax_provision",
+                "deferred_tax": "deferred_tax",
+                "operating_income": "ebit",
+                "net_income": "net_income",
+                "ebitda": "ebitda",
+                "depreciation_amortization": "depreciation_amortization",
+                "interest_income": "interest_income",
+            }
+            BS_FIELDS = {
+                "total_assets": "total_assets",
+                "total_liabilities": "total_liabilities",
+                "total_debt": "total_debt",
+                "cash_and_equivalents": "cash_and_equivalents",
+                "accounts_receivable": "accounts_receivable",
+                "inventory": "inventory",
+                "accounts_payable": "accounts_payable",
+                "shareholders_equity": "total_equity",
+                "shares_outstanding": "shares_outstanding",
+                "retained_earnings": "retained_earnings",
+                "ppe_gross": "ppe_gross",
+                "accumulated_depreciation": "accumulated_depreciation",
+                "net_ppe": "net_ppe",
+                "total_current_assets": "total_current_assets",
+                "total_current_liabilities": "total_current_liabilities",
+                "long_term_debt": "long_term_debt",
+                "current_debt": "current_debt",
+                "net_debt": "net_debt",
+                "working_capital": "working_capital",
+                "non_current_marketable_securities": "non_current_marketable_securities",
+                "other_current_liabilities": "other_current_liabilities",
+                "deferred_tax_liabilities": "deferred_tax_liabilities",
+                "current_accrued_expenses": "current_accrued_expenses",
+                "current_deferred_liabilities": "current_deferred_liabilities",
+                "trade_and_other_payables_non_current": "trade_and_other_payables_non_current",
+                "other_non_current_liabilities": "other_non_current_liabilities",
+                "other_short_term_investments": "other_short_term_investments",
+                "other_current_assets": "other_current_assets",
+                "other_non_current_assets": "other_non_current_assets",
+                "common_stock": "common_stock",
+                "other_equity_adjustments": "other_equity_adjustments",
+            }
+            CF_FIELDS = {
+                "operating_cash_flow": "operating_cash_flow",
+                "capex": "capital_expenditure",
+                "free_cash_flow": "free_cash_flow",
+                "working_capital_change": "working_capital_change",
+                "interest_paid": "interest_paid",
+                "tax_paid": "tax_paid",
+                "share_buybacks": "share_buybacks",
+                "debt_repayments": "debt_repayments",
+                "debt_issuance": "debt_issuance",
+                "dividends_paid": "dividends_paid",
+            }
+            
+            # Additional key variants for balance sheet fields (yfinance CamelCase + snake_case)
+            BS_KEY_VARIANTS = {
+                "cash_and_equivalents": ["cash_and_equivalents",
+                                          "CashCashEquivalentsAndShortTermInvestments",
+                                          "CashAndCashEquivalents",
+                                          "Cash Cash Equivalents And Short Term Investments",
+                                          "Cash And Cash Equivalents",
+                                          "Cash"],
+                "retained_earnings": ["retained_earnings", "RetainedEarnings", "Retained Earnings",
+                                       "RetainedEarningsAccumulatedDeficit"],
+                "shares_outstanding": ["shares_outstanding", "OrdinarySharesNumber", "SharesOutstanding",
+                                        "Ordinary Shares Number", "Share Outstanding"],
+                "total_assets": ["total_assets", "TotalAssets", "Total Assets"],
+                "total_debt": ["total_debt", "TotalDebt", "Total Debt"],
+                "accounts_receivable": ["accounts_receivable", "AccountsReceivable", "Receivables"],
+                "inventory": ["inventory", "Inventory", "Inventories"],
+                "accounts_payable": ["accounts_payable", "AccountsPayable", "Payables"],
+                "shareholders_equity": ["shareholders_equity", "StockholdersEquity", "TotalEquityGrossMinorityInterest",
+                                         "CommonStockEquity"],
+                "ppe_gross": ["ppe_gross", "GrossPPE", "Gross PPE", "PropertyPlantAndEquipmentGross",
+                              "Properties", "NetPPE",
+                              "PropertyPlantAndEquipmentNet", "Property Plant And Equipment Net"],
+                "accumulated_depreciation": ["accumulated_depreciation", "AccumulatedDepreciation",
+                                              "Accumulated Depreciation"],
+                "net_ppe": ["net_ppe", "Net PPE", "NetPPE",
+                            "PropertyPlantAndEquipmentNet", "Property Plant And Equipment Net"],
+                "long_term_debt": ["long_term_debt", "LongTermDebt", "Long Term Debt",
+                                    "LongTermDebtAndCapitalLeaseObligation",
+                                    "Long Term Debt And Capital Lease Obligation"],
+                "current_debt": ["current_debt", "CurrentDebt", "Current Debt",
+                                  "CurrentDebtAndCapitalLeaseObligation",
+                                  "Current Debt And Capital Lease Obligation",
+                                  "Short Long Term Debt", "ShortLongTermDebt"],
+                "interest_income": ["interest_income", "InterestIncome", "Interest Income", "InterestEarned"],
+                "working_capital": ["working_capital", "WorkingCapital", "Working Capital"],
+                "non_current_marketable_securities": ["non_current_marketable_securities", "NonCurrentMarketableSecurities",
+                                                      "LongTermInvestments", "Other Long Term Investments",
+                                                      "Non Current Available For Sale Securities", "Available For Sale Securities"],
+                "other_current_liabilities": ["other_current_liabilities", "OtherCurrentLiabilities",
+                                              "Other Current Liabilities"],
+                "deferred_tax_liabilities": ["deferred_tax_liabilities", "DeferredTaxLiabilities",
+                                             "Net Non Current Deferred Tax Liabilities",
+                                             "Non Current Deferred Taxes Liabilities",
+                                             "Deferred Tax Liabilities", "deferred_tax"],
+                "current_accrued_expenses": ["current_accrued_expenses", "CurrentAccruedExpenses",
+                                             "Current Accrued Expenses", "PayablesAndAccruedExpenses",
+                                             "Payables And Accrued Expenses"],
+                "current_deferred_liabilities": ["current_deferred_liabilities", "CurrentDeferredRevenue",
+                                                 "Current Deferred Revenue", "DeferredRevenueCurrent",
+                                                 "Deferred Revenue Current", "Current Deferred Liabilities"],
+                "trade_and_other_payables_non_current": ["trade_and_other_payables_non_current",
+                                                         "NonCurrentPayables", "Non Current Payables",
+                                                         "Trade Payables Non Current", "Other Non Current Liabilities"],
+                "other_non_current_liabilities": ["other_non_current_liabilities", "OtherNonCurrentLiabilities",
+                                                  "Other Non Current Liabilities"],
+                "other_short_term_investments": ["other_short_term_investments", "OtherShortTermInvestments",
+                                                 "Other Short Term Investments", "AvailableForSaleSecurities",
+                                                 "Available For Sale Securities", "ShortTermInvestments"],
+                "other_current_assets": ["other_current_assets", "OtherCurrentAssets",
+                                         "Other Current Assets"],
+                "other_non_current_assets": ["other_non_current_assets", "OtherNonCurrentAssets",
+                                             "Other Non Current Assets"],
+                "common_stock": ["common_stock", "CommonStockEquity", "Common Stock Equity",
+                                 "CommonStock", "Common Stock", "CommonStockValue"],
+                "other_equity_adjustments": ["other_equity_adjustments", "OtherEquityAdjustments",
+                                             "Other Equity Adjustments", "AccumulatedOtherComprehensiveIncome",
+                                             "AOCI", "TreasuryStock"],
             }
 
-            # Convert dict format to DataFrame format expected by processors
-            income_stmt_dict = all_data.get("income_statement", {})
-            balance_sheet_dict = all_data.get("balance_sheet", {})
-            cash_flow_dict = all_data.get("cash_flow", {})
-
-            # FIX: Properly construct DataFrames using APIAdapter data structure
-            # APIAdapter returns nested dict: {"income_statement": {timestamp: {metric: value}}, ...}
-            # We need to convert this to DataFrame format with metrics in INDEX (rows)
-            def build_financials_from_api_data(api_data_dict):
-                """Build pseudo time-series from APIAdapter flat data"""
+            def build_multiyear_df(yfs_section, field_map):
+                """Build multi-year DataFrame from YFinanceService output.
+                
+                YFS format: {"periods": ["2024-12-31", ...], "total_revenue": [176B, ...], ...}
+                Returns DataFrame with MetricRegistry IDs as INDEX, periods as COLUMNS.
+                Tries multiple key variants for each metric to handle yfinance naming differences.
+                """
+                if not yfs_section or not isinstance(yfs_section, dict):
+                    return None
+                periods = yfs_section.get("periods", [])
+                if not periods:
+                    return None
+                sorted_periods = sorted(periods, reverse=True)[:4]
+                
+                metrics_data = {}
+                for metric_id, yfs_key in field_map.items():
+                    values = yfs_section.get(yfs_key)
+                    # If primary key didn't work, try additional variants
+                    if not (isinstance(values, list) and values):
+                        variants = BS_KEY_VARIANTS.get(metric_id, [])
+                        for alt_key in variants:
+                            if alt_key != yfs_key:
+                                values = yfs_section.get(alt_key)
+                                if isinstance(values, list) and values:
+                                    break
+                    if isinstance(values, list) and values:
+                        padded = values[:len(sorted_periods)]
+                        while len(padded) < len(sorted_periods):
+                            padded.append(None)
+                        if any(v is not None for v in padded):
+                            metrics_data[metric_id] = padded
+                
+                if metrics_data:
+                    df = pd.DataFrame.from_dict(metrics_data, orient='index', columns=sorted_periods)
+                    logger.info(f"[Step6DCF] Built multi-year DataFrame: {len(df)} metrics x {len(df.columns)} periods")
+                    return df
+                return None
+            
+            # Fallback: single-period DataFrame from APIAdapter mapped data
+            def build_single_period_df(api_data_dict):
                 if not api_data_dict:
                     return None
-
-                # Extract all metric values into a single-period DataFrame
-                # Since APIAdapter returns current/latest values only
-                # IMPORTANT: Metrics must be in the INDEX (rows), not columns
-                # because _extract_metric_from_financials() searches df.index
                 metrics_data = {}
-                periods = ["Latest"]  # Single period for now
                 for metric_id, metric_info in api_data_dict.items():
                     if isinstance(metric_info, dict) and "value" in metric_info:
-                        # Store metric_id as the INDEX key, value as the data
                         metrics_data[metric_id] = metric_info["value"]
                     elif not isinstance(metric_info, dict):
-                        # Fallback if the value is already parsed as a flat primitive
                         metrics_data[metric_id] = metric_info
-
                 if not metrics_data:
                     return None
-
-                # Create DataFrame with metrics as INDEX, not columns
-                df = pd.DataFrame.from_dict(metrics_data, orient='index', columns=periods)
-                logger.debug(f"[Step6DCF] Built financials_df with {len(df)} rows (metrics) and {len(df.columns)} periods")
-                logger.debug(f"[Step6DCF] financials_df.index (first 10): {list(df.index)[:10]}")
-                return df
-
-            def build_balance_sheet_df(raw_data):
-                """Build balance sheet DataFrame from APIAdapter raw data"""
-                bs_data = raw_data.get("balance_sheet", {})
-                if not bs_data:
-                    logger.debug("[Step6DCF] No balance_sheet data in raw_data")
-                    return None
-                try:
-                    # APIAdapter returns: {timestamp: {metric: value, ...}} or flat dict
-                    # FIXED: Completed trailing conditional clause
-                    if isinstance(bs_data, dict) and bs_data:
-                        # Check if the structure uses timestamp strings as top-level keys
-                        first_key = list(bs_data.keys())[0]
-                        if isinstance(bs_data[first_key], dict) and "value" not in bs_data[first_key]:
-                            latest_data = bs_data[first_key]
-                        else:
-                            latest_data = bs_data
-
-                        # Cleanly separate metric values from metadata wrappers
-                        metrics_data = {}
-                        for metric_id, metric_info in latest_data.items():
-                            if isinstance(metric_info, dict) and "value" in metric_info:
-                                metrics_data[metric_id] = metric_info["value"]
-                            elif not isinstance(metric_info, dict):
-                                metrics_data[metric_id] = metric_info
-
-                        if metrics_data:
-                            # Convert to DataFrame with metrics as INDEX
-                            df = pd.DataFrame.from_dict(metrics_data, orient='index', columns=["Latest"])
-                            logger.debug(f"[Step6DCF] Built balance_sheet_df with {len(df)} rows")
-                            logger.debug(f"[Step6DCF] balance_sheet_df.index (first 10): {list(df.index)[:10]}")
-                            return df
-                except Exception as e:
-                    logger.error(f"[Step6DCF] Error building balance_sheet_df: {e}")
-                return None
-
-            def build_cashflow_df(raw_data):
-                """Build cash flow DataFrame from APIAdapter raw data"""
-                cf_data = raw_data.get("cash_flow", {})
-                if not cf_data:
-                    logger.debug("[Step6DCF] No cash_flow data in raw_data")
-                    return None
-                try:
-                    # APIAdapter returns: {timestamp: {metric: value, ...}} or flat dict
-                    # FIXED: Completed trailing conditional clause
-                    if isinstance(cf_data, dict) and cf_data:
-                        # Check if the structure uses timestamp strings as top-level keys
-                        first_key = list(cf_data.keys())[0]
-                        if isinstance(cf_data[first_key], dict) and "value" not in cf_data[first_key]:
-                            latest_data = cf_data[first_key]
-                        else:
-                            latest_data = cf_data
-
-                        # Cleanly separate metric values from metadata wrappers
-                        metrics_data = {}
-                        for metric_id, metric_info in latest_data.items():
-                            if isinstance(metric_info, dict) and "value" in metric_info:
-                                metrics_data[metric_id] = metric_info["value"]
-                            elif not isinstance(metric_info, dict):
-                                metrics_data[metric_id] = metric_info
-
-                        if metrics_data:
-                            # Convert to DataFrame with metrics as INDEX
-                            df = pd.DataFrame.from_dict(metrics_data, orient='index', columns=["Latest"])
-                            logger.debug(f"[Step6DCF] Built cashflow_df with {len(df)} rows")
-                            logger.debug(f"[Step6DCF] cashflow_df.index (first 10): {list(df.index)[:10]}")
-                            return df
-                except Exception as e:
-                    logger.error(f"[Step6DCF] Error building cashflow_df: {e}")
-                return None
-
-            # Build ALL THREE DataFrames from APIAdapter raw data
-            financials_df = build_financials_from_api_data(api_data)
-            balance_sheet_df = build_balance_sheet_df(mapped_result.get("raw_data", {}))
-            cashflow_df = build_cashflow_df(mapped_result.get("raw_data", {}))
+                return pd.DataFrame.from_dict(metrics_data, orient='index', columns=["Latest"])
+            
+            # Build DataFrames: prefer multi-year, fallback to single-period
+            financials_df = build_multiyear_df(yfs_income, INCOME_FIELDS)
+            if financials_df is None:
+                financials_df = build_single_period_df(api_data)
+            balance_sheet_df = build_multiyear_df(yfs_bs, BS_FIELDS)
+            cashflow_df = build_multiyear_df(yfs_cf, CF_FIELDS)
+            
+            logger.info(f"[Step6DCF] Built DataFrames: financials={financials_df is not None} ({len(financials_df) if financials_df is not None else 0} rows), "
+                       f"balance_sheet={balance_sheet_df is not None}, cashflow={cashflow_df is not None}")
 
             logger.info(f"[Step6DCF] Built DataFrames: financials={financials_df is not None}, balance_sheet={balance_sheet_df is not None}, cashflow={cashflow_df is not None}")
 
@@ -342,9 +429,110 @@ class DCFStep6Processor:
                 'balance_sheet': balance_sheet_df,
                 'cashflow': cashflow_df
             }
-            market_data = market_data or all_data.get('key_stats', {})
-            forecast_data = forecast_data or all_data.get('analyst_estimates', {})
-            retrieved_assumptions = retrieved_assumptions or {}
+            market_data = market_data or api_data
+            # Merge raw info (key_stats) into market_data so _process_dcf_market_data can find totalCash, beta, etc.
+            raw_info = mapped_result.get("raw_data", {}).get("info", {})
+            if raw_info and isinstance(raw_info, dict):
+                for k, v in raw_info.items():
+                    if v is not None and k not in market_data:
+                        market_data[k] = v
+            forecast_data = forecast_data or {}
+            
+            # Fetch peer data if not provided (for WACC calculation)
+            if not retrieved_assumptions:
+                # Look for peer tickers in multiple session locations
+                # SessionService stores peer data in session["data"]["peer_tickers"]
+                # (because "peer_tickers" is not in shared_keys list)
+                peer_tickers = []
+                if session_cache:
+                    # Check session["data"]["peer_tickers"] (where SessionService actually stores it)
+                    data_dict = session_cache.get('data', {})
+                    if isinstance(data_dict, dict):
+                        peer_tickers = data_dict.get('peer_tickers', [])
+                    # Also check top-level (backward compatibility)
+                    if not peer_tickers:
+                        peer_tickers = session_cache.get('peer_tickers', [])
+                    # Also check selected_peers in data dict
+                    if not peer_tickers and isinstance(data_dict, dict):
+                        selected_peers = data_dict.get('selected_peers', [])
+                        if selected_peers:
+                            peer_tickers = [p.get('symbol', p.get('ticker', '')) if isinstance(p, dict) else str(p) for p in selected_peers]
+                    # Also check top-level selected_peers
+                    if not peer_tickers:
+                        selected_peers = session_cache.get('selected_peers', [])
+                        if selected_peers:
+                            peer_tickers = [p.get('symbol', p.get('ticker', '')) if isinstance(p, dict) else str(p) for p in selected_peers]
+                    # Also check peer_data.peers
+                    if not peer_tickers:
+                        peer_data_section = session_cache.get('peer_data', {})
+                        if isinstance(peer_data_section, dict):
+                            peer_tickers = peer_data_section.get('peers', [])
+                    # Also check valuation track (nested structure)
+                    if not peer_tickers:
+                        valuations = session_cache.get('valuations', {})
+                        if isinstance(valuations, dict):
+                            for market_key, market_data in valuations.items():
+                                if isinstance(market_data, dict):
+                                    for method_key, method_data in market_data.items():
+                                        if isinstance(method_data, dict):
+                                            # Check data sub-dict first
+                                            track_data = method_data.get('data', {})
+                                            if isinstance(track_data, dict):
+                                                peer_tickers = track_data.get('peer_tickers', [])
+                                                if not peer_tickers:
+                                                    sp = track_data.get('selected_peers', [])
+                                                    if sp:
+                                                        peer_tickers = [p.get('symbol', p.get('ticker', '')) if isinstance(p, dict) else str(p) for p in sp]
+                                            if not peer_tickers:
+                                                peer_tickers = method_data.get('peer_tickers', [])
+                                            if peer_tickers:
+                                                break
+                                if peer_tickers:
+                                    break
+
+                logger.info(f"[Step6DCF] Found {len(peer_tickers)} peer tickers in session: {peer_tickers}")
+
+                if peer_tickers:
+                    logger.info(f"[Step6DCF] Fetching data for {len(peer_tickers)} peers: {peer_tickers}")
+                    peer_data = {}
+                    # Peer metrics: DCF-required + additional fields needed for multiples calculation
+                    peer_metrics = list(set(required_metrics + [
+                        "market_cap", "enterprise_value", "ebitda", "revenue",
+                        "current_price", "book_value", "beta", "total_debt",
+                        "cash_and_equivalents", "effective_tax_rate", "cost_of_debt",
+                        "net_income", "shares_outstanding", "pe_ratio", "pb_ratio"
+                    ]))
+                    for peer_ticker in peer_tickers[:5]:  # Limit to 5 peers
+                        try:
+                            peer_raw = self.peer_adapter.fetch_raw_data(peer_ticker, peer_metrics)
+                            peer_mapped = self.peer_adapter.map_and_normalize(peer_raw, peer_ticker)
+                            # Extract plain values from mapped data format {metric_id: {value: ..., unit: ...}}
+                            raw_mapped = peer_mapped.get("data", {})
+                            peer_values = {}
+                            for k, v in raw_mapped.items():
+                                if isinstance(v, dict) and "value" in v:
+                                    peer_values[k] = v["value"]
+                                else:
+                                    peer_values[k] = v
+                            # Also merge raw info (key_stats) so totalCash, effectiveTaxRate, etc. are available
+                            peer_info = peer_mapped.get("raw_data", {}).get("info", {})
+                            if peer_info and isinstance(peer_info, dict):
+                                for k, v in peer_info.items():
+                                    if v is not None and k not in peer_values:
+                                        peer_values[k] = v
+                            peer_data[f"peer_{peer_ticker}_info"] = peer_values
+                        except Exception as e:
+                            logger.warning(f"[Step6DCF] Failed to fetch peer data for {peer_ticker}: {e}")
+                    retrieved_assumptions = {"peers": peer_tickers, "peer_data": peer_data}
+                    # Also include peer_market_data from session (populated by Step 4)
+                    if session_cache and 'peer_market_data' in session_cache:
+                        retrieved_assumptions["peer_market_data"] = session_cache['peer_market_data']
+                    logger.info(f"[Step6DCF] Fetched peer data for {len(peer_data)} peers")
+                else:
+                    logger.warning(f"[Step6DCF] No peer tickers found in session for {ticker}")
+                    retrieved_assumptions = {}
+            else:
+                retrieved_assumptions = retrieved_assumptions
 
         user_overrides = user_overrides or {}
 
@@ -356,7 +544,7 @@ class DCFStep6Processor:
         market_display = self._process_dcf_market_data(market_data, user_overrides)
 
         logger.info(f"Processing DCF opening balances for {ticker}")
-        opening_display = self._process_dcf_opening_balances(historical_data, user_overrides)
+        opening_display = await self._process_dcf_opening_balances(historical_data, user_overrides, ticker=ticker)
 
         logger.info(f"Processing DCF peer comparables for {ticker}")
         peer_display = self._process_dcf_peer_comparables(retrieved_assumptions, user_overrides)
@@ -380,7 +568,13 @@ class DCFStep6Processor:
             valuation_model="DCF",
             historical_financials=historical_display,
             forecast_drivers=ForecastDriversDisplay(
-                data_fields=opening_display.data_fields + (peer_display.data_fields if peer_display else [])
+                data_fields=(
+                    opening_display.data_fields +
+                    (peer_display.data_fields if peer_display else []) +
+                    # Add risk-free rate and equity risk premium from market_data
+                    # (unified schema expects these in forecast_drivers, not market_data)
+                    [f for f in market_display.data_fields if f.field_name in ("risk_free_rate", "equity_risk_premium")]
+                )
             ),
             market_data=market_display,
             peer_comparables=peer_display,
@@ -430,8 +624,9 @@ class DCFStep6Processor:
         years = []
 
         # Extract years from financial statements
+        # NOTE: yfinance columns are newest-first, so [:4] gets the 4 most recent
         if financials_df is not None and not financials_df.empty:
-            years = [str(col.year) if hasattr(col, 'year') else str(col) for col in financials_df.columns[-5:]]
+            years = [str(col.year) if hasattr(col, 'year') else str(col) for col in financials_df.columns[:4]]
 
         # COMPREHENSIVE DCF historical fields (40+ fields to match frontend expectations)
         dcf_historical_fields = [
@@ -450,11 +645,23 @@ class DCFStep6Processor:
             ("net_income", "Net Income", True),
             ("depreciation_amortization", "Depreciation & Amortization", True),
 
+            # SG&A (separate from operating_expenses for DCF income statement)
+            ("sg_and_a", "SG&A Expenses", False),
+
+            # Deferred Tax (needed for tax schedule current/deferred split)
+            ("deferred_tax", "Deferred Tax", False),
+
             # Cash Flow
             ("capex", "Capital Expenditures (CapEx)", True),
             ("operating_cash_flow", "Operating Cash Flow", True),
             ("free_cash_flow", "Free Cash Flow", True),
-            ("working_capital_changes", "Working Capital Changes", False),
+            ("working_capital_change", "Working Capital Changes", False),
+            ("interest_paid", "Interest Paid (Cash)", False),
+            ("tax_paid", "Income Tax Paid (Cash)", False),
+            ("share_buybacks", "Share Buybacks", False),
+            ("debt_repayments", "Debt Repayments", False),
+            ("debt_issuance", "Debt Issuance", False),
+            ("dividends_paid", "Dividends Paid", False),
 
             # Balance Sheet - Working Capital
             ("accounts_receivable", "Accounts Receivable", True),
@@ -465,9 +672,24 @@ class DCFStep6Processor:
             # Balance Sheet - Long-term
             ("total_assets", "Total Assets", True),
             ("total_debt", "Total Debt", True),
+            ("long_term_debt", "Long-Term Debt", False),
+            ("current_debt", "Current Debt", False),
             ("shareholders_equity", "Shareholders Equity", True),
             ("retained_earnings", "Retained Earnings", False),
             ("shares_outstanding", "Shares Outstanding", True),
+            ("interest_income", "Interest Income", False),
+            ("working_capital", "Working Capital (Direct)", False),
+
+            # Balance Sheet - Additional historical fields
+            # NOTE: non_current_marketable_securities, other_current_liabilities,
+            # and deferred_tax_liabilities are EXCLUDED here because they are
+            # already in _process_dcf_opening_balances (forecast_drivers).
+            # Including them here caused duplicates in the missing_data_summary.
+            ("net_ppe", "PP&E (Net)", False),
+            ("net_debt", "Net Debt", False),
+            ("total_current_assets", "Total Current Assets", False),
+            ("total_current_liabilities", "Total Current Liabilities", False),
+            ("total_liabilities", "Total Liabilities", False),
 
             # Margins (calculated)
             ("gross_margin", "Gross Margin", False),
@@ -554,19 +776,22 @@ class DCFStep6Processor:
         # Note: yfinance v1.3.0+ returns CamelCase without spaces (e.g., TotalRevenue)
         # but our service converts them to snake_case (e.g., total_revenue)
         income_mapping = {
-            "revenue": ["total_revenue", "TotalRevenue", "OperatingRevenue"],
+            "revenue": ["revenue", "TotalRevenue", "total_revenue", "OperatingRevenue"],
             "cogs": ["cost_of_revenue", "CostOfRevenue", "ReconciledCostOfRevenue"],
             # Note: gross_profit removed from mapping - it's now CALCULATED (Revenue - COGS)
             "operating_expenses": ["operating_expenses", "OperatingExpense", "TotalOperatingExpenses"],
             "research_development": ["research_development", "ResearchAndDevelopment", "R&D"],
             "ebitda": ["ebitda", "EBITDA", "NormalizedEBITDA"],
+            "sg_and_a": ["sg_and_a", "SellingGeneralAndAdministration", "Selling General And Administration"],
+            "deferred_tax": ["deferred_tax", "DeferredIncomeTax", "Deferred Tax", "Deferred Income Tax"],
             # Note: ebit removed from mapping - it's now CALCULATED (EBITDA - D&A)
             "interest_expense": ["interest_expense", "InterestExpense", "InterestAndDebtExpense"],
             "other_income": ["other_income", "OtherIncomeExpense", "OtherIncome/Expense"],
             "pretax_income": ["pretax_income", "PretaxIncome", "Pre-TaxIncome"],
             "tax_provision": ["tax_provision", "TaxProvision", "IncomeTaxExpense"],
             "net_income": ["net_income", "NetIncome", "NetIncomeCommonStockholders"],
-            "depreciation_amortization": ["depreciation_amortization", "ReconciledDepreciation", "DepreciationAndAmortization"]
+            "depreciation_amortization": ["depreciation_amortization", "ReconciledDepreciation", "DepreciationAndAmortization"],
+            "interest_income": ["interest_income", "InterestIncome", "Interest Income", "InterestEarned"],
         }
 
         # Add debug logging to see what's in the DataFrames
@@ -581,12 +806,72 @@ class DCFStep6Processor:
             "accounts_receivable": ["accounts_receivable", "AccountsReceivable", "Receivables"],
             "inventory": ["inventory", "Inventory", "Inventories"],
             "accounts_payable": ["accounts_payable", "AccountsPayable", "Payables", "PayablesAndAccruedExpenses"],
-            "cash_and_equivalents": ["cash_and_equivalents", "CashCashEquivalentsAndShortTermInvestments", "CashAndCashEquivalents", "Cash", "Cash Cash Equivalents And Short Term Investments"],
-            "total_assets": ["total_assets", "TotalAssets", "Assets", "Total Assets"],
-            "total_debt": ["total_debt", "TotalDebt", "Debt", "Total Debt"],
-            "shareholders_equity": ["shareholders_equity", "StockholdersEquity", "TotalEquityGrossMinorityInterest", "Stockholders Equity", "Total Equity Gross Minority Interest", "CommonStockEquity"],
+            # Cash: yfinance v1.3.0+ uses CamelCase WITHOUT spaces
+            "cash_and_equivalents": ["cash_and_equivalents", "CashCashEquivalentsAndShortTermInvestments",
+                                     "CashAndCashEquivalents", "CashCashEquivalents",
+                                     "Cash And Cash Equivalents", "Cash"],
+            "total_assets": ["total_assets", "TotalAssets", "Assets"],
+            "total_debt": ["total_debt", "TotalDebt", "Debt"],
+            "shareholders_equity": ["shareholders_equity", "StockholdersEquity",
+                                    "TotalEquityGrossMinorityInterest", "CommonStockEquity"],
             "retained_earnings": ["retained_earnings", "RetainedEarnings"],
-            "shares_outstanding": ["shares_outstanding", "OrdinarySharesNumber", "SharesOutstanding", "Ordinary Shares Number"]
+            "shares_outstanding": ["shares_outstanding", "OrdinarySharesNumber", "SharesOutstanding"],
+            # PP&E: yfinance v1.3.0+ uses 'GrossPPE' (CamelCase no spaces)
+            "ppe_gross": ["ppe_gross", "GrossPPE", "Gross PPE",
+                          "PropertyPlantAndEquipmentGross", "Properties",
+                          "NetPPE", "PropertyPlantAndEquipmentNet"],
+            # Accumulated Depreciation: yfinance v1.3.0+ uses 'AccumulatedDepreciation'
+            "accumulated_depreciation": ["accumulated_depreciation", "AccumulatedDepreciation",
+                                         "Accumulated Depreciation", "accumulated_amortization"],
+            # Long-term Debt: yfinance v1.3.0+ uses 'LongTermDebt'
+            "long_term_debt": ["long_term_debt", "LongTermDebt", "Long Term Debt",
+                               "LongTermDebtAndCapitalLeaseObligation"],
+            # Current Debt: yfinance v1.3.0+ uses 'CurrentDebt'
+            "current_debt": ["current_debt", "CurrentDebt", "Current Debt",
+                             "CurrentDebtAndCapitalLeaseObligation", "ShortLongTermDebt"],
+            "interest_income": ["interest_income", "InterestIncome", "Interest Income", "InterestEarned"],
+            "working_capital": ["working_capital", "WorkingCapital", "Working Capital"],
+            # Net PP&E: needed for Asset Schedule PP&E roll
+            "net_ppe": ["net_ppe", "NetPPE", "Net PPE",
+                        "PropertyPlantAndEquipmentNet", "Property Plant And Equipment Net"],
+            # Net Debt: Total Debt - Cash (needed for equity bridge)
+            "net_debt": ["net_debt", "NetDebt", "Net Debt"],
+            # Total Current Assets: needed for Balance Sheet opening
+            "total_current_assets": ["total_current_assets", "CurrentAssets", "Current Assets",
+                                     "TotalCurrentAssets", "Total Current Assets"],
+            # Total Current Liabilities: needed for Balance Sheet opening
+            "total_current_liabilities": ["total_current_liabilities", "CurrentLiabilities", "Current Liabilities",
+                                          "TotalCurrentLiabilities", "Total Current Liabilities"],
+            # Total Liabilities: needed for Balance Sheet opening
+            "total_liabilities": ["total_liabilities", "TotalLiabilitiesNetMinorityInterest",
+                                  "Total Liabilities Net Minority Interest", "TotalLiabilities",
+                                  "Total Liabilities"],
+            "non_current_marketable_securities": ["non_current_marketable_securities", "NonCurrentMarketableSecurities",
+                                                  "LongTermInvestments", "Other Long Term Investments",
+                                                  "Non Current Available For Sale Securities"],
+            "other_current_liabilities": ["other_current_liabilities", "OtherCurrentLiabilities",
+                                          "Other Current Liabilities"],
+            "deferred_tax_liabilities": ["deferred_tax_liabilities", "DeferredTaxLiabilities",
+                                         "Net Non Current Deferred Tax Liabilities",
+                                         "Non Current Deferred Taxes Liabilities"],
+            "current_accrued_expenses": ["current_accrued_expenses", "CurrentAccruedExpenses",
+                                         "Current Accrued Expenses", "PayablesAndAccruedExpenses"],
+            "current_deferred_liabilities": ["current_deferred_liabilities", "CurrentDeferredRevenue",
+                                             "Current Deferred Revenue", "DeferredRevenueCurrent"],
+            "trade_and_other_payables_non_current": ["trade_and_other_payables_non_current",
+                                                     "NonCurrentPayables", "Non Current Payables"],
+            "other_non_current_liabilities": ["other_non_current_liabilities", "OtherNonCurrentLiabilities",
+                                              "Other Non Current Liabilities"],
+            "other_short_term_investments": ["other_short_term_investments", "OtherShortTermInvestments",
+                                             "Other Short Term Investments", "AvailableForSaleSecurities"],
+            "other_current_assets": ["other_current_assets", "OtherCurrentAssets",
+                                     "Other Current Assets"],
+            "other_non_current_assets": ["other_non_current_assets", "OtherNonCurrentAssets",
+                                         "Other Non Current Assets"],
+            "common_stock": ["common_stock", "CommonStockEquity", "Common Stock Equity",
+                             "CommonStock", "Common Stock"],
+            "other_equity_adjustments": ["other_equity_adjustments", "OtherEquityAdjustments",
+                                         "AccumulatedOtherComprehensiveIncome", "AOCI", "TreasuryStock"],
         }
 
         # DEBUG: Log the mapping being used for troubleshooting
@@ -595,18 +880,35 @@ class DCFStep6Processor:
         logger.debug(f"[Step6DCF] Looking for shareholders_equity with variants: {balance_sheet_mapping['shareholders_equity']}")
 
         cash_flow_mapping = {
-            "capex": ["capex", "capital_expenditure", "CapitalExpenditure", "PurchaseOfPropertyPlantAndEquipment"],
+            "capex": ["capex", "capital_expenditure", "CapitalExpenditure", "PurchaseOfPropertyPlantAndEquipment", "Purchase Of PPE"],
             "operating_cash_flow": ["operating_cash_flow", "OperatingCashFlow", "CashFlowFromContinuingOperatingActivities"],
             "free_cash_flow": ["free_cash_flow", "FreeCashFlow"],
-            "working_capital_changes": ["working_capital_changes", "ChangeInWorkingCapital", "WorkingCapitalChanges"]
+            "working_capital_change": ["working_capital_change", "working_capital_changes", "ChangeInWorkingCapital", "WorkingCapitalChanges"],
+            "interest_paid": ["interest_paid", "InterestPaidSupplementalData", "Interest Paid Supplemental Data", "InterestPaid"],
+            "tax_paid": ["tax_paid", "income_tax_paid", "IncomeTaxPaidSupplementalData", "Income Tax Paid Supplemental Data", "IncomeTaxPaid"],
+            "share_buybacks": ["share_buybacks", "repurchase_of_capital_stock", "RepurchaseOfCapitalStock", "Repurchase Of Capital Stock", "RepurchaseOfCommonStock", "NetCommonStockIssuance"],
+            "debt_repayments": ["debt_repayments", "repayment_of_debt", "RepaymentOfDebt", "Repayment Of Debt", "LongTermDebtPayments"],
+            "debt_issuance": ["debt_issuance", "issuance_of_debt", "IssuanceOfDebt", "Issuance Of Debt", "LongTermDebtIssuance"],
+            "dividends_paid": ["dividends_paid", "cash_dividends_paid", "CashDividendsPaid", "Cash Dividends Paid", "CommonStockDividendPaid"],
         }
 
         # STEP 1: Handle calculated fields FIRST (before trying to extract from DataFrames)
-        # This ensures calculations work even if the field exists in mappings
+        # Helper: extract values directly from a DataFrame by trying multiple key variants
+        def _extract_from_df(df, keys_to_try):
+            """Extract values from DataFrame using multiple key variants"""
+            if df is None or df.empty:
+                return None
+            for key in keys_to_try:
+                if key in df.index:
+                    series = df.loc[key]
+                    values = [float(v) if pd.notna(v) else None for v in series.values]
+                    return values if any(v is not None for v in values) else None
+            return None
+
         if field_name == "gross_profit":
             # Gross Profit = Revenue - COGS (calculate for each period)
-            revenue_values = self._extract_metric_from_financials("revenue", financials_df, balance_sheet_df, cashflow_df)
-            cogs_values = self._extract_metric_from_financials("cogs", financials_df, balance_sheet_df, cashflow_df)
+            revenue_values = _extract_from_df(financials_df, ["revenue", "TotalRevenue", "total_revenue", "OperatingRevenue"])
+            cogs_values = _extract_from_df(financials_df, ["cost_of_revenue", "cogs", "CostOfRevenue", "ReconciledCostOfRevenue"])
             if revenue_values and cogs_values:
                 gp_values = []
                 for i in range(min(len(revenue_values), len(cogs_values))):
@@ -615,11 +917,16 @@ class DCFStep6Processor:
                     else:
                         gp_values.append(None)
                 return gp_values if gp_values else None
+            return None
 
         if field_name == "free_cash_flow":
             # FCF = Operating Cash Flow - CapEx (calculate for each period)
-            op_cf_values = self._extract_metric_from_financials("operating_cash_flow", financials_df, balance_sheet_df, cashflow_df)
-            capex_values = self._extract_metric_from_financials("capex", financials_df, balance_sheet_df, cashflow_df)
+            op_cf_values = _extract_from_df(cashflow_df, ["operating_cash_flow", "OperatingCashFlow", "CashFlowFromContinuingOperatingActivities"])
+            capex_values = _extract_from_df(cashflow_df, ["capital_expenditure", "capex", "CapitalExpenditure", "PurchaseOfPropertyPlantAndEquipment"])
+            if not op_cf_values:
+                op_cf_values = _extract_from_df(financials_df, ["operating_cash_flow", "OperatingCashFlow"])
+            if not capex_values:
+                capex_values = _extract_from_df(financials_df, ["capital_expenditure", "capex"])
             if op_cf_values and capex_values:
                 fcf_values = []
                 for i in range(min(len(op_cf_values), len(capex_values))):
@@ -628,14 +935,13 @@ class DCFStep6Processor:
                     else:
                         fcf_values.append(None)
                 return fcf_values if fcf_values else None
+            return None
 
         if field_name == "change_in_nwc":
-            # Change in NWC = (Current Assets - Current Liabilities) change year over year
-            # Simplified: calculate from AR, Inventory, AP if available
-            ar_values = self._extract_metric_from_financials("accounts_receivable", financials_df, balance_sheet_df, cashflow_df)
-            inv_values = self._extract_metric_from_financials("inventory", financials_df, balance_sheet_df, cashflow_df)
-            ap_values = self._extract_metric_from_financials("accounts_payable", financials_df, balance_sheet_df, cashflow_df)
-
+            # Change in NWC = (AR + Inventory - AP) change year over year
+            ar_values = _extract_from_df(balance_sheet_df, ["accounts_receivable", "AccountsReceivable", "Receivables"])
+            inv_values = _extract_from_df(balance_sheet_df, ["inventory", "Inventory", "Inventories"])
+            ap_values = _extract_from_df(balance_sheet_df, ["accounts_payable", "AccountsPayable", "Payables"])
             if ar_values and inv_values and ap_values and len(ar_values) >= 2:
                 nwc_changes = []
                 for i in range(1, min(len(ar_values), len(inv_values), len(ap_values))):
@@ -645,15 +951,13 @@ class DCFStep6Processor:
                         nwc_changes.append(nwc_current - nwc_prior)
                     else:
                         nwc_changes.append(None)
-                # Prepend None for the first period (no prior year to compare)
                 return [None] + nwc_changes if nwc_changes else None
             return None
 
         if field_name == "ebit":
-            # EBIT = Gross Profit - Operating Expenses (if Operating Expenses available)
-            # Or EBIT = EBITDA - Depreciation & Amortization
-            ebitda_values = self._extract_metric_from_financials("ebitda", financials_df, balance_sheet_df, cashflow_df)
-            d_and_a_values = self._extract_metric_from_financials("depreciation_amortization", financials_df, balance_sheet_df, cashflow_df)
+            # EBIT = EBITDA - Depreciation & Amortization
+            ebitda_values = _extract_from_df(financials_df, ["ebitda", "EBITDA", "NormalizedEBITDA"])
+            d_and_a_values = _extract_from_df(financials_df, ["depreciation_amortization", "ReconciledDepreciation", "DepreciationAndAmortization"])
             if ebitda_values and d_and_a_values:
                 ebit_values = []
                 for i in range(min(len(ebitda_values), len(d_and_a_values))):
@@ -665,24 +969,49 @@ class DCFStep6Processor:
             return None
 
         if field_name == "operating_expenses":
-            # Operating Expenses = Gross Profit - EBIT (if EBIT available)
-            # Or Operating Expenses = Revenue - COGS - EBIT
-            gross_profit_values = self._extract_metric_from_financials("gross_profit", financials_df, balance_sheet_df, cashflow_df)
-            ebit_values = self._extract_metric_from_financials("ebit", financials_df, balance_sheet_df, cashflow_df)
-            if gross_profit_values and ebit_values:
-                opex_values = []
-                for i in range(min(len(gross_profit_values), len(ebit_values))):
-                    if gross_profit_values[i] is not None and ebit_values[i] is not None:
-                        opex_values.append(gross_profit_values[i] - ebit_values[i])
-                    else:
-                        opex_values.append(None)
-                return opex_values if opex_values else None
+            # Operating Expenses = Revenue - COGS - EBIT (try direct calculation first)
+            revenue_values = _extract_from_df(financials_df, ["revenue", "TotalRevenue", "total_revenue"])
+            cogs_values = _extract_from_df(financials_df, ["cost_of_revenue", "cogs", "CostOfRevenue"])
+            ebit_values = _extract_from_df(financials_df, ["ebitda", "EBITDA"])
+            d_and_a_values = _extract_from_df(financials_df, ["depreciation_amortization", "ReconciledDepreciation"])
+            if revenue_values and cogs_values:
+                # Calculate EBIT if not directly available
+                if not ebit_values or not d_and_a_values:
+                    ebit_values = revenue_values  # fallback: use revenue as proxy
+                    cogs_for_sub = cogs_values
+                else:
+                    ebit_calc = []
+                    for i in range(min(len(ebit_values), len(d_and_a_values))):
+                        if ebit_values[i] is not None and d_and_a_values[i] is not None:
+                            ebit_calc.append(ebit_values[i] - d_and_a_values[i])
+                        else:
+                            ebit_calc.append(None)
+                    ebit_values = ebit_calc
+                    cogs_for_sub = cogs_values
+                if ebit_values and cogs_for_sub:
+                    opex_values = []
+                    for i in range(min(len(revenue_values), len(cogs_for_sub), len(ebit_values))):
+                        if all(v is not None for v in [revenue_values[i], cogs_for_sub[i], ebit_values[i]]):
+                            opex_values.append(revenue_values[i] - cogs_for_sub[i] - ebit_values[i])
+                        else:
+                            opex_values.append(None)
+                    return opex_values if opex_values else None
             return None
 
         if field_name == "pretax_income":
-            # Pre-Tax Income = EBIT - Interest Expense + Other Income
-            ebit_values = self._extract_metric_from_financials("ebit", financials_df, balance_sheet_df, cashflow_df)
-            interest_values = self._extract_metric_from_financials("interest_expense", financials_df, balance_sheet_df, cashflow_df)
+            # Pre-Tax Income = EBIT - Interest Expense
+            ebit_values = _extract_from_df(financials_df, ["ebitda", "EBITDA"])
+            d_and_a_values = _extract_from_df(financials_df, ["depreciation_amortization", "ReconciledDepreciation"])
+            interest_values = _extract_from_df(financials_df, ["interest_expense", "InterestExpense", "InterestAndDebtExpense"])
+            # Calculate EBIT from EBITDA - D&A
+            if ebit_values and d_and_a_values:
+                ebit_calc = []
+                for i in range(min(len(ebit_values), len(d_and_a_values))):
+                    if ebit_values[i] is not None and d_and_a_values[i] is not None:
+                        ebit_calc.append(ebit_values[i] - d_and_a_values[i])
+                    else:
+                        ebit_calc.append(None)
+                ebit_values = ebit_calc
             if ebit_values and interest_values:
                 pretax_values = []
                 for i in range(min(len(ebit_values), len(interest_values))):
@@ -694,64 +1023,86 @@ class DCFStep6Processor:
             return None
 
         if field_name == "interest_expense":
-            # Try to extract from cash flow or income statement
-            # Sometimes available as interest paid in cash flow
-            if cashflow_df is not None:
-                interest_keys = ["interest_paid", "InterestPaid", "cash_paid_for_interest"]
-                for key in interest_keys:
-                    if key in cashflow_df.index:
-                        series = cashflow_df.loc[key]
-                        values = [float(v) if pd.notna(v) else None for v in series.values]
-                        return values if values else None
-            return None
+            # Try income statement first (where interest_expense IS in DataFrame index),
+            # then fall back to cash flow statement
+            result = _extract_from_df(financials_df, ["interest_expense", "InterestExpense", "InterestAndDebtExpense"])
+            if result:
+                return result
+            result = _extract_from_df(cashflow_df, ["interest_paid", "InterestPaid", "cash_paid_for_interest",
+                                                     "interest_expense", "InterestExpense"])
+            return result
 
         if field_name == "other_income":
-            # Other Income/Expense - try multiple keys
-            if financials_df is not None:
-                other_keys = ["other_income", "OtherIncomeExpense", "OtherIncome/Expense", "non_operating_income"]
-                for key in other_keys:
-                    if key in financials_df.index:
-                        series = financials_df.loc[key]
-                        values = [float(v) if pd.notna(v) else None for v in series.values]
-                        return values if values else None
+            # Other Income/Expense - try multiple sources
+            result = _extract_from_df(financials_df, ["other_income", "OtherIncomeExpense", "OtherIncome/Expense",
+                                                      "non_operating_income", "OtherNonOperatingIncomeLossNet"])
+            if result:
+                return result
+            # Try calculating as: Net Income - Pretax Income (if both available)
             return None
 
         if field_name == "tax_provision":
-            # Tax Provision - try to extract from income statement
-            if financials_df is not None:
-                tax_keys = ["tax_provision", "TaxProvision", "IncomeTaxExpense", "income_tax"]
-                for key in tax_keys:
-                    if key in financials_df.index:
-                        series = financials_df.loc[key]
-                        values = [float(v) if pd.notna(v) else None for v in series.values]
-                        return values if values else None
+            # Tax Provision - try multiple sources
+            result = _extract_from_df(financials_df, ["tax_provision", "TaxProvision", "IncomeTaxExpense",
+                                                      "income_tax", "TaxProvisionForEquityInvestments",
+                                                      "incomeTaxExpense", "taxExpense"])
+            if result:
+                return result
+            # Try calculating as: Pretax Income - Net Income (extract directly from DataFrame)
+            pretax_values = _extract_from_df(financials_df, ["pretax_income", "PretaxIncome", "IncomeBeforeTax"])
+            net_income_values = _extract_from_df(financials_df, ["net_income", "NetIncome", "NetIncomeCommonStockholders"])
+            if pretax_values and net_income_values:
+                tax_values = []
+                for i in range(min(len(pretax_values), len(net_income_values))):
+                    if pretax_values[i] is not None and net_income_values[i] is not None:
+                        tax_values.append(pretax_values[i] - net_income_values[i])
+                    else:
+                        tax_values.append(None)
+                return tax_values if tax_values else None
             return None
 
         if field_name == "working_capital_changes":
-            # Working Capital Changes - same as change_in_nwc
-            return self._extract_metric_from_financials("change_in_nwc", financials_df, balance_sheet_df, cashflow_df)
+            # Working Capital Changes - calculate from AR, Inventory, AP balance changes
+            ar_values = _extract_from_df(balance_sheet_df, ["accounts_receivable", "AccountsReceivable", "Receivables"])
+            inv_values = _extract_from_df(balance_sheet_df, ["inventory", "Inventory", "Inventories"])
+            ap_values = _extract_from_df(balance_sheet_df, ["accounts_payable", "AccountsPayable", "Payables"])
+            if ar_values and inv_values and ap_values and len(ar_values) >= 2:
+                wc_changes = [None]  # First period has no prior
+                for i in range(1, min(len(ar_values), len(inv_values), len(ap_values))):
+                    if all(v is not None for v in [ar_values[i], inv_values[i], ap_values[i], ar_values[i-1], inv_values[i-1], ap_values[i-1]]):
+                        nwc_curr = ar_values[i] + inv_values[i] - ap_values[i]
+                        nwc_prior = ar_values[i-1] + inv_values[i-1] - ap_values[i-1]
+                        wc_changes.append(nwc_curr - nwc_prior)
+                    else:
+                        wc_changes.append(None)
+                return wc_changes if len(wc_changes) > 1 else None
+            # Fallback: try cashflow_df for change_in_nwc
+            result = _extract_from_df(cashflow_df, ["working_capital_change", "working_capital_changes",
+                                                     "ChangeInWorkingCapital", "WorkingCapitalChanges"])
+            return result
 
         if field_name == "retained_earnings":
-            # Retained Earnings from Balance Sheet
-            if balance_sheet_df is not None:
-                re_keys = ["retained_earnings", "RetainedEarnings", "accumulated_deficit"]
-                for key in re_keys:
-                    if key in balance_sheet_df.index:
-                        series = balance_sheet_df.loc[key]
-                        values = [float(v) if pd.notna(v) else None for v in series.values]
-                        return values if values else None
-            return None
+            # Retained Earnings from Balance Sheet - try multiple key variants
+            result = _extract_from_df(balance_sheet_df, [
+                "retained_earnings", "RetainedEarnings", "accumulated_deficit",
+                "AccumulatedDeficit", "Retained Earnings", "RetainedEarningsAccumulatedDeficit"
+            ])
+            return result
 
         if field_name == "shares_outstanding":
-            # Shares Outstanding - try balance sheet or market data
-            if balance_sheet_df is not None:
-                shares_keys = ["shares_outstanding", "OrdinarySharesNumber", "SharesOutstanding", "common_shares_outstanding"]
-                for key in shares_keys:
-                    if key in balance_sheet_df.index:
-                        series = balance_sheet_df.loc[key]
-                        values = [float(v) if pd.notna(v) else None for v in series.values]
-                        return values if values else None
-            return None
+            # Shares Outstanding - try balance sheet, then market data
+            result = _extract_from_df(balance_sheet_df, [
+                "shares_outstanding", "OrdinarySharesNumber", "SharesOutstanding",
+                "common_shares_outstanding", "CommonSharesOutstanding",
+                "Ordinary Shares Number", "Share Outstanding"
+            ])
+            if result:
+                return result
+            # Also try cashflow_df (some companies report it there)
+            result = _extract_from_df(cashflow_df, [
+                "shares_outstanding", "OrdinarySharesNumber", "SharesOutstanding"
+            ])
+            return result
 
         # Calculate margins if requested
         if field_name == "gross_margin":
@@ -804,6 +1155,34 @@ class DCFStep6Processor:
             logger.debug("[Step6DCF] shareholders_equity NOT FOUND in balance_sheet_df")
             return None
 
+        if field_name == "dividends_paid":
+            # Dividends Paid - try cashflow_df first, then income statement
+            result = _extract_from_df(cashflow_df, [
+                "dividends_paid", "cash_dividends_paid", "CashDividendsPaid",
+                "Cash Dividends Paid", "CommonStockDividendPaid",
+                "dividends", "DividendsPaid", "Dividends Paid"
+            ])
+            if result:
+                return result
+            # Try income statement as fallback
+            result = _extract_from_df(financials_df, [
+                "dividends_paid", "dividends", "DividendsPaid", "Dividends"
+            ])
+            return result
+
+        if field_name == "interest_income":
+            # Interest Income - try income statement first, then cashflow
+            result = _extract_from_df(financials_df, [
+                "interest_income", "InterestIncome", "Interest Income",
+                "InterestEarned", "interest_earned"
+            ])
+            if result:
+                return result
+            result = _extract_from_df(cashflow_df, [
+                "interest_income", "InterestIncome", "InterestEarned"
+            ])
+            return result
+
         # If we reach here, try to extract from DataFrames using mappings
         # Determine which DataFrame to use based on field name
         df_to_use = None
@@ -853,6 +1232,10 @@ class DCFStep6Processor:
         """Process DCF market data (6 fields)"""
         data_fields = []
 
+        # Ensure market_data is a dict
+        if not market_data:
+            market_data = {}
+
         # DEBUG: Log what keys are actually in market_data
         logger.debug(f"[Step6DCF] market_data keys: {list(market_data.keys())[:30]}...")
         logger.debug(f"[Step6DCF] currentPrice={market_data.get('currentPrice')}, totalCash={market_data.get('totalCash')}, marketCap={market_data.get('marketCap')}")
@@ -878,15 +1261,22 @@ class DCFStep6Processor:
 
             # Add yfinance v1.3.0+ specific key variations
             if field_name == "current_stock_price":
-                possible_keys.extend(["currentPrice", "current_price", "price", "regularMarketPrice"])
+                possible_keys.extend(["currentPrice", "current_price", "price", "regularMarketPrice",
+                                       "currentPriceRaw", "regularMarketPriceRaw"])
             elif field_name == "cash":
-                possible_keys.extend(["totalCash", "total_cash", "cashAndEquivalents", "cash_and_equivalents", "CashAndCashEquivalents"])
+                possible_keys.extend(["totalCash", "total_cash", "cashAndEquivalents", "cash_and_equivalents",
+                                       "CashAndCashEquivalents", "CashCashEquivalentsAndShortTermInvestments",
+                                       "Cash Cash Equivalents And Short Term Investments",
+                                       "totalCashRaw", "cashAndShortTermInvestments"])
             elif field_name == "total_debt":
-                possible_keys.extend(["totalDebt", "total_debt", "debt", "TotalDebt"])
+                possible_keys.extend(["totalDebt", "total_debt", "debt", "TotalDebt",
+                                       "total_debt_raw", "longTermDebt", "LongTermDebt",
+                                       "long_term_debt", "shortLongTermDebtTotal"])
             elif field_name == "shares_outstanding":
-                possible_keys.extend(["sharesOutstanding", "shares_outstanding", "OrdinarySharesNumber"])
+                possible_keys.extend(["sharesOutstanding", "shares_outstanding", "OrdinarySharesNumber",
+                                       "sharesOutstandingRaw", "impliedSharesOutstanding"])
             elif field_name == "market_cap":
-                possible_keys.extend(["marketCap", "market_cap", "marketCapitalization"])
+                possible_keys.extend(["marketCap", "market_cap", "marketCapitalization", "marketCapRaw"])
 
             logger.debug(f"Looking for {field_name} with keys: {possible_keys}")
 
@@ -896,9 +1286,15 @@ class DCFStep6Processor:
                     logger.debug(f"Found {field_name} using key '{key}': {value}")
                     break
 
-            # Also check if the value is nested in a dict with 'value' key
-            if isinstance(value, dict) and 'value' in value:
-                value = value['value']
+            # Also check if the value is nested in a dict with 'value' key (handle multiple levels)
+            max_depth = 5
+            current = value
+            for _ in range(max_depth):
+                if isinstance(current, dict) and 'value' in current:
+                    current = current['value']
+                else:
+                    break
+            value = current
 
             status = DataStatus.RETRIEVED if value is not None else DataStatus.MISSING
             source = "yfinance"
@@ -919,6 +1315,65 @@ class DCFStep6Processor:
                 allow_override=True
             ))
 
+        # Fetch Risk-Free Rate from 10Y Treasury (^TNX) via yfinance
+        risk_free_rate = None
+        risk_free_source = "yfinance"
+        try:
+            import yfinance as yf
+            treasury = yf.Ticker("^TNX")
+            treasury_hist = treasury.history(period="1d")
+            if treasury_hist is not None and not treasury_hist.empty:
+                rf_raw = treasury_hist['Close'].iloc[-1]
+                risk_free_rate = rf_raw / 100  # yfinance returns as percentage (e.g. 4.25), convert to decimal
+                risk_free_source = "yfinance (^TNX)"
+                logger.info(f"[Step6DCF] Risk-Free Rate from ^TNX: {risk_free_rate:.4%}")
+        except Exception as e:
+            logger.warning(f"[Step6DCF] Failed to fetch risk-free rate from ^TNX: {e}")
+
+        # Also try FRED as fallback
+        if risk_free_rate is None:
+            try:
+                from app.services.international.fred_service import get_fred_service
+                fred_service = get_fred_service()
+                treasury_data = fred_service.get_10year_treasury_yield()
+                if treasury_data and treasury_data.get('status') == 'RETRIEVED':
+                    risk_free_rate = treasury_data.get('value')
+                    if risk_free_rate is not None:
+                        risk_free_rate = risk_free_rate / 100  # Convert from percentage to decimal
+                        risk_free_source = "FRED"
+                        logger.info(f"[Step6DCF] Risk-Free Rate from FRED: {risk_free_rate:.4%}")
+            except Exception as e:
+                logger.warning(f"[Step6DCF] Failed to fetch risk-free rate from FRED: {e}")
+
+        # Add risk-free rate to data_fields
+        rfr_status = DataStatus.RETRIEVED if risk_free_rate is not None else DataStatus.MISSING
+        rfr_field = DataField(
+            field_name="risk_free_rate",
+            display_name="Risk-Free Rate",
+            value=risk_free_rate,
+            unit="%",
+            status=rfr_status,
+            source=risk_free_source,
+            is_critical=True,
+            allow_override=True
+        )
+        data_fields.append(rfr_field)
+
+        # Fetch Equity Risk Premium (default 4.5% if not available)
+        # ERP = Market Return - Risk-Free Rate; typical range 4-6%
+        erp_value = 0.045  # 4.5% default
+        erp_status = DataStatus.CALCULATED
+        data_fields.append(DataField(
+            field_name="equity_risk_premium",
+            display_name="Equity Risk Premium",
+            value=erp_value,
+            unit="%",
+            status=erp_status,
+            source="estimated (historical average)",
+            is_critical=True,
+            allow_override=True
+        ))
+
         return MarketDataDisplay(
             current_stock_price=data_fields[0] if data_fields else None,
             shares_outstanding=data_fields[1] if len(data_fields) > 1 else None,
@@ -929,19 +1384,51 @@ class DCFStep6Processor:
             data_fields=data_fields
         )
 
-    def _process_dcf_opening_balances(
+    async def _process_dcf_opening_balances(
         self,
         historical_data: Dict,
-        user_overrides: Dict
+        user_overrides: Dict,
+        ticker: str = "",
+        sec_edgar_email: str = None
     ) -> ForecastDriversDisplay:
         """Process DCF opening balances (3 fields)"""
+        # Get SEC EDGAR email using the standard priority chain:
+        # 1. Explicit parameter (if provided)
+        # 2. Request header (via SecEdgarService)
+        # 3. Environment variable (via SecEdgarService)
+        if not sec_edgar_email:
+            from app.services.international.sec_edgar_service import SecEdgarService
+            sec_edgar_email = SecEdgarService.get_email()
         data_fields = []
 
-        # DCF opening balance fields
+        # DCF opening balance fields - keys must match frontend expected keys
+        # Balance Sheet identity items:
+        #   Current Liabilities = Payables + Accrued Expenses + Other CL + Current Debt + Deferred Liabilities
+        #   Non-Current Liabilities = LT Debt + Trade Payables NC + Other NC Liabilities
+        #   Current Assets = Cash + ST Investments + Receivables + Inventory + Other CA
+        #   Non-Current Assets = Net PPE + Accum Dep + Investments + Other NCA + Deferred Assets
+        #   Equity = Common Stock + Retained Earnings + Other Equity Adjustments
         opening_fields = [
-            ("opening_net_working_capital", "Opening Net Working Capital", True, "USD"),
-            ("opening_net_ppe", "Opening Net PP&E", True, "USD"),
-            ("opening_total_debt", "Opening Total Debt", True, "USD")
+            ("net_debt_opening", "Net Debt", True, "USD"),
+            ("ppe_gross", "PP&E (Gross)", True, "USD"),
+            ("accumulated_depreciation", "Accumulated Depreciation", True, "USD"),
+            ("non_current_marketable_securities", "Non-Current Marketable Securities", False, "USD"),
+            ("other_current_liabilities", "Other Current Liabilities", False, "USD"),
+            ("deferred_tax_liabilities", "Deferred Tax Liabilities", False, "USD"),
+            # Current Liabilities sub-items (CL = Payables + Accrued + Other CL + Curr Debt + Deferred)
+            ("current_accrued_expenses", "Current Accrued Expenses", False, "USD"),
+            ("current_deferred_liabilities", "Current Deferred Liabilities", False, "USD"),
+            # Non-Current Liabilities sub-items (NCL = LT Debt + Trade Payables NC + Other NC Liab)
+            ("trade_and_other_payables_non_current", "Trade and Other Payables Non Current", False, "USD"),
+            ("other_non_current_liabilities", "Other Non Current Liabilities", False, "USD"),
+            # Current Assets sub-items (CA = Cash + ST Inv + Receivables + Inventory + Other CA)
+            ("other_short_term_investments", "Other Short Term Investments", False, "USD"),
+            ("other_current_assets", "Other Current Assets", False, "USD"),
+            # Non-Current Assets sub-items (NCA = Net PPE + Accum Dep + Investments + Other NCA + Deferred)
+            ("other_non_current_assets", "Other Non Current Assets", False, "USD"),
+            # Equity sub-items (Equity = Common Stock + RE + Other Equity)
+            ("common_stock", "Common Stock", False, "USD"),
+            ("other_equity_adjustments", "Other Equity Adjustments", False, "USD"),
         ]
 
         balance_sheet_df = historical_data.get('balance_sheet')
@@ -953,7 +1440,7 @@ class DCFStep6Processor:
 
             # Extract from balance sheet
             if balance_sheet_df is not None and not balance_sheet_df.empty:
-                value = self._extract_opening_balance(field_name, balance_sheet_df)
+                value = self._extract_opening_balance(field_name, balance_sheet_df, ticker=ticker, sec_edgar_email=sec_edgar_email)
                 if value is not None:
                     status = DataStatus.RETRIEVED
 
@@ -978,22 +1465,204 @@ class DCFStep6Processor:
     def _extract_opening_balance(
         self,
         field_name: str,
-        balance_sheet_df: pd.DataFrame
+        balance_sheet_df: pd.DataFrame,
+        ticker: str = "",
+        sec_edgar_email: str = None
     ) -> Optional[float]:
-        """Extract opening balance from balance sheet"""
+        """Extract opening balance from balance sheet.
+
+        Handles:
+        - net_debt_opening: Total Debt - Cash & Equivalents
+        - ppe_gross: Property, Plant & Equipment (Gross) with yfinance-compatible key lookup
+        - accumulated_depreciation: Accumulated Depreciation with yfinance-compatible key lookup
+        """
         if balance_sheet_df is None or balance_sheet_df.empty:
             return None
 
         # Get most recent year's data (opening for forecast period)
-        latest_col = balance_sheet_df.columns[-1]
+        # DataFrame columns are sorted newest-first (2025, 2024, 2023, 2022, 2021)
+        # So columns[0] is the latest, columns[-1] is the oldest
+        latest_col = balance_sheet_df.columns[0]
 
-        mapping = {
-            "opening_net_working_capital": ["Working Capital", "Net Working Capital"],
-            "opening_net_ppe": ["Net PPE", "Property Plant And Equipment Net", "Net Property Plant And Equipment"],
-            "opening_total_debt": ["Total Debt", "Long Term Debt", "Short Long Term Debt Total"]
+        # Net Debt = Total Debt - Cash & Equivalents (calculated field)
+        if field_name == "net_debt_opening":
+            total_debt = None
+            cash = None
+            debt_keys = ["total_debt", "TotalDebt", "Debt",
+                         "LongTermDebt", "LongTermDebtAndCapitalLeaseObligation",
+                         "ShortLongTermDebt"]
+            cash_keys = ["cash_and_equivalents", "CashCashEquivalentsAndShortTermInvestments",
+                         "CashAndCashEquivalents", "CashCashEquivalents",
+                         "Cash And Cash Equivalents", "Cash"]
+            for key in debt_keys:
+                if key in balance_sheet_df.index:
+                    val = balance_sheet_df.loc[key, latest_col]
+                    if pd.notna(val):
+                        total_debt = float(val)
+                        break
+            for key in cash_keys:
+                if key in balance_sheet_df.index:
+                    val = balance_sheet_df.loc[key, latest_col]
+                    if pd.notna(val):
+                        cash = float(val)
+                        break
+            if total_debt is not None and cash is not None:
+                return total_debt - cash
+            elif total_debt is not None:
+                return total_debt
+            return None
+
+        # PP&E Gross - try multiple yfinance key variants
+        if field_name == "ppe_gross":
+            # yfinance v1.3.0+ uses 'GrossPPE' (CamelCase no spaces)
+            ppe_keys = ["ppe_gross", "GrossPPE", "Gross PPE",
+                        "PropertyPlantAndEquipmentGross", "Properties",
+                        "LandAndImprovements", "BuildingsAndImprovements",
+                        "MachineryFurnitureEquipment",
+                        "net_ppe", "NetPPE", "PropertyPlantAndEquipmentNet"]
+            logger.info(f"[Step6DCF] Looking for ppe_gross in balance_sheet_df index (type={type(balance_sheet_df).__name__}, empty={balance_sheet_df.empty if hasattr(balance_sheet_df, 'empty') else 'N/A'})")
+            logger.info(f"[Step6DCF] Balance sheet index sample: {list(balance_sheet_df.index)[:10] if hasattr(balance_sheet_df, 'index') else 'N/A'}")
+            for key in ppe_keys:
+                if key in balance_sheet_df.index:
+                    val = balance_sheet_df.loc[key, latest_col]
+                    if pd.notna(val):
+                        logger.info(f"[Step6DCF] Found ppe_gross via key '{key}': {val:,.0f}")
+                        return float(val)
+            logger.warning(f"[Step6DCF] ppe_gross NOT FOUND in balance_sheet_df. Tried keys: {ppe_keys[:5]}...")
+            # Fallback: try SEC EDGAR XBRL for Gross PP&E (synchronous)
+            if sec_edgar_email:
+                try:
+                    import requests as sync_requests
+                    # First get CIK from ticker
+                    search_url = f"https://efts.sec.gov/LATEST/search-index?q={ticker}&dateRange=custom&startdt=2020-01-01&forms=10-K"
+                    headers = {"User-Agent": f"ValuationPlatform {sec_edgar_email}", "Accept": "application/json"}
+                    # Use company facts endpoint directly
+                    # Need CIK first - use SEC EDGAR company search
+                    cik_url = f"https://efts.sec.gov/LATEST/search-index?q=%22{ticker}%22&dateRange=custom&forms=10-K"
+                    # Simpler: use the company tickers endpoint
+                    tickers_url = "https://www.sec.gov/files/company_tickers.json"
+                    resp = sync_requests.get(tickers_url, headers=headers, timeout=10)
+                    if resp.status_code == 200:
+                        tickers_data = resp.json()
+                        cik = None
+                        for key, info in tickers_data.items():
+                            if info.get("ticker") == ticker:
+                                cik = str(info["cik_str"]).zfill(10)
+                                break
+                        if cik:
+                            facts_url = f"https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json"
+                            facts_resp = sync_requests.get(facts_url, headers=headers, timeout=15)
+                            if facts_resp.status_code == 200:
+                                facts_data = facts_resp.json()
+                                us_gaap = facts_data.get("facts", {}).get("us-gaap", {})
+                                ppe_raw = us_gaap.get("PropertyPlantAndEquipmentGross", {}).get("units", {}).get("USD", [])
+                                # Get latest value per fiscal year
+                                ppe_yearly = {}
+                                for item in ppe_raw:
+                                    fy = item.get("fy")
+                                    if fy and item.get("val") is not None:
+                                        end = item.get("end", "")
+                                        if fy not in ppe_yearly or end > ppe_yearly[fy].get("end", ""):
+                                            ppe_yearly[fy] = {"value": item["val"], "end": end}
+                                if ppe_yearly:
+                                    latest = max(ppe_yearly.keys())
+                                    logger.info(f"SEC EDGAR: Got PP&E Gross for {ticker}: ${ppe_yearly[latest]['value']:,.0f}")
+                                    return float(ppe_yearly[latest]["value"])
+                except Exception as e:
+                    logger.warning(f"SEC EDGAR PP&E Gross fetch failed for {ticker}: {e}")
+            return None
+
+        # Accumulated Depreciation - try multiple yfinance key variants (multi-year)
+        if field_name == "accumulated_depreciation":
+            acc_dep_keys = ["accumulated_depreciation", "AccumulatedDepreciation",
+                            "Accumulated Depreciation", "accumulated_amortization",
+                            "Allowances", "allowances"]
+            for key in acc_dep_keys:
+                if key in balance_sheet_df.index:
+                    # Read ALL periods, not just latest
+                    values = []
+                    for col in balance_sheet_df.columns:
+                        val = balance_sheet_df.loc[key, col]
+                        if pd.notna(val):
+                            values.append(float(val))
+                    if values:
+                        return values
+            # Fallback: try SEC EDGAR XBRL for Accumulated Depreciation (synchronous)
+            if sec_edgar_email:
+                try:
+                    import requests as sync_requests
+                    # Get CIK from company tickers endpoint
+                    tickers_url = "https://www.sec.gov/files/company_tickers.json"
+                    headers = {"User-Agent": f"ValuationPlatform {sec_edgar_email}", "Accept": "application/json"}
+                    resp = sync_requests.get(tickers_url, headers=headers, timeout=10)
+                    if resp.status_code == 200:
+                        tickers_data = resp.json()
+                        cik = None
+                        for key, info in tickers_data.items():
+                            if info.get("ticker") == ticker:
+                                cik = str(info["cik_str"]).zfill(10)
+                                break
+                        if cik:
+                            facts_url = f"https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json"
+                            facts_resp = sync_requests.get(facts_url, headers=headers, timeout=15)
+                            if facts_resp.status_code == 200:
+                                facts_data = facts_resp.json()
+                                us_gaap = facts_data.get("facts", {}).get("us-gaap", {})
+                                acc_raw = us_gaap.get("PropertyPlantAndEquipmentAccumulatedDepreciation", {}).get("units", {}).get("USD", [])
+                                acc_yearly = {}
+                                for item in acc_raw:
+                                    fy = item.get("fy")
+                                    if fy and item.get("val") is not None:
+                                        end = item.get("end", "")
+                                        if fy not in acc_yearly or end > acc_yearly[fy].get("end", ""):
+                                            acc_yearly[fy] = {"value": item["val"], "end": end}
+                                if acc_yearly:
+                                    # Return ALL years, sorted
+                                    all_vals = [acc_yearly[y]["value"] for y in sorted(acc_yearly.keys())]
+                                    logger.info(f"SEC EDGAR: Got Accumulated Depreciation for {ticker}: {len(all_vals)} years")
+                                    return all_vals
+                except Exception as e:
+                    logger.warning(f"SEC EDGAR Accumulated Depreciation fetch failed for {ticker}: {e}")
+            return None
+
+        # Generic fallback for other opening balance fields
+        # Maps field_name to list of yfinance DataFrame index keys to try
+        generic_keys = {
+            "opening_net_working_capital": ["working_capital", "WorkingCapital", "Net Working Capital",
+                                             "TotalCurrentAssets", "Total Current Assets"],
+            "opening_net_ppe": ["net_ppe", "NetPPE", "Net PPE", "PropertyPlantAndEquipmentNet",
+                                "Property Plant And Equipment Net", "Net Property Plant And Equipment"],
+            "opening_total_debt": ["total_debt", "TotalDebt", "Long Term Debt",
+                                   "LongTermDebt", "Short Long Term Debt Total"],
+            "non_current_marketable_securities": ["non_current_marketable_securities", "NonCurrentMarketableSecurities",
+                                                  "LongTermInvestments", "Other Long Term Investments",
+                                                  "AvailableForSaleSecurities"],
+            "other_current_liabilities": ["other_current_liabilities", "OtherCurrentLiabilities",
+                                          "Other Current Liabilities"],
+            "deferred_tax_liabilities": ["deferred_tax_liabilities", "DeferredTaxLiabilities",
+                                         "NonCurrentDeferredTaxesLiabilities",
+                                         "Non Current Deferred Taxes Liabilities"],
+            "current_accrued_expenses": ["current_accrued_expenses", "CurrentAccruedExpenses",
+                                         "PayablesAndAccruedExpenses", "Payables And Accrued Expenses"],
+            "current_deferred_liabilities": ["current_deferred_liabilities", "CurrentDeferredRevenue",
+                                             "DeferredRevenueCurrent", "Current Deferred Revenue"],
+            "trade_and_other_payables_non_current": ["trade_and_other_payables_non_current",
+                                                     "NonCurrentPayables", "Non Current Payables"],
+            "other_non_current_liabilities": ["other_non_current_liabilities", "OtherNonCurrentLiabilities",
+                                              "Other Non Current Liabilities"],
+            "other_short_term_investments": ["other_short_term_investments", "OtherShortTermInvestments",
+                                             "AvailableForSaleSecurities", "ShortTermInvestments"],
+            "other_current_assets": ["other_current_assets", "OtherCurrentAssets",
+                                     "Other Current Assets"],
+            "other_non_current_assets": ["other_non_current_assets", "OtherNonCurrentAssets",
+                                         "Other Non Current Assets"],
+            "common_stock": ["common_stock", "CommonStockEquity", "Common Stock Equity",
+                             "CommonStock", "Common Stock"],
+            "other_equity_adjustments": ["other_equity_adjustments", "OtherEquityAdjustments",
+                                         "AccumulatedOtherComprehensiveIncome", "AOCI", "TreasuryStock"],
         }
 
-        for key in mapping.get(field_name, [field_name]):
+        for key in generic_keys.get(field_name, [field_name]):
             if key in balance_sheet_df.index:
                 value = balance_sheet_df.loc[key, latest_col]
                 if pd.notna(value):
@@ -1017,6 +1686,9 @@ class DCFStep6Processor:
         if not peers and 'peer_data' in retrieved_assumptions:
             peers = retrieved_assumptions['peer_data'].get('peers', [])
 
+        # Lazy-init yfinance service for fetching missing peer data
+        yf_service = None
+
         for peer_ticker in peers:
             # Try multiple key patterns for peer info
             peer_info = None
@@ -1039,21 +1711,86 @@ class DCFStep6Processor:
                         peer_info = retrieved_assumptions['peer_data'][key]
                         break
 
+            # Also check peer_market_data (populated by Step 4 peer management service)
+            if not peer_info and 'peer_market_data' in retrieved_assumptions:
+                peer_market_data = retrieved_assumptions['peer_market_data']
+                if peer_ticker in peer_market_data:
+                    peer_info = peer_market_data[peer_ticker]
+
+            # Note: peer_info may not have multiples if session data is stale
+            # The key mapping fix (enterpriseToEbitda → evEbitda) handles the case
+            # where multiples ARE present but with yfinance key names
+
             if peer_info:
+                # Helper to get value with multiple key fallbacks (metric IDs + yfinance keys)
+                def _peer_val(keys, default=None):
+                    for k in keys:
+                        v = peer_info.get(k)
+                        if v is not None:
+                            return v
+                    return default
+
+                mc = _peer_val(['market_cap', 'marketCap', 'marketCapitalization'])
+                ev = _peer_val(['enterprise_value', 'enterpriseValue'])
+                ebitda_val = _peer_val(['ebitda'])
+                revenue_val = _peer_val(['revenue', 'total_revenue', 'totalRevenue'])
+                eps_val = _peer_val(['eps', 'trailingEps', 'diluted_eps'])
+                price_val = _peer_val(['current_price', 'currentPrice', 'price'])
+                bvps = _peer_val(['book_value', 'bookValue', 'book_value_per_share'])
+                beta_val = _peer_val(['beta'])
+                debt_val = _peer_val(['total_debt', 'totalDebt'])
+                cash_val = _peer_val(['cash_and_equivalents', 'cash', 'totalCash', 'CashAndCashEquivalents',
+                                       'CashCashEquivalentsAndShortTermInvestments',
+                                       'Cash And Cash Equivalents', 'cashAndShortTermInvestments'])
+                tax_val = _peer_val(['effective_tax_rate', 'effectiveTaxRate', 'tax_rate',
+                                      'taxRate', 'incomeTaxExpense', 'taxProvision'])
+                # If tax_rate not directly available, compute from tax_provision / pretax_income
+                if tax_val is None:
+                    tax_prov = _peer_val(['tax_provision', 'TaxProvision', 'IncomeTaxExpense',
+                                           'incomeTaxExpense', 'income_tax_expense'])
+                    pretax = _peer_val(['pretax_income', 'PretaxIncome', 'incomeBeforeTax',
+                                        'IncomeBeforeTax', 'income_before_tax'])
+                    if tax_prov is not None and pretax is not None and pretax != 0:
+                        tax_val = abs(tax_prov) / abs(pretax)
+                cod_val = _peer_val(['cost_of_debt', 'costOfDebt'])
+
+                # Compute EV if not available: Market Cap + Total Debt - Cash
+                if ev is None and mc is not None:
+                    d = debt_val or 0
+                    c = cash_val or 0
+                    ev = mc + d - c
+
+                # Compute multiples from raw data
+                ev_ebitda = None
+                if ev and ebitda_val and ebitda_val > 0:
+                    ev_ebitda = ev / ebitda_val
+
+                pe_ratio = None
+                if price_val and eps_val and eps_val > 0:
+                    pe_ratio = price_val / eps_val
+
+                ev_revenue = None
+                if ev and revenue_val and revenue_val > 0:
+                    ev_revenue = ev / revenue_val
+
+                pb_ratio = None
+                if price_val and bvps and bvps > 0:
+                    pb_ratio = price_val / bvps
+
                 company = PeerCompany(
                     ticker=peer_ticker,
-                    name=peer_info.get('name') or peer_info.get('longName'),
-                    market_cap=peer_info.get('marketCap') or peer_info.get('market_cap'),
-                    enterprise_value=peer_info.get('enterpriseValue') or peer_info.get('enterprise_value'),
-                    ev_ebitda=peer_info.get('evEbitda') or peer_info.get('ev_ebitda'),
-                    pe_ratio=peer_info.get('peRatio') or peer_info.get('pe_ratio'),
-                    ev_revenue=peer_info.get('evRevenue') or peer_info.get('ev_revenue'),
-                    pb_ratio=peer_info.get('pbRatio') or peer_info.get('pb_ratio'),
-                    beta=peer_info.get('beta'),
-                    total_debt=peer_info.get('totalDebt') or peer_info.get('total_debt'),
-                    cash=peer_info.get('cash') or peer_info.get('cashAndEquivalents'),
-                    tax_rate=peer_info.get('effectiveTaxRate') or peer_info.get('tax_rate'),
-                    cost_of_debt=peer_info.get('costOfDebt') or peer_info.get('cost_of_debt')
+                    name=_peer_val(['name', 'longName', 'shortName', 'company_name'], peer_ticker),
+                    market_cap=mc,
+                    enterprise_value=ev,
+                    ev_ebitda=ev_ebitda,
+                    pe_ratio=pe_ratio,
+                    ev_revenue=ev_revenue,
+                    pb_ratio=pb_ratio,
+                    beta=beta_val,
+                    total_debt=debt_val,
+                    cash=cash_val,
+                    tax_rate=tax_val,
+                    cost_of_debt=cod_val
                 )
                 companies.append(company)
 
@@ -1096,7 +1833,7 @@ class DCFStep6Processor:
         # Calculate historical growth rates from historical data
         # These are intermediate calculations, NOT WACC/TV/Fair Value
 
-        # 1. Revenue CAGR (3-year and 5-year if available)
+        # 1. Revenue CAGR (3-year and 4-year if available)
         revenue_fields = [f for f in historical_display.data_fields if f.field_name == "revenue"]
         if revenue_fields and revenue_fields[0].value:
             revenue_data = revenue_fields[0].value
@@ -1160,28 +1897,54 @@ class DCFStep6Processor:
                             allow_override=True
                         ))
 
-        # 4. Historical margins trends (show latest year)
+        # 4. Historical margins - BOTH latest AND average across all years
         margin_fields = ["gross_margin", "operating_margin", "net_margin"]
         for margin in margin_fields:
             field = next((f for f in historical_display.data_fields if f.field_name == margin), None)
             if field and field.value is not None:
                 margin_value = field.value
-                # If margin is a list, use the most recent
                 if isinstance(margin_value, list) and len(margin_value) > 0:
-                    margin_value = margin_value[-1]
+                    # Latest year
+                    latest = margin_value[-1]
+                    data_fields.append(DataField(
+                        field_name=f"historical_{margin}",
+                        display_name=f"Latest {field.display_name}",
+                        value=latest,
+                        unit="%",
+                        status=DataStatus.CALCULATED,
+                        source="calculated_from_historical",
+                        is_critical=False,
+                        allow_override=True
+                    ))
+                    # Average across all years (excluding None)
+                    valid_margins = [v for v in margin_value if v is not None]
+                    if valid_margins:
+                        avg_margin = sum(valid_margins) / len(valid_margins)
+                        data_fields.append(DataField(
+                            field_name=f"avg_{margin}",
+                            display_name=f"Average {field.display_name} ({len(valid_margins)}-year)",
+                            value=avg_margin,
+                            unit="%",
+                            status=DataStatus.CALCULATED,
+                            source="calculated_from_historical",
+                            formula=f"Average of {len(valid_margins)} years of {field.display_name}",
+                            is_critical=False,
+                            allow_override=True
+                        ))
+                elif margin_value is not None:
+                    # Single value
+                    data_fields.append(DataField(
+                        field_name=f"historical_{margin}",
+                        display_name=f"Latest {field.display_name}",
+                        value=margin_value,
+                        unit="%",
+                        status=DataStatus.CALCULATED,
+                        source="calculated_from_historical",
+                        is_critical=False,
+                        allow_override=True
+                    ))
 
-                data_fields.append(DataField(
-                    field_name=f"historical_{margin}",
-                    display_name=f"Latest {field.display_name}",
-                    value=margin_value,
-                    unit="%",
-                    status=DataStatus.CALCULATED,
-                    source="calculated_from_historical",
-                    is_critical=False,
-                    allow_override=True
-                ))
-
-        # 5. FCF Conversion Rate (FCF / EBITDA)
+        # 5. FCF Conversion Rate (FCF / EBITDA) - latest year
         fcf_fields = [f for f in historical_display.data_fields if f.field_name == "free_cash_flow"]
         if fcf_fields and fcf_fields[0].value and ebitda_fields and ebitda_fields[0].value:
             fcf_data = fcf_fields[0].value
@@ -1205,6 +1968,128 @@ class DCFStep6Processor:
                     is_critical=False,
                     allow_override=True
                 ))
+
+        # 6. Revenue Year-over-Year Growth Rates
+        if revenue_fields and revenue_fields[0].value:
+            revenue_data = revenue_fields[0].value
+            if isinstance(revenue_data, list) and len(revenue_data) >= 2:
+                yoy_growth_rates = []
+                for i in range(1, len(revenue_data)):
+                    if revenue_data[i] is not None and revenue_data[i-1] is not None and revenue_data[i-1] > 0:
+                        growth = ((revenue_data[i] - revenue_data[i-1]) / abs(revenue_data[i-1])) * 100
+                        yoy_growth_rates.append(growth)
+                    else:
+                        yoy_growth_rates.append(None)
+                if yoy_growth_rates:
+                    valid_rates = [r for r in yoy_growth_rates if r is not None]
+                    if valid_rates:
+                        data_fields.append(DataField(
+                            field_name="revenue_yoy_growth",
+                            display_name="Revenue YoY Growth Rates",
+                            value=yoy_growth_rates,
+                            unit="%",
+                            status=DataStatus.CALCULATED,
+                            source="calculated_from_historical",
+                            formula="((Current Year - Prior Year) / Prior Year) * 100",
+                            is_critical=False,
+                            allow_override=True
+                        ))
+                        # Average YoY growth
+                        avg_growth = sum(valid_rates) / len(valid_rates)
+                        data_fields.append(DataField(
+                            field_name="avg_revenue_growth",
+                            display_name=f"Average Revenue Growth ({len(valid_rates)}-year)",
+                            value=avg_growth,
+                            unit="%",
+                            status=DataStatus.CALCULATED,
+                            source="calculated_from_historical",
+                            formula=f"Average of {len(valid_rates)} years of YoY revenue growth",
+                            is_critical=False,
+                            allow_override=True
+                        ))
+
+        # 7. Working Capital Days (AR Days, Inventory Days, AP Days)
+        ar_fields = [f for f in historical_display.data_fields if f.field_name == "accounts_receivable"]
+        inv_fields = [f for f in historical_display.data_fields if f.field_name == "inventory"]
+        ap_fields = [f for f in historical_display.data_fields if f.field_name == "accounts_payable"]
+
+        if revenue_fields and revenue_fields[0].value:
+            revenue_data = revenue_fields[0].value
+            if isinstance(revenue_data, list):
+                # AR Days = (Accounts Receivable / Revenue) * 365
+                if ar_fields and ar_fields[0].value:
+                    ar_data = ar_fields[0].value
+                    if isinstance(ar_data, list) and len(ar_data) == len(revenue_data):
+                        ar_days_list = []
+                        for i in range(len(ar_data)):
+                            if ar_data[i] is not None and revenue_data[i] is not None and revenue_data[i] > 0:
+                                ar_days_list.append((ar_data[i] / revenue_data[i]) * 365)
+                            else:
+                                ar_days_list.append(None)
+                        valid_ar_days = [d for d in ar_days_list if d is not None]
+                        if valid_ar_days:
+                            data_fields.append(DataField(
+                                field_name="ar_days",
+                                display_name=f"Average AR Days ({len(valid_ar_days)}-year)",
+                                value=sum(valid_ar_days) / len(valid_ar_days),
+                                unit="days",
+                                status=DataStatus.CALCULATED,
+                                source="calculated_from_historical",
+                                formula="(Accounts Receivable / Revenue) * 365",
+                                is_critical=False,
+                                allow_override=True
+                            ))
+
+                # Inventory Days = (Inventory / COGS) * 365
+                cogs_fields = [f for f in historical_display.data_fields if f.field_name == "cogs"]
+                if inv_fields and inv_fields[0].value and cogs_fields and cogs_fields[0].value:
+                    inv_data = inv_fields[0].value
+                    cogs_data = cogs_fields[0].value
+                    if isinstance(inv_data, list) and isinstance(cogs_data, list):
+                        inv_days_list = []
+                        for i in range(min(len(inv_data), len(cogs_data))):
+                            if inv_data[i] is not None and cogs_data[i] is not None and cogs_data[i] > 0:
+                                inv_days_list.append((inv_data[i] / cogs_data[i]) * 365)
+                            else:
+                                inv_days_list.append(None)
+                        valid_inv_days = [d for d in inv_days_list if d is not None]
+                        if valid_inv_days:
+                            data_fields.append(DataField(
+                                field_name="inv_days",
+                                display_name=f"Average Inventory Days ({len(valid_inv_days)}-year)",
+                                value=sum(valid_inv_days) / len(valid_inv_days),
+                                unit="days",
+                                status=DataStatus.CALCULATED,
+                                source="calculated_from_historical",
+                                formula="(Inventory / COGS) * 365",
+                                is_critical=False,
+                                allow_override=True
+                            ))
+
+                # AP Days = (Accounts Payable / COGS) * 365
+                if ap_fields and ap_fields[0].value and cogs_fields and cogs_fields[0].value:
+                    ap_data = ap_fields[0].value
+                    cogs_data = cogs_fields[0].value
+                    if isinstance(ap_data, list) and isinstance(cogs_data, list):
+                        ap_days_list = []
+                        for i in range(min(len(ap_data), len(cogs_data))):
+                            if ap_data[i] is not None and cogs_data[i] is not None and cogs_data[i] > 0:
+                                ap_days_list.append((ap_data[i] / cogs_data[i]) * 365)
+                            else:
+                                ap_days_list.append(None)
+                        valid_ap_days = [d for d in ap_days_list if d is not None]
+                        if valid_ap_days:
+                            data_fields.append(DataField(
+                                field_name="ap_days",
+                                display_name=f"Average AP Days ({len(valid_ap_days)}-year)",
+                                value=sum(valid_ap_days) / len(valid_ap_days),
+                                unit="days",
+                                status=DataStatus.CALCULATED,
+                                source="calculated_from_historical",
+                                formula="(Accounts Payable / COGS) * 365",
+                                is_critical=False,
+                                allow_override=True
+                            ))
 
         # 6. Peer Comparables - Median & Mean Metrics for WACC
         if peer_display and peer_display.companies:
@@ -1334,8 +2219,80 @@ class DCFStep6Processor:
                     allow_override=True
                 ))
 
-            # Calculate median Debt/Equity or Net Debt/EBITDA if available
-            # For now, calculate average market cap and enterprise value for sizing context
+            # Calculate D/E Ratio, Unlevered Beta, and Cost of Debt per peer
+            de_ratios = []
+            unlevered_betas = []
+            cost_of_debts_from_peer = []
+            for c in companies:
+                # D/E Ratio = Total Debt / Market Cap (equity)
+                if c.total_debt is not None and c.market_cap is not None and c.market_cap > 0:
+                    de_ratio = c.total_debt / c.market_cap
+                    c._de_ratio = de_ratio  # Store for unlevered beta calculation
+                    de_ratios.append(de_ratio)
+                # Unlevered Beta = Levered Beta / (1 + (1 - Tax Rate) × D/E)
+                if c.beta is not None and hasattr(c, '_de_ratio') and c.tax_rate is not None:
+                    tax_rate = c.tax_rate if c.tax_rate <= 1 else c.tax_rate / 100
+                    unlevered_beta = c.beta / (1 + (1 - tax_rate) * c._de_ratio)
+                    unlevered_betas.append(unlevered_beta)
+                # Cost of Debt = Interest Expense / Total Debt (estimated from yield)
+                if c.total_debt is not None and c.total_debt > 0 and c.cost_of_debt is None:
+                    # If cost_of_debt not directly available, estimate from market data
+                    # This is a fallback - yfinance doesn't always provide this
+                    pass
+
+            if de_ratios:
+                median_de = self._calculate_median(de_ratios)
+                avg_de = sum(de_ratios) / len(de_ratios)
+                data_fields.append(DataField(
+                    field_name="peer_median_de_ratio",
+                    display_name="Peer Median D/E Ratio",
+                    value=median_de,
+                    unit="x",
+                    status=DataStatus.CALCULATED,
+                    source="calculated_from_peers",
+                    formula="Median of peer Debt/Equity ratios (Total Debt / Market Cap)",
+                    is_critical=True,
+                    allow_override=True
+                ))
+                data_fields.append(DataField(
+                    field_name="peer_mean_de_ratio",
+                    display_name="Peer Mean D/E Ratio",
+                    value=avg_de,
+                    unit="x",
+                    status=DataStatus.CALCULATED,
+                    source="calculated_from_peers",
+                    formula="Average of peer Debt/Equity ratios",
+                    is_critical=False,
+                    allow_override=True
+                ))
+
+            if unlevered_betas:
+                median_unlevered_beta = self._calculate_median(unlevered_betas)
+                avg_unlevered_beta = sum(unlevered_betas) / len(unlevered_betas)
+                data_fields.append(DataField(
+                    field_name="peer_median_unlevered_beta",
+                    display_name="Peer Median Unlevered Beta",
+                    value=median_unlevered_beta,
+                    unit="",
+                    status=DataStatus.CALCULATED,
+                    source="calculated_from_peers",
+                    formula="Median of Levered Beta / (1 + (1-Tax) × D/E)",
+                    is_critical=True,
+                    allow_override=True
+                ))
+                data_fields.append(DataField(
+                    field_name="peer_mean_unlevered_beta",
+                    display_name="Peer Mean Unlevered Beta",
+                    value=avg_unlevered_beta,
+                    unit="",
+                    status=DataStatus.CALCULATED,
+                    source="calculated_from_peers",
+                    formula="Average of Levered Beta / (1 + (1-Tax) × D/E)",
+                    is_critical=False,
+                    allow_override=True
+                ))
+
+            # Calculate average market cap and enterprise value for sizing context
             market_caps = [c.market_cap for c in companies if c.market_cap is not None]
             if market_caps:
                 median_market_cap = self._calculate_median(market_caps)
@@ -1350,6 +2307,60 @@ class DCFStep6Processor:
                     is_critical=False,
                     allow_override=True
                 ))
+
+        # 7. CapEx as % of Revenue and CapEx as % of D&A (forecasting drivers)
+        capex_fields = [f for f in historical_display.data_fields if f.field_name == "capex"]
+        if capex_fields and capex_fields[0].value and revenue_fields and revenue_fields[0].value:
+            capex_data = capex_fields[0].value
+            rev_data = revenue_fields[0].value
+            if isinstance(capex_data, list) and isinstance(rev_data, list):
+                capex_rev_ratios = []
+                for i in range(min(len(capex_data), len(rev_data))):
+                    if capex_data[i] is not None and rev_data[i] is not None and rev_data[i] > 0:
+                        capex_rev_ratios.append((abs(capex_data[i]) / rev_data[i]) * 100)
+                    else:
+                        capex_rev_ratios.append(None)
+                valid_ratios = [r for r in capex_rev_ratios if r is not None]
+                if valid_ratios:
+                    avg_capex_rev = sum(valid_ratios) / len(valid_ratios)
+                    data_fields.append(DataField(
+                        field_name="capex_pct_of_revenue",
+                        display_name=f"Average CapEx % of Revenue ({len(valid_ratios)}-year)",
+                        value=avg_capex_rev,
+                        unit="%",
+                        status=DataStatus.CALCULATED,
+                        source="calculated_from_historical",
+                        formula="(|CapEx| / Revenue) × 100",
+                        is_critical=False,
+                        allow_override=True
+                    ))
+
+        if capex_fields and capex_fields[0].value:
+            capex_data = capex_fields[0].value
+            da_fields = [f for f in historical_display.data_fields if f.field_name == "depreciation_amortization" or f.field_name == "depreciation"]
+            if da_fields and da_fields[0].value:
+                da_data = da_fields[0].value
+                if isinstance(capex_data, list) and isinstance(da_data, list):
+                    capex_da_ratios = []
+                    for i in range(min(len(capex_data), len(da_data))):
+                        if capex_data[i] is not None and da_data[i] is not None and da_data[i] > 0:
+                            capex_da_ratios.append((abs(capex_data[i]) / da_data[i]) * 100)
+                        else:
+                            capex_da_ratios.append(None)
+                    valid_da_ratios = [r for r in capex_da_ratios if r is not None]
+                    if valid_da_ratios:
+                        avg_capex_da = sum(valid_da_ratios) / len(valid_da_ratios)
+                        data_fields.append(DataField(
+                            field_name="capex_pct_of_da",
+                            display_name=f"Average CapEx % of D&A ({len(valid_da_ratios)}-year)",
+                            value=avg_capex_da,
+                            unit="%",
+                            status=DataStatus.CALCULATED,
+                            source="calculated_from_historical",
+                            formula="(|CapEx| / Depreciation & Amortization) × 100",
+                            is_critical=False,
+                            allow_override=True
+                        ))
 
         return CalculatedMetricsDisplay(data_fields=data_fields)
 

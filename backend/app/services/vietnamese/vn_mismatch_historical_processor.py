@@ -72,7 +72,7 @@ class vn_Step3HistoricalProcessor:
     Processor for Vietnamese Step 3: Historical Financial Data.
 
     Responsibilities:
-    - Fetch Vietnamese historical financials (3-5 years) per TT99 standards
+    - Fetch Vietnamese historical financials (3-4 years) per TT99 standards
     - Handle VND currency and local accounting standards
     - Fill missing years with estimates
     - Calculate growth rates and margins
@@ -234,7 +234,7 @@ class vn_Step3HistoricalProcessor:
                 years_available = list(financials.keys())
 
             # Process each year
-            for year in years_available[-5:]:  # Last 5 years
+            for year in years_available[-4:]:  # Last 4 years
                 try:
                     year_data = self._extract_year_data(financials, year, ticker_data)
                     historical_data_points.append(year_data)

@@ -487,15 +487,7 @@ The frontend will run on **http://localhost:3000**
    
   │   ├── .env                        # Environment variables (gitignored)  
    
-  │   ├── docs/  
-   
-  │   │   ├── ARCHITECTURE.md         # Backend architecture  
-   
-  │   │   ├── VIETNAMESE_VS_INTERNATIONAL_MODELS.md  # TT99 vs IFRS/GAAP  
-   
-  │   │   └── vietnamese_report_auto_fetch.md  # Auto-fetch VN reports  
-   
-  │   └── test/                       # Test suites  
+│   └── test/                       # Test suites
    
   │  
    

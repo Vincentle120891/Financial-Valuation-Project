@@ -18,6 +18,7 @@ from app.services.international.dcf_engine import (
     create_default_inputs,
     ScenarioDrivers
 )
+from app.services.international.dcf_input_builder import build_dcf_inputs
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +36,7 @@ class DCFValuationResult(BaseModel):
 
 
 class DCFProjectionTable(BaseModel):
-    """5-year UFCF projection table."""
+    """4-year UFCF projection table."""
     year_1: float
     year_2: float
     year_3: float
@@ -108,25 +109,26 @@ class DCFStep10Processor:
         logger.info(f"Generating DCF report for {ticker}")
 
         try:
-            # Build DCFInputs from the provided dictionary
-            inputs = self._build_dcf_inputs(dcf_inputs)
+            # Build DCFInputs from the provided dictionary using shared module
+            inputs = build_dcf_inputs(dcf_inputs)
             engine = DCFEngine(inputs)
 
-            # Run the full DCF calculation
+            # Run the full DCF calculation using two-phase API
             scenario = dcf_inputs.get('scenario', 'base_case')
-            output = engine.calculate(scenario)
+            blocks = engine.calculate_building_blocks(scenario)
+            valuation_output = engine.calculate_valuation(blocks, scenario)
 
-            # Extract key results from engine output
-            ev = output.perpetuity_method.enterprise_value
-            equity_val = output.perpetuity_method.equity_value
-            fair_val = output.perpetuity_method.equity_value_per_share
-            wacc = output.wacc
+            # Extract key results from valuation output
+            ev = valuation_output.perpetuity_method.enterprise_value
+            equity_val = valuation_output.perpetuity_method.equity_value
+            fair_val = valuation_output.perpetuity_method.equity_value_per_share
+            wacc = valuation_output.wacc
             terminal_growth = inputs.forecast_drivers[scenario].get_value(
                 inputs.forecast_drivers[scenario].terminal_growth_rate
             )
 
             # Extract UFCF projections
-            ufcf_projections = self._extract_ufcf_projections(output)
+            ufcf_projections = self._extract_ufcf_projections(valuation_output)
 
         except Exception as e:
             logger.error(f"DCF Engine calculation failed: {e}. Using fallback values.")
@@ -196,38 +198,6 @@ class DCFStep10Processor:
             }
         )
 
-    def _build_dcf_inputs(self, data: Dict) -> DCFInputs:
-        """Convert dictionary to DCFInputs dataclass."""
-        inputs = create_default_inputs()
-
-        # Override with provided values
-        if 'shares_outstanding' in data:
-            inputs.shares_outstanding = data['shares_outstanding']
-        if 'current_price' in data:
-            inputs.current_stock_price = data['current_price']
-        if 'net_debt' in data:
-            inputs.net_debt_opening = data['net_debt']
-        if 'historical_revenue' in data:
-            inputs.historical_revenue = data['historical_revenue']
-        if 'risk_free_rate' in data:
-            inputs.risk_free_rate = data['risk_free_rate']
-        if 'market_risk_premium' in data:
-            inputs.market_risk_premium = data['market_risk_premium']
-        if 'country_risk_premium' in data:
-            inputs.country_risk_premium = data['country_risk_premium']
-        if 'statutory_tax_rate' in data:
-            inputs.statutory_tax_rate = data['statutory_tax_rate']
-        if 'target_debt_weight' in data:
-            inputs.target_debt_weight = data['target_debt_weight']
-        if 'target_equity_weight' in data:
-            inputs.target_equity_weight = data['target_equity_weight']
-        if 'pre_tax_cost_of_debt' in data:
-            inputs.pre_tax_cost_of_debt = data['pre_tax_cost_of_debt']
-        if 'comparable_companies' in data:
-            inputs.comparable_companies = data['comparable_companies']
-
-        return inputs
-
     def _extract_ufcf_projections(self, output) -> List[float]:
         """Extract UFCF projections from DCF engine output."""
         try:
@@ -239,7 +209,7 @@ class DCFStep10Processor:
             else:
                 # Fallback: estimate from enterprise value
                 ev = output.perpetuity_method.enterprise_value
-                return [ev * 0.08] * 5  # Assume 8% of EV per year
+                return [ev * 0.08] * 4  # Assume 8% of EV per year
         except Exception:
             return [0.0] * 5
 
@@ -285,7 +255,7 @@ class DCFStep10Processor:
     def _determine_confidence_level(self, upside: float, dcf_inputs: Dict) -> str:
         """Determine confidence level based on upside and input quality."""
         # Check data completeness
-        has_historical = 'historical_revenue' in dcf_inputs and len(dcf_inputs.get('historical_revenue', [])) >= 5
+        has_historical = 'historical_revenue' in dcf_inputs and len(dcf_inputs.get('historical_revenue', [])) >= 4
         has_wacc_components = all(k in dcf_inputs for k in ['risk_free_rate', 'market_risk_premium', 'pre_tax_cost_of_debt'])
 
         if has_historical and has_wacc_components and abs(upside) > 0.20:

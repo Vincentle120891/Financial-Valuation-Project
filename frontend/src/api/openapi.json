@@ -96,13 +96,13 @@
           "Valuation"
         ],
         "summary": "Save Peers",
-        "description": "Step 4: Save selected peer companies to session.\nDelegates to Step4PeerManagementService for all business logic.",
+        "description": "Step 4: Save selected peer companies to session.\nDelegates to Step4PeerManagementService for all business logic.\nUses unified PeerCompany schema for strict validation.",
         "operationId": "save_peers_api_step_4_save_peers_post",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/SavePeersRequest"
+                "$ref": "#/components/schemas/UnifiedStep4SavePeersRequest"
               }
             }
           },
@@ -114,7 +114,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SavePeersResponse"
+                  "$ref": "#/components/schemas/UnifiedStep4SavePeersResponse"
                 }
               }
             }
@@ -264,7 +264,7 @@
           "Valuation"
         ],
         "summary": "Fetch Api Data",
-        "description": "Step 6: Fetch financial data from APIs and calculate metrics.\nUses SessionService for session management, APIAdapter for data fetching,\nand ValidationMiddleware for data quality checks.\n\nENHANCED WITH NEW ARCHITECTURE:\n- APIAdapter: Handles fetching, mapping, normalizing, and validating data\n- MetricRegistry: Centralized field mappings and validation rules\n- ValidationMiddleware: Pre-save validation with outlier detection\n\nMATRIX WORKFLOW:\n- Uses market/method from request parameters (REQUIRED - no fallback)\n- Stores financial data in the specific valuation track\n- Each model's data is stored independently",
+        "description": "Step 6: Fetch financial data from APIs and calculate metrics.\n\nARCHITECTURE (Option C - Processor-Owned Fetch):\nRoute passes None for data parameters. Each processor (DCF, DuPont, Comps)\nhas its own complete fetch logic via APIAdapter that runs when data is None.\nThis avoids data format mismatches between route-level and processor-level fetching.\n\nMATRIX WORKFLOW:\n- Uses market/method from request parameters (REQUIRED - no fallback)\n- Stores financial data in the specific valuation track\n- Each model's data is stored independently",
         "operationId": "fetch_api_data_api_step_6_fetch_api_data_post",
         "requestBody": {
           "content": {
@@ -466,6 +466,15 @@
               "default": "international",
               "title": "Market"
             }
+          },
+          {
+            "name": "custom_prompt",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Custom Prompt"
+            }
           }
         ],
         "responses": {
@@ -498,6 +507,46 @@
         "summary": "Fetch Sec Edgar For Step7",
         "description": "Step 7: Fetch SEC EDGAR Filings for Historical Data\n\nFetches 10-K and 10-Q filings directly from SEC EDGAR database.\nRequires email address for rate limit compliance (SEC requirement).\n\nWorkflow:\n1. User clicks \"Fetch SEC Filings\" in Step 7 frontend (US companies only)\n2. Backend queries SEC EDGAR API to get recent 10-K/10-Q filings\n3. Filing metadata is extracted and stored in session\n4. Optionally, AI can be used to extract data from filing content\n5. Results merged with Step 6 data for Step 8\n\nArgs:\n    session_id: Session identifier\n    ticker: Stock ticker symbol (e.g., AAPL, MSFT) - US companies only\n    company_name: Full company name for User-Agent header\n    email: Contact email for SEC rate limit compliance\n    method: Valuation method (DCF, DUPONT, COMPS)\n    market: Market type (international, vietnamese)\n\nReturns:\n    SEC filing metadata including accession numbers, filing dates, and document URLs",
         "operationId": "fetch_sec_edgar_for_step7_api_step_7_fetch_sec_edgar_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SecEdgarFetchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/complete-financial-statements": {
+      "get": {
+        "tags": [
+          "Valuation"
+        ],
+        "summary": "Get Complete Financial Statements",
+        "description": "Get complete merged financial statements (Income Statement, Balance Sheet, Cash Flow).\n\nReturns the merged Step 6 + Step 7 data organized by financial statement type.\nCreated during Step 8 initialization, stored in session for user access.",
+        "operationId": "get_complete_financial_statements_api_complete_financial_statements_get",
         "parameters": [
           {
             "name": "session_id",
@@ -509,42 +558,6 @@
             }
           },
           {
-            "name": "ticker",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Ticker"
-            }
-          },
-          {
-            "name": "company_name",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Company Name"
-            }
-          },
-          {
-            "name": "email",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Email"
-            }
-          },
-          {
-            "name": "method",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Method"
-            }
-          },
-          {
             "name": "market",
             "in": "query",
             "required": false,
@@ -552,6 +565,16 @@
               "type": "string",
               "default": "international",
               "title": "Market"
+            }
+          },
+          {
+            "name": "method",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "dcf",
+              "title": "Method"
             }
           }
         ],
@@ -583,7 +606,7 @@
           "Valuation"
         ],
         "summary": "Initialize Step8 Assumptions",
-        "description": "Step 8: Initialize assumptions with historical trendlines from Step 6.\n\nThis endpoint loads historical data and prepares the assumption categories\nwith trendlines. No AI suggestions are generated yet - user must click\nbuttons to generate them per category.\n\nMATRIX WORKFLOW:\n- Uses market/method from request parameters (REQUIRED - no fallback)\n- Initializes assumptions for the specific valuation track\n\nMETHOD-AGNOSTIC DESIGN:\n- Method MUST be provided in request.method - no session.selected_model fallback\n- Each method operates independently with its own data track",
+        "description": "Step 8: Initialize assumptions with historical trendlines.\n\n1. MERGES Step 6 + Step 7 into complete_financial_statements\n2. Stores merged data in session (user-accessible)\n3. Builds assumption categories with trendlines from merged data\n\nMATRIX WORKFLOW:\n- Uses market/method from request parameters (REQUIRED - no fallback)\n- Initializes assumptions for the specific valuation track",
         "operationId": "initialize_step8_assumptions_api_step_8_initialize_post",
         "requestBody": {
           "content": {
@@ -2840,6 +2863,105 @@
         }
       }
     },
+    "/api/debug/api-key-manager": {
+      "get": {
+        "tags": [
+          "debug"
+        ],
+        "summary": "Debug Api Key Manager",
+        "description": "Debug endpoint showing full API key manager status.\n\nShows:\n- All registered keys per service (masked)\n- Key rotation status\n- Usage statistics (requests, successes, failures, rate limits)\n- Which key is currently active\n- Error history per key",
+        "operationId": "debug_api_key_manager_api_debug_api_key_manager_get",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/session/{session_id}/export-pdf": {
+      "post": {
+        "tags": [
+          "PDF Export"
+        ],
+        "summary": "Export Pdf",
+        "description": "Generate a PDF investment memorandum from valuation results.\n\nWorkflow:\n1. Retrieve Step 9 confirmed outputs and Step 10 results from session\n2. Build HTML template with all valuation data\n3. Convert to PDF using ReportLab\n4. Return binary PDF stream with Content-Disposition header\n\nReturns:\n    StreamingResponse with PDF binary data",
+        "operationId": "export_pdf_api_session__session_id__export_pdf_post",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExportPdfRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "summary": "Health Check",
@@ -3158,7 +3280,7 @@
         "properties": {
           "file": {
             "type": "string",
-            "format": "binary",
+            "contentMediaType": "application/octet-stream",
             "title": "File",
             "description": "PDF file to extract"
           },
@@ -3186,7 +3308,7 @@
           "files": {
             "items": {
               "type": "string",
-              "format": "binary"
+              "contentMediaType": "application/octet-stream"
             },
             "type": "array",
             "title": "Files",
@@ -3209,7 +3331,7 @@
         "properties": {
           "file": {
             "type": "string",
-            "format": "binary",
+            "contentMediaType": "application/octet-stream",
             "title": "File",
             "description": "PDF financial report to extract data from"
           }
@@ -3782,6 +3904,44 @@
         "title": "ExchangeInfo",
         "description": "Exchange information (Vietnam-specific)"
       },
+      "ExportPdfRequest": {
+        "properties": {
+          "methods": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Methods",
+            "description": "Valuation methods to include in report",
+            "default": [
+              "DCF",
+              "DUPONT",
+              "COMPS"
+            ]
+          },
+          "market": {
+            "type": "string",
+            "title": "Market",
+            "description": "Market type",
+            "default": "international"
+          },
+          "include_sensitivity": {
+            "type": "boolean",
+            "title": "Include Sensitivity",
+            "description": "Include sensitivity analysis tables",
+            "default": true
+          },
+          "include_peer_comparison": {
+            "type": "boolean",
+            "title": "Include Peer Comparison",
+            "description": "Include peer comparison data",
+            "default": true
+          }
+        },
+        "type": "object",
+        "title": "ExportPdfRequest",
+        "description": "Request to generate PDF export"
+      },
       "ExtractionResponse": {
         "properties": {
           "success": {
@@ -4175,17 +4335,7 @@
               }
             ]
           },
-          "ebitda": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/DataField"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "net_income": {
+          "gross_profit": {
             "anyOf": [
               {
                 "$ref": "#/components/schemas/DataField"
@@ -4205,7 +4355,77 @@
               }
             ]
           },
-          "sg_and_a": {
+          "research_development": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DataField"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ebitda": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DataField"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ebit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DataField"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "interest_expense": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DataField"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "other_income": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DataField"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "pretax_income": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DataField"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "tax_provision": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DataField"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "net_income": {
             "anyOf": [
               {
                 "$ref": "#/components/schemas/DataField"
@@ -4216,6 +4436,16 @@
             ]
           },
           "depreciation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DataField"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sg_and_a": {
             "anyOf": [
               {
                 "$ref": "#/components/schemas/DataField"
@@ -4255,6 +4485,76 @@
               }
             ]
           },
+          "working_capital_changes": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DataField"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "interest_paid": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DataField"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "tax_paid": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DataField"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "share_buybacks": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DataField"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "debt_repayments": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DataField"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "debt_issuance": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DataField"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "dividends_paid": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DataField"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "total_assets": {
             "anyOf": [
               {
@@ -4266,6 +4566,26 @@
             ]
           },
           "total_debt": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DataField"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "long_term_debt": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DataField"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "current_debt": {
             "anyOf": [
               {
                 "$ref": "#/components/schemas/DataField"
@@ -4316,6 +4636,66 @@
             ]
           },
           "shareholders_equity": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DataField"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "retained_earnings": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DataField"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "shares_outstanding": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DataField"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "interest_income": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DataField"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "working_capital": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DataField"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ppe_gross": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DataField"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "accumulated_depreciation": {
             "anyOf": [
               {
                 "$ref": "#/components/schemas/DataField"
@@ -4911,6 +5291,20 @@
             "title": "Match Score",
             "description": "Match score 0-100"
           },
+          "similarity_score": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 100.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Similarity Score",
+            "description": "Similarity score 0-100"
+          },
           "match_reasons": {
             "anyOf": [
               {
@@ -5241,64 +5635,44 @@
         "title": "SaveApiKeysResponse",
         "description": "Response after saving API keys"
       },
-      "SavePeersRequest": {
+      "SecEdgarFetchRequest": {
         "properties": {
           "session_id": {
             "type": "string",
             "title": "Session Id"
           },
-          "peers": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "type": "array",
-            "title": "Peers"
+          "ticker": {
+            "type": "string",
+            "title": "Ticker"
+          },
+          "company_name": {
+            "type": "string",
+            "title": "Company Name",
+            "default": ""
+          },
+          "email": {
+            "type": "string",
+            "title": "Email",
+            "default": ""
+          },
+          "method": {
+            "type": "string",
+            "title": "Method",
+            "default": "DCF"
+          },
+          "market": {
+            "type": "string",
+            "title": "Market",
+            "default": "international"
           }
         },
         "type": "object",
         "required": [
           "session_id",
-          "peers"
+          "ticker"
         ],
-        "title": "SavePeersRequest",
-        "description": "Request to save selected peers to session"
-      },
-      "SavePeersResponse": {
-        "properties": {
-          "status": {
-            "type": "string",
-            "title": "Status"
-          },
-          "message": {
-            "type": "string",
-            "title": "Message"
-          },
-          "peers_saved": {
-            "type": "integer",
-            "title": "Peers Saved"
-          },
-          "peer_data": {
-            "anyOf": [
-              {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Peer Data"
-          }
-        },
-        "type": "object",
-        "required": [
-          "status",
-          "message",
-          "peers_saved"
-        ],
-        "title": "SavePeersResponse",
-        "description": "Response after saving peers"
+        "title": "SecEdgarFetchRequest",
+        "description": "Request body for SEC EDGAR filing fetch"
       },
       "SensitivityAnalysis": {
         "properties": {
@@ -5845,6 +6219,67 @@
         "title": "UnifiedStep4Response",
         "description": "Step 4: Peer selection results"
       },
+      "UnifiedStep4SavePeersRequest": {
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "title": "Session Id"
+          },
+          "peers": {
+            "items": {
+              "$ref": "#/components/schemas/PeerCompany"
+            },
+            "type": "array",
+            "title": "Peers"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_id",
+          "peers"
+        ],
+        "title": "UnifiedStep4SavePeersRequest",
+        "description": "Step 4: Save selected peers to session (unified schema)"
+      },
+      "UnifiedStep4SavePeersResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "peers_saved": {
+            "type": "integer",
+            "title": "Peers Saved"
+          },
+          "peer_list": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Peer List"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "message",
+          "peers_saved"
+        ],
+        "title": "UnifiedStep4SavePeersResponse",
+        "description": "Step 4: Response after saving peers (unified schema)"
+      },
       "UnifiedStep5Request": {
         "properties": {
           "session_id": {
@@ -6050,6 +6485,36 @@
               }
             ],
             "description": "Trading comparables multiples - NESTED structure"
+          },
+          "balance_sheet_opening": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/DataField"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Balance Sheet Opening",
+            "description": "Balance sheet opening balances (Net Debt, PP&E Gross, Accumulated Depreciation)"
+          },
+          "peer_comparables": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/DataField"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Peer Comparables",
+            "description": "Peer comparison data (Market Caps, Betas, Total Debt, Cash, Tax Rates)"
           },
           "data_source": {
             "type": "string",
@@ -6357,6 +6822,19 @@
             "title": "Ready For Calculation",
             "description": "Whether assumptions are ready for valuation calculation",
             "default": false
+          },
+          "complete_financial_statements": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Complete Financial Statements",
+            "description": "Merged Income Statement, Balance Sheet, Cash Flow from Step 6 + Step 7"
           },
           "sensitivity_preview": {
             "anyOf": [
@@ -6691,6 +7169,13 @@
           "type": {
             "type": "string",
             "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
           }
         },
         "type": "object",

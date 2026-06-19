@@ -2,29 +2,36 @@ import axios from 'axios';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
 
-// Helper to get stored API keys from localStorage
-const getStoredApiKeys = () => ({
-  alphaVantage: localStorage.getItem('alpha_vantage_api_key') || '',
-  fmp: localStorage.getItem('fmp_api_key') || '',
-  fred: localStorage.getItem('fred_api_key') || '',
-  secEdgar: localStorage.getItem('sec_edgar_email') || ''
-});
+// Helper to get ALL stored API keys from localStorage (for sending to backend)
+const getAllStoredApiKeys = () => {
+  const getAll = (name) => {
+    const raw = localStorage.getItem(`${name}_api_key`) || '';
+    return raw.split('\n').map(k => k.trim()).filter(k => k);
+  };
+  return {
+    alpha_vantage: getAll('alpha_vantage'),
+    fmp: getAll('fmp'),
+    fred: getAll('fred'),
+    sec_edgar: getAll('sec_edgar'),
+    openrouter: getAll('openrouter'),
+    groq: getAll('groq'),
+    gemini: getAll('gemini'),
+    qwen: getAll('qwen'),
+    openai: getAll('openai'),
+  };
+};
 
-// Helper to inject API keys into request headers
+// Helper to inject API keys into request headers (supports multiple keys comma-separated)
 const injectApiKeys = (headers = {}) => {
-  const apiKeys = getStoredApiKeys();
+  const allKeys = getAllStoredApiKeys();
   
-  if (apiKeys.alphaVantage) {
-    headers['X-API-Key-AlphaVantage'] = apiKeys.alphaVantage;
-  }
-  if (apiKeys.fmp) {
-    headers['X-API-Key-FMP'] = apiKeys.fmp;
-  }
-  if (apiKeys.fred) {
-    headers['X-API-Key-FRED'] = apiKeys.fred;
-  }
-  if (apiKeys.secEdgar) {
-    headers['X-API-Key-SECEdgar'] = apiKeys.secEdgar;
+  // Send all keys as comma-separated for each service
+  // Backend parses and registers them in the ApiKeyManager
+  for (const [service, keys] of Object.entries(allKeys)) {
+    if (keys.length > 0) {
+      const headerName = `X-API-Key-${service.replace(/_/g, '-').replace(/\b\w/g, l => l.toUpperCase())}`;
+      headers[headerName] = keys.join(',');
+    }
   }
   
   return headers;
@@ -43,9 +50,46 @@ const api = axios.create({
 api.interceptors.request.use(
   (config) => {
     config.headers = injectApiKeys(config.headers);
+    // Log API call for process visibility
+    const step = config.url?.match(/step-(\d+)/)?.[1] || 'API';
+    const method = config.method?.toUpperCase() || 'GET';
+    window.dispatchEvent(new CustomEvent('api-process-log', {
+      detail: {
+        step: `Step ${step}`,
+        message: `${method} ${config.url?.split('/api/')[1] || config.url}`,
+        status: 'info'
+      }
+    }));
     return config;
   },
-  (error) => Promise.reject(error)
+  (error) => {
+    const step = error.config?.url?.match(/step-(\d+)/)?.[1] || 'API';
+    const detail = error.response?.data?.detail || error.message;
+    window.dispatchEvent(new CustomEvent('api-process-log', {
+      detail: { step: `Step ${step}`, message: `❌ ${error.response?.status || 'Error'}: ${detail}`, status: 'error' }
+    }));
+    return Promise.reject(error);
+  }
+);
+
+// Response interceptor for success + error logging
+api.interceptors.response.use(
+  (response) => {
+    const step = response.config?.url?.match(/step-(\d+)/)?.[1] || 'API';
+    window.dispatchEvent(new CustomEvent('api-process-log', {
+      detail: { step: `Step ${step}`, message: `✅ ${response.config?.method?.toUpperCase()} ${response.config?.url?.split('/api/')[1] || ''} — ${response.status} OK`, status: 'success' }
+    }));
+    return response;
+  },
+  (error) => {
+    const step = error.config?.url?.match(/step-(\d+)/)?.[1] || 'API';
+    const status = error.response?.status || 'Error';
+    const detail = error.response?.data?.detail || error.message || 'Unknown error';
+    window.dispatchEvent(new CustomEvent('api-process-log', {
+      detail: { step: `Step ${step}`, message: `❌ ${error.config?.method?.toUpperCase()} ${error.config?.url?.split('/api/')[1] || ''} — ${status}: ${detail}`, status: 'error' }
+    }));
+    return Promise.reject(error);
+  }
 );
 
 // Create separate instance for AI calls with longer timeout
@@ -230,6 +274,24 @@ export const generateAISuggestion = async (sessionId, category, method, market =
   }
 };
 
+// Step 8: Generate Best/Worst Scenarios from Base Case
+export const generateScenarios = async (sessionId, method, market = 'international', baseCase = {}) => {
+  try {
+    const response = await api.post('/step-8-generate-scenarios', {
+      session_id: sessionId,
+      method: method.toUpperCase(),
+      market: market.toLowerCase(),
+      base_case: baseCase
+    });
+    return response.data;
+  } catch (error) {
+    if (error.code === 'ECONNABORTED') {
+      throw new Error('Scenario generation timed out. Please try again.');
+    }
+    throw error;
+  }
+};
+
 // Step 9: Confirm Assumptions
 // Now requires method and market parameters
 export const confirmAssumptions = async (sessionId, confirmedValues, scenario = 'base_case', method, market = 'international') => {
@@ -239,6 +301,24 @@ export const confirmAssumptions = async (sessionId, confirmedValues, scenario = 
     scenario,
     method,
     market: market.toLowerCase()
+  });
+  return response.data;
+};
+
+// Step 9: Calculate Building Block Schedules (replaces client-side dcfCalculator)
+export const calculateBuildingBlocks = async (
+  sessionId,
+  scenario = 'base_case',
+  method = 'DCF',
+  market = 'international',
+  assumptionOverrides = null
+) => {
+  const response = await api.post('/step-9-calculate-building-blocks', {
+    session_id: sessionId,
+    scenario,
+    method: method.toUpperCase(),
+    market: market.toLowerCase(),
+    assumption_overrides: assumptionOverrides,
   });
   return response.data;
 };
@@ -255,13 +335,13 @@ export const runValuation = async (sessionId, method, scenario = 'base_case', ma
   return response.data;
 };
 
-// Step 10: Run Valuation (Multiple Methods - Parallel Execution)
-// NEW: Orchestrates multiple valuation methods in a single request
-export const runValuationMulti = async (sessionId, methods, market = 'international') => {
-  const response = await api.post('/step-10-valuate-multi', {
-    session_id: sessionId,
-    methods,
-    market: market.toLowerCase()
+// =====================
+// Complete Financial Statements (Step 8 merger)
+// =====================
+
+export const getCompleteFinancialStatements = async (sessionId, market = 'international', method = 'dcf') => {
+  const response = await api.get('/complete-financial-statements', {
+    params: { session_id: sessionId, market: market.toLowerCase(), method: method.toLowerCase() }
   });
   return response.data;
 };

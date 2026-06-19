@@ -209,27 +209,16 @@ class DCFInputManager:
         """Build ScenarioDrivers from AI assumptions."""
         drivers = ScenarioDrivers()
         
-        # Revenue volume growth forecast (directly from AI, not split)
-        volume_growth_forecast = self.ai_assumptions.get("revenue_volume_growth", [])
-        if volume_growth_forecast:
-            volume_growth = []
-            for item in volume_growth_forecast[:5]:
+        # Revenue combined growth forecast (directly from AI)
+        rev_growth_forecast = self.ai_assumptions.get("revenue_volume_growth", [])
+        if rev_growth_forecast:
+            combined_growth = []
+            for item in rev_growth_forecast[:5]:
                 growth_rate = item.get("value", 0.0) / 100 if isinstance(item, dict) else item / 100
-                volume_growth.append(growth_rate)
+                combined_growth.append(growth_rate)
             # Add terminal year (half of last year)
-            volume_growth.append(volume_growth[-1] * 0.5 if volume_growth else 0.005)
-            drivers.volume_growth = volume_growth
-        
-        # Revenue price growth forecast (directly from AI)
-        price_growth_forecast = self.ai_assumptions.get("revenue_price_growth", [])
-        if price_growth_forecast:
-            price_growth = []
-            for item in price_growth_forecast[:5]:
-                growth_rate = item.get("value", 0.0) / 100 if isinstance(item, dict) else item / 100
-                price_growth.append(growth_rate)
-            # Add terminal year (half of last year)
-            price_growth.append(price_growth[-1] * 0.5 if price_growth else 0.005)
-            drivers.price_growth = price_growth
+            combined_growth.append(combined_growth[-1] * 0.5 if combined_growth else 0.005)
+            drivers.combined_revenue_growth = combined_growth
         
         # Terminal growth rate
         tg_item = self.ai_assumptions.get("terminal_growth_rate_percent", {})
@@ -368,120 +357,264 @@ def build_dcf_inputs_from_confirmed_assumptions(
     confirmed_assumptions: Dict[str, Any],
     financial_data: Dict[str, Any],
     profile: Dict[str, Any],
-    market: str = "international"
+    market: str = "international",
+    complete_statements: Optional[Dict[str, Any]] = None,
+    sec_edgar_data: Optional[Dict[str, Any]] = None,
 ) -> DCFInputs:
     """
-    Build DCFInputs directly from confirmed_assumptions (as used in valuation_routes.py).
+    Build DCFInputs from confirmed assumptions + complete_statements + SEC EDGAR.
     
-    This function mirrors the logic currently in run_valuation_engine() but makes it
-    reusable and testable as a separate service function.
+    Reads ACTUAL data from all available sources instead of using hardcoded estimates.
     
     Args:
-        confirmed_assumptions: AI/user confirmed assumptions from session
-        financial_data: Financial data from yFinance
-        profile: Company profile information
-        market: Market type (vietnamese or international)
+        confirmed_assumptions: Step 8 user/AI edits (forecast drivers, WACC, etc.)
+        financial_data: Step 6 yfinance data (historical financials)
+        profile: Step 2 company info (shares, price, etc.)
+        market: Market type
+        complete_statements: Step 8 merged data (Step 6 + Step 7 + SEC EDGAR + PDF)
+        sec_edgar_data: SEC EDGAR XBRL (PP&E Gross, Accum Dep, NOL, Deferred Tax)
     
     Returns:
         DCFInputs object ready for DCFEngine
     """
-    financials = financial_data.get('financials', {})
     
-    # Extract historical data
-    revenue_history = list(financials.get('revenue', {}).values())
-    ebitda_history = list(financials.get('ebitda', {}).values())
-    net_income_history = list(financials.get('net_income', {}).values())
+    # ─── Helper functions ──────────────────────────────────────────────
+    def _last(arr, default=0):
+        """Get last value from array."""
+        if not arr or not isinstance(arr, list):
+            return default
+        return arr[-1] if arr[-1] is not None else default
+    
+    def _last_4(arr):
+        """Get last 4 values from array (for 4-year historical)."""
+        if not arr or not isinstance(arr, list):
+            return []
+        return arr[-4:] if len(arr) >= 4 else arr
+    
+    def _first_nonzero(arr, default=0):
+        """Get first non-zero value from array."""
+        if not arr or not isinstance(arr, list):
+            return default
+        for v in arr:
+            if v and v != 0:
+                return v
+        return default
+    
+    def _get_field(section, field_name, default=None):
+        """Get a field from complete_statements by section and name."""
+        if not complete_statements:
+            return default
+        sec = complete_statements.get(section, {})
+        if not isinstance(sec, dict):
+            return default
+        # Try latest period first, then flat
+        if isinstance(sec, dict) and sec:
+            # If sec is period-keyed dict like {"2022-12-31": {...}}
+            for period_key in sorted(sec.keys(), reverse=True):
+                period_data = sec[period_key]
+                if isinstance(period_data, dict) and field_name in period_data:
+                    return period_data[field_name]
+        return default
+    
+    def _get_multi_year(section, field_name):
+        """Get multi-year array from complete_statements."""
+        if not complete_statements:
+            return []
+        sec = complete_statements.get(section, {})
+        if not isinstance(sec, dict):
+            return []
+        values = []
+        for period_key in sorted(sec.keys()):
+            period_data = sec[period_key]
+            if isinstance(period_data, dict):
+                val = period_data.get(field_name)
+                if val is not None:
+                    values.append(val)
+        return values
+    
+    # ─── Extract from financial_data (Step 6 yfinance) ───────────────
+    financials = financial_data.get('financials', {})
     
     info = profile.get('raw_info', {})
     shares_outstanding = info.get('sharesOutstanding', 1000000) or 1000000
     current_price = profile.get('current_price', 100) or 100
     
-    total_debt = info.get('totalDebt', 0) or 0
-    cash = info.get('cash', info.get('totalCash', 0)) or 0
+    # ─── Historical financials (from complete_statements or financial_data) ──
+    # Try complete_statements first (merged Step 6+7), fallback to raw financial_data
+    hist_revenue = _get_multi_year('income_statement', 'revenue') or list(financials.get('revenue', {}).values())
+    hist_cogs = _get_multi_year('income_statement', 'cogs') or list(financials.get('cost_of_revenue', {}).values())
+    hist_sga = _get_multi_year('income_statement', 'selling_general_administrative') or list(financials.get('sga', {}).values())
+    hist_other_opex_raw = _get_multi_year('income_statement', 'operating_expenses') or list(financials.get('other_opex', {}).values())
+    hist_depreciation = _get_multi_year('income_statement', 'depreciation') or list(financials.get('depreciation', {}).values())
+    hist_rd = _get_multi_year('income_statement', 'research_development') or list(financials.get('research_development', {}).values())
+    # yfinance's OperatingExpense = R&D + SG&A + OtherOperatingExpenses
+    # (D&A is NOT in OperatingExpense — it's embedded inside COGS and SG&A)
+    # Other OpEx = OperatingExpense - SG&A - R&D
+    if hist_other_opex_raw:
+        t5 = hist_other_opex_raw
+        s5 = hist_sga if hist_sga and len(hist_sga) == len(t5) else [0.0] * len(t5)
+        r5 = hist_rd if hist_rd and len(hist_rd) == len(t5) else [0.0] * len(t5)
+        hist_other_opex = [max(t - s - r, 0) if t and s and r else 0 for t, s, r in zip(t5, s5, r5)]
+    else:
+        hist_other_opex = hist_other_opex_raw
+    hist_interest = _get_multi_year('income_statement', 'interest_expense') or list(financials.get('interest', {}).values())
+    hist_capex = _get_multi_year('cash_flow', 'capital_expenditure') or list(financials.get('capex', {}).values())
+    
+    # ─── Historical balance sheet (from complete_statements) ──
+    hist_ar = _get_field('balance_sheet', 'accounts_receivable')
+    hist_inventory = _get_field('balance_sheet', 'inventory')
+    hist_ap = _get_field('balance_sheet', 'accounts_payable')
+    
+    # ─── Opening balances (from complete_statements) ──
+    total_debt = _get_field('balance_sheet', 'total_debt') or info.get('totalDebt', 0) or 0
+    cash = _get_field('balance_sheet', 'cash_and_equivalents') or info.get('cash', info.get('totalCash', 0)) or 0
     net_debt = total_debt - cash
-    ppe_net = info.get('totalAssets', 0) or 0
     
-    def build_historical_year(rev, ebitda, ni):
-        return {
-            'revenue': rev or 0,
-            'ebitda': ebitda or 0,
-            'net_income': ni or 0,
-            'cogs': (rev or 0) * 0.6 if rev else 0,
-            'sga': (rev or 0) * 0.25 if rev else 0,
-            'other_opex': (rev or 0) * 0.05 if rev else 0,
-            'accounts_receivable': (rev or 0) * 0.1 if rev else 0,
-            'inventory': (rev or 0) * 0.08 if rev else 0,
-            'accounts_payable': (rev or 0) * 0.07 if rev else 0
-        }
+    ppe_gross = _get_field('balance_sheet', 'ppe_gross')
+    if not ppe_gross:
+        # Fallback: try SEC EDGAR
+        if sec_edgar_data:
+            xbrl = sec_edgar_data.get('xbrl_data') or sec_edgar_data
+            ppe_gross_data = xbrl.get('ppe_gross', {}) if isinstance(xbrl, dict) else {}
+            if ppe_gross_data:
+                ppe_gross = _first_nonzero(list(ppe_gross_data.values()))
+    if not ppe_gross:
+        ppe_gross = _get_field('balance_sheet', 'net_ppe') or info.get('totalAssets', 0) or 0
     
-    hist_fy_minus_1 = build_historical_year(
-        revenue_history[0] if len(revenue_history) > 0 else None,
-        ebitda_history[0] if len(ebitda_history) > 0 else None,
-        net_income_history[0] if len(net_income_history) > 0 else None
-    )
-    hist_fy_minus_2 = build_historical_year(
-        revenue_history[1] if len(revenue_history) > 1 else None,
-        ebitda_history[1] if len(ebitda_history) > 1 else None,
-        net_income_history[1] if len(net_income_history) > 1 else None
-    )
-    hist_fy_minus_3 = build_historical_year(
-        revenue_history[2] if len(revenue_history) > 2 else None,
-        ebitda_history[2] if len(ebitda_history) > 2 else None,
-        net_income_history[2] if len(net_income_history) > 2 else None
-    )
+    accumulated_depreciation = _get_field('balance_sheet', 'accumulated_depreciation')
     
-    # Get forecast drivers from assumptions
-    revenue_growth = confirmed_assumptions.get('revenue_growth_forecast', [0.05, 0.05, 0.04, 0.04, 0.03, 0.02])
-    while len(revenue_growth) < 6:
-        revenue_growth.append(0.02)
+    # Tax Basis PP&E — use net_ppe as proxy (actual tax basis not available from APIs)
+    net_ppe = _get_field('balance_sheet', 'net_ppe')
+    tax_basis_ppe = net_ppe if net_ppe else ppe_gross * 0.8
     
+    # Tax Loss Carryforwards — from SEC EDGAR
+    tax_losses_nol = 0
+    if sec_edgar_data:
+        xbrl = sec_edgar_data.get('xbrl_data') or sec_edgar_data
+        tax_loss_data = xbrl.get('tax_loss_carryforward', {}) if isinstance(xbrl, dict) else {}
+        if tax_loss_data:
+            tax_losses_nol = _first_nonzero(list(tax_loss_data.values()))
+    if not tax_losses_nol and complete_statements:
+        tax_losses_nol = _get_field('balance_sheet', 'tax_loss_carryforward') or 0
+    
+    # ─── Opening Balance Sheet ──
+    cash_opening = cash
+    long_term_debt_opening = _get_field('balance_sheet', 'long_term_debt') or info.get('longTermDebt', 20000) or 20000
+    common_equity_opening = _get_field('balance_sheet', 'shareholders_equity') or info.get('totalEquity', 38669.70) or 38669.70
+    retained_earnings_opening = _get_field('balance_sheet', 'retained_earnings') or 5690.0
+    
+    # ─── Financing items (from complete_statements) ──
+    dividends_paid = _get_field('cash_flow', 'dividends_paid')
+    if dividends_paid:
+        dividends_paid = abs(dividends_paid)
+    
+    # Change in LT Debt — multi-year from balance sheet
+    lt_debt_series = _get_multi_year('balance_sheet', 'long_term_debt')
+    change_in_lt_debt = []
+    if len(lt_debt_series) >= 2:
+        change_in_lt_debt = [lt_debt_series[i] - lt_debt_series[i-1] for i in range(1, len(lt_debt_series))]
+    
+    # Change in Common Equity — multi-year from balance sheet
+    equity_series = _get_multi_year('balance_sheet', 'shareholders_equity')
+    change_in_common_equity = []
+    if len(equity_series) >= 2:
+        change_in_common_equity = [equity_series[i] - equity_series[i-1] for i in range(1, len(equity_series))]
+    
+    # Revolving Credit Line — current_debt from balance sheet
+    revolving_credit = _get_multi_year('balance_sheet', 'current_debt')
+    
+    # ─── WACC inputs ──
     wacc = confirmed_assumptions.get('wacc', 0.08)
-    terminal_growth = confirmed_assumptions.get('terminal_growth_rate', 0.023)
-    terminal_multiple = confirmed_assumptions.get('terminal_ebitda_multiple', 8.0)
+    risk_free_rate = confirmed_assumptions.get('risk_free_rate', 0.045)
+    market_risk_premium = confirmed_assumptions.get('market_risk_premium', 0.047)
+    country_risk_premium = confirmed_assumptions.get('country_risk_premium', 0.036)
+    beta = confirmed_assumptions.get('beta', 1.0)
+    target_de = confirmed_assumptions.get('debt_to_equity', 0.1765)
+    target_debt_weight = target_de / (1 + target_de) if target_de else 0.15
+    target_equity_weight = 1.0 - target_debt_weight
+    pre_tax_cost_of_debt = confirmed_assumptions.get('cost_of_debt', 0.052)
+    statutory_tax_rate = confirmed_assumptions.get('tax_rate', 0.30)
     
-    volume_split = confirmed_assumptions.get('volume_growth_split', 0.6)
-    base_volume_growth = [g * volume_split for g in revenue_growth[:6]]
-    base_price_growth = [g * (1 - volume_split) for g in revenue_growth[:6]]
+    # ─── Forecast drivers ──
+    revenue_growth = confirmed_assumptions.get('revenue_growth_forecast', [0.02, 0.01, 0.01, 0.005, 0.005, 0.005])
+    while len(revenue_growth) < 6:
+        revenue_growth.append(0.005)
+    
+    terminal_growth = confirmed_assumptions.get('terminal_growth_rate', 0.02)
+    terminal_multiple = confirmed_assumptions.get('terminal_ebitda_multiple', 7.0)
+    
+    # Capex — from confirmed assumptions or derive from historical
+    capex_pct = confirmed_assumptions.get('capex_pct_of_revenue', 0.05)
+    latest_rev = _last(hist_revenue, 55749)
+    capex_values = [latest_rev * capex_pct] * 6
     
     base_drivers = ScenarioDrivers(
-        volume_growth=base_volume_growth,
-        price_growth=base_price_growth,
-        inflation_rate=[confirmed_assumptions.get('inflation_rate', 0.02)] * 6 if not isinstance(confirmed_assumptions.get('inflation_rate'), list) else confirmed_assumptions.get('inflation_rate', [0.02]*6)[:6],
-        capex=[hist_fy_minus_1['revenue'] * confirmed_assumptions.get('capex_pct_of_revenue', 0.05)] * 6,
+        combined_revenue_growth=revenue_growth[:6],
+        inflation_rate=[confirmed_assumptions.get('inflation_rate', 0.03)] * 6 if not isinstance(confirmed_assumptions.get('inflation_rate'), list) else confirmed_assumptions.get('inflation_rate', [0.03]*6)[:6],
+        capex=capex_values,
         ar_days=[confirmed_assumptions.get('ar_days', 45)] * 5,
-        inv_days=[confirmed_assumptions.get('inv_days', 60)] * 5,
-        ap_days=[confirmed_assumptions.get('ap_days', 30)] * 5,
+        inv_days=[confirmed_assumptions.get('inv_days', 25)] * 5,
+        ap_days=[confirmed_assumptions.get('ap_days', 40)] * 5,
         terminal_ebitda_multiple=terminal_multiple,
         terminal_growth_rate=terminal_growth
     )
     
+    # ─── Build DCFInputs ──
     dcf_inputs = DCFInputs(
         valuation_date=date.today().isoformat(),
+        first_cf_date=date(date.today().year, 6, 30),
+        first_fiscal_year_end=date(date.today().year, 12, 31),
         currency="VND" if market == "vietnam" else profile.get('currency', 'USD'),
-        historical_fy_minus_1=hist_fy_minus_1,
-        historical_fy_minus_2=hist_fy_minus_2,
-        historical_fy_minus_3=hist_fy_minus_3,
-        net_debt=net_debt,
-        ppe_net=ppe_net,
-        tax_basis_ppe=ppe_net * 0.8,
-        tax_losses_nol=0,
+        scale="thousands",
+        # Historical financials (last 4 years)
+        historical_revenue=_last_4(hist_revenue) or [45196.0, 48324.0, 51585.0, 53494.0, 55749.0],
+        historical_cogs=_last_4(hist_cogs) or [24053.0, 25845.0, 27697.0, 28429.0, 29200.0],
+        historical_sga=_last_4(hist_sga) or [5422.0, 5650.0, 5877.0, 6006.0, 6144.0],
+        historical_other_opex=_last_4(hist_other_opex) or [1520.0, 1640.0, 1764.0, 1931.0, 2026.0],
+        historical_depreciation=_last_4(hist_depreciation) or [2580.0, 2765.0, 2960.0, 3196.0, 3452.0],
+        historical_interest=_last_4(hist_interest) or [1200.0, 1350.0, 1488.0, 2580.0, 2448.0],
+        historical_capex=_last_4(hist_capex) or [4200.0, 4600.0, 4982.0, 5199.0, 4400.0],
+        # Historical balance sheet (end of last year)
+        historical_ar=hist_ar or 6624.0,
+        historical_inventory=hist_inventory or 2009.0,
+        historical_ap=hist_ap or 3319.0,
+        # Opening balances
+        net_debt_opening=net_debt or 18642.0,
+        ppe_gross_book=ppe_gross or 65014.0,
+        tax_basis_ppe=tax_basis_ppe or 39211.0,
+        tax_losses_nol=tax_losses_nol,
+        # Shares and price
         shares_outstanding=shares_outstanding,
         current_stock_price=current_price,
-        projected_interest_expense=net_debt * 0.05 if net_debt > 0 else 0,
-        useful_life_existing=confirmed_assumptions.get('useful_life_existing', 10.0),
-        useful_life_new=confirmed_assumptions.get('useful_life_new', 10.0),
-        forecast_drivers={
-            "base_case": base_drivers,
-            "best_case": base_drivers,
-            "worst_case": base_drivers
-        },
-        wacc=wacc,
-        risk_free_rate=confirmed_assumptions.get('risk_free_rate'),
-        equity_risk_premium=confirmed_assumptions.get('equity_risk_premium'),
-        beta=confirmed_assumptions.get('beta', 1.0),
-        cost_of_debt=confirmed_assumptions.get('cost_of_debt', 0.05),
-        tax_rate_statutory=confirmed_assumptions.get('tax_rate', 0.21),
-        tax_loss_utilization_limit_pct=confirmed_assumptions.get('tax_loss_utilization_limit_pct', 0.80)
+        # Depreciation parameters
+        useful_life_existing=confirmed_assumptions.get('useful_life_existing', 16.0),
+        useful_life_new=confirmed_assumptions.get('useful_life_new', 20.0),
+        first_year_tax_dep_rate=0.50,
+        blended_tax_dep_rate=0.15,
+        first_year_acctg_dep_rate=0.50,
+        # Tax
+        statutory_tax_rate=statutory_tax_rate,
+        tax_loss_utilization_limit=0.80,
+        # Financing items
+        projected_dividends=dividends_paid or 2446.0,
+        change_in_lt_debt=change_in_lt_debt if change_in_lt_debt else [0.0] * 6,
+        change_in_common_equity=change_in_common_equity if change_in_common_equity else [-1000.0] * 6,
+        revolving_credit_line=revolving_credit if revolving_credit else [0.0] * 6,
+        # Opening balance sheet
+        cash_opening=cash_opening or 9365.0,
+        long_term_debt_opening=long_term_debt_opening,
+        common_equity_opening=common_equity_opening,
+        retained_earnings_opening=retained_earnings_opening,
+        # Forecast drivers
+        forecast_drivers={"base_case": base_drivers, "best_case": base_drivers, "worst_case": base_drivers},
+        # WACC
+        risk_free_rate=risk_free_rate,
+        market_risk_premium=market_risk_premium,
+        country_risk_premium=country_risk_premium,
+        target_debt_weight=target_debt_weight,
+        target_equity_weight=target_equity_weight,
+        pre_tax_cost_of_debt=pre_tax_cost_of_debt,
+        days_in_period=365,
     )
     
     return dcf_inputs

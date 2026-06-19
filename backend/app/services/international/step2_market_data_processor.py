@@ -188,6 +188,21 @@ class Step2MarketDataProcessor:
         else:
             missing_data.append("market_cap")
 
+        # Shares Outstanding
+        shares_outstanding = ticker_info.get('sharesOutstanding')
+        if shares_outstanding:
+            market_data_points.append(MarketDataPoint(
+                metric="shares_outstanding",
+                value=shares_outstanding,
+                source="yfinance",
+                status=DataStatus.RETRIEVED,
+                confidence_score=90.0,
+                currency=None,
+                unit="shares"
+            ))
+        else:
+            missing_data.append("shares_outstanding")
+
         # Beta
         beta = ticker_info.get('beta')
         beta_status = DataStatus.RETRIEVED if beta else DataStatus.ESTIMATED
@@ -222,19 +237,35 @@ class Step2MarketDataProcessor:
             unit="%"
         ))
 
-        # Market Risk Premium
+        # Market Risk Premium (calculated from S&P 500 vs 10Y Treasury via FRED)
         market_premium = self._get_market_premium(market)
-        market_premium_status = DataStatus.ESTIMATED if market_premium is not None else DataStatus.MISSING
+        market_premium_status = DataStatus.RETRIEVED if market_premium is not None else DataStatus.MISSING
         market_data_points.append(MarketDataPoint(
             metric="market_risk_premium",
             value=market_premium,
-            source="damodaran" if market_premium is not None else "pending",
+            source="FRED - S&P 500 vs 10Y Treasury" if market_premium is not None else "pending",
             status=market_premium_status,
-            formula="Historical Equity Risk Premium",
-            confidence_score=75.0 if market_premium is not None else None,
+            formula="Average(S&P 500 returns) - Average(10Y Treasury)",
+            confidence_score=85.0 if market_premium is not None else None,
             currency=None,
             unit="%"
         ))
+        
+        # GDP Growth Rate (for Terminal Growth Rate estimation)
+        gdp_growth_data = self._get_gdp_growth()
+        gdp_growth_value = gdp_growth_data.get("value") if gdp_growth_data else None
+        gdp_growth_status = DataStatus.RETRIEVED if gdp_growth_value is not None else DataStatus.MISSING
+        if gdp_growth_value is not None:
+            market_data_points.append(MarketDataPoint(
+                metric="gdp_growth",
+                value=gdp_growth_value,
+                source=gdp_growth_data.get("source", "FRED"),
+                status=gdp_growth_status,
+                formula="Year-over-year Real GDP growth",
+                confidence_score=90.0,
+                currency=None,
+                unit="%"
+            ))
 
         # Country Risk Premium (if applicable)
         country_risk = self._get_country_risk_premium(market)
@@ -316,7 +347,16 @@ class Step2MarketDataProcessor:
                 confidence_score=65.0 if country_risk else None,
                 unit="%",
                 currency=None
-            ) if country_risk else None
+            ) if country_risk else None,
+            gdp_growth=DataField(
+                value=gdp_growth_value,
+                status=gdp_growth_status,
+                source="FRED - GDP Data" if gdp_growth_value is not None else "pending",
+                formula="Year-over-year Real GDP growth",
+                confidence_score=90.0 if gdp_growth_value is not None else None,
+                unit="%",
+                currency=None
+            ) if gdp_growth_value is not None else None
         )
 
         # Calculate data quality score
@@ -369,12 +409,31 @@ class Step2MarketDataProcessor:
         return None
 
     def _get_market_premium(self, market: str) -> Optional[float]:
-        """Get market risk premium based on market. Returns None if not available."""
-        # No default fallbacks - return None to indicate missing data
-        # Frontend must handle null values and show "Pending" or require user input
-        if market == "vietnam":
-            return None  # Explicitly no default
-        return None  # Explicitly no default
+        """Get market risk premium from FRED (S&P 500 vs 10Y Treasury).
+        
+        Returns value in percentage format (e.g., 11.12 for 11.12%).
+        The FRED service already returns the value as a percentage,
+        so no additional conversion is needed.
+        """
+        try:
+            from app.services.international.fred_service import get_fred_service
+            fred = get_fred_service(self.request)
+            result = fred.get_market_risk_premium()
+            if result and result.get("value") is not None:
+                return result["value"]  # Already in percentage format from FRED
+        except Exception as e:
+            logger.warning(f"Failed to get market risk premium from FRED: {e}")
+        return None
+    
+    def _get_gdp_growth(self) -> Optional[Dict[str, Any]]:
+        """Get GDP growth rate from FRED."""
+        try:
+            from app.services.international.fred_service import get_fred_service
+            fred = get_fred_service(self.request)
+            return fred.get_gdp_growth_rate()
+        except Exception as e:
+            logger.warning(f"Failed to get GDP growth from FRED: {e}")
+            return None
 
     def _get_country_risk_premium(self, market: str) -> Optional[float]:
         """Get country risk premium."""

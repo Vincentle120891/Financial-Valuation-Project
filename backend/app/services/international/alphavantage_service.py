@@ -39,21 +39,40 @@ logger = logging.getLogger(__name__)
 class AlphaVantageService:
     """Service for fetching financial data from AlphaVantage API."""
 
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(self, api_key: Optional[str] = None, rapidapi_key: Optional[str] = None):
         """
         Initialize AlphaVantage service.
 
-        Args:
-            api_key: AlphaVantage API key. If not provided, will try to load from
-                    environment variable ALPHAVANTAGE_API_KEY or ALPHA_VANTAGE_API_KEY.
-                    Can also be provided per-request via header.
+        Uses ApiKeyManager for multi-key support with automatic rotation.
         """
-        self.api_key = api_key or os.getenv('ALPHAVANTAGE_API_KEY') or os.getenv('ALPHA_VANTAGE_API_KEY')
-        self.base_url = "https://www.alphavantage.co/query"
+        from app.core.api_key_manager import api_key_manager
+        
+        self._manager = api_key_manager
         self._session = None
+        self._rate_limit_hits = 0
+        
+        # Get keys from manager (handles env vars, session, headers)
+        # Try 'rapidapi' first (user-provided RapidAPI keys), then 'alphavantage' (env/hardcoded)
+        self.rapidapi_key = rapidapi_key or self._manager.get_key('rapidapi') or self._manager.get_key('alphavantage')
+        self.api_key = api_key or os.getenv('ALPHAVANTAGE_API_KEY') or os.getenv('ALPHA_VANTAGE_API_KEY')
+        
+        # Fallback to hardcoded key if manager has none
+        if not self.rapidapi_key:
+            default_key = "b9d602a26amshc86281b315604e1p1a42ccjsn7529ee98cb60"
+            self._manager.add_key('rapidapi', default_key, source='hardcoded')
+            self.rapidapi_key = default_key
 
-        if not self.api_key:
-            logger.warning("AlphaVantage API key not provided. Set ALPHAVANTAGE_API_KEY or ALPHA_VANTAGE_API_KEY environment variable, or provide via request header.")
+        # RapidAPI is the primary endpoint
+        if self.rapidapi_key:
+            self.base_url = "https://alpha-vantage.p.rapidapi.com/query"
+            pool_status = self._manager.get_service_status('alphavantage')
+            key_count = pool_status['total_keys'] if pool_status else 1
+            logger.info(f"Using RapidAPI AlphaVantage endpoint with {key_count} fallback key(s)")
+        else:
+            self.base_url = "https://www.alphavantage.co/query"
+
+        if not self.api_key and not self.rapidapi_key:
+            logger.warning("AlphaVantage API key not provided.")
 
     @staticmethod
     def get_api_key(request: Optional[Request] = None) -> Optional[str]:
@@ -96,6 +115,27 @@ class AlphaVantageService:
             logger.debug("AlphaVantage API key updated from request header")
         else:
             logger.warning("Attempted to set empty API key, keeping existing key")
+
+    def _rotate_to_next_key(self) -> bool:
+        """Rotate to the next RapidAPI key using the manager."""
+        # Try rapidapi pool first, then alphavantage pool
+        new_key = self._manager.rotate_key('rapidapi') or self._manager.rotate_key('alphavantage')
+        if new_key:
+            self.rapidapi_key = new_key
+            return True
+        return False
+
+    def get_key_status(self) -> Dict[str, Any]:
+        """Get current key status for debugging."""
+        pool_status = self._manager.get_service_status('rapidapi') or self._manager.get_service_status('alphavantage')
+        return {
+            "total_keys": pool_status['total_keys'] if pool_status else 0,
+            "current_key_index": pool_status['current_key_index'] if pool_status else 0,
+            "rate_limit_hits": self._rate_limit_hits,
+            "using_rapidapi": self.rapidapi_key is not None,
+            "using_direct_av": self.api_key is not None,
+            "pool_status": pool_status,
+        }
 
     @property
     def session(self):
@@ -160,32 +200,80 @@ class AlphaVantageService:
             return {}
 
     def _make_request(self, function: str, params: Optional[Dict] = None) -> Optional[Dict]:
-        """Make API request to AlphaVantage with error handling."""
+        """Make API request to AlphaVantage with error handling.
+        
+        Supports both direct AV API and RapidAPI endpoint.
+        """
         try:
             url_params = {
                 'function': function,
-                'apikey': self.api_key,
                 **(params or {})
             }
 
-            response = self.session.get(self.base_url, params=url_params, timeout=30)
+            # Add API key as query param for direct AV, or as header for RapidAPI
+            headers = {}
+            if self.rapidapi_key:
+                # RapidAPI: key goes in header, not query param
+                headers = {
+                    'x-rapidapi-host': 'alpha-vantage.p.rapidapi.com',
+                    'x-rapidapi-key': self.rapidapi_key,
+                    'Content-Type': 'application/json'
+                }
+            else:
+                # Direct AV: key goes in query param
+                url_params['apikey'] = self.api_key
+
+            response = self.session.get(self.base_url, params=url_params, headers=headers, timeout=30)
             response.raise_for_status()
 
             data = response.json()
 
+            # Record success with manager
+            self._manager.record_success('rapidapi')
+
             # Check for API limit errors
             if 'Note' in data:
-                logger.warning(f"AlphaVantage API limit reached: {data['Note']}")
+                error_msg = data['Note']
+                logger.warning(f"AlphaVantage API limit reached: {error_msg}")
+                self._rate_limit_hits += 1
+                self._manager.record_failure('rapidapi', error_msg, is_rate_limit=True)
+                # Try rotating to next key
+                if self._rotate_to_next_key():
+                    logger.info(f"Retrying with next key after rate limit hit #{self._rate_limit_hits}")
+                    return self._make_request(function, params)  # Recursive retry
+                return None
+
+            if 'Information' in data:
+                info_msg = data.get('Information', '')
+                logger.warning(f"AlphaVantage info: {info_msg}")
+                # Rate limit messages from RapidAPI
+                if 'rate limit' in info_msg.lower() or 'too many' in info_msg.lower():
+                    self._rate_limit_hits += 1
+                    self._manager.record_failure('rapidapi', info_msg, is_rate_limit=True)
+                    if self._rotate_to_next_key():
+                        logger.info(f"Retrying with next key after rate limit info #{self._rate_limit_hits}")
+                        return self._make_request(function, params)
                 return None
 
             if 'Error Message' in data:
-                logger.error(f"AlphaVantage API error: {data['Error Message']}")
+                error_msg = data['Error Message']
+                logger.error(f"AlphaVantage API error: {error_msg}")
+                self._manager.record_failure('rapidapi', error_msg)
                 return None
 
             return data
 
         except Exception as e:
-            logger.error(f"AlphaVantage request failed: {str(e)}")
+            error_str = str(e)
+            logger.error(f"AlphaVantage request failed: {error_str}")
+            is_rate_limit = '429' in error_str or 'rate limit' in error_str.lower() or 'too many' in error_str.lower()
+            self._manager.record_failure('rapidapi', error_str, is_rate_limit=is_rate_limit)
+            # Check for rate limit in HTTP status
+            if is_rate_limit:
+                self._rate_limit_hits += 1
+                if self._rotate_to_next_key():
+                    logger.info(f"Retrying with next key after HTTP rate limit #{self._rate_limit_hits}")
+                    return self._make_request(function, params)
             return None
 
     def _fetch_company_overview(self, symbol: str) -> Dict[str, Any]:
@@ -290,7 +378,7 @@ class AlphaVantageService:
             # Convert annual reports to year-keyed format
             result = {}
 
-            for report in data['annualReports'][:5]:  # Last 5 years
+            for report in data['annualReports'][:4]:  # Last 4 years
                 fiscal_year = report.get('fiscalDateEnding', '')[:4]  # Extract year
 
                 if not fiscal_year:
@@ -338,7 +426,7 @@ class AlphaVantageService:
 
             result = {}
 
-            for report in data['annualReports'][:5]:  # Last 5 years
+            for report in data['annualReports'][:4]:  # Last 4 years
                 fiscal_year = report.get('fiscalDateEnding', '')[:4]
 
                 if not fiscal_year:
@@ -408,7 +496,7 @@ class AlphaVantageService:
 
             result = {}
 
-            for report in data['annualReports'][:5]:  # Last 5 years
+            for report in data['annualReports'][:4]:  # Last 4 years
                 fiscal_year = report.get('fiscalDateEnding', '')[:4]
 
                 if not fiscal_year:

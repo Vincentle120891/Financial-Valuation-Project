@@ -131,7 +131,7 @@ class CalculatedMetricsDisplay(BaseModel):
 
 class DCFHistoricalFinancials(BaseModel):
     """
-    Historical financial data (3-5 years) for DCF model
+    Historical financial data (3-4 years) for DCF model
     Typically auto-fetched from yFinance API
     """
     

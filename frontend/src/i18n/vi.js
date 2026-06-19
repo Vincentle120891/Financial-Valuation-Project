@@ -1,26 +1,23 @@
 /**
- * Vietnamese Language Translations for Valuation Platform
+ * Vietnamese Translations — Corporate Finance Localization
  * 
- * This file contains all Vietnamese translations for the UI.
- * Uses i18next format for React internationalization.
+ * Translation Mask: Only UI wrappers are translated.
+ * Financial data, acronyms (WACC, EBITDA, DCF, P/E, Beta, VaR),
+ * ticker codes, and calculation states stay English uppercase.
  * 
- * Usage:
- * import { t } from 'i18next';
- * t('common.submit') // Returns "Gửi"
+ * Density Protection: Concise Vietnamese corporate terminology used.
+ * Financial acronyms remain English in data grids to prevent layout breakage.
  */
-
-export const vi = {
+export default {
   translation: {
-    // Common Terms
+    // Common Actions
     common: {
-      submit: "Gửi",
-      cancel: "Hủy",
-      save: "Lưu",
-      delete: "Xóa",
-      edit: "Sửa",
-      view: "Xem",
-      search: "Tìm kiếm",
       loading: "Đang tải...",
+      search: "Tìm kiếm",
+      select: "Chọn",
+      cancel: "Hủy",
+      confirm: "Xác nhận",
+      save: "Lưu",
       error: "Lỗi",
       success: "Thành công",
       warning: "Cảnh báo",
@@ -39,6 +36,16 @@ export const vi = {
       import: "Nhập",
       download: "Tải xuống",
       upload: "Tải lên",
+      submit: "Gửi",
+      edit: "Sửa",
+      view: "Xem",
+      delete: "Xóa",
+      fetch_data: "Lấy dữ liệu",
+      retrieve_data: "Thu thập dữ liệu",
+      run_valuation: "Chạy định giá",
+      generate_scenarios: "Tạo kịch bản",
+      apply: "Áp dụng",
+      remove: "Xóa bỏ",
     },
 
     // Navigation
@@ -51,6 +58,7 @@ export const vi = {
       reports: "Báo cáo",
       settings: "Cài đặt",
       help: "Trợ giúp",
+      watchlist: "Danh mục Theo dõi",
     },
 
     // Stock Types
@@ -60,53 +68,83 @@ export const vi = {
       us: "Cổ phiếu Mỹ",
     },
 
-    // Exchanges
-    exchanges: {
-      hose: "HOSE (Sàn TP.HCM)",
-      hnx: "HNX (Sàn Hà Nội)",
-      upcom: "UPCOM (Sàn chưa niêm yết)",
-      nyse: "NYSE",
-      nasdaq: "NASDAQ",
-      amex: "AMEX",
+    // Step Titles — Aligned with Backend Unified Schema
+    steps: {
+      step1: "Bước 1: Tìm kiếm & Chọn Công ty",
+      step2: "Bước 2: Xác nhận Thị trường & Dữ liệu",
+      step3: "Bước 3: Chọn Phương pháp Định giá",
+      step4: "Bước 4: Chọn Công ty Đồng nghiệp",
+      step5: "Bước 5: Chuẩn bị Đầu vào/Giả định",
+      step6: "Bước 6: Lấy dữ liệu API",
+      step7: "Bước 7: Xử lý Dữ liệu Lịch sử",
+      step8: "Bước 8: Giả định & Đề xuất AI",
+      step9: "Bước 9: Xác nhận Giả định",
+      step10: "Bước 10: Thực hiện Định giá",
+      step11: "Bước 11: Kết quả & Phân tích Định giá",
     },
 
-    // Sectors (Vietnamese Market)
-    sectors: {
-      banking: "Ngân hàng",
-      real_estate: "Bất động sản",
-      consumer_staples: "Hàng tiêu dùng thiết yếu",
-      consumer_discretionary: "Hàng tiêu dùng không thiết yếu",
-      materials: "Vật liệu/Xây dựng",
-      industrials: "Công nghiệp",
-      energy: "Năng lượng",
-      utilities: "Điện/Nước",
-      healthcare: "Y tế/Dược phẩm",
-      technology: "Công nghệ",
-      telecommunications: "Viễn thông",
-      financials: "Tài chính/Chứng khoán/Bảo hiểm",
+    // Step Descriptions
+    stepDescriptions: {
+      step1: "Nhập tên công ty hoặc mã chứng khoán để lấy các chỉ số tài chính và bắt đầu tìm kiếm công ty đồng nghiệp.",
+      step2: "Xem xét dữ liệu thị trường và xác nhận thông tin công ty mục tiêu.",
+      step3: "Chọn phương pháp định giá cho phân tích này.",
+      step4: "Chọn các công ty đồng nghiệp để so sánh.",
+      step5: "Xem xét và chuẩn bị các đầu vào cần thiết cho mô hình định giá.",
+      step6: "Dữ liệu tài chính đã được lấy từ API. Xem xét độ chính xác trước khi tiếp tục.",
+      step7: "Xem xét dữ liệu tài chính lịch sử do AI trích xuất.",
+      step8: "Điều chỉnh tốc độ tăng trưởng doanh thu, biên lợi nhuận và các yếu tố dự báo khác.",
+      step9: "Xác nhận tất cả giả định trước khi thực hiện các mô hình định giá.",
+      step10: "Thực hiện phân tích DCF, So sánh bội số và DuPont.",
+      step11: "Kết quả định giá toàn diện với so sánh đa phương pháp.",
     },
 
     // Financial Statements
     financialStatements: {
-      income_statement: "Báo cáo kết quả hoạt động kinh doanh",
-      balance_sheet: "Báo cáo tình hình tài chính",
-      cash_flow: "Báo cáo lưu chuyển tiền tệ",
-      notes: "Thuyết minh báo cáo tài chính",
+      income_statement: "Báo cáo Kết quả Kinh doanh",
+      balance_sheet: "Bảng Cân đối Kế toán",
+      cash_flow: "Báo cáo Lưu chuyển Tiền tệ",
+      notes: "Thuyết minh Báo cáo Tài chính",
       annual: "Năm",
       quarterly: "Quý",
       consolidated: "Hợp nhất",
       standalone: "Riêng lẻ",
+      historical: "Báo cáo Tài chính Lịch sử",
+      periods: "kỳ",
     },
 
-    // Financial Metrics
+    // Structural Financial Labels
+    sections: {
+      balance_sheet: "Bảng Cân đối Kế toán",
+      income_statement: "Báo cáo Kết quả Kinh doanh",
+      cash_flow_statement: "Báo cáo Lưu chuyển Tiền tệ",
+      assumptions_inputs: "Giả định Mô hình",
+      growth_rate: "Tốc độ Tăng trưởng",
+      discount_factor: "Hệ số Chiết khấu",
+      revenue_drivers: "Yếu tố Tăng trưởng Doanh thu",
+      cost_margins: "Chi phí & Biên lợi nhuận",
+      working_capital: "Vốn Lưu động",
+      wacc_components: "Các thành phần WACC",
+      terminal_value: "Giá trị Dài hạn",
+      dcf_model_inputs: "Đầu vào Mô hình DCF",
+      peer_comparison: "Dữ liệu So sánh Đồng nghiệp",
+      dupont_analysis: "Kết quả Phân tích DuPont",
+      comps_analysis: "Phân tích Công ty So sánh",
+      calculated_metrics: "Chỉ số Trung gian Tính toán",
+      valuation_results: "Kết quả & Phân tích Định giá",
+      multi_method_summary: "Tổng hợp Định giá Đa phương pháp",
+      historical_financials: "Tài chính Lịch sử (từ API)",
+      forecast_drivers: "Yếu tố Dự báo (từ API)",
+      extraction_methodology: "Phương pháp Trích xuất",
+      key_financial_metrics: "Chỉ số Tài chính Trọng yếu",
+    },
+
+    // Structural Metric Labels
     metrics: {
       revenue: "Doanh thu",
       cogs: "Giá vốn hàng bán",
       gross_profit: "Lợi nhuận gộp",
       operating_income: "Lợi nhuận thuần từ HĐKD",
-      net_income: "Lợi nhuận sau thuế",
-      ebitda: "EBITDA",
-      ebit: "EBIT",
+      net_income: "Lợi nhuận ròng",
       total_assets: "Tổng tài sản",
       total_liabilities: "Tổng nợ phải trả",
       equity: "Vốn chủ sở hữu",
@@ -119,166 +157,99 @@ export const vi = {
       investing_cf: "Lưu chuyển tiền từ HĐĐT",
       financing_cf: "Lưu chuyển tiền từ HĐTC",
       capex: "Chi phí đầu tư TSCĐ",
-      dividends: "Cổ tức đã trả",
+      depreciation: "Khấu hao & Phân bổ",
+      sga_opex: "Chi phí Bán hàng & QLDN",
+      free_cash_flow: "Dòng tiền tự do",
+      shares_outstanding: "Số CP lưu hành",
+      risk_free_rate: "Lãi suất không rủi ro",
+      equity_risk_premium: "Phần bù rủi ro thị trường (ERP)",
+      beta: "Beta",
+      cost_of_debt: "Chi phí nợ",
+      terminal_growth_rate: "Tốc độ tăng trưởng dài hạn",
+      terminal_ebitda_multiple: "Bội số EV/EBITDA cuối kỳ",
+      useful_life: "Tuổi thọ (Tài sản hiện tại)",
+      avg_roe: "ROE Trung bình",
+      roe_trend: "Xu hướng ROE",
+      latest_roe: "ROE Mới nhất",
+      revenue_cagr: "CAGR Doanh thu",
+      avg_ebitda_margin: "Biên EBITDA TB",
+      avg_net_margin: "Biên LNST TB",
     },
 
-    // Ratios & Multiples
-    ratios: {
-      pe_ratio: "P/E",
-      pb_ratio: "P/B",
-      ps_ratio: "P/S",
-      ev_ebitda: "EV/EBITDA",
-      ev_revenue: "EV/Doanh thu",
-      roe: "ROE",
-      roa: "ROA",
-      roic: "ROIC",
-      gross_margin: "Biên lợi nhuận gộp",
-      operating_margin: "Biên lợi nhuận thuần từ HĐKD",
-      net_margin: "Biên lợi nhuận ròng",
-      ebitda_margin: "Biên EBITDA",
-      debt_to_equity: "Nợ/Vốn chủ sở hữu",
-      current_ratio: "Hệ số thanh toán hiện hành",
-      quick_ratio: "Hệ số thanh toán nhanh",
-      asset_turnover: "Vòng quay tổng tài sản",
-      inventory_turnover: "Vòng quay hàng tồn kho",
+    // Data Status Badges — NEVER TRANSLATED (Translation Mask Law)
+    dataStatus: {
+      retrieved: "RETRIEVED",
+      fetched: "✓ FETCHED",
+      calculated: "📊 CALCULATED",
+      manual: "✏️ MANUAL",
+      ai: "🤖 AI",
+      missing: "⚠ MISSING",
+      unknown: "? UNKNOWN",
+      no_data: "Không có dữ liệu",
+    },
+
+    // Market & Exchange
+    marketData: {
+      ticker: "Mã CK",
+      company_name: "Tên công ty",
+      current_price: "Giá hiện tại",
+      market_cap: "Vốn hóa",
+      change: "Biến động",
+      change_percent: "% Biến động",
+      volume: "Khối lượng",
+      value: "Giá trị GD",
+      high_52w: "Cao nhất 52 tuần",
+      low_52w: "Thấp nhất 52 tuần",
+      avg_volume: "KL TB",
+      dividend_yield: "Tỷ suất Cổ tức",
+      sector: "Ngành",
+      exchange: "Sàn",
+      industry: "Lĩnh vực",
+      market: "Thị trường",
+      region: "Khu vực",
     },
 
     // Valuation Methods
     valuationMethods: {
-      dcf: "DCF (Chiết khấu dòng tiền)",
-      dd_model: "Mô hình chiết khấu cổ tức",
-      nav: "NAV (Giá trị tài sản ròng)",
-      rnava: "RNAV (NAV định giá lại)",
-      comps: "So sánh bội số",
-      residual_income: "Thu nhập thặng dư",
-      sector_specific: "Mô hình theo ngành",
+      dcf: "Công cụ DCF",
+      dupont: "Phân tích DuPont",
+      comps: "So sánh Bội số",
+      vietnamese: "Mô hình Việt Nam",
+      international: "Mô hình Quốc tế",
     },
 
-    // Banking Specific
-    banking: {
-      npl_ratio: "Tỷ lệ nợ xấu",
-      llr_ratio: "Tỷ lệ dự phòng rủi ro",
-      cost_of_risk: "Chi phí rủi ro tín dụng",
-      car_ratio: "Tỷ lệ an toàn vốn (CAR)",
-      tier1_capital: "Vốn cấp 1",
-      nim: "Biên lãi ròng (NIM)",
-      cir: "Tỷ lệ chi phí trên thu nhập (CIR)",
-      loan_growth: "Tăng trưởng tín dụng",
-      deposit_growth: "Tăng trưởng tiền gửi",
-      dividend_payout: "Tỷ lệ chi trả cổ tức",
-      book_value_per_share: "Giá trị sổ sách trên cổ phiếu (BVPS)",
+    // Buttons
+    buttons: {
+      search_company: "Tìm công ty",
+      fetch_data: "Lấy dữ liệu",
+      retrieve_data: "Thu thập dữ liệu",
+      continue_next: "Tiếp tục Bước tiếp",
+      run_valuation: "Chạy định giá",
+      generate_scenarios: "Tạo kịch bản",
+      use_ai: "Dùng AI",
+      ai_suggestion: "Đề xuất AI",
+      apply_suggestion: "Áp dụng Đề xuất AI",
+      manual_override: "Điều chỉnh Thủ công",
+      edit_inputs: "Chỉnh sửa",
+      save_inputs: "Lưu",
+      back_to_previous: "Quay lại Bước trước",
+      upload_pdf: "Tải lên Báo cáo PDF",
+      ai_web_search: "Tìm kiếm Web bằng AI",
+      sec_fetch: "Lấy từ SEC EDGAR",
+      toggle_edit_mode: "Bật/Tắt chế độ Sửa",
     },
 
-    // Real Estate Specific
-    realEstate: {
-      land_bank: "Quỹ đất",
-      total_land_area: "Tổng diện tích đất (m²)",
-      developable_area: "Diện tích có thể phát triển (m²)",
-      average_land_cost: "Giá vốn đất bình quân (VND/m²)",
-      number_of_projects: "Số lượng dự án",
-      projects_under_construction: "Dự án đang thi công",
-      projects_ready_for_sale: "Dự án sẵn sàng bàn giao",
-      average_selling_price: "Giá bán bình quân (VND/m²)",
-      pre_sales_rate: "Tỷ lệ bán trước",
-      sales_velocity: "Tốc độ bán hàng",
-      nav_per_share: "NAV trên cổ phiếu",
-      rnava_per_share: "RNAV trên cổ phiếu",
-      pipeline_value: "Giá trị quỹ dự án tương lai",
-      completion_rate: "Tỷ lệ hoàn thành dự án",
+    // Input Labels
+    inputs: {
+      search_placeholder_intl: "Nhập mã CK (VD: AAPL, MSFT) hoặc tên công ty",
+      search_placeholder_vn: "Nhập mã CK (VD: VNM, VIC, HPG) hoặc tên công ty",
+      select_market: "Chọn Thị trường",
+      select_model: "Chọn Mô hình Định giá",
+      select_peers: "Chọn Công ty Đồng nghiệp",
+      custom_prompt: "Prompt AI Tùy chỉnh",
     },
 
-    // Manufacturing Specific
-    manufacturing: {
-      production_capacity: "Công suất sản xuất (tấn/năm)",
-      utilization_rate: "Tỷ lệ sử dụng công suất",
-      actual_production: "Sản lượng thực tế (tấn)",
-      raw_material_cost: "Giá vốn nguyên liệu (VND/tấn)",
-      energy_cost: "Chi phí năng lượng (VND/tấn)",
-      labor_cost: "Chi phí nhân công (VND/tấn)",
-      average_selling_price: "Giá bán bình quân (VND/tấn)",
-      price_realization: "Mức giá so với thị trường",
-      commodity_exposure: "Rủi ro giá nguyên liệu",
-      fx_exposure: "Rủi ro tỷ giá",
-      maintenance_capex: "Capex bảo trì",
-      expansion_capex: "Capex mở rộng",
-    },
-
-    // Foreign Ownership
-    foreignOwnership: {
-      fol: "Room ngoại (FOL)",
-      fol_limit: "Giới hạn sở hữu nước ngoài",
-      current_fol: "Tỷ lệ sở hữu nước ngoài hiện tại",
-      fol_restricted: "Hết room ngoại",
-      available_fol: "Room ngoại còn lại",
-    },
-
-    // Market Data
-    marketData: {
-      ticker: "Mã chứng khoán",
-      company_name: "Tên công ty",
-      current_price: "Giá hiện tại",
-      change: "Biến động",
-      change_percent: "% Biến động",
-      volume: "Khối lượng",
-      value: "Giá trị giao dịch",
-      market_cap: "Vốn hóa thị trường",
-      high_52w: "Cao nhất 52 tuần",
-      low_52w: "Thấp nhất 52 tuần",
-      avg_volume: "KL giao dịch bình quân",
-      beta: "Beta",
-      dividend_yield: "Tỷ suất cổ tức",
-      eps: "EPS",
-      shares_outstanding: "Số cổ phiếu lưu hành",
-    },
-
-    // Valuation Steps - Aligned with Backend Unified Schema
-    steps: {
-      step1: "Bước 1: Tìm kiếm & Chọn Công ty",
-      step2: "Bước 2: Xác nhận Thị trường & Dữ liệu Thị trường",
-      step3: "Bước 3: Chọn Phương pháp Định giá",
-      step4: "Bước 4: Chọn Công ty Peer",
-      step5: "Bước 5: Chuẩn bị Đầu vào/Giả định",
-      step6: "Bước 6: Lấy dữ liệu API",
-      step7: "Bước 7: Xử lý Dữ liệu Lịch sử",
-      step8: "Bước 8: Phòng thu Giả định & Đề xuất AI",
-      step9: "Bước 9: Xác nhận Giả định",
-      step10: "Bước 10: Thực hiện Định giá",
-    },
-
-    // AI Assumptions
-    aiAssumptions: {
-      equity_risk_premium: "Phần bù rủi ro thị trường (ERP)",
-      country_risk_premium: "Phần bù rủi ro quốc gia (CRP)",
-      terminal_growth_rate: "Tốc độ tăng trưởng dài hạn",
-      terminal_ebitda_multiple: "Bội số EV/EBITDA cuối kỳ",
-      use_ai_suggestion: "Sử dụng đề xuất AI",
-      manual_override: "Điều chỉnh thủ công",
-      rationale: "Lý giải",
-    },
-
-    // Recommendations
-    recommendations: {
-      strong_buy: "MUA MẠNH",
-      buy: "MUA",
-      hold: "NẮM GIỮ",
-      reduce: "GIẢM TỶ TRỌNG",
-      sell: "BÁN",
-      strong_sell: "BÁN MẠNH",
-    },
-
-    // Risk Warnings
-    risks: {
-      market_risk: "Rủi ro thị trường",
-      credit_risk: "Rủi ro tín dụng",
-      liquidity_risk: "Rủi ro thanh khoản",
-      operational_risk: "Rủi ro hoạt động",
-      regulatory_risk: "Rủi ro pháp lý",
-      currency_risk: "Rủi ro tỷ giá",
-      commodity_risk: "Rủi ro giá nguyên liệu",
-      interest_rate_risk: "Rủi ro lãi suất",
-    },
-
-    // Messages
+    // Messages & Notifications
     messages: {
       data_fetch_success: "Đã lấy dữ liệu thành công",
       data_fetch_error: "Không thể lấy dữ liệu",
@@ -289,16 +260,32 @@ export const vi = {
       loading_data: "Đang tải dữ liệu...",
       processing: "Đang xử lý...",
       ready_to_valuate: "Sẵn sàng định giá",
+      no_data_retrieved: "Chưa lấy được dữ liệu",
+      no_data_description: "Không thể hiển thị đầu vào. Vui lòng kiểm tra xem dữ liệu đã được lấy thành công từ API chưa.",
+      please_go_back: "Vui lòng quay lại Bước 5 và nhấp \"Thu thập dữ liệu\" trước.",
+      loading_statements: "Đang tải báo cáo tài chính...",
+      no_statements: "Chưa có dữ liệu báo cáo tài chính. Hoàn thành các bước trước để hiển thị.",
+      about_step6: "Màn hình này hiển thị toàn bộ dữ liệu tài chính được tự động lấy từ API bên ngoài. Xác nhận độ chính xác trước khi tiếp tục.",
     },
 
-    // Currency
-    currency: {
-      vnd: "VNĐ",
-      usd: "USD",
-      million_vnd: "Triệu VNĐ",
-      billion_vnd: "Tỷ VNĐ",
-      exchange_rate: "Tỷ giá",
-      convert_to_usd: "Quy đổi sang USD",
+    // Foreign Ownership (Vietnam)
+    foreignOwnership: {
+      fol: "Room ngoại (FOL)",
+      fol_limit: "Giới hạn sở hữu nước ngoài",
+      current_fol: "Tỷ lệ sở hữu nước ngoài hiện tại",
+      fol_restricted: "Hết room ngoại",
+      available_fol: "Room ngoại còn lại",
+      status: "Trạng thái",
+    },
+
+    // Exchange Info
+    exchangeInfo: {
+      trading_hours: "Giờ giao dịch",
+      settlement: "Thanh toán",
+      currency: "Đơn vị tiền tệ",
+      market_status: "Trạng thái thị trường",
+      open: "Mở cửa",
+      closed: "Đóng cửa",
     },
 
     // Time Periods
@@ -329,7 +316,10 @@ export const vi = {
       dividend_yield: "Cổ tức",
       recommendation: "Khuyến nghị",
     },
+
+    // System Notice — Translation Mask Disclaimer
+    notices: {
+      translation_disclaimer: "Lưu ý: Giao diện ngôn ngữ được bản địa hóa cho mục đích hiển thị. Các chỉ số tài chính, thuật ngữ chuyên ngành và tính toán số liệu được giữ nguyên theo tiêu chuẩn báo cáo quốc tế.",
+    },
   },
 };
-
-export default vi;

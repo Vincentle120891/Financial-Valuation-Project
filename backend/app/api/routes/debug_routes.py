@@ -111,22 +111,40 @@ async def debug_api_keys(request: Request):
         sec_key_source = "environment"
         sec_key_value = sec_env_key
     
+    # AI provider headers
+    openrouter_header = raw_headers.get('x-api-key-openrouter')
+    openai_header = raw_headers.get('x-api-key-openai')
+    groq_header = raw_headers.get('x-api-key-groq')
+    gemini_header = raw_headers.get('x-api-key-gemini')
+    qwen_header = raw_headers.get('x-api-key-qwen')
+    
     logger.info(f"Debug API keys endpoint accessed - FMP source: {fmp_key_source}")
     
     return {
         "success": True,
         "data": {
+            
             "received_headers": {
                 "x-api-key-fmp": mask_api_key(fmp_header_key) if fmp_header_key else None,
                 "x-api-key-alphavantage": mask_api_key(av_header_key) if av_header_key else None,
                 "x-api-key-fred": mask_api_key(fred_header_key) if fred_header_key else None,
                 "x-api-key-secedgar": mask_api_key(sec_header_key) if sec_header_key else None,
+                "x-api-key-openrouter": mask_api_key(openrouter_header) if openrouter_header else None,
+                "x-api-key-openai": mask_api_key(openai_header) if openai_header else None,
+                "x-api-key-groq": mask_api_key(groq_header) if groq_header else None,
+                "x-api-key-gemini": mask_api_key(gemini_header) if gemini_header else None,
+                "x-api-key-qwen": mask_api_key(qwen_header) if qwen_header else None,
             },
             "extracted_to_state": {
                 "fmp": mask_api_key(extracted_keys.get('fmp')) if extracted_keys.get('fmp') else None,
                 "alpha_vantage": mask_api_key(extracted_keys.get('alpha_vantage')) if extracted_keys.get('alpha_vantage') else None,
                 "fred": mask_api_key(extracted_keys.get('fred')) if extracted_keys.get('fred') else None,
                 "sec_edgar": mask_api_key(extracted_keys.get('sec_edgar')) if extracted_keys.get('sec_edgar') else None,
+                "openrouter": mask_api_key(extracted_keys.get('openrouter')) if extracted_keys.get('openrouter') else None,
+                "openai": mask_api_key(extracted_keys.get('openai')) if extracted_keys.get('openai') else None,
+                "groq": mask_api_key(extracted_keys.get('groq')) if extracted_keys.get('groq') else None,
+                "gemini": mask_api_key(extracted_keys.get('gemini')) if extracted_keys.get('gemini') else None,
+                "qwen": mask_api_key(extracted_keys.get('qwen')) if extracted_keys.get('qwen') else None,
             },
             "key_sources": {
                 "fmp": {
@@ -152,6 +170,36 @@ async def debug_api_keys(request: Request):
                     "masked_value": mask_api_key(sec_key_value) if sec_key_value else None,
                     "header_present": sec_header_key is not None,
                     "env_present": sec_env_key is not None,
+                },
+                "openrouter": {
+                    "source": "header" if openrouter_header else ("environment" if os.getenv("OPENROUTER_API_KEY") else "none"),
+                    "masked_value": mask_api_key(openrouter_header or os.getenv("OPENROUTER_API_KEY")) if (openrouter_header or os.getenv("OPENROUTER_API_KEY")) else None,
+                    "header_present": openrouter_header is not None,
+                    "env_present": os.getenv("OPENROUTER_API_KEY") is not None,
+                },
+                "openai": {
+                    "source": "header" if openai_header else ("environment" if os.getenv("OPENAI_API_KEY") else "none"),
+                    "masked_value": mask_api_key(openai_header or os.getenv("OPENAI_API_KEY")) if (openai_header or os.getenv("OPENAI_API_KEY")) else None,
+                    "header_present": openai_header is not None,
+                    "env_present": os.getenv("OPENAI_API_KEY") is not None,
+                },
+                "groq": {
+                    "source": "header" if groq_header else ("environment" if os.getenv("GROQ_API_KEY") else "none"),
+                    "masked_value": mask_api_key(groq_header or os.getenv("GROQ_API_KEY")) if (groq_header or os.getenv("GROQ_API_KEY")) else None,
+                    "header_present": groq_header is not None,
+                    "env_present": os.getenv("GROQ_API_KEY") is not None,
+                },
+                "gemini": {
+                    "source": "header" if gemini_header else ("environment" if os.getenv("GOOGLE_GEMINI_API_KEY") else "none"),
+                    "masked_value": mask_api_key(gemini_header or os.getenv("GOOGLE_GEMINI_API_KEY")) if (gemini_header or os.getenv("GOOGLE_GEMINI_API_KEY")) else None,
+                    "header_present": gemini_header is not None,
+                    "env_present": os.getenv("GOOGLE_GEMINI_API_KEY") is not None,
+                },
+                "qwen": {
+                    "source": "header" if qwen_header else ("environment" if os.getenv("DASHSCOPE_API_KEY") else "none"),
+                    "masked_value": mask_api_key(qwen_header or os.getenv("DASHSCOPE_API_KEY")) if (qwen_header or os.getenv("DASHSCOPE_API_KEY")) else None,
+                    "header_present": qwen_header is not None,
+                    "env_present": os.getenv("DASHSCOPE_API_KEY") is not None,
                 },
             },
             "diagnostic": {
@@ -184,3 +232,70 @@ def get_diagnostic_message(fmp_header, fmp_env, av_header, av_env, fred_header, 
         messages.append("ℹ️ FRED API key not configured (optional for risk-free rate).")
     
     return " ".join(messages) if messages else "✅ All required API keys configured."
+
+
+@router.get("/api-key-manager")
+async def debug_api_key_manager(request: Request, session_id: Optional[str] = None):
+    """
+    Debug endpoint showing full API key manager status.
+    
+    Shows:
+    - All registered keys per service (masked)
+    - Key rotation status
+    - Usage statistics (requests, successes, failures, rate limits)
+    - Which key is currently active
+    - Error history per key
+    """
+    from app.core.api_key_manager import api_key_manager
+    
+    # Load session keys if session_id provided
+    if session_id:
+        api_key_manager.load_from_session(session_id)
+    
+    # Also load from request headers
+    extracted_keys = getattr(request.state, 'api_keys', {})
+    for service_name, key_value in extracted_keys.items():
+        if key_value:
+            api_key_manager.add_key(service_name, key_value, source='header')
+    
+    all_status = api_key_manager.get_all_status()
+    
+    # Build summary
+    total_keys = sum(s['total_keys'] for s in all_status.values())
+    total_requests = sum(
+        sum(k['total_requests'] for k in s['all_keys'])
+        for s in all_status.values()
+    )
+    total_rate_limits = sum(
+        sum(k['rate_limit_hits'] for k in s['all_keys'])
+        for s in all_status.values()
+    )
+    
+    return {
+        "success": True,
+        "summary": {
+            "total_services": len(all_status),
+            "total_keys_registered": total_keys,
+            "total_requests_made": total_requests,
+            "total_rate_limit_hits": total_rate_limits,
+        },
+        "services": all_status,
+        "diagnostic": _build_key_diagnostic(all_status)
+    }
+
+
+def _build_key_diagnostic(all_status: dict) -> str:
+    """Build human-readable diagnostic message."""
+    messages = []
+    for service, status in all_status.items():
+        total = status['total_keys']
+        current = status.get('current_key', {})
+        if total == 0:
+            messages.append(f"⚠️ {service}: No keys registered")
+        elif current and current.get('rate_limit_hits', 0) > 0:
+            messages.append(f"🔄 {service}: Key #{status['current_key_index']} active, {current['rate_limit_hits']} rate limit hit(s)")
+        elif current and current.get('failed_requests', 0) > 0:
+            messages.append(f"❌ {service}: Key #{status['current_key_index']} has {current['failed_requests']} failure(s)")
+        else:
+            messages.append(f"✅ {service}: {total} key(s) registered, Key #{status['current_key_index']} active")
+    return " | ".join(messages) if messages else "No services registered"

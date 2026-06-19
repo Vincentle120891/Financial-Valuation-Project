@@ -1,0 +1,114 @@
+/* =============================================================================
+   TYPOGRAPHY SYSTEM — Bloomberg Precision & Tabular Constraint
+   Dual-font law: Geist Sans (UI) + Geist Mono (data/financial).
+   The Tabular Alignment Law: Every digit takes the same horizontal width.
+   Columns of data must NEVER shift horizontally when values change scale.
+   ============================================================================= */
+
+/* ======================== GLOBAL TABULAR NUMERALS ======================== */
+/* The Golden Rule: Every digit takes the same horizontal width. */
+/* font-variant-numeric: tabular-nums lining-nums forces fixed-width digits */
+/* with lining figures for perfect vertical alignment in financial grids. */
+
+.tabular-nums,
+[data-financial],
+table,
+td,
+th,
+.chart-tooltip,
+.data-cell,
+.metric-callout,
+.section-header {
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: "tnum" on, "lnum" on;
+}
+
+/* ======================== SIZE HIERARCHY ======================== */
+
+/* Level 1: Intrinsic Price Blocks — 28px Bold */
+/* Use for: Share price callouts, enterprise value headlines */
+.metric-callout {
+  font-size: 1.75rem;    /* 28px */
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  font-family: var(--font-sans);
+}
+
+/* Level 2: Section Metrics & Form Labels — 16px Semi-Bold */
+/* Use for: Section headers, chart titles, form labels */
+.section-header {
+  font-size: 1rem;       /* 16px */
+  font-weight: 600;
+  line-height: 1.4;
+  font-family: var(--font-sans);
+}
+
+/* Level 3: Data Ledger Values — 12px Regular/Mono */
+/* Use for: Table data rows, input fields, chart data points */
+/* Geist Mono for all data values — the dual-font law */
+.data-cell {
+  font-size: 0.75rem;    /* 12px */
+  font-weight: 400;
+  line-height: 1.5;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: "tnum" on, "lnum" on;
+}
+
+.data-cell-mono {
+  font-size: 0.75rem;
+  font-weight: 400;
+  line-height: 1.5;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: "tnum" on, "lnum" on;
+}
+
+/* Level 4: Metadata Captions — 11px Medium Uppercase */
+/* Use for: Table headers, field labels, status badges */
+.table-label {
+  font-size: 0.6875rem;  /* 11px */
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  line-height: 1.4;
+  font-family: var(--font-sans);
+}
+
+/* ======================== STATUS TEXT COLORS ======================== */
+/* Semantic colors for data quality indicators */
+
+.text-retrieved {
+  color: var(--color-retrieved);
+}
+.text-calculated {
+  color: var(--color-calculated);
+}
+.text-manual {
+  color: var(--color-manual);
+}
+.text-ai {
+  color: var(--color-ai);
+}
+.text-missing {
+  color: var(--color-missing);
+}
+
+/* ======================== FINANCIAL VALUE FORMATTING ======================== */
+/* Applied to any container displaying formatted financial numbers */
+/* ALWAYS uses Geist Mono — the dual-font law demands monospace for data */
+
+.financial-value {
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: "tnum" on, "lnum" on;
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+
+.financial-value-mono {
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: "tnum" on, "lnum" on;
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}

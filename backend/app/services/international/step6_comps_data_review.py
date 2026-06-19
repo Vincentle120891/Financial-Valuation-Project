@@ -156,58 +156,53 @@ class CompsStep6Processor:
         if historical_data is None or market_data is None or retrieved_assumptions is None:
             logger.info(f"Fetching data for Comps analysis of {ticker}")
             from ..api_adapter import APIAdapter
-            adapter = APIAdapter()
+            adapter = APIAdapter(market="international", enable_alphavantage=True)  # Target company: AV as gap-filler
 
-            # GAP 2 FIX: Use correct two-step process (fetch_raw_data -> map_and_normalize) matching DCF pattern
             required_metrics = ["revenue", "net_income", "ebitda", "total_assets", "shareholders_equity",
                                "current_stock_price", "shares_outstanding", "market_cap", "enterprise_value",
                                "total_debt", "cash_and_equivalents", "tax_rate"]
             raw_result = adapter.fetch_raw_data(ticker, required_metrics)
             mapped_result = adapter.map_and_normalize(raw_result, ticker)
-            raw_data = mapped_result.get("raw_data", {})
 
-            # Build DataFrames from raw yfinance data (same pattern as DCF)
-            def build_financials_from_api_data(api_data):
-                """Build income statement DataFrame from APIAdapter response"""
-                if not api_data:
-                    return None
-                periods = api_data.get('periods', [])
-                data_rows = {k: v for k, v in api_data.items() if k != 'periods' and isinstance(v, list)}
-                if not data_rows or not periods:
-                    return None
-                df = pd.DataFrame(data_rows, index=periods).T
-                df.columns = pd.to_datetime(df.columns)
-                return df
+            # --- Build multi-year DataFrames from YFinanceService output ---
+            multi_year = mapped_result.get("raw_data", {}).get("_multi_year", {})
+            yfs_income = multi_year.get("income_statement", {})
+            yfs_bs = multi_year.get("balance_sheet", {})
+            yfs_cf = multi_year.get("cash_flow", {})
 
-            def build_balance_sheet_df(raw_data):
-                """Build balance sheet DataFrame from APIAdapter raw data"""
-                bs_data = raw_data.get('balance_sheet', {})
-                if not bs_data:
-                    return None
-                periods = bs_data.get('periods', [])
-                data_rows = {k: v for k, v in bs_data.items() if k != 'periods' and isinstance(v, list)}
-                if not data_rows or not periods:
-                    return None
-                df = pd.DataFrame(data_rows, index=periods).T
-                df.columns = pd.to_datetime(df.columns)
-                return df
+            COMPS_INCOME = {
+                "revenue": "total_revenue", "net_income": "net_income",
+                "ebitda": "ebitda", "operating_income": "ebit",
+            }
+            COMPS_BS = {
+                "total_assets": "total_assets", "shareholders_equity": "total_equity",
+                "total_debt": "total_debt", "cash_and_equivalents": "cash_and_equivalents",
+                "shares_outstanding": "shares_outstanding",
+            }
 
-            def build_cashflow_df(raw_data):
-                """Build cash flow DataFrame from APIAdapter raw data"""
-                cf_data = raw_data.get('cash_flow', {})
-                if not cf_data:
+            def build_multiyear_df(yfs_section, field_map):
+                if not yfs_section or not isinstance(yfs_section, dict):
                     return None
-                periods = cf_data.get('periods', [])
-                data_rows = {k: v for k, v in cf_data.items() if k != 'periods' and isinstance(v, list)}
-                if not data_rows or not periods:
+                periods = yfs_section.get("periods", [])
+                if not periods:
                     return None
-                df = pd.DataFrame(data_rows, index=periods).T
-                df.columns = pd.to_datetime(df.columns)
-                return df
+                sorted_periods = sorted(periods, reverse=True)[:4]
+                metrics_data = {}
+                for metric_id, yfs_key in field_map.items():
+                    values = yfs_section.get(yfs_key)
+                    if isinstance(values, list) and values:
+                        padded = values[:len(sorted_periods)]
+                        while len(padded) < len(sorted_periods):
+                            padded.append(None)
+                        if any(v is not None for v in padded):
+                            metrics_data[metric_id] = padded
+                if metrics_data:
+                    return pd.DataFrame.from_dict(metrics_data, orient='index', columns=sorted_periods)
+                return None
 
-            financials_df = build_financials_from_api_data(raw_data.get('income_statement', {}))
-            balance_sheet_df = build_balance_sheet_df(raw_data)
-            cashflow_df = build_cashflow_df(raw_data)
+            financials_df = build_multiyear_df(yfs_income, COMPS_INCOME)
+            balance_sheet_df = build_multiyear_df(yfs_bs, COMPS_BS)
+            cashflow_df = build_multiyear_df(yfs_cf, {"operating_cash_flow": "operating_cash_flow", "capex": "capital_expenditure", "free_cash_flow": "free_cash_flow"})
 
             logger.info(f"[Step6Comps] Built DataFrames: financials={financials_df is not None}, balance_sheet={balance_sheet_df is not None}, cashflow={cashflow_df is not None}")
 
@@ -263,7 +258,7 @@ class CompsStep6Processor:
         return response_obj
 
     def _process_comps_historical(self, historical_data: Dict, user_overrides: Dict) -> HistoricalFinancialsDisplay:
-        """Process Trading Comps historical financials (3-year data for multiples calculation)"""
+        """Process Trading Comps historical financials (5-year data for multiples calculation)"""
         financials_df = historical_data.get('financials')
         balance_sheet_df = historical_data.get('balance_sheet')
         cashflow_df = historical_data.get('cashflow')
@@ -271,9 +266,10 @@ class CompsStep6Processor:
         data_fields = []
         years = []
 
-        # Extract years from financial statements (last 3-5 years for comps)
+        # Extract years from financial statements
+        # NOTE: yfinance columns are newest-first, so [:4] gets the 4 most recent
         if financials_df is not None and not financials_df.empty:
-            years = [str(col.year) if hasattr(col, 'year') else str(col) for col in financials_df.columns[-5:]]
+            years = [str(col.year) if hasattr(col, 'year') else str(col) for col in financials_df.columns[:4]]
 
         # Trading Comps-specific historical fields (critical for multiple calculations)
         comps_historical_fields = [
@@ -328,22 +324,22 @@ class CompsStep6Processor:
     ) -> Optional[List[float]]:
         """Extract specific metric from financial statements for Comps (returns list of values for multiple years)"""
         mapping = {
-            "revenue": ["Total Revenue", "Revenue", "Total Revenues"],
-            "ebitda": ["EBITDA", "Ebitda"],
-            "ebit": ["EBIT", "Operating Income", "Operating income"],
-            "net_income": ["Net Income", "Net Income Common Stockholders"],
-            "gross_profit": ["Gross Profit", "Gross Profits"],
-            "operating_income": ["Operating Income", "Operating income", "EBIT"],
-            "total_assets": ["Total Assets", "Assets"],
-            "total_equity": ["Stockholders Equity", "Shareholders Equity", "Total Equity"],
-            "shares_outstanding": ["Shares Outstanding", "Diluted Shares Outstanding"]
+            "revenue": ["revenue", "Total Revenue", "Revenue", "Total Revenues"],
+            "ebitda": ["ebitda", "EBITDA", "Ebitda"],
+            "ebit": ["operating_income", "EBIT", "Operating Income", "Operating income"],
+            "net_income": ["net_income", "Net Income", "Net Income Common Stockholders"],
+            "gross_profit": ["gross_profit", "Gross Profit", "Gross Profits"],
+            "operating_income": ["operating_income", "Operating Income", "Operating income", "EBIT"],
+            "total_assets": ["total_assets", "Total Assets", "Assets"],
+            "total_equity": ["shareholders_equity", "total_equity", "Stockholders Equity", "Shareholders Equity", "Total Equity"],
+            "shares_outstanding": ["shares_outstanding", "Shares Outstanding", "Diluted Shares Outstanding"]
         }
 
         values = []
         df_to_use = balance_sheet_df if field_name in ["total_assets", "total_equity"] else financials_df
 
         if df_to_use is not None and not df_to_use.empty:
-            for col in df_to_use.columns[-5:]:  # Last 5 years
+            for col in df_to_use.columns[:4]:  # 4 most recent years (newest-first order)
                 found = False
                 for key in mapping.get(field_name, [field_name]):
                     if key in df_to_use.index:

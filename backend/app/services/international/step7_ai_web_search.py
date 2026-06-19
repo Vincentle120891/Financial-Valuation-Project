@@ -17,17 +17,85 @@ class AIWebSearchExtractor:
     Supports Groq, Gemini, and Qwen providers with automatic fallback.
     """
 
-    def __init__(self):
-        self.ai_engine = AIFallbackEngine()
+    def __init__(self, api_keys: Optional[Dict[str, str]] = None):
+        self.ai_engine = AIFallbackEngine(api_keys=api_keys)
 
-    def _build_search_prompt(self, ticker: str, company_name: str, market: str, metrics: List[str]) -> str:
-        """Build a structured prompt for AI web search."""
+    def _build_search_prompt(self, ticker: str, company_name: str, market: str, metrics: List[str], context_data: Optional[Dict] = None) -> str:
+        """Build a structured prompt for AI web search — only asks for missing metrics.
+        
+        Uses actual fiscal year periods from Step 6 data to ensure the AI returns
+        data for the correct periods (not generic calendar years).
+        """
         metric_list = ", ".join(metrics)
+        # Build dynamic JSON example with only the requested metrics
+        example_fields = ",\n            ".join([f'"{m.lower().replace(" ", "_").replace("(", "").replace(")", "")}": 0' for m in metrics])
+        
+        # Extract actual fiscal year periods from Step 6 context data
+        periods_info = ""
+        example_periods = ""
+        if context_data:
+            periods = []
+            
+            # PRIMARY: periods_covered is at the TOP level of UnifiedStep6Response
+            top_level_periods = context_data.get("periods_covered", [])
+            if isinstance(top_level_periods, list):
+                periods = [p for p in top_level_periods if p and not str(p).startswith("Period_")]
+            
+            # FALLBACK: Check calculated_metrics for periods_covered (some data shapes nest it)
+            if not periods:
+                calc_metrics = context_data.get("calculated_metrics", {})
+                if isinstance(calc_metrics, dict):
+                    cm_periods = calc_metrics.get("periods_covered", [])
+                    if isinstance(cm_periods, list):
+                        periods = [p for p in cm_periods if p and not str(p).startswith("Period_")]
+            
+            # FALLBACK 2: Scan historical_financials field values for period keys
+            if not periods:
+                historical = context_data.get("historical_financials", {})
+                if isinstance(historical, dict):
+                    for key, field in historical.items():
+                        if key in ('data_fields', 'periods_covered'):
+                            continue
+                        if isinstance(field, dict) and isinstance(field.get("value"), list):
+                            for pv in field["value"]:
+                                if isinstance(pv, dict) and pv.get("period"):
+                                    period_val = pv["period"]
+                                    # Skip placeholder Period_X entries
+                                    if not str(period_val).startswith("Period_") and period_val not in periods:
+                                        periods.append(period_val)
+                            if periods:
+                                break
+            
+            if periods:
+                # Sort periods descending (most recent first), take last 4
+                periods_sorted = sorted([p for p in periods if p], reverse=True)[:4]
+                periods_str = ", ".join([f'"{p}"' for p in periods_sorted])
+                periods_info = f"\n\nCRITICAL: This company uses NON-Calendar fiscal years. You MUST use EXACTLY these fiscal year end dates: [{periods_str}]"
+                periods_info += "\nDo NOT use calendar year dates (e.g., 2023-12-31). Use the fiscal year end dates listed above."
+                periods_info += "\nThe 'year' field in your JSON should use the period string (e.g., '2025-05-31'), not just the year number."
+                
+                # Build example periods for the JSON
+                example_periods_list = []
+                for p in periods_sorted[:2]:
+                    example_periods_list.append(f'{{"period": "{p}", {example_fields.replace("{", "").replace("}", "")}}}')
+                example_periods = ",\n            ".join(example_periods_list)
+        
+        if not example_periods:
+            example_periods = f'{{"year": 2023, {example_fields}}}'
+        
         return f"""
-You are a financial data analyst. Search the internet for the latest historical financial data for {company_name} ({ticker}), listed in the {market} market.
+You are a senior financial analyst providing historical financial data for {company_name} ({ticker}), listed on the {market} market.
 
-Extract the following metrics for the last 5 available fiscal years:
+Provide the following metrics for {company_name} ({ticker}):
 {metric_list}
+{periods_info}
+
+IMPORTANT: Only return data for the metrics listed above. Do NOT include other financial metrics.
+
+Rules:
+- Use your training knowledge of {company_name}'s actual financial statements (10-K, 20-F filings)
+- Provide actual numeric values — only use null if you genuinely have no knowledge of a specific metric for a specific year
+- Use the EXACT fiscal year end dates specified above, NOT calendar year dates
 
 Return the data strictly in this JSON format:
 {{
@@ -35,21 +103,13 @@ Return the data strictly in this JSON format:
     "ticker": "{ticker}",
     "currency": "USD or local currency",
     "fiscal_years": [
-        {{
-            "year": 2023,
-            "revenue": 1000000,
-            "net_income": 500000,
-            ...
-        }},
+        {example_periods},
         ...
     ],
-    "source_urls": ["url1", "url2"],
-    "confidence_score": 0.95,
-    "notes": "Any relevant notes about data quality or accounting standards"
+    "source_urls": [],
+    "confidence_score": 0.85,
+    "notes": "Notes about data quality, confidence level, and any caveats"
 }}
-
-If exact values are not found, provide estimates based on reliable sources (Yahoo Finance, Bloomberg, Reuters, Official IR sites) and mark confidence appropriately.
-Do not invent numbers. If data is missing for a specific year, omit that year or use null.
 """
 
     def _build_validation_prompt(self, ticker: str, raw_data: str) -> str:
@@ -71,7 +131,8 @@ Return ONLY the cleaned JSON object.
         ticker: str,
         company_name: str,
         market: str,
-        context_data: Optional[Dict] = None
+        context_data: Optional[Dict] = None,
+        custom_prompt: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Perform AI web search and extract historical financial data.
@@ -85,50 +146,111 @@ Return ONLY the cleaned JSON object.
         Returns:
             Dictionary containing extracted data, metadata, and status
         """
-        # Define key metrics to extract based on valuation needs
-        metrics = [
-            "Revenue",
-            "Net Income",
-            "EBITDA",
-            "Operating Cash Flow",
-            "Capital Expenditures (CapEx)",
-            "Total Assets",
-            "Total Equity",
-            "Working Capital",
-            "Free Cash Flow"
-        ]
+        # IMPORTANT: Check custom_prompt FIRST — user may want AI for fields not in the default list
+        if custom_prompt and custom_prompt.strip():
+            search_prompt = custom_prompt.strip()
+            logger.info(f"Using custom prompt for {ticker}: {search_prompt[:100]}...")
+        else:
+            # Detect missing metrics from Step 6 data using the missing_data_summary
+            # Step 6 provides critical_missing and optional_missing lists — use them directly
+            missing_metrics = []
+            if context_data:
+                # PRIMARY: Use missing_data_summary from Step 6 (most reliable)
+                missing_summary = context_data.get("missing_data_summary", {})
+                if not missing_summary:
+                    # Try nested in calculated_metrics
+                    calc_metrics = context_data.get("calculated_metrics", {})
+                    if isinstance(calc_metrics, dict):
+                        missing_summary = calc_metrics.get("missing_data_summary", {})
+                
+                critical = missing_summary.get("critical_missing", [])
+                optional = missing_summary.get("optional_missing", [])
+                missing_metrics = critical + optional
+                
+                # FALLBACK: If no summary, scan historical_financials for MISSING status
+                if not missing_metrics:
+                    historical = context_data.get("historical_financials", {})
+                    
+                    def _is_missing(field):
+                        if isinstance(field, dict):
+                            return field.get('status') == 'MISSING' or field.get('is_missing') is True or field.get('value') is None
+                        return field is None
+                    
+                    for key, field in historical.items():
+                        if key in ('data_fields', 'periods_covered'):
+                            continue
+                        if isinstance(field, dict) and _is_missing(field):
+                            display_name = key.replace('_', ' ').title()
+                            if display_name not in missing_metrics:
+                                missing_metrics.append(display_name)
+                        elif field is None:
+                            display_name = key.replace('_', ' ').title()
+                            if display_name not in missing_metrics:
+                                missing_metrics.append(display_name)
+                    
+                    # Also scan market_data and forecast_drivers
+                    for section_key in ['market_data', 'forecast_drivers']:
+                        section = context_data.get(section_key, {})
+                        if isinstance(section, dict):
+                            for key, field in section.items():
+                                if key in ('data_fields', 'periods_covered'):
+                                    continue
+                                if (isinstance(field, dict) and _is_missing(field)) or field is None:
+                                    display_name = key.replace('_', ' ').title()
+                                    if display_name not in missing_metrics:
+                                        missing_metrics.append(display_name)
+            else:
+                logger.info(f"No context data for {ticker} — cannot determine missing metrics")
+                return {
+                    "success": True,
+                    "time_series": {},
+                    "metadata": {
+                        "provider": "none",
+                        "message": "No context data available to determine missing metrics"
+                    }
+                }
+
+            # If no metrics are missing, skip AI extraction
+            if not missing_metrics:
+                logger.info(f"No missing metrics for {ticker} — all data available from Step 6")
+                return {
+                    "success": True,
+                    "time_series": {},
+                    "metadata": {
+                        "provider": "none",
+                        "message": "All data already available from Step 6 API retrieval"
+                    }
+                }
+
+            logger.info(f"AI extraction needed for {len(missing_metrics)} missing metrics: {missing_metrics}")
+            search_prompt = self._build_search_prompt(ticker, company_name, market, missing_metrics, context_data)
 
         try:
-            logger.info(f"Starting AI web search for {ticker} ({market}) using Groq/Gemini/Qwen")
-
-            # Step 1: Search and Extract using the new service function
-            # Note: This requires search_results from a search API (e.g., Tavily, SerpAPI)
-            # For now, we'll use the existing generate_analysis approach as a fallback
-            search_prompt = self._build_search_prompt(ticker, company_name, market, metrics)
+            logger.info(f"Starting AI web search for {ticker} ({market}) using OpenRouter")
 
             # Use the existing fallback engine which tries Groq -> Gemini -> Qwen
-            extraction_result = await self.ai_engine.generate_analysis(
+            extraction_result = self.ai_engine.generate_analysis(
                 prompt=search_prompt,
                 model_preference=None  # Let the engine decide based on availability
             )
 
-            if not extraction_result or "error" in extraction_result:
+            if not extraction_result or "error" in extraction_result or not extraction_result.get("success"):
                 return {
                     "success": False,
                     "error": "Failed to extract data from AI providers",
-                    "details": extraction_result.get("error", "Unknown error"),
+                    "details": extraction_result.get("metadata", {}).get("errors", {}) if extraction_result else "No response",
                     "provider_used": None
                 }
 
             # Step 2: Clean and Validate JSON
             # The AI might return markdown or extra text, so we clean it
-            cleaned_json_str = self._extract_json_from_response(extraction_result.get("analysis", ""))
+            analysis_text = extraction_result.get("analysis") or ""
+            cleaned_json_str = self._extract_json_from_response(analysis_text)
 
             if not cleaned_json_str:
-                # Try validation prompt if direct extraction failed
-                validation_prompt = self._build_validation_prompt(ticker, extraction_result.get("analysis", ""))
-                validation_result = await self.ai_engine.generate_analysis(prompt=validation_prompt)
-                cleaned_json_str = self._extract_json_from_response(validation_result.get("analysis", ""))
+                # Try to re-extract JSON from the raw response (no AI call needed)
+                raw_text = extraction_result.get("analysis", "")
+                cleaned_json_str = self._extract_json_from_response(raw_text)
 
             if not cleaned_json_str:
                 return {
@@ -148,10 +270,11 @@ Return ONLY the cleaned JSON object.
                     "raw_response": cleaned_json_str[:500]
                 }
 
-            # Step 3: Validate and clean using the new service function
+            # Step 3: Validate and clean using the existing ai_engine (with api_keys)
             validated_data = await validate_and_clean_financial_data(
                 raw_data=extracted_data,
-                ticker=ticker
+                ticker=ticker,
+                ai_engine=self.ai_engine
             )
 
             # Step 4: Format for Frontend
@@ -206,30 +329,78 @@ Return ONLY the cleaned JSON object.
         return None
 
     def _format_for_frontend(self, data: Dict, ticker: str, context_data: Optional[Dict]) -> Dict:
-        """Format extracted data for frontend consumption and session storage."""
+        """Format extracted data for frontend consumption and session storage.
+        
+        Dynamically includes ALL fields from the AI response, not just the 9 standard ones.
+        This ensures additional missing fields (Cash & Equivalents, Accumulated Depreciation,
+        PP&E Gross, R&D, Dividends Paid, Debt, etc.) are preserved.
+        """
         from datetime import datetime
+
+        # Mapping from snake_case AI response keys to human-readable display names
+        FIELD_NAME_MAP = {
+            "revenue": "Revenue",
+            "net_income": "Net Income",
+            "ebitda": "EBITDA",
+            "operating_cash_flow": "Operating Cash Flow",
+            "capital_expenditures": "CapEx",
+            "capex": "CapEx",
+            "total_assets": "Total Assets",
+            "total_equity": "Total Equity",
+            "shareholders_equity": "Total Equity",
+            "working_capital": "Working Capital",
+            "free_cash_flow": "Free Cash Flow",
+            "cash_and_equivalents": "Cash & Equivalents",
+            "cash_and_cash_equivalents": "Cash & Cash Equivalents",
+            "accumulated_depreciation": "Accumulated Depreciation",
+            "ppe_gross": "PP&E (Gross)",
+            "net_debt_opening": "Net Debt",
+            "research_and_development": "R&D",
+            "other_income_expense": "Other Income/Expense",
+            "interest_paid": "Interest Paid (Cash)",
+            "income_tax_paid": "Income Tax Paid (Cash)",
+            "dividends_paid": "Dividends Paid",
+            "long_term_debt": "Long-Term Debt",
+            "current_debt": "Current Debt",
+            "interest_income": "Interest Income",
+            "depreciation": "Depreciation",
+            "interest_expense": "Interest Expense",
+            "tax_provision": "Tax Provision",
+        }
 
         time_series = {}
         fiscal_years = data.get("fiscal_years", [])
 
         for year_data in fiscal_years:
+            # Support both old format {"year": 2023} and new format {"period": "2025-05-31"}
+            period = year_data.get("period")
             year = year_data.get("year")
-            if not year:
+            if not period and not year:
                 continue
 
-            date_key = f"{year}-12-31" # Simplified assumption for fiscal year end
+            # Use period string if available (e.g., "2025-05-31"), otherwise construct from year
+            if period:
+                date_key = str(period)
+            elif isinstance(year, (int, float)):
+                date_key = f"{int(year)}-12-31"  # Legacy fallback for calendar year companies
+            else:
+                date_key = str(year)
 
-            time_series[date_key] = {
-                "Revenue": year_data.get("revenue"),
-                "Net Income": year_data.get("net_income"),
-                "EBITDA": year_data.get("ebitda"),
-                "Operating Cash Flow": year_data.get("operating_cash_flow"),
-                "CapEx": year_data.get("capital_expenditures") or year_data.get("capex"),
-                "Total Assets": year_data.get("total_assets"),
-                "Total Equity": year_data.get("total_equity"),
-                "Working Capital": year_data.get("working_capital"),
-                "Free Cash Flow": year_data.get("free_cash_flow")
-            }
+            # Build metrics dict from ALL fields in the AI response (skip metadata fields)
+            skip_keys = {"year", "period", "company_name", "ticker", "currency", "source_urls", "confidence_score", "notes"}
+            metrics = {}
+            for key, value in year_data.items():
+                if key in skip_keys:
+                    continue
+                display_name = FIELD_NAME_MAP.get(key, key.replace('_', ' ').title())
+                # Only include non-null values
+                if value is not None:
+                    try:
+                        metrics[display_name] = float(value)
+                    except (ValueError, TypeError):
+                        pass  # Skip non-numeric values
+
+            time_series[date_key] = metrics
 
         # Merge with context data if available (Step 6 data)
         if context_data:
@@ -302,26 +473,6 @@ def calculate_historical_trends(historical_data: Dict[str, Dict[str, Any]]) -> D
         volatility = (std_dev / abs(avg)) if avg != 0 else 0
         return {"average": avg, "volatility": volatility}
 
-    # Extract key metric series
-    revenue_series = get_series("Revenue")
-    net_income_series = get_series("Net Income")
-    ebitda_series = get_series("EBITDA")
-
-    # Calculate margins per year then average
-    net_margins = []
-    ebitda_margins = []
-    for date in sorted_dates:
-        d = historical_data[date]
-        rev = d.get("Revenue") or d.get("revenue")
-        ni = d.get("Net Income") or d.get("net_income")
-        ebit = d.get("EBITDA") or d.get("ebitda")
-
-        if rev and rev > 0:
-            if ni is not None:
-                net_margins.append(ni / rev)
-            if ebit is not None:
-                ebitda_margins.append(ebit / rev)
-
     # Determine trend direction
     def get_trend(series: List[float]) -> str:
         if not series:
@@ -332,31 +483,56 @@ def calculate_historical_trends(historical_data: Dict[str, Dict[str, Any]]) -> D
             return "down"
         return "flat"
 
+    # Dynamically calculate trends for ALL available metrics
+    # Collect all metric names across all years
+    all_metric_names = set()
+    for date in sorted_dates:
+        all_metric_names.update(historical_data[date].keys())
+
+    # Calculate CAGR, average, volatility, and trend for every numeric metric
+    growth_rates = {}
+    averages = {}
+    volatility = {}
+    trend_direction = {}
+
+    for metric_name in sorted(all_metric_names):
+        series = get_series(metric_name)
+        if len(series) >= 2:
+            growth_rates[f"{metric_name}_cagr"] = calc_cagr(series)
+            stats = calc_stats(series)
+            averages[f"{metric_name}_avg"] = stats["average"]
+            volatility[f"{metric_name}_volatility"] = stats["volatility"]
+            trend_direction[metric_name.lower().replace(" ", "_")] = get_trend(series)
+        elif len(series) == 1:
+            # Single value — no CAGR possible, but record average
+            averages[f"{metric_name}_avg"] = series[0]
+
+    # Calculate margins per year (if Revenue is available)
+    net_margins = []
+    ebitda_margins = []
+    for date in sorted_dates:
+        d = historical_data[date]
+        rev = d.get("Revenue") or d.get("revenue")
+        ni = d.get("Net Income") or d.get("net_income")
+        ebit = d.get("EBITDA") or d.get("ebitda")
+        if rev and rev > 0:
+            if ni is not None:
+                net_margins.append(ni / rev)
+            if ebit is not None:
+                ebitda_margins.append(ebit / rev)
+
+    if net_margins:
+        averages["net_margin_avg"] = sum(net_margins) / len(net_margins)
+    if ebitda_margins:
+        averages["ebitda_margin_avg"] = sum(ebitda_margins) / len(ebitda_margins)
+
     analysis = {
         "period": f"{sorted_dates[-1]} to {sorted_dates[0]}",
         "years_analyzed": years_count,
-        "growth_rates": {
-            "revenue_cagr": calc_cagr(revenue_series),
-            "net_income_cagr": calc_cagr(net_income_series),
-            "ebitda_cagr": calc_cagr(ebitda_series)
-        },
-        "averages": {
-            "revenue_avg": calc_stats(revenue_series)["average"],
-            "net_income_avg": calc_stats(net_income_series)["average"],
-            "ebitda_avg": calc_stats(ebitda_series)["average"],
-            "net_margin_avg": sum(net_margins)/len(net_margins) if net_margins else None,
-            "ebitda_margin_avg": sum(ebitda_margins)/len(ebitda_margins) if ebitda_margins else None
-        },
-        "volatility": {
-            "revenue_volatility": calc_stats(revenue_series)["volatility"],
-            "net_income_volatility": calc_stats(net_income_series)["volatility"],
-            "ebitda_volatility": calc_stats(ebitda_series)["volatility"]
-        },
-        "trend_direction": {
-            "revenue": get_trend(revenue_series),
-            "net_income": get_trend(net_income_series),
-            "ebitda": get_trend(ebitda_series)
-        }
+        "growth_rates": growth_rates,
+        "averages": averages,
+        "volatility": volatility,
+        "trend_direction": trend_direction
     }
 
     return analysis

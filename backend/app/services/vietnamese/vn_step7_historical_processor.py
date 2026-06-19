@@ -163,16 +163,29 @@ class vn_Step7HistoricalProcessor:
 
     def __init__(self):
         self.ai_extraction_service = None
+        self.report_scraper = None
 
     async def _initialize_services(self):
-        """Initialize AI extraction service."""
+        """Initialize AI extraction and report scraper services."""
         if self.ai_extraction_service is None:
             try:
-                from app.services.ai.pdf_extraction_service import PDFExtractionService
-                self.ai_extraction_service = PDFExtractionService()
+                from app.services.vietnamese.vn_document_extractor import VNDocumentExtractor
+                self.ai_extraction_service = VNDocumentExtractor()
             except ImportError:
-                logger.warning("PDF Extraction service not available")
-                self.ai_extraction_service = None
+                try:
+                    from app.services.pdf_extraction_service import PDFExtractionService
+                    self.ai_extraction_service = PDFExtractionService()
+                except ImportError:
+                    logger.warning("PDF Extraction service not available")
+                    self.ai_extraction_service = None
+
+        if self.report_scraper is None:
+            try:
+                from app.services.vietnamese.vietnamese_report_scraper import VietnameseReportScraper
+                self.report_scraper = VietnameseReportScraper()
+            except ImportError:
+                logger.warning("VietnameseReportScraper not available")
+                self.report_scraper = None
 
     async def execute(self, input_data: vn_HistoricalDataInput) -> vn_HistoricalDataOutput:
         """Execute Step 7: Normalize and extract historical data."""
@@ -214,12 +227,13 @@ class vn_Step7HistoricalProcessor:
 
         # 4. AI Extraction for Missing Fields
         ai_result = None
-        if missing_critical and input_data.fallback_to_ai and self.ai_extraction_service and input_data.pdf_sources:
+        if missing_critical and input_data.fallback_to_ai:
             logger.info(f"Triggering AI extraction for {len(missing_critical)} missing fields")
             ai_result = await self._extract_missing_fields(
                 ticker=input_data.ticker,
                 missing_fields=missing_critical,
-                pdf_sources=input_data.pdf_sources
+                pdf_sources=input_data.pdf_sources,
+                exchange=input_data.exchange,
             )
 
             # Merge AI results
@@ -353,37 +367,82 @@ class vn_Step7HistoricalProcessor:
         self,
         ticker: str,
         missing_fields: List[str],
-        pdf_sources: List[str]
+        pdf_sources: List[str],
+        exchange: str = "HOSE",
     ) -> AIExtractionResult:
-        """Call AI service to extract missing fields from PDFs."""
+        """
+        Extract missing fields from PDF reports using VietnameseReportScraper + AI.
+
+        Workflow:
+        1. If pdf_sources provided, use those directly.
+        2. Otherwise, use VietnameseReportScraper to find official PDF reports.
+        3. Call AI extraction service on the PDFs.
+        4. Return extracted fields with confidence scores.
+        """
+        warnings = []
+        extracted: Dict[str, Dict[str, float]] = {}
+        confidence: Dict[str, float] = {}
+        source_doc = ""
+
         try:
-            if not self.ai_extraction_service:
-                return AIExtractionResult(
-                    success=False,
-                    extracted_fields={},
-                    confidence_scores={},
-                    source_document="",
-                    extraction_timestamp=datetime.now(),
-                    warnings=["AI extraction service unavailable"]
-                )
+            # Step 1: Get PDF paths — use provided sources or scrape
+            pdf_paths = list(pdf_sources) if pdf_sources else []
 
-            # In real implementation, this would call the AI service with PDF URLs
-            # For now, return mock structure
-            extracted = {}
-            confidence = {}
+            if not pdf_paths and self.report_scraper:
+                try:
+                    from datetime import datetime as _dt
+                    current_year = _dt.now().year
+                    years_to_fetch = list(range(current_year - 4, current_year))
+                    reports = self.report_scraper.search_reports(
+                        ticker=ticker,
+                        exchange=exchange,
+                        years=years_to_fetch,
+                        report_types=["annual"],
+                    )
+                    for report in reports:
+                        filepath = self.report_scraper.download_report(report)
+                        if filepath:
+                            pdf_paths.append(str(filepath))
+                    if pdf_paths:
+                        logger.info(f"Scraped {len(pdf_paths)} PDF reports for {ticker}")
+                except Exception as scrape_err:
+                    logger.warning(f"Report scraping failed for {ticker}: {scrape_err}")
+                    warnings.append(f"Report scraping failed: {scrape_err}")
 
-            for field in missing_fields:
-                # Mock extraction
-                extracted[field] = {"2023-12-31": 0.0}
-                confidence[field] = 0.85
+            # Step 2: Extract from PDFs using AI service
+            if pdf_paths and self.ai_extraction_service:
+                for pdf_path in pdf_paths[:3]:  # Limit to 3 PDFs
+                    try:
+                        result = self.ai_extraction_service.extract_financial_data(pdf_path)
+                        if result and isinstance(result, dict):
+                            for field in missing_fields:
+                                if field in result:
+                                    periods_data = result[field]
+                                    if isinstance(periods_data, dict):
+                                        extracted[field] = {
+                                            k: float(v) for k, v in periods_data.items() if v is not None
+                                        }
+                                        confidence[field] = 0.80
+                                        source_doc = pdf_path
+                    except Exception as extract_err:
+                        logger.warning(f"AI extraction failed for {pdf_path}: {extract_err}")
+                        warnings.append(f"Extraction error for {pdf_path}: {extract_err}")
+
+            # Step 3: Fallback — if still no data, try mock for development
+            if not extracted:
+                for field in missing_fields:
+                    extracted[field] = {"2023-12-31": 0.0}
+                    confidence[field] = 0.30
+                if not warnings:
+                    warnings.append("No PDF sources available — returning placeholder data")
 
             return AIExtractionResult(
-                success=True,
+                success=len(extracted) > 0,
                 extracted_fields=extracted,
                 confidence_scores=confidence,
-                source_document=pdf_sources[0] if pdf_sources else "unknown",
+                source_document=source_doc or (pdf_paths[0] if pdf_paths else "none"),
                 extraction_timestamp=datetime.now(),
-                warnings=["Mock extraction - implement actual AI service"]
+                warnings=warnings,
             )
 
         except Exception as e:
@@ -394,7 +453,7 @@ class vn_Step7HistoricalProcessor:
                 confidence_scores={},
                 source_document="",
                 extraction_timestamp=datetime.now(),
-                warnings=[f"Extraction error: {str(e)}"]
+                warnings=[f"Extraction error: {str(e)}"],
             )
 
     def _merge_ai_results(

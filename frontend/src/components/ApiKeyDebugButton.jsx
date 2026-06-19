@@ -1,307 +1,344 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import api from '../services/api';
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
 
 /**
  * ApiKeyDebugButton Component
  * 
- * Floating debug button that shows a side-by-side comparison of:
- * - Browser localStorage values
- * - Backend received headers and extracted state
+ * Shows: API key status + real-time process log + edit keys.
  * 
- * Helps diagnose API key flow issues between frontend and backend.
+ * Props:
+ *   variant: 'inline' | 'floating' (default: 'floating')
+ *     - 'inline' renders a compact button suitable for embedding in a sidebar/panel
+ *     - 'floating' renders the original fixed-position button
  */
-const ApiKeyDebugButton = () => {
+const ApiKeyDebugButton = ({ variant = 'floating' }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [backendData, setBackendData] = useState(null);
   const [error, setError] = useState(null);
+  const [editMode, setEditMode] = useState(false);
+  const [editKeys, setEditKeys] = useState({});
+  const [saveStatus, setSaveStatus] = useState(null);
+  const [activeTab, setActiveTab] = useState('status'); // 'status' | 'process' | 'edit'
+  const [processLogs, setProcessLogs] = useState([]);
+  const logEndRef = useRef(null);
 
-  // Get stored API keys from localStorage
-  const getLocalStorageKeys = () => ({
+  // Listen for process log events from anywhere in the app
+  useEffect(() => {
+    const handler = (e) => {
+      const { step, message, status, details } = e.detail;
+      setProcessLogs(prev => [...prev, {
+        id: Date.now() + Math.random(),
+        timestamp: new Date().toLocaleTimeString(),
+        step, message, status, details,
+      }]);
+    };
+    window.addEventListener('api-process-log', handler);
+    return () => window.removeEventListener('api-process-log', handler);
+  }, []);
+
+  const getStoredKeys = () => ({
     fmp: localStorage.getItem('fmp_api_key') || '',
     alphaVantage: localStorage.getItem('alpha_vantage_api_key') || '',
+    rapidapi: localStorage.getItem('rapidapi_av_key') || '',
     fred: localStorage.getItem('fred_api_key') || '',
-    secEdgar: localStorage.getItem('sec_edgar_email') || ''
+    openrouter: localStorage.getItem('openrouter_api_key') || '',
+    openai: localStorage.getItem('openai_api_key') || '',
+    groq: localStorage.getItem('groq_api_key') || '',
+    gemini: localStorage.getItem('gemini_api_key') || '',
+    qwen: localStorage.getItem('qwen_api_key') || '',
   });
 
-  // Fetch backend debug data - uses api instance with interceptors
+  const addLog = (step, message, status = 'info', details = null) => {
+    const entry = {
+      id: Date.now() + Math.random(),
+      timestamp: new Date().toLocaleTimeString(),
+      step,
+      message,
+      status, // 'info' | 'success' | 'warning' | 'error'
+      details,
+    };
+    setProcessLogs(prev => [...prev, entry]);
+  };
+
+  const clearLogs = () => setProcessLogs([]);
+
   const fetchBackendData = async () => {
     setLoading(true);
     setError(null);
     try {
-      // Use the api instance to ensure headers are injected via interceptor
+      addLog('System', 'Fetching backend key status...', 'info');
       const response = await api.get('/debug/api-keys');
       setBackendData(response.data.data);
+      addLog('System', 'Backend key status loaded', 'success');
+      try {
+        const mgrResp = await api.get('/debug/api-key-manager');
+        setBackendData(prev => ({ ...prev, key_manager: mgrResp.data }));
+        addLog('System', `Key manager: ${mgrResp.data.summary?.total_services || 0} services, ${mgrResp.data.summary?.total_keys_registered || 0} keys`, 'info');
+      } catch (_) {
+        addLog('System', 'Key manager endpoint not available', 'warning');
+      }
     } catch (err) {
-      console.error('Failed to fetch backend debug data:', err);
-      setError(err.response?.data?.detail || err.message || 'Failed to fetch debug data');
+      setError(err.message || 'Failed to fetch debug data');
+      addLog('System', `Failed to fetch backend data: ${err.message}`, 'error');
     } finally {
       setLoading(false);
     }
   };
 
-  // Auto-fetch when modal opens
-  useEffect(() => {
-    if (isOpen) {
-      fetchBackendData();
+  useEffect(() => { if (isOpen) { fetchBackendData(); setEditKeys(getStoredKeys()); } }, [isOpen]);
+  
+  // Recompute storedKeys when editKeys change (after save)
+  const storedKeys = getStoredKeys();
+  // Merge with editKeys for live preview
+  const liveKeys = { ...storedKeys };
+  Object.entries(editKeys).forEach(([name, value]) => {
+    if (value !== undefined && value !== '') {
+      liveKeys[name] = value.split('\n').find(k => k.trim()) || '';
     }
-  }, [isOpen]);
-
-  const localStorageKeys = getLocalStorageKeys();
+  });
 
   const maskKey = (key) => {
     if (!key || key.length < 8) return '****';
     return `${key.substring(0, 4)}...${key.substring(key.length - 4)}`;
   };
 
-  const getStatusIcon = (hasValue) => {
-    return hasValue ? (
-      <span className="text-green-600">✅</span>
-    ) : (
-      <span className="text-red-500">❌</span>
-    );
+  const isPlaceholder = (key) => !key || key.includes('your_') || key === '';
+
+  const handleSaveKeys = () => {
+    Object.entries(editKeys).forEach(([name, value]) => {
+      // For rapidapi, store under rapidapi_av_key (used by AlphaVantageService)
+      const storageKey = name === 'rapidapi' ? 'rapidapi_av_key' : `${name}_api_key`;
+      if (value.trim()) {
+        localStorage.setItem(storageKey, value.trim());
+        const keyCount = value.trim().split('\n').filter(k => k.trim()).length;
+        addLog('Edit', `Saved ${name}: ${keyCount} key(s)`, 'success');
+      } else {
+        localStorage.removeItem(storageKey);
+        addLog('Edit', `Removed ${name} keys`, 'info');
+      }
+    });
+    setSaveStatus('Saved! Refreshing...');
+    setTimeout(() => {
+      setSaveStatus(null);
+      setActiveTab('status');
+      // Force re-read from localStorage
+      setEditKeys(getStoredKeys());
+      fetchBackendData();
+    }, 300);
   };
 
-  const renderKeyValue = (value, source) => {
-    if (!value) return <span className="text-gray-400 italic">Not set</span>;
-    return (
-      <div>
-        <code className="bg-gray-100 px-2 py-1 rounded text-sm font-mono">
-          {maskKey(value)}
-        </code>
-        {source && (
-          <span className="ml-2 text-xs text-gray-500">({source})</span>
-        )}
-      </div>
-    );
+  const serviceConfig = [
+    { key: 'fmp', name: 'FMP', icon: '🔑', headerKey: 'x-api-key-fmp', ls: 'fmp', desc: 'Peer discovery, financial statements' },
+    { key: 'alphaVantage', name: 'Alpha Vantage (Direct)', icon: '📊', headerKey: 'x-api-key-alphavantage', ls: 'alphaVantage', desc: 'Direct AV API key (5 req/min)' },
+    { key: 'rapidapi', name: 'Alpha Vantage (RapidAPI)', icon: '🚀', headerKey: 'x-api-key-rapidapi', ls: 'rapidapi', desc: 'RapidAPI AV key (500 req/month, multiple keys rotate)' },
+    { key: 'fred', name: 'FRED', icon: '🏛️', headerKey: 'x-api-key-fred', ls: 'fred', desc: 'US Treasury yields (Risk-Free Rate)' },
+    { key: 'openrouter', name: 'OpenRouter', icon: '🤖', headerKey: 'x-api-key-openrouter', ls: 'openrouter', desc: 'Primary AI provider' },
+    { key: 'openai', name: 'OpenAI', icon: '🧠', headerKey: 'x-api-key-openai', ls: 'openai', desc: 'GPT-4o / GPT-4o-mini' },
+    { key: 'groq', name: 'Groq', icon: '⚡', headerKey: 'x-api-key-groq', ls: 'groq', desc: 'Fast AI inference' },
+    { key: 'gemini', name: 'Gemini', icon: '✨', headerKey: 'x-api-key-gemini', ls: 'gemini', desc: 'AI inference fallback' },
+  ];
+
+  const getBackendInfo = (headerKey) => {
+    if (!backendData) return { received: null, source: null, headerPresent: false, envPresent: false };
+    const svc = headerKey.replace('x-api-key-', '');
+    return {
+      received: backendData.received_headers?.[headerKey] || null,
+      source: backendData.key_sources?.[svc]?.source || null,
+      headerPresent: backendData.key_sources?.[svc]?.header_present || false,
+      envPresent: backendData.key_sources?.[svc]?.env_present || false,
+    };
   };
+
+  const getStatusColor = (configured, working) => {
+    if (configured && working) return { bg: '#f0fdf4', border: '#86efac', badge: '#dcfce7', badgeText: '#166534', label: '✓ Active' };
+    if (configured) return { bg: '#fffbeb', border: '#fde68a', badge: '#fef3c7', badgeText: '#92400e', label: '⚠ Configured' };
+    return { bg: '#fef2f2', border: '#fecaca', badge: '#fee2e2', badgeText: '#991b1b', label: '✗ Missing' };
+  };
+
+  const logColorMap = { success: '#16a34a', warning: '#d97706', error: '#dc2626', info: '#6b7280' };
 
   return (
     <>
-      {/* Floating Debug Button */}
-      <button
-        onClick={() => setIsOpen(true)}
-        className="fixed bottom-6 right-6 z-40 inline-flex items-center gap-2 px-4 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-full shadow-lg hover:shadow-xl transition-all cursor-pointer"
-        title="Debug API Keys"
-      >
-        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-          <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-        </svg>
-        <span className="hidden sm:inline">🔍 API Keys</span>
-      </button>
+      {/* ── Trigger Button ──────────────────────────────────────────────────── */}
+      {variant === 'inline' ? (
+        <button onClick={() => setIsOpen(true)}
+          className="w-full text-left text-[10px] text-slate-400 hover:text-white border border-slate-600 px-2 py-1 rounded transition-colors flex items-center gap-1.5"
+          title="API Key Manager">
+          🔍 API Keys
+          {processLogs.filter(l => l.status === 'error').length > 0 && (
+            <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse ml-auto"></span>
+          )}
+        </button>
+      ) : (
+        <button onClick={() => setIsOpen(true)}
+          className="fixed top-[60px] right-6 z-[200] inline-flex items-center gap-2 px-4 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-full shadow-lg hover:shadow-xl transition-all cursor-pointer"
+          title="API Key Manager">
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+          </svg>
+          <span className="hidden sm:inline">🔍 API Keys</span>
+          {processLogs.filter(l => l.status === 'error').length > 0 && (
+            <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
+          )}
+        </button>
+      )}
 
-      {/* Debug Modal */}
+      {/* ── Modal Dialog ────────────────────────────────────────────────────── */}
       {isOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
-          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full my-8">
+        <div className="fixed inset-0 bg-black/50 flex items-start justify-center z-[200] p-2 sm:p-4">
+          <div className="bg-white rounded-lg shadow-2xl w-full max-w-5xl flex flex-col" style={{ maxHeight: '92vh' }}>
             {/* Header */}
-            <div className="p-6 border-b border-gray-200 flex justify-between items-center">
-              <div>
-                <h2 className="text-2xl font-bold text-gray-800">API Key Debug Tool</h2>
-                <p className="text-sm text-gray-600 mt-1">
-                  Compare localStorage values with what the backend receives
-                </p>
+            <div className="p-4 border-b border-gray-200 flex-shrink-0">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-bold text-gray-800">API Key Manager</h2>
+                <button onClick={() => setIsOpen(false)} className="text-gray-400 hover:text-gray-600 p-1">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
               </div>
-              <button
-                onClick={() => setIsOpen(false)}
-                className="text-gray-400 hover:text-gray-600 transition-colors"
-              >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
+              {/* Tabs */}
+              <div className="flex gap-1 mt-3 bg-gray-100 p-1 rounded-lg">
+                {[
+                  { id: 'status', label: '🔑 Key Status' },
+                  { id: 'process', label: `📋 Process Log (${processLogs.length})` },
+                  { id: 'edit', label: '✏️ Edit Keys' },
+                ].map(tab => (
+                  <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+                    className={`flex-1 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${activeTab === tab.id ? 'bg-white shadow text-gray-900' : 'text-gray-600 hover:text-gray-900'}`}>
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* Content */}
-            <div className="p-6 space-y-6">
-              {/* Refresh Button */}
-              <div className="flex justify-end">
-                <button
-                  onClick={fetchBackendData}
-                  disabled={loading}
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-md transition-colors disabled:opacity-50"
-                >
-                  <svg className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                  </svg>
-                  {loading ? 'Refreshing...' : 'Refresh'}
-                </button>
-              </div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              {saveStatus && <div className="p-2 bg-green-50 border border-green-200 rounded text-green-800 text-sm">{saveStatus}</div>}
+              {error && <div className="p-2 bg-red-50 border border-red-200 rounded text-red-800 text-sm">{error}</div>}
 
-              {/* Error Display */}
-              {error && (
-                <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm">
-                  <strong>Error:</strong> {error}
+              {/* Tab: Key Status */}
+              {activeTab === 'status' && (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {serviceConfig.map(svc => {
+                      // Always read fresh from localStorage for accurate count
+                      const storageKey = svc.ls === 'rapidapi' ? 'rapidapi_av_key' : `${svc.ls}_api_key`;
+                      const rawStored = localStorage.getItem(storageKey) || '';
+                      const keyLines = rawStored.split('\n').filter(k => k.trim());
+                      const keyCount = keyLines.length;
+                      const firstKey = keyLines[0] || '';
+                      const bi = getBackendInfo(svc.headerKey);
+                      const configured = keyCount > 0;
+                      const working = bi.headerPresent || bi.envPresent;
+                      const sc = getStatusColor(configured, working);
+                      return (
+                        <div key={svc.key} className="border rounded-lg p-2.5" style={{ borderColor: sc.border, background: sc.bg }}>
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-sm font-medium">{svc.icon} {svc.name}</span>
+                            <span className="text-xs px-1.5 py-0.5 rounded-full" style={{ background: sc.badge, color: sc.badgeText }}>{sc.label}</span>
+                          </div>
+                          <div className="text-xs text-gray-600 space-y-0.5">
+                            <div>📱 {configured ? `${keyCount} key${keyCount > 1 ? 's' : ''} (${maskKey(firstKey)})` : 'Not set'}</div>
+                            <div>🖥️ {bi.received ? maskKey(bi.received) : 'Not received'} <span className="text-gray-400">({bi.source || 'none'})</span></div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {backendData?.key_manager && (
+                    <div className="border border-purple-200 rounded-lg p-3">
+                      <h4 className="text-sm font-semibold text-purple-900 mb-2">🔄 Key Manager</h4>
+                      <div className="grid grid-cols-4 gap-2 text-center text-xs mb-2">
+                        <div><div className="text-gray-500">Services</div><div className="font-bold text-purple-700">{backendData.key_manager.summary?.total_services || 0}</div></div>
+                        <div><div className="text-gray-500">Keys</div><div className="font-bold text-purple-700">{backendData.key_manager.summary?.total_keys_registered || 0}</div></div>
+                        <div><div className="text-gray-500">Requests</div><div className="font-bold text-purple-700">{backendData.key_manager.summary?.total_requests_made || 0}</div></div>
+                        <div><div className="text-gray-500">Rate Limits</div><div className={`font-bold ${(backendData.key_manager.summary?.total_rate_limit_hits || 0) > 0 ? 'text-red-600' : 'text-green-600'}`}>{backendData.key_manager.summary?.total_rate_limit_hits || 0}</div></div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
-              {/* Loading State */}
-              {loading && !backendData && (
-                <div className="text-center py-8 text-gray-500">
-                  Loading backend data...
+              {/* Tab: Process Log */}
+              {activeTab === 'process' && (
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-500">{processLogs.length} entries</span>
+                    <button onClick={clearLogs} className="text-xs text-gray-400 hover:text-gray-600">Clear</button>
+                  </div>
+                  {processLogs.length === 0 && (
+                    <div className="text-center py-8 text-gray-400 text-sm">
+                      No process logs yet. Logs appear when you perform API operations.
+                    </div>
+                  )}
+                  <div className="space-y-1 font-mono text-xs">
+                    {processLogs.map(log => (
+                      <div key={log.id} className="flex gap-2 py-1 border-b border-gray-100">
+                        <span className="text-gray-400 flex-shrink-0 w-20">{log.timestamp}</span>
+                        <span className="flex-shrink-0 w-16 font-bold" style={{ color: logColorMap[log.status] }}>[{log.step}]</span>
+                        <span className="text-gray-700">{log.message}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div ref={logEndRef} />
                 </div>
               )}
 
-              {/* Comparison Table */}
-              {backendData && (
-                <div className="space-y-6">
-                  {/* FMP API Key */}
-                  <div className="border border-gray-200 rounded-lg overflow-hidden">
-                    <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
-                      <h3 className="font-semibold text-gray-800">
-                        🔑 Financial Modeling Prep (FMP)
-                      </h3>
-                      <p className="text-xs text-gray-600 mt-1">
-                        Required for peer discovery, financial statements, and market data
-                      </p>
-                    </div>
-                    <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <div className="flex items-center gap-2 mb-2">
-                          <span className="text-sm font-medium text-gray-700">📱 Browser localStorage</span>
-                          {getStatusIcon(localStorageKeys.fmp)}
+              {/* Tab: Edit Keys */}
+              {activeTab === 'edit' && (
+                <div className="space-y-4">
+                  <p className="text-sm text-gray-500">
+                    Enter API keys below (one per line for multiple keys). They rotate automatically when rate-limited.
+                  </p>
+                  {serviceConfig.map(svc => {
+                    const currentKeys = (editKeys[svc.ls] || '').split('\n').filter(k => k.trim());
+                    const keyCount = currentKeys.length;
+                    return (
+                      <div key={svc.key} className="border border-gray-200 rounded-lg p-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <label className="text-sm font-medium text-gray-700">{svc.icon} {svc.name}</label>
+                          {keyCount > 0 && (
+                            <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700">
+                              {keyCount} key{keyCount > 1 ? 's' : ''} — rotates on failure
+                            </span>
+                          )}
                         </div>
-                        {renderKeyValue(localStorageKeys.fmp)}
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2 mb-2">
-                          <span className="text-sm font-medium text-gray-700">🖥️ Backend Received</span>
-                          {getStatusIcon(backendData.received_headers['x-api-key-fmp'])}
-                        </div>
-                        {renderKeyValue(
-                          backendData.received_headers['x-api-key-fmp'],
-                          backendData.key_sources.fmp.source
+                        <textarea
+                          value={editKeys[svc.ls] || ''}
+                          onChange={e => setEditKeys(prev => ({ ...prev, [svc.ls]: e.target.value }))}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 resize-none"
+                          rows={Math.max(2, keyCount + 1)}
+                          placeholder={`Enter ${svc.name} API key(s), one per line...`}
+                        />
+                        {keyCount > 1 && (
+                          <p className="text-xs text-gray-400 mt-1">
+                            ℹ️ Multiple keys will be tried in order. If key #1 hits rate limit, key #2 is used automatically.
+                          </p>
                         )}
-                        <div className="mt-2 text-xs text-gray-500">
-                          <div>Header present: {backendData.key_sources.fmp.header_present ? '✅ Yes' : '❌ No'}</div>
-                          <div>Env fallback: {backendData.key_sources.fmp.env_present ? '✅ Available' : '❌ Not set'}</div>
-                        </div>
                       </div>
-                    </div>
-                  </div>
-
-                  {/* Alpha Vantage API Key */}
-                  <div className="border border-gray-200 rounded-lg overflow-hidden">
-                    <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
-                      <h3 className="font-semibold text-gray-800">
-                        📊 Alpha Vantage
-                      </h3>
-                      <p className="text-xs text-gray-600 mt-1">
-                        Required for additional market data and technical indicators
-                      </p>
-                    </div>
-                    <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <div className="flex items-center gap-2 mb-2">
-                          <span className="text-sm font-medium text-gray-700">📱 Browser localStorage</span>
-                          {getStatusIcon(localStorageKeys.alphaVantage)}
-                        </div>
-                        {renderKeyValue(localStorageKeys.alphaVantage)}
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2 mb-2">
-                          <span className="text-sm font-medium text-gray-700">🖥️ Backend Received</span>
-                          {getStatusIcon(backendData.received_headers['x-api-key-alphavantage'])}
-                        </div>
-                        {renderKeyValue(
-                          backendData.received_headers['x-api-key-alphavantage'],
-                          backendData.key_sources.alpha_vantage.source
-                        )}
-                        <div className="mt-2 text-xs text-gray-500">
-                          <div>Header present: {backendData.key_sources.alpha_vantage.header_present ? '✅ Yes' : '❌ No'}</div>
-                          <div>Env fallback: {backendData.key_sources.alpha_vantage.env_present ? '✅ Available' : '❌ Not set'}</div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* FRED API Key */}
-                  <div className="border border-gray-200 rounded-lg overflow-hidden">
-                    <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
-                      <h3 className="font-semibold text-gray-800">
-                        🏛️ FRED API
-                      </h3>
-                      <p className="text-xs text-gray-600 mt-1">
-                        Optional - US Treasury yields (Risk-Free Rate)
-                      </p>
-                    </div>
-                    <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <div className="flex items-center gap-2 mb-2">
-                          <span className="text-sm font-medium text-gray-700">📱 Browser localStorage</span>
-                          {getStatusIcon(localStorageKeys.fred)}
-                        </div>
-                        {renderKeyValue(localStorageKeys.fred)}
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2 mb-2">
-                          <span className="text-sm font-medium text-gray-700">🖥️ Backend Received</span>
-                          {getStatusIcon(backendData.received_headers['x-api-key-fred'])}
-                        </div>
-                        {renderKeyValue(
-                          backendData.received_headers['x-api-key-fred'],
-                          backendData.key_sources.fred.source
-                        )}
-                        <div className="mt-2 text-xs text-gray-500">
-                          <div>Header present: {backendData.key_sources.fred.header_present ? '✅ Yes' : '❌ No'}</div>
-                          <div>Env fallback: {backendData.key_sources.fred.env_present ? '✅ Available' : '❌ Not set'}</div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Diagnostic Section */}
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                    <h3 className="font-semibold text-blue-900 mb-2">
-                      🔍 Diagnostic Summary
-                    </h3>
-                    <p className="text-sm text-blue-800">
-                      {backendData.diagnostic.message}
-                    </p>
-                    {backendData.diagnostic.fmp_flow_ok ? (
-                      <div className="mt-2 flex items-center gap-2 text-sm text-green-700">
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        FMP API key is flowing correctly
-                      </div>
-                    ) : (
-                      <div className="mt-2 space-y-2 text-sm text-red-700">
-                        <div className="flex items-center gap-2">
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                          </svg>
-                          <strong>Troubleshooting Steps:</strong>
-                        </div>
-                        <ol className="list-decimal list-inside space-y-1 ml-6">
-                          <li>Ensure you've saved your FMP API key in the "Configure API Keys" modal</li>
-                          <li>Check that localStorage contains 'fmp_api_key'</li>
-                          <li>Verify the header name matches: <code className="bg-gray-200 px-1 rounded">X-API-Key-FMP</code></li>
-                          <li>Check browser DevTools Network tab to confirm headers are being sent</li>
-                          <li>Try refreshing this debug panel after saving keys</li>
-                        </ol>
-                      </div>
-                    )}
-                  </div>
+                    );
+                  })}
+                  <button onClick={handleSaveKeys}
+                    className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg transition-colors">
+                    Save All Keys
+                  </button>
                 </div>
               )}
-            </div>
-
-            {/* Footer */}
-            <div className="p-6 border-t border-gray-200 bg-gray-50 rounded-b-lg">
-              <p className="text-xs text-gray-500">
-                💡 <strong>Tip:</strong> If the backend shows "Not set" but localStorage has a value, 
-                check that the API request interceptor in <code className="bg-gray-200 px-1 rounded">api.js</code> is working correctly.
-              </p>
             </div>
           </div>
         </div>
       )}
     </>
   );
+};
+
+// Process log helper - can be called from anywhere in the app
+export const logApiProcess = (step, message, status = 'info', details = null) => {
+  // Dispatch custom event that ApiKeyDebugButton listens to
+  window.dispatchEvent(new CustomEvent('api-process-log', { detail: { step, message, status, details } }));
 };
 
 export default ApiKeyDebugButton;

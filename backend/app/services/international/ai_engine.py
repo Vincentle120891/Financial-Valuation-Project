@@ -12,18 +12,30 @@ Strategy Pattern:
 import os
 import json
 import logging
+from pathlib import Path
 from typing import Dict, Any, Optional, List, Protocol
 from dotenv import load_dotenv
 
-# Load .env file explicitly
-load_dotenv()
+# Load .env file explicitly (resolve relative to this file's location)
+load_dotenv(Path(__file__).resolve().parent.parent.parent / ".env")
 
 logger = logging.getLogger(__name__)
 
 # --- Configuration ---
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 GEMINI_API_KEY = os.getenv("GOOGLE_GEMINI_API_KEY")
 QWEN_API_KEY = os.getenv("DASHSCOPE_API_KEY")
+
+# Default model preferences
+DEFAULT_MODELS = {
+    'openrouter': os.getenv("OPENROUTER_MODEL", "openrouter/owl-alpha"),
+    'groq': os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile"),
+    'openai': os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
+    'gemini': os.getenv("GEMINI_MODEL", "gemini-2.0-flash"),
+    'qwen': os.getenv("QWEN_MODEL", "qwen-turbo"),
+}
 
 
 # === Strategy Pattern Interface ===
@@ -187,8 +199,7 @@ Generate comprehensive DCF assumptions for {company_name} ({ticker}).
     "terminal_ebitda_multiple": <number as multiple>
   }},
   "forecast_drivers": {{
-    "revenue_volume_growth": [<number in % for FY1>, <FY2>, <FY3>, <FY4>, <FY5>],
-    "revenue_price_growth": [<number in % for FY1>, <FY2>, <FY3>, <FY4>, <FY5>],
+    "revenue_growth": [<number in % for FY1>, <FY2>, <FY3>, <FY4>, <FY5>],
     "inflation_rate": [<number in % for FY1>, <FY2>, <FY3>, <FY4>, <FY5>, <Terminal>],
     "capital_expenditure": [<USD thousands for FY1>, <FY2>, <FY3>, <FY4>, <FY5>],
     "ar_days": <number>,
@@ -201,9 +212,6 @@ Generate comprehensive DCF assumptions for {company_name} ({ticker}).
     "first_year_tax_dep_rate": <percentage>,
     "blended_tax_dep_rate": <percentage>,
     "first_year_acctg_dep_rate": <percentage>
-  }},
-  "other_inputs": {{
-    "projected_interest_expense": <USD thousands>
   }},
   "rationale": "<one paragraph explaining key choices>"
 }}
@@ -222,9 +230,8 @@ Generate comprehensive DCF assumptions for {company_name} ({ticker}).
 - Terminal EBITDA multiple by sector: Tech 10-15x | Consumer Staples 10-14x | Healthcare 10-14x | Industrials 8-12x | Energy 6-10x
 
 ### Forecast Drivers
-- Volume growth: Based on industry outlook, company position, historical growth ({revenue_growth}%)
-- Price growth: Based on inflation expectations, pricing power
-- Inflation rate: Central bank targets, typically 2-3% for developed, 3-5% emerging
+- Revenue growth: Combined volume + price effect, based on industry outlook, company position, historical growth ({revenue_growth}%)
+- Inflation rate: Drives COGS and OpEx growth. Central bank targets, typically 2-3% for developed, 3-5% emerging
 - Capex: Based on historical ({capex_to_revenue}% of revenue), growth plans, maintenance needs
 - Working capital days: Use historical as baseline (DSO:{dso_latest}, DIO:{dio_latest}, DPO:{dpo_latest})
 
@@ -257,8 +264,7 @@ Now return the complete JSON for {ticker}:
                 "terminal_ebitda_multiple": None
             },
             "forecast_drivers": {
-                "revenue_volume_growth": None,
-                "revenue_price_growth": None,
+                "revenue_growth": None,
                 "inflation_rate": None,
                 "capital_expenditure": None,
                 "ar_days": None,
@@ -271,9 +277,6 @@ Now return the complete JSON for {ticker}:
                 "first_year_tax_dep_rate": None,
                 "blended_tax_dep_rate": None,
                 "first_year_acctg_dep_rate": None
-            },
-            "other_inputs": {
-                "projected_interest_expense": None
             },
             "rationale": None
         }
@@ -377,17 +380,43 @@ def get_strategy(model_type: str, market: str = "US") -> PromptStrategy:
 
 
 class AIFallbackEngine:
-    def __init__(self):
+    def __init__(self, model_preferences: Optional[Dict[str, str]] = None, api_keys: Optional[Dict[str, str]] = None):
         self.providers = []
+        self.model_preferences = model_preferences or DEFAULT_MODELS.copy()
+        # Request-level API keys override env vars (set via frontend API Keys modal)
+        self.request_api_keys = api_keys or {}
         self._initialize_providers()
 
+    def _get_api_key(self, provider: str) -> Optional[str]:
+        """Get API key for a provider. Priority: request headers > session > env vars."""
+        # Check request-level keys first (from frontend API Keys modal)
+        if provider in self.request_api_keys and self.request_api_keys[provider]:
+            return self.request_api_keys[provider]
+        # Fallback to env vars (set in .env file)
+        env_map = {
+            'openrouter': OPENROUTER_API_KEY,
+            'groq': GROQ_API_KEY,
+            'openai': OPENAI_API_KEY,
+            'gemini': GEMINI_API_KEY,
+            'qwen': QWEN_API_KEY,
+        }
+        return env_map.get(provider)
+
     def _initialize_providers(self):
-        """Initialize available providers based on API keys."""
-        if GROQ_API_KEY:
+        """Initialize available providers based on API keys.
+        
+        Priority order: OpenRouter (PRIMARY) → Groq → Gemini → Qwen
+        Checks request-level keys first, then falls back to env vars.
+        """
+        if self._get_api_key('openrouter'):
+            self.providers.append(("openrouter", self._call_openrouter))
+        if self._get_api_key('openai'):
+            self.providers.append(("openai", self._call_openai))
+        if self._get_api_key('groq'):
             self.providers.append(("groq", self._call_groq))
-        if GEMINI_API_KEY:
+        if self._get_api_key('gemini'):
             self.providers.append(("gemini", self._call_gemini))
-        if QWEN_API_KEY:
+        if self._get_api_key('qwen'):
             self.providers.append(("qwen", self._call_qwen))
         
         if not self.providers:
@@ -396,10 +425,18 @@ class AIFallbackEngine:
     def get_provider_status(self) -> Dict[str, str]:
         """Get status of each provider (available, missing_key, etc.)"""
         status = {}
+        if OPENROUTER_API_KEY:
+            status["openrouter"] = "configured"
+        else:
+            status["openrouter"] = "missing_key"
         if GROQ_API_KEY:
             status["groq"] = "configured"
         else:
             status["groq"] = "missing_key"
+        if OPENAI_API_KEY:
+            status["openai"] = "configured"
+        else:
+            status["openai"] = "missing_key"
         if GEMINI_API_KEY:
             status["gemini"] = "configured"
         else:
@@ -1120,23 +1157,162 @@ Return ONLY valid JSON:
 Now generate the JSON response for {ticker}:
 """.strip()
 
+    def _call_openrouter(self, prompt: str) -> Optional[str]:
+        """
+        Call OpenRouter API with model fallback.
+        OpenRouter is the PRIMARY provider — routes to various models.
+        """
+        import requests
+        import time
+        
+        api_key = self._get_api_key('openrouter')
+        # Try models in order: primary → fallbacks (valid OpenRouter model IDs)
+        # openrouter/free = Free Models Router (randomly selects from available free models)
+        fallback_models = ['openrouter/free', 'openrouter/elephant-alpha']
+        default_primary = 'openrouter/owl-alpha'
+        models_to_try = [self.model_preferences.get('openrouter', default_primary)] + [
+            m for m in fallback_models if m != self.model_preferences.get('openrouter', default_primary)
+        ]
+        # Deduplicate while preserving order
+        seen = set()
+        models_unique = []
+        for m in models_to_try:
+            if m and m not in seen:
+                models_unique.append(m)
+                seen.add(m)
+        
+        for model_idx, model in enumerate(models_unique):
+            # Primary model gets retries with backoff; fallback models get 1 attempt
+            is_primary = (model_idx == 0)
+            max_retries = 2 if is_primary else 0
+            retry_delays = [10, 20]  # Backoff delays in seconds
+            
+            for attempt in range(max_retries + 1):
+                start_time = time.time()
+                if attempt > 0:
+                    delay = retry_delays[attempt - 1]
+                    logger.info(f"🔄 Retrying OpenRouter (model: {model}, attempt {attempt + 1}/{max_retries + 1}, backoff: {delay}s)...")
+                    time.sleep(delay)
+                else:
+                    logger.info(f"⏳ Connecting to OpenRouter API (model: {model})...")
+                
+                try:
+                    response = requests.post(
+                        'https://openrouter.ai/api/v1/chat/completions',
+                        headers={
+                            'Authorization': f'Bearer {api_key}',
+                            'Content-Type': 'application/json',
+                            'HTTP-Referer': 'https://financial-valuation-platform.com',
+                            'X-Title': 'Financial Valuation Platform'
+                        },
+                        json={
+                            'model': model,
+                            'messages': [
+                                {'role': 'system', 'content': 'You are a senior financial analyst specializing in DCF valuation. Always respond with valid JSON only, no markdown formatting.'},
+                                {'role': 'user', 'content': prompt}
+                            ],
+                            'temperature': 0.3,
+                        },
+                        timeout=90
+                    )
+                    
+                    response.raise_for_status()
+                    data = response.json()
+                    elapsed = time.time() - start_time
+                    logger.info(f"✅ OpenRouter response received in {elapsed:.2f}s (model: {model})")
+                    
+                    # Validate response structure
+                    if 'choices' not in data or not data['choices']:
+                        # Log the actual error details from OpenRouter
+                        error_info = data.get('error', {})
+                        if isinstance(error_info, dict):
+                            error_msg = error_info.get('message', str(error_info))
+                            error_code = error_info.get('code', 'unknown')
+                        else:
+                            error_msg = str(error_info)
+                            error_code = 'unknown'
+                        logger.warning(f"⚠️ OpenRouter model {model} error: [{error_code}] {error_msg}")
+                        logger.warning(f"⚠️ Full response keys: {list(data.keys())}")
+                        # Try to extract content from alternative response formats
+                        content = None
+                        if 'message' in data:
+                            content = data['message'].get('content')
+                        elif 'output' in data:
+                            content = data['output'] if isinstance(data['output'], str) else str(data['output'])
+                        if not content:
+                            raise ValueError(f"OpenRouter error for {model}: [{error_code}] {error_msg}")
+                        return content
+                    
+                    return data['choices'][0]['message']['content']
+                except Exception as e:
+                    elapsed = time.time() - start_time
+                    logger.warning(f"⚠️ OpenRouter model {model} failed after {elapsed:.2f}s: {e}")
+                    # If this was the last attempt for this model, move to next model
+                    if attempt >= max_retries:
+                        if model == models_unique[-1]:
+                            # Last model failed, re-raise
+                            raise
+                        # Try next model
+                        break
+                    # Will retry with backoff
+                    continue
+        
+        # Should not reach here
+        raise Exception("All OpenRouter models failed")
+
+    def _call_openai(self, prompt: str) -> Optional[str]:
+        """
+        Call OpenAI API with selected model.
+        """
+        from openai import OpenAI
+        import time
+        
+        model = self.model_preferences.get('openai') or DEFAULT_MODELS['openai']
+        start_time = time.time()
+        logger.info(f"⏳ Connecting to OpenAI API ({model})...")
+        
+        try:
+            client = OpenAI(api_key=self._get_api_key('openai'), timeout=60.0)
+            logger.info(f"📡 Sending request to OpenAI ({model})...")
+            
+            completion = client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": "You are a senior financial analyst specializing in DCF valuation. Always respond with valid JSON only, no markdown formatting."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.3,
+                response_format={"type": "json_object"},
+                timeout=50
+            )
+            
+            elapsed = time.time() - start_time
+            logger.info(f"✅ OpenAI response received in {elapsed:.2f}s")
+            
+            return completion.choices[0].message.content
+            
+        except Exception as e:
+            elapsed = time.time() - start_time
+            logger.error(f"❌ OpenAI failed after {elapsed:.2f}s: {str(e)}")
+            raise
+
     def _call_groq(self, prompt: str) -> Optional[str]:
         """
-        Call Groq API with detailed logging and timeout handling.
-        Groq is the PRIMARY provider - fastest and most reliable for financial analysis.
+        Call Groq API with selected model (optional fallback).
         """
         from groq import Groq
         import time
         
+        model = self.model_preferences.get('groq') or DEFAULT_MODELS['groq']
         start_time = time.time()
-        logger.info("⏳ Connecting to Groq API (Primary Provider)...")
+        logger.info(f"⏳ Connecting to Groq API (Optional Fallback - {model})...")
         
         try:
-            client = Groq(api_key=GROQ_API_KEY, timeout=60000)
-            logger.info("📡 Sending request to Groq (llama-3.3-70b-versatile)...")
+            client = Groq(api_key=self._get_api_key('groq'), timeout=60000)
+            logger.info(f"📡 Sending request to Groq ({model})...")
             
             completion = client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
+                model=model,
                 messages=[
                     {"role": "system", "content": "You are a senior financial analyst specializing in DCF valuation. Always respond with valid JSON only, no markdown formatting."},
                     {"role": "user", "content": prompt}
@@ -1158,35 +1334,63 @@ Now generate the JSON response for {ticker}:
 
     def _call_gemini(self, prompt: str) -> Optional[str]:
         """
-        Call Gemini API with latest gemini-2.0-flash-lite model.
-        Secondary fallback provider with detailed logging.
+        Call Gemini API with selected model using REST API (no SDK dependency).
+        Uses the Google AI Generative Language API directly via HTTP.
         """
-        import google.generativeai as genai
+        import requests as http_requests
         import time
         
+        model = self.model_preferences.get('gemini') or DEFAULT_MODELS['gemini']
+        api_key = self._get_api_key('gemini')
         start_time = time.time()
-        logger.info("⏳ Connecting to Google Gemini API (Secondary Provider - gemini-2.0-flash-lite)...")
+        logger.info(f"⏳ Connecting to Google Gemini API (Optional Fallback - {model})...")
         
         try:
-            genai.configure(api_key=GEMINI_API_KEY)
-            # Use the latest lite version for speed and cost efficiency
-            model = genai.GenerativeModel('gemini-2.0-flash-lite')
-            logger.info("📡 Sending request to Gemini...")
+            url = f'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}'
+            logger.info(f"📡 Sending request to Gemini ({model})...")
             
-            response = model.generate_content(
-                prompt + "\n\nIMPORTANT: Respond ONLY with valid JSON. Do not include markdown code blocks or any explanatory text outside the JSON.",
-                generation_config=genai.GenerationConfig(
-                    temperature=0.3,
-                    response_mime_type="application/json"
-                ),
-                request_options={'timeout': 50}
+            payload = {
+                "contents": [
+                    {
+                        "parts": [
+                            {
+                                "text": prompt + "\n\nIMPORTANT: Respond ONLY with valid JSON. Do not include markdown code blocks or any explanatory text outside the JSON."
+                            }
+                        ]
+                    }
+                ],
+                "generationConfig": {
+                    "temperature": 0.3,
+                    "responseMimeType": "application/json"
+                }
+            }
+            
+            response = http_requests.post(
+                url,
+                json=payload,
+                headers={'Content-Type': 'application/json'},
+                timeout=50
             )
+            
+            response.raise_for_status()
+            data = response.json()
+            
+            # Extract text from Gemini REST response structure
+            text = None
+            candidates = data.get('candidates', [])
+            if candidates and len(candidates) > 0:
+                content = candidates[0].get('content', {})
+                parts = content.get('parts', [])
+                if parts and len(parts) > 0:
+                    text = parts[0].get('text', '')
+            
+            if not text:
+                raise ValueError(f"Gemini returned empty content. Response keys: {list(data.keys())}")
             
             elapsed = time.time() - start_time
             logger.info(f"✅ Gemini response received in {elapsed:.2f}s")
             
             # Clean up markdown code blocks if present
-            text = response.text
             if text.startswith("```json"):
                 text = text.replace("```json", "").replace("```", "")
             elif text.startswith("```"):
@@ -1198,36 +1402,24 @@ Now generate the JSON response for {ticker}:
             elapsed = time.time() - start_time
             logger.error(f"❌ Gemini failed after {elapsed:.2f}s: {str(e)}")
             raise
-        genai.configure(api_key=GEMINI_API_KEY)
-        # Use available model - gemini-pro or gemini-1.5-pro
-        try:
-            model = genai.GenerativeModel('gemini-pro')
-        except Exception:
-            # Fallback to default available model
-            model = genai.GenerativeModel()
-        response = model.generate_content(prompt + "\n\nRespond ONLY with valid JSON.")
-        # Clean up markdown code blocks if present
-        text = response.text
-        if text.startswith("```json"):
-            text = text.replace("```json", "").replace("```", "")
-        return text
 
     def _call_qwen(self, prompt: str) -> Optional[str]:
         """
-        Call Qwen API as tertiary fallback with detailed logging.
+        Call Qwen API with selected model (optional fallback).
         """
         import dashscope
         from dashscope import Generation
         import time
         
+        model = self.model_preferences.get('qwen') or DEFAULT_MODELS['qwen']
         start_time = time.time()
-        logger.info("⏳ Connecting to Alibaba Qwen API (Tertiary Provider - qwen-turbo)...")
+        logger.info(f"⏳ Connecting to Alibaba Qwen API (Optional Fallback - {model})...")
         
         try:
-            dashscope.api_key = QWEN_API_KEY
+            dashscope.api_key = self._get_api_key('qwen')
             
             response = Generation.call(
-                model='qwen-turbo',
+                model=model,
                 messages=[
                     {'role': 'system', 'content': 'You are a senior financial analyst. Respond ONLY with valid JSON.'},
                     {'role': 'user', 'content': prompt}

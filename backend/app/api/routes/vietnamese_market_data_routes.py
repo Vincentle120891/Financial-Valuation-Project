@@ -763,7 +763,7 @@ class vn_Step6FetchRequest(BaseModel):
     """Request model for Vietnamese Step 6 data fetch."""
     session_id: str = Field(..., description="Session identifier")
     method: str = Field(..., description="Valuation method: DCF, DuPont, or Comps")
-    history_years: int = Field(default=5, ge=3, le=10, description="Number of historical years to fetch")
+    history_years: int = Field(default=4, ge=3, le=10, description="Number of historical years to fetch")
     include_quarterly: bool = Field(default=True, description="Include quarterly data for TTM")
     fetch_peer_data: bool = Field(default=False, description="Fetch peer data if Comps model selected")
     peer_tickers: List[str] = Field(default_factory=list, description="List of peer tickers to fetch")

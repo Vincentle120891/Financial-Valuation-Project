@@ -1,0 +1,1144 @@
+================================================================================
+FINAL DCF VALUATION MODEL — COMPREHENSIVE DOCUMENTATION
+Structured for AI consumption. All figures in USD thousands unless stated.
+Workbook Sheets: Inputs, Model, Outputs, Relative Valuation, Football Field Chart
+                 (+ mirrored "-R" variants: Inputs-R, Model-R, Outputs-R)
+================================================================================
+
+NOTE: Hardcoded values shown below are SUGGESTIONS / HISTORICAL DATA that will be
+replaced with actual company data when valuing a specific company. The critical
+elements are the FORMULAS, CELL REFERENCES, and CALCULATION LOGIC — these define
+the model's behavior regardless of what numbers are entered.
+
+TABLE OF CONTENTS
+  1. Model Overview
+  2. Inputs Sheet — Formula Structure
+  3. Model Sheet — Formula Structure
+  4. Outputs Sheet — Formula Structure
+  5. Relative Valuation Sheet
+  6. Football Field Chart Sheet
+  7. Cross-Sheet Data Flow
+  8. Key Assumptions
+
+LEGEND:
+  [H] = Hardcoded input (will be replaced with actual company data)
+  [F] = Formula (calculated within this sheet — CORE LOGIC)
+  [L] = Linked reference (formula pointing to another sheet/section)
+  [CHOOSE] = CHOOSE() formula driven by scenario switch
+  [IF] = IF() conditional formula
+
+================================================================================
+1. MODEL OVERVIEW
+================================================================================
+
+Purpose: DCF valuation using two terminal value methods:
+  (A) Perpetuity / Gordon Growth — TV = UFCF_terminal / (WACC - g)
+  (B) Exit Multiple — TV = Terminal EBITDA × Multiple
+
+Column Mapping (all sheets):
+  F = Historical Year 1 (e.g. FY2020)
+  G = Historical Year 2 (e.g. FY2021)
+  H = Historical Year 3 (e.g. FY2022) ← last actual
+  I = Forecast Year 1
+  J = Forecast Year 2
+  K = Forecast Year 3
+  L = Forecast Year 4
+  M = Forecast Year 5
+  N = Terminal Year
+
+Scenario Switch: Inputs!D7 = Outputs!F6 → 1=Best, 2=Base, 3=Worst
+
+================================================================================
+2. INPUTS SHEET — FORMULA STRUCTURE
+================================================================================
+
+[A] SCENARIO SWITCH
+  D7 = Outputs!F6                        [L] → links to Outputs sheet
+
+[B] REVENUE GROWTH (rows 5–8)
+  Row 5 (Active): [F] =CHOOSE($D$7, row6, row7, row8)
+    → selects Best/Base/Worst row based on scenario
+    → feeds Model revenue growth row
+  Rows 6–8: [H] Historical/projected growth rates (per scenario)
+
+[C] COST PROJECTION INCREASES (rows 9–12)
+  Row 9 (Active): [F] =CHOOSE($D$7, row10, row11, row12)
+    → drives COGS and OpEx growth (SG&A and Other)
+    → feeds Model projected cost increase row
+  Rows 10–12: [H] Per-scenario cost increase rates
+
+[D] CAPITAL EXPENDITURE (rows 13–16)
+  Row 13 (Active): [F] =CHOOSE($D$7, row14, row15, row16)
+    → feeds Model Depreciation Schedule and Asset Schedule
+  Rows 14–16: [H] Per-scenario capex amounts
+
+[E] INFLATION RATE (row 17)
+  Row 17: [H] Non-scenario-switched inflation series
+    → feeds Model inflation context row (not operative driver)
+
+[F] WORKING CAPITAL (rows 18–21)
+  Rows 19–21: [H] AR/Inventory/AP Days
+  Terminal columns (L): [F] =prior year (K column)
+
+[G] OTHER ANNUAL INPUTS (rows 22–24)
+  Row 23: [H] Term Debt Increase/(Decrease) per year
+  Row 24: [H] Common Equity Increase/(Decrease) per year
+
+[H] WACC INPUTS (rows 26–59)
+  Peer table (rows 30–39):
+    Debt, Equity, Tax Rate, Levered Beta: [H] (per company)
+    D/E Ratio: [F] =Debt / Equity
+    D/Capital: [F] =Debt / (Debt + Equity)
+    Unlevered Beta: [F] =Levered β / (1 + (1-Tax Rate) × D/E)
+
+  Averages/Medians (rows 41–42): [H] (averages of peer metrics)
+
+  Cost of Equity:
+    Market Risk Premium: [H]
+    Avg Unlevered Beta: [H] (from peers)
+    Levered Beta: [H] =Unlevered β × (1 + (1-Tax) × Target D/E)
+    Equity Risk Premium: [H] =MRP × Levered Beta
+    Risk-Free Rate: [H]
+    Country Risk Premium: [H]
+    Cost of Equity: [H] =Risk-Free + ERP + Country Premium
+
+  Capital Structure:
+    Total Debt, Market Cap: [H]
+    Current D/Capital, E/Capital: [F] =Debt/Capital, Equity/Capital
+    Target D weight, E weight: [H]
+    Target D/E: [F] =Target D / Target E
+
+  Cost of Debt:
+    Pre-Tax Cost: [H]
+    Tax Rate: [H]
+    After-Tax Cost: [F] =Pre-Tax × (1 - Tax Rate)
+
+  WACC: [F] =(Debt Weight × AT Cost Debt) + (Equity Weight × Cost Equity)
+
+[I] OTHER INPUTS (rows 61–83)
+  Dates: [H] Valuation Date, First CF Date, Fiscal Year End
+  Date Validation: [F] =IF(date1 > date2, 1, 0)
+  Opening Balances: [H] Net Debt, PP&E Gross, Accumulated Depreciation,
+    Tax Basis, Tax Losses, Long-Term Debt, Common Equity, Retained Earnings,
+    Cash, PP&E Net, Revolving Credit Line, Total Current Assets,
+    Total Current Liabilities, Total Assets, Total Liabilities
+  Balance Sheet Sub-Item Opening Balances: [H]
+    Non-Current Marketable Securities (long-term bond portfolio)
+    Other Current Liabilities (Accrued Expenses + Deferred Revenue)
+    Deferred Tax Liabilities (net DTA/DTL position)
+    Current Accrued Expenses (separate from Other Current Liabilities)
+    Current Deferred Liabilities (deferred revenue current portion)
+    Trade and Other Payables Non Current
+    Other Non Current Liabilities
+    Other Short Term Investments
+    Other Current Assets
+    Other Non Current Assets
+    Common Stock (par value)
+    Other Equity Adjustments (AOCI, treasury stock, etc.)
+  52-Week Range: [H] High, Low
+  Shares Outstanding, Stock Price, Terminal Growth, Terminal Multiple: [H]
+  WACC: [L] =linked from WACC calculation
+  Terminal Growth Check: [F] =IF(g >= WACC, 1, 0)
+  Interest Rates: [H] Cash=1%, Revolving=5%, LT Debt=6%
+  Dividend Payout Ratio: [H]
+  Depreciation Params: [H] Useful lives, tax dep rates, first-year conventions
+
+================================================================================
+3. MODEL SHEET — FORMULA STRUCTURE
+================================================================================
+
+[3A] INCOME STATEMENT — WATERFALL STRUCTURE
+
+  ═══════════════════════════════════════════════════════════════════════
+  INCOME STATEMENT LINE REPAIR WATERFALL (Correct Calculation Order):
+  ═══════════════════════════════════════════════════════════════════════
+
+  Gross Profit
+    (-) SG&A Expense
+    (-) R&D Expense / Other OpEx
+  ─────────────────────────────────────────────────────────────────────
+    (=) EBITDA  (This represents pure pre-depreciation cash generation)
+
+    (-) Depreciation & Amortization (Link from your Asset Schedule)
+  ─────────────────────────────────────────────────────────────────────
+    (=) EBIT / Operating Income (The foundational anchor for your DCF)
+
+    (+) Interest Income (Link from Cash Asset yield)
+    (-) Interest Expense (Link from Debt Schedule coupons)
+    (+/-) Pure Non-Operating Adjustments (FX gains/losses, legal settlements ONLY)
+  ─────────────────────────────────────────────────────────────────────
+    (=) Pretax Income (EBT)
+
+    (-) Tax Provision (Calculated using your Adjusted Tax Basis Schedule)
+  ─────────────────────────────────────────────────────────────────────
+    (=) NET INCOME -> Flows to Cash Flow Statement & Retained Earnings
+  ═══════════════════════════════════════════════════════════════════════
+
+  Revenue (row 96):
+    Historical: [H] (hardcoded actuals)
+    Forecast: [F] =Prior Year × (1 + Revenue Growth)
+      where Revenue Growth = CHOOSE-driven from Inputs
+
+  COGS (row 97):
+    Historical: [H] (hardcoded actuals, negative)
+    Forecast: [F] =Prior Year × (1 + Projected Cost Increase)
+      where Projected Cost Increase = CHOOSE-driven from Inputs
+
+  Gross Profit (row 98): [F] =Revenue + COGS (COGS is negative)
+
+  SG&A (row 99):
+    Historical: [H] (hardcoded actuals, negative)
+    Forecast: [F] =Prior Year × (1 + Projected Cost Increase)
+
+  Other OpEx (row 100) — includes R&D:
+    Historical: [H] (hardcoded actuals, negative)
+    Forecast: [F] =Prior Year × (1 + Projected Cost Increase)
+    NOTE: R&D is bundled into Other OpEx. If separately tracked from XBRL,
+          R&D is added to Other OpEx to form the complete cash operating
+          expense line. EBITDA = Gross Profit − (SG&A + Other OpEx incl. R&D).
+
+  EBITDA (row 101): [F] =SUM(Gross Profit, SG&A, Other)
+    ═══ CRITICAL WATERFALL CHECK ═══
+    EBITDA must represent PURE pre-depreciation cash operating generation.
+    Formula: EBITDA = Gross Profit − Cash Operating Expenses (SG&A + R&D + Other)
+    If your platform computes EBITDA differently (e.g., adds back depreciation
+    to EBIT), you have the order inverted and will DOUBLE-COUNT depreciation
+    in your FCFF calculation. Verify: EBITDA > EBIT in all periods.
+
+  Depreciation (row 103):
+    Historical: [H] (hardcoded actuals, negative — MUST be populated for ALL
+                historical periods including 2022, 2023, 2024, and 2025)
+    Forecast: [L] =linked from Depreciation Schedule (Total Depreciation)
+    NOTE: Historical accumulated depreciation on the Balance Sheet (rows 143-144)
+          is derived from the running total of this row.
+
+  EBIT (row 104): [F] =EBITDA + Depreciation
+    ═══ WATERFALL CHECK ═══
+    EBIT = EBITDA − |Depreciation| (since Dep is stored negative).
+    This is the foundational anchor for your DCF NOPAT calculation.
+    EBIT must equal Operating Income before any financing decisions.
+
+  Interest Expense (row 105):
+    Historical: [H] (hardcoded actuals, negative — MUST be populated for ALL
+                historical periods. Apple paid ~$3.9B-$4.0B annually.
+                Leaving this blank for 2024/2025 creates ghost cash on the
+                Balance Sheet and fails identity checks.)
+    Forecast: [L] =linked from Debt Schedule Part 2 (Net Interest Expense)
+    NOTE: Even though DCF values the firm on an unlevered basis, you still
+          need projected Interest Expense to build a complete Income Statement
+          for Net Income → Retained Earnings → Balance Sheet reconciliation.
+
+  Interest Income (row 106):
+    Historical: [H] (hardcoded actuals, positive — ~$3.0B for Apple)
+    Forecast: [L] =linked from Debt Schedule Part 1 (Interest Income)
+    CRITICAL: This row tracks ONLY interest earned on cash/marketable securities.
+              Do NOT bundle this with Other Income/Expense.
+
+  Other Income/Expense (row 107a):
+    Historical: [H] (hardcoded actuals — e.g., -$384M for Apple 2025)
+    Forecast: [H] or [L] =non-operating items ONLY
+    ═══ DOUBLE-COUNTING RISK ═══
+    In Apple's SEC filings, "Other Income/Expense, Net" bundles:
+      + Interest Income (~$3.0B)
+      - Interest Expense (~$4.0B)
+      ± Foreign exchange adjustments
+      ± Equity investment gains/losses
+      ± Legal settlements
+    Since you already have standalone rows for Interest Income (row 106)
+    and Interest Expense (row 105), this row MUST ONLY contain pure
+    non-interest items: FX gains/losses, equity method adjustments,
+    realized investment gains/losses, and one-time legal settlements.
+    If your backend API pulled the consolidated SEC line while keeping
+    the isolated interest rows active, you are DOUBLE-COUNTING.
+    Fix: Other Income/Expense (row 107a) = SEC "Other Income/Expense, Net"
+         − Interest Income − Interest Expense
+
+  EBT (row 108): [F] =EBIT + Interest Expense + Interest Income + Other Income/Expense
+
+  Current Tax (row 109):
+    Historical: [H] (hardcoded actuals — MUST be populated)
+    Forecast: [L] =linked from Income Tax Schedule (Levered), Current Taxes
+    Terminal: [F] =EBT × Tax Rate (no tax losses remaining)
+
+  Deferred Tax (row 110):
+    Historical: [H] (hardcoded actuals)
+    Forecast: [L] =linked from Income Tax Schedule (Levered), Deferred Taxes
+    Terminal: [H] 0
+    NOTE: Deferred Tax = timing difference between accounting and tax treatment.
+          This flows to the Cash Flow Statement as a non-cash add-back and to
+          the Balance Sheet as Deferred Tax Liabilities (net DTA/DTL position).
+
+  Total Tax (row 111): [F] =Current Tax + Deferred Tax
+
+  Net Income (row 112): [F] =EBT + Total Tax
+    → Flows to: Cash Flow Statement (row 115), Equity Schedule (Retained Earnings)
+
+[3B] CASH FLOW STATEMENT — SIGN CONVENTION ENFORCED
+
+  ═══════════════════════════════════════════════════════════════════════
+  CASH FLOW STATEMENT INTEGRITY WATERFALL
+  ═══════════════════════════════════════════════════════════════════════
+
+  Operating Cash Flow (CFO Baseline)
+    (-) Strip out Non-Operating Interest Income (if bundled in CFO)
+  ─────────────────────────────────────────────────────────────────────
+    (=) TRUE OPERATING CASH FLOW
+
+  Investing Cash Flow (CFI Module)
+    (-) Capex (Must be explicitly NEGATIVE, NO duplicate positive row)
+    (+) Inflows from Marketable Securities Liquidations (if applicable)
+  ─────────────────────────────────────────────────────────────────────
+    (=) SUBTOTAL CASH FLOW FROM INVESTING (CFI)
+
+  Financing Cash Flow (CFF Module)
+    (+) Debt Issuance (Positive cash influx)
+    (-) Debt Repayments (Must be NEGATIVE)
+    (-) Dividends Paid (Must be NEGATIVE)
+    (-) Share Buybacks / RSU Tax Settlements (Must be NEGATIVE)
+  ─────────────────────────────────────────────────────────────────────
+    (=) SUBTOTAL CASH FLOW FROM FINANCING (CFF)
+
+  ─────────────────────────────────────────────────────────────────────
+  FINAL RECONCILIATION CELL:
+  Net Change in Cash = True CFO + CFI + CFF
+  → Links directly to Balance Sheet Cash (row 138)
+  ═══════════════════════════════════════════════════════════════════════
+
+  ── SIGN CONVENTION RULES (CRITICAL) ──
+  ════════════════════════════════════════
+  Every row in the Cash Flow Statement MUST follow these sign rules:
+    • Cash INFLOWS = Positive values
+    • Cash OUTFLOWS = Negative values
+  Specifically:
+    • CapEx: MUST be NEGATIVE (cash leaving the firm)
+    • Dividends: MUST be NEGATIVE (cash paid to shareholders)
+    • Debt Repayments: MUST be NEGATIVE (cash paid to creditors)
+    • Debt Issuance: MUST be POSITIVE (cash received from creditors)
+    • Share Buybacks: MUST be NEGATIVE (cash paid to repurchase shares)
+    • Depreciation Add-back: POSITIVE (non-cash expense added back)
+    • Deferred Tax Add-back: Sign matches tax schedule output
+  ════════════════════════════════════════
+
+  ── DUPLICATE ROW PREVENTION ──
+  ════════════════════════════════════════
+  There must be EXACTLY ONE CapEx row in the Cash Flow Statement.
+  If your data ingestion API pulls the same metric from two different
+  database tags (e.g., "capex" = -$12.7B AND "CapEx" = +$12.7B),
+  they will cancel each other out: -$12.7B + $12.7B = $0.
+  This makes the model think the company spends $0 on capital assets,
+  completely distorting Net PP&E projections and useful life calculations.
+  FIX: Keep ONLY the NEGATIVE CapEx row. Drop any positive duplicate.
+  ════════════════════════════════════════
+
+  ── CFO SECTION ──
+
+  Net Income (row 115): [L] =linked from Income Statement (row 112)
+  Deferred Taxes (row 116): [L] =linked from Income Statement (row 110)
+    NOTE: Deferred Tax flows through CFO as a non-cash add-back.
+          If DTA increased → cash outflow (negative adjustment).
+          If DTL increased → cash inflow (positive adjustment).
+  Depreciation (row 117): [L] =ABS(linked from Income Statement depreciation) [POSITIVE]
+    NOTE: Depreciation is stored NEGATIVE on the Income Statement.
+          On the CFS it MUST be POSITIVE (added back as non-cash expense).
+
+  Cash From AR (row 118):
+    Historical: [H] — MUST be populated for all historical periods
+    Forecast: [F] =Prior AR Balance − Current AR Balance (from Working Capital)
+    Logic: If AR decreases → customers paid → cash INFLOW (positive)
+
+  Cash From Inventory (row 119):
+    Historical: [H]
+    Forecast: [F] =Prior Inventory − Current Inventory
+    Logic: If Inventory decreases → sold off stock → cash INFLOW (positive)
+
+  Cash From AP (row 120):
+    Historical: [H]
+    Forecast: [F] =Current AP − Prior AP
+    Logic: If AP increases → delayed payments → cash INFLOW (positive)
+
+  Subtotal CFO (row 121): [F] =SUM(Net Income through Cash From AP)
+
+  ── CFI SECTION ──
+
+  Capital Expenditure (row 123):
+    Historical: [H] — MUST be NEGATIVE for all historical periods
+    Forecast: [L] =linked from Depreciation Schedule (CapEx, NEGATIVE)
+    ═══ SINGLE ROW ONLY ═══
+    There must NOT be a second "CapEx" or "capital_expenditure" row.
+    If your data has two rows (one negative, one positive), REMOVE the
+    positive duplicate. The model's CFI subtotal will be WRONG if both
+    rows are summed: they cancel to zero.
+
+  Subtotal CFI (row 124): [F] =CapEx (single negative value)
+
+  ── CFF SECTION ──
+
+  Change in LT Debt (row 126):
+    Historical: [H]
+    Forecast: [H] =hardcoded from Inputs row 23
+    Sign: POSITIVE = new debt issued, NEGATIVE = debt repaid
+
+  Change in Revolving Credit (row 127):
+    Historical: [H] (zeros)
+    Forecast: [L] =linked from Debt Schedule Part 2 (Revolving Credit change)
+    Sign: POSITIVE = drawn down, NEGATIVE = repaid
+
+  Change in Common Equity (row 128):
+    Historical: [H]
+    Forecast: [H] =hardcoded from Inputs row 24
+    Sign: POSITIVE = new equity issued, NEGATIVE = buybacks
+
+  Dividends (row 129):
+    Historical: [H]
+    Forecast: [L] =linked from Equity Schedule (Dividend, NEGATIVE)
+    Sign: MUST be NEGATIVE (cash paid out to shareholders)
+
+  Subtotal CFF (row 130): [F] =SUM(Change in LT Debt through Dividends)
+
+  ── CASH BALANCE ──
+
+  Beginning Cash (row 132):
+    Historical: [H]
+    Forecast: [F] =Prior year ending balance
+
+  Change (row 133): [F] =CFO + CFI + CFF
+    ═══ RECONCILIATION CHECK ═══
+    This value MUST equal the change in cash on the Balance Sheet:
+    Change (row 133) = Balance Sheet Cash(ending) − Balance Sheet Cash(beginning)
+
+  Ending Cash (row 134): [F] =Beginning + Change
+    → Links to: Balance Sheet Cash (row 138)
+
+[3C] BALANCE SHEET — COMPLETE STRUCTURE WITH ALL CRITICAL ITEMS
+
+  ═══════════════════════════════════════════════════════════════════════
+  BALANCE SHEET THREE-STATEMENT IDENTITY CHECK:
+  Assets = Liabilities + Shareholders' Equity (must balance in ALL periods)
+  ═══════════════════════════════════════════════════════════════════════
+
+  ── ASSETS ──
+
+  CURRENT ASSETS:
+    ═══ ASSET IDENTITY: CA = Cash + ST Investments + AR + Inventory + Other CA ═══
+    Cash (row 138): [L] =linked from Cash Flow Statement (Ending Balance)
+    Other Short Term Investments (row 138a): [H] [L]
+      ═══ SHORT-TERM INVESTMENTS (excludes cash equivalents) ═══
+      Money market funds, T-bills, available-for-sale securities that
+      mature within 1 year but are NOT cash equivalents.
+      Historical: [H] (from XBRL/10-K — part of marketable securities)
+      Forecast: [H] or [L] =held constant or proportional to revenue
+      NOTE: Separated from Cash & Equivalents to allow granular
+            working capital analysis and accurate ΔNWC calculations.
+    Accounts Receivable (row 139): [L] =linked from Working Capital row
+    Inventories (row 140): [L] =linked from Working Capital row
+    Other Current Assets (row 140a): [H] [L]
+      ═══ OTHER CURRENT ASSETS ═══
+      Prepaid expenses, deferred tax assets (current), and other
+      current assets not classified as cash, receivables, or inventory.
+      Historical: [H] (from XBRL/10-K — OtherCurrentAssets)
+      Forecast: [H] or [F] =proportional to revenue or held constant
+    Total Current Assets (row 142): [F] =Cash + ST Investments + AR + Inventories + Other CA
+
+  NON-CURRENT ASSETS:
+    ═══ ASSET IDENTITY: NCA = Net PPE + Investments + Other NCA + Deferred Assets ═══
+    PP&E Gross (row 143): [L] =linked from Asset Schedule (PP&E Gross Ending)
+    Accumulated Depreciation (row 144): [L] =linked from Asset Schedule
+      ═══ CRITICAL MISSING ITEM — HISTORICAL ACCUMULATED DEPRECIATION ═══
+      This row tracks the CUMULATIVE depreciation of all PP&E assets.
+      It MUST be populated with historical actuals for 2022, 2023, 2024,
+      and 2025. Without historical accumulated depreciation:
+        • You cannot calculate Asset Turnover accurately
+        • You cannot track average Useful Life of existing equipment
+        • Your PP&E schedules will generate broken sign conventions
+        • The opening net asset baseline will be wrong
+      Historical: [H] (from XBRL/10-K — negative convention from yfinance)
+        Example Apple values: 2022: ~-$67,000M, 2023: ~-$75,000M,
+        2024: ~-$83,000M, 2025: ~-$91,000M
+      Forecast: [L] =linked from Asset Schedule (Accumulated Depreciation Roll)
+      Sign: NEGATIVE (contra-asset account, reduces gross PP&E)
+    PP&E Net (row 145): [F] =PP&E Gross + Accumulated Depreciation
+      (Accum Dep is negative, so this subtraction is implicit)
+    Investments And Advances (row 141): [H] [L]
+      ═══ CRITICAL MISSING ITEM — THE MULTI-BILLION DOLLAR GAP ═══
+      This is the long-term bond portfolio / non-current marketable
+      securities. For Apple FY2025, this row is ~$165.5B.
+      Without this row, Total Assets cannot reconcile:
+        Total Current Assets ($148B) + PP&E Net ($45.7B) = $193.7B
+        But actual Total Assets = $359.2B → GAP = $165.5B (this row).
+      Historical: [H] (from XBRL/10-K filings — non-current securities)
+      Forecast: [H] or [L] =linked from Investment Schedule or held constant
+      WHY IT MATTERS FOR DCF:
+        When converting Enterprise Value to Equity Value:
+          Equity Value = EV − Debt + Cash & ALL Marketable Securities
+        If you only add back liquid cash ($54.7B) and miss the $165B+
+        long-term securities, your DCF target share price will be
+        undervalued by ~$10-$11 per share.
+    Other Non Current Assets (row 141a): [H] [L]
+      ═══ OTHER NON-CURRENT ASSETS ═══
+      Goodwill, intangible assets, long-term prepaids, and other
+      non-current assets not classified as PP&E or investments.
+      Historical: [H] (from XBRL/10-K — OtherNonCurrentAssets)
+      Forecast: [H] or [F] =held constant or proportional to revenue
+    Non Current Deferred Assets (row 141b): [H] [L]
+      ═══ DEFERRED TAX ASSETS (NON-CURRENT) ═══
+      Non-current deferred tax assets from timing differences between
+      accounting and tax depreciation. Part of the DTA/DTL net position.
+      Historical: [H] (from XBRL/10-K — NonCurrentDeferredTaxesAssets)
+      Forecast: [L] =linked from Tax Schedule
+      NOTE: Together with Deferred Tax Liabilities (row 153), these
+            represent the net deferred tax position.
+    Total Assets (row 146): [F] =Total Current Assets + PP&E Net + Investments + Other NCA + Deferred Assets
+      ═══ IDENTITY CHECK ═══
+      Total Assets MUST equal the sum from your XBRL data:
+        Total Current Assets + PP&E Net + Investments
+        + Other NCA + Deferred Assets.
+      If Total Assets ≠ Assets side sum, your model is missing rows.
+
+  ── LIABILITIES ──
+
+  CURRENT LIABILITIES:
+    ═══ LIABILITY IDENTITY: CL = Payables + Accrued Expenses + Other CL + Curr Debt + Deferred ═══
+    Accounts Payable (row 148): [L] =linked from Working Capital row
+    Current Accrued Expenses (row 148a): [H] [L]
+      ═══ ACCRUED EXPENSES (SEPARATE FROM OTHER CL) ═══
+      Accrued wages, accrued interest, and other short-term obligations
+      that have been incurred but not yet paid. Separated from Other
+      Current Liabilities per the balance sheet identity:
+        CL = Payables + Accrued Expenses + Other CL + Curr Debt + Deferred
+      Historical: [H] (from XBRL/10-K — CurrentAccruedExpenses)
+      Forecast: [H] or [F] =proportional to revenue or held constant
+      NOTE: If yfinance does not provide this as a separate line item,
+            it may be bundled in "PayablesAndAccruedExpenses". In that
+            case, subtract Accounts Payable to isolate Accrued Expenses.
+    Other Current Liabilities (row 149): [H] [L]
+      ═══ OTHER CURRENT LIABILITIES (EXCLUDES ACCRUED EXPENSES) ═══
+      Deferred Revenue from pre-paid services (AppleCare, iCloud,
+      App Store pre-paid) and other current liabilities NOT including
+      accrued expenses (which is tracked separately in row 148a).
+      For Apple FY2025, this row is ~$75.4B (including accrued).
+      WHY IT MATTERS FOR DCF:
+        A core ingredient of FCFF is Change in Net Working Capital (ΔNWC).
+        Deferred revenue and accrued employee payroll obligations are
+        massive non-cash sources/uses of operating cash. Leaving $75B
+        of working capital adjustments unmodeled means your projected
+        Free Cash Flows will completely miss real-world cash inflows.
+      Historical: [H] (from XBRL/10-K filings — OtherCurrentLiabilities)
+      Forecast: [H] or [F] =proportional to revenue or held constant
+    Current Debt & Capital Lease Oblig (row 150): [H]
+      Short-term portion of long-term debt (current maturities) and
+      current portion of capital lease obligations.
+      Historical: [H] (from XBRL/10-K — CurrentDebtAndCapitalLeaseObligation)
+      Forecast: [H] or [F] =next period's LT debt maturing
+    Current Deferred Liabilities (row 150a): [H] [L]
+      ═══ DEFERRED REVENUE (CURRENT PORTION) ═══
+      Deferred revenue and other deferred items within current
+      liabilities — pre-paid services to be recognized within 1 year.
+      Historical: [H] (from XBRL/10-K — DeferredRevenueCurrent)
+      Forecast: [H] or [F] =proportional to revenue or held constant
+      NOTE: If yfinance bundles this into OtherCurrentLiabilities,
+            use the total and note the bundling.
+    Revolving Credit Line (row 151):
+      Historical: [H] (zeros)
+      Forecast: [L] =linked from Debt Schedule Part 2 (Revolving Credit Ending)
+    Total Current Liabilities (row 152): [F] =Payables + Accrued Exp + Other CL + Curr Debt + Deferred + Revolving
+
+  NON-CURRENT LIABILITIES:
+    ═══ LIABILITY IDENTITY: NCL = LT Debt + Trade Payables NC + Other NC Liab ═══
+    Long Term Debt & Capital Lease Oblig (row 154): [L] =linked from Debt Schedule Part 1 (LT Debt Ending)
+    Trade and Other Payables Non Current (row 154a): [H] [L]
+      ═══ NON-CURRENT TRADE PAYABLES ═══
+      Non-current portion of trade payables and other long-term payables.
+      Historical: [H] (from XBRL/10-K — NonCurrentPayables)
+      Forecast: [H] or [F] =held constant or proportional to revenue
+    Deferred Tax Liabilities (row 153): [L] =linked from Tax Schedule
+      ═══ CRITICAL MISSING ITEM — DTA vs DTL SEPARATION ═══
+      Under US GAAP, companies net Deferred Tax Assets (DTAs) and
+      Deferred Tax Liabilities (DTLs). Your data table may list:
+        Deferred Tax Assets as positive (e.g., $27.5B in 2025)
+        Deferred Tax as negative (e.g., -$2.1B)
+      These represent NON-CASH tax timing differences.
+      WHY IT MATTERS FOR DCF:
+        When computing NOPAT, you assume taxes are paid entirely in cash.
+        If Apple has massive non-cash tax timing differences (DTAs/DTLs),
+        your model must add back or subtract those deferred adjustments
+        on the Cash Flow Statement to compute pure, un-distorted FCF.
+      Formula: Deferred Tax Liabilities = DTL − DTA (net position)
+        If net positive → liability (cash not yet paid)
+        If net negative → asset (cash prepaid / refund receivable)
+      Historical: [H] (net DTA/DTL from XBRL)
+      Forecast: [L] =linked from Tax Schedule (deferred_tax row)
+    Other Non Current Liabilities (row 154b): [H] [L]
+      ═══ OTHER NON-CURRENT LIABILITIES ═══
+      All other non-current liabilities not classified as long-term
+      debt or deferred taxes (e.g. pension obligations, long-term
+      lease liabilities, contingent liabilities).
+      Historical: [H] (from XBRL/10-K — OtherNonCurrentLiabilities)
+      Forecast: [H] or [F] =held constant or proportional to revenue
+    Total Liabilities (row 155): [F] =Total CL + LT Debt + Trade Payables NC + Deferred Tax Liab + Other NC Liab
+
+  ── EQUITY ──
+    ═══ EQUITY IDENTITY: Equity = Common Stock + Retained Earnings + Other Equity ═══
+
+    Common Stock (row 157): [L] =linked from Equity Schedule
+      Par value of common stock issued.
+      Historical: [H] (from XBRL/10-K — CommonStockEquity)
+      Forecast: [L] =linked from Equity Schedule (Common Stock)
+    Retained Earnings (row 158): [L] =linked from Equity Schedule
+      Formula: RE = Prior RE + Net Income − Dividends
+    Other Equity Adjustments (row 158a): [H] [L]
+      ═══ OTHER EQUITY ADJUSTMENTS ═══
+      Accumulated Other Comprehensive Income (AOCI), treasury stock,
+      and other equity adjustments. Calculated as:
+        Other Equity = Total Equity − Common Stock − Retained Earnings
+      Historical: [H] (from XBRL/10-K — derived)
+      Forecast: [H] =held constant or [F] =Total Equity − Common Stock − RE
+      NOTE: This captures items like foreign currency translation
+            adjustments, unrealized gains/losses on AFS securities,
+            and pension liability adjustments.
+    Total Shareholders' Equity (row 159): [F] =Common Stock + Retained Earnings + Other Equity Adjustments
+    Total L&E (row 160): [F] =Total Liabilities + Total Shareholders' Equity
+
+  ── BALANCE CHECK ──
+
+    Check (row 161): [IF] =ROUND(Total Assets − Total L&E, 0) → should be 0
+    ═══ THREE-STATEMENT IDENTITY ═══
+    This check MUST equal zero in ALL periods (historical and forecast).
+    If it does not, trace the gap to find missing rows:
+      Gap = Total Assets − Total Liabilities − Total Equity
+      If Gap > 0: Missing liability or equity row
+      If Gap < 0: Missing asset row (most common: missing marketable securities)
+
+[3D] WORKING CAPITAL SCHEDULE
+
+  Days in Period (row 160): [H] 365
+  Revenue (row 161): [L] =linked from Income Statement
+  COGS (row 162): [L] =linked from Income Statement
+
+  AR Days (row 164):
+    Historical: [H] (back-calculated from actuals)
+    Forecast: [L] =linked from Inputs (AR Days)
+  Inventory Days (row 165):
+    Historical: [H]
+    Forecast: [L] =linked from Inputs
+  AP Days (row 166):
+    Historical: [H]
+    Forecast: [L] =linked from Inputs
+
+  AR Balance (row 168):
+    Historical: [H]
+    Forecast: [F] =(AR Days / Days in Period) × Revenue
+  Inventory Balance (row 169):
+    Historical: [H]
+    Forecast: [F] =(Inv Days / Days in Period) × COGS
+  AP Balance (row 170):
+    Historical: [H]
+    Forecast: [F] =(AP Days / Days in Period) × COGS
+
+  Current Assets (row 172): [F] =AR + Inventory
+  Current Liabilities (row 173): [F] =AP
+  Net Working Capital (row 174): [F] =Current Assets − Current Liabilities
+  Cash from WC Items (row 175): [F] =Prior NWC − Current NWC
+
+[3E] DEPRECIATION SCHEDULE — WITH HISTORICAL ACCUMULATED DEPRECIATION
+
+  ═══ CRITICAL: HISTORICAL DATA REQUIREMENTS ═══
+  To accurately forecast future Capital Expenditures and Depreciation,
+  you MUST populate historical accumulated depreciation for ALL available
+  periods (2022, 2023, 2024, 2025). This allows:
+    • Calculating historical Asset Turnover ratios
+    • Tracking average Useful Life of existing equipment
+    • Establishing the correct opening net asset baseline
+    • Avoiding broken sign conventions in PP&E schedules
+
+  Capital Expenditure (row 180):
+    Historical: [H] — MUST be NEGATIVE for all periods
+    Forecast: [L] =linked from Inputs (CHOOSE scenario capex)
+    NOTE: CapEx feeds both the PP&E Gross roll and the Accumulated
+          Depreciation roll (via the depreciation schedule).
+
+  PP&E at End of Last Historical Year (row 183): [H]
+    This is the GROSS PP&E opening balance for the first forecast year.
+    MUST be populated from actual XBRL/10-K data.
+  Accumulated Depreciation Opening (row 183a): [H]
+    ═══ NEW ROW — HISTORICAL ACCUMULATED DEPRECIATION ═══
+    Historical: [H] — MUST be populated for ALL historical periods:
+      FY2022: [H] (from XBRL, negative convention)
+      FY2023: [H] (from XBRL, negative convention)
+      FY2024: [H] (from XBRL, negative convention)
+      FY2025: [H] (from XBRL, negative convention)
+    Forecast Year 1: =Last historical accumulated depreciation
+    Used to compute: PP&E Net Opening = PP&E Gross Opening + Accum Dep Opening
+    Also used to calculate: Average Remaining Useful Life =
+      |Accumulated Depreciation| / Annual Depreciation Expense
+  Useful Life Existing (row 182): [H] (from Inputs)
+  Useful Life New (row 185): [H] (from Inputs)
+  First Year Acctg Dep (row 186): [H] (from Inputs)
+
+  Percent of Full Year Grid (rows 189–194):
+    [F] Cohort depreciation timing formulas
+    First year = 50% convention, subsequent years = 100%
+
+  Amounts for Depreciation Grid (rows 197–202):
+    [F] =Capex Per Year × Percent of Full Year
+
+  Existing Assets Dep (row 204): [F] =Opening PP&E Net / Useful Life
+    NOTE: Uses PP&E Net (Gross − Accumulated Depreciation) as the base,
+          NOT Gross PP&E. This ensures depreciation reflects the remaining
+          undepreciated asset base.
+  New Assets Dep (row 205): [F] =SUM of all cohort rows
+  Total Depreciation (row 206): [F] =Existing + New
+    → Flows to: Income Statement Depreciation (row 103)
+    → Flows to: Asset Schedule Accumulated Depreciation Roll (row 227)
+    → Flows to: Cash Flow Statement Depreciation Add-back (row 117)
+
+[3F] ASSET SCHEDULE — PP&E, ACCUMULATED DEPRECIATION & TAX BASIS
+
+  ── PP&E GROSS ROLL-FORWARD ──
+  PP&E Roll (Gross):
+    Beginning (row 216): [F] =Prior year ending
+      NOTE: First forecast year beginning = Historical PP&E Gross from XBRL.
+            This value MUST be populated from actual filings (e.g., Apple
+            FY2025 PP&E Gross ≈ $136B). Without this, the entire asset
+            schedule starts from a wrong baseline.
+    CapEx (row 217): [L] =linked from Depreciation Schedule (NEGATIVE)
+    Acctg Depreciation (row 218): [L] =−linked from Depreciation Schedule
+    Ending (row 219): [F] =Beginning + CapEx + Acctg Dep
+
+  ── ACCUMULATED DEPRECIATION ROLL-FORWARD (NEW — CRITICAL) ──
+  ═══════════════════════════════════════════════════════════════════════
+  This section tracks the CUMULATIVE depreciation of ALL PP&E assets.
+  It is REQUIRED for:
+    1. Balance Sheet identity check (PP&E Net = Gross − Accum Dep)
+    2. Accurate Asset Turnover calculations
+    3. Tracking average Useful Life of existing equipment
+    4. Correct opening net asset baseline for PP&E schedules
+  ═══════════════════════════════════════════════════════════════════════
+
+  Accumulated Depreciation Roll:
+    Opening Balance (row 226): [H] [L]
+      Historical: [H] =from XBRL/10-K filings (NEGATIVE convention)
+        Example Apple values (USD millions):
+          FY2022: ~-$67,000M
+          FY2023: ~-$75,000M
+          FY2024: ~-$83,000M
+          FY2025: ~-$91,000M
+      Forecast Year 1 Opening = Historical Accum Dep (last available year)
+      Subsequent years: [F] =Prior year ending
+      WHY HISTORICAL DATA IS REQUIRED:
+        Leaving Accumulated Depreciation blank for 2022-2024 forces the
+        platform to guess the opening net asset baseline, which causes:
+          • PP&E schedules generating broken sign conventions
+          • Wrong Asset Turnover ratios
+          • Inability to calculate average remaining useful life
+    Depreciation Expense (row 227): [L] =linked from Depreciation Schedule
+      (NEGATIVE — reduces the accumulated depreciation balance)
+    Asset Disposals (row 228): [H] [F]
+      If assets are retired/disposed: remove their accumulated depreciation
+      Historical: [H] (usually small relative to total)
+      Forecast: [H] 0 (assume no major disposals unless modeled)
+    Ending Balance (row 229): [F] =Opening + Depreciation Expense + Disposals
+      NOTE: This value flows to:
+        • Balance Sheet Accumulated Depreciation (row 144)
+        • PP&E Net calculation: PP&E Gross (row 143) + Accum Dep (row 144)
+          (Accum Dep is negative, so addition = subtraction)
+
+  ── PP&E NET (DERIVED) ──
+  PP&E Net = PP&E Gross Ending (row 219) + Accumulated Depreciation Ending (row 229)
+    → This flows to Balance Sheet PP&E Net (row 145)
+    → Verification: PP&E Net should decrease over time (depreciation > capex)
+                    or increase when capex exceeds depreciation.
+
+  ── TAX BASIS ROLL-FORWARD ──
+  Tax Basis Roll:
+    Beginning (row 231): [F] =Prior year ending
+    CapEx (row 232): [L] =linked
+    Tax Depreciation (row 233): [F] =−(Beginning + CapEx × 50%) × 15%
+    Ending (row 234): [F] =Beginning + CapEx + Tax Dep
+    NOTE: Tax Basis ending feeds into the Tax Schedule for computing
+          deferred taxes (difference between accounting and tax depreciation).
+
+[3G] DEBT SCHEDULE PART 1
+
+  CASH Section:
+    Beginning Balance: [F] =Prior year ending
+    Increase/(Decrease): [F] =linked from cash flow
+    Ending Balance: [F] =Beginning + Change
+    Interest Rate: [H] (from Inputs)
+    Interest Income: [F] =Cash Balance × Interest Rate
+
+  LONG TERM DEBT Section:
+    Beginning Balance: [F] =Prior year ending
+    Increase/(Decrease): [H] =hardcoded from Inputs row 23
+    Ending Balance: [F] =Beginning + Change
+    Interest Rate: [H] (from Inputs)
+    Interest Expense: [F] =LT Debt Balance × Interest Rate
+
+[3H] DEBT SCHEDULE PART 2
+
+  AVAILABLE CASH:
+    Beginning Cash: [L] =linked from Part 1
+    Cash from Operations: [L] =linked from CF Statement
+    Cash from Investing: [L] =linked from CF Statement
+    Change in LT Debt: [H] =hardcoded from Inputs
+    Change in Common Equity: [H] =hardcoded from Inputs
+    Dividends: [L] =linked from Equity Schedule
+    Cash Available: [F] =SUM(all above)
+
+  REVOLVING CREDIT LINE:
+    Beginning Balance: [F] =Prior year ending
+    Increase/(Decrease): [F] =−MIN(Available Cash, Beginning Balance)
+    Ending Balance: [IF] =IF(SUM(Beginning + Change) > 0, SUM, 0)
+    Interest Rate: [H] (from Inputs)
+    Interest Expense: [IF] =IF(CircularityFlag, AVG(Beg,End)×Rate, End×Rate)
+
+  NET INTEREST:
+    Total Interest: [F] =LT Interest + Revolving Interest
+    Less: Interest Income: [F] =−(from Part 1)
+    Net Interest Expense: [F] =Total − Interest Income
+
+[3I] EQUITY SCHEDULE
+
+  COMMON EQUITY:
+    Beginning: [F] =Prior year ending
+    Change: [H] =hardcoded from Inputs row 24
+    Ending: [F] =Beginning + Change
+
+  Net Income: [L] =linked from Income Statement
+  Payout Ratio: [H] (from Inputs)
+  Dividend: [F] =Net Income × Payout Ratio
+
+  RETAINED EARNINGS:
+    Beginning: [F] =Prior year ending
+    Net Income: [L] =linked from Income Statement
+    Dividends: [F] =−(from Dividend row)
+    Ending: [F] =Beginning + Net Income − Dividends
+
+[3J] INCOME TAX SCHEDULE — LEVERED
+
+  EBT: [L] =linked from Income Statement
+  Tax Rate: [H] (from Inputs)
+  Unused Tax Losses: [IF] =IF(Ending Losses = 0, 0, 1)
+
+  Step 1 — Depreciation Adjustment:
+    EBT: [L] =linked
+    Add: Acctg Dep: [L] =−linked from Depreciation Schedule
+    Less: Tax Dep: [L] =linked from Asset Schedule
+    EBT After Adj: [F] =EBT + Acctg Dep + Tax Dep
+
+  Step 2 — Tax Loss Application:
+    EBT After Adj: [F] =same as above
+    Use of Tax Losses: [F] =−MIN(Beginning Losses, Adj EBT) × Profitable Flag
+    Taxable Income: [IF] =MAX(Adj EBT − Used Losses, 0)
+    Tax Losses Beginning: [F] =Prior year ending
+    New Losses: [IF] =−MIN(EBT, 0) if negative
+    Used Losses: [F] =−MIN(Beginning, Adj EBT) × Profitable Flag
+    Tax Losses Ending: [F] =Beginning + New − Used
+
+  Step 3 — Tax Computation:
+    Current Taxes: [IF] =Tax Rate × Taxable Income
+    Deferred Taxes: [F] =Total Tax − Current Tax
+    Total Taxes: [F] =MAX(Tax Rate × Adj EBT, 0)
+
+  Output: Current Tax → IS row 108; Deferred Tax → IS row 109
+
+[3K] INCOME TAX SCHEDULE — UNLEVERED
+
+  Same structure as Levered, but starting from EBIT (not EBT).
+  Output: Current Tax (Unlevered) → UFCF Schedule
+
+[3L] UNLEVERED FREE CASH FLOW SCHEDULE
+
+  TAX SHIELD:
+    Current Tax (Unlevered): [L] =linked from Unlevered Tax
+    Current Tax (Levered): [L] =linked from Levered Tax
+    Tax Shield: [F] =Unlevered Tax − Levered Tax
+
+  EBITDA METHOD:
+    EBITDA: [L] =linked from IS
+    Current Tax (Unlev): [F] =−(from Unlevered Tax)
+    CapEx: [L] =linked from Inputs (negative)
+    Change in WC: [L] =linked from Working Capital
+    UFCF: [F] =EBITDA + Tax + CapEx + ΔWC
+
+  NET INCOME METHOD (cross-check):
+    Net Income: [L] =linked from IS
+    Depreciation: [L] =linked from IS (positive)
+    Deferred Tax: [L] =linked from Levered Tax
+    Interest Expense: [L] =linked from Debt Schedule
+    Tax Shield: [F] =−(from Tax Shield row)
+    CapEx: [L] =linked
+    Change in WC: [L] =linked
+    UFCF: [F] =SUM(all above)
+
+  Reconciliation Check: [IF] =IF(ROUND(EBITDA_UFCF − NI_UFCF, 1) = 0, 0, 1)
+
+[3M] DCF SCHEDULE: PERPETUITY METHOD
+
+  Terminal Growth: [H] (from Inputs)
+  WACC: [L] =linked from Inputs
+  UFCF: [L] =linked from UFCF Schedule
+
+  UNADJUSTED CF:
+    Discrete: [F] =UFCF
+    Terminal Value: [F] =Terminal UFCF / (WACC − Growth)
+    Total: [F] =SUM(Discrete + Terminal)
+
+  ADJUSTED CF:
+    Partial Period: [F] =YEARFRAC(FY End, Valuation Date)
+    Discrete: [F] =Discrete × Partial Period
+    Total: [F] =SUM(Adjusted)
+
+  DISCOUNTED CF:
+    Years: [F] =YEARFRAC(CF Date, Valuation Date)
+    PV Discrete: [F] =Discrete / (1 + WACC)^Years
+    PV Terminal: [IF] =Terminal Value / (1 + WACC)^Years
+    PV Total: [F] =SUM(PV Discrete + PV Terminal)
+
+  ENTERPRISE VALUE:
+    Manual: [F] =SUM of all PV cash flows
+    XNPV: [F] =XNPV(WACC, Cash Flows, Dates)
+
+  EQUITY VALUE:
+    EV: [L] =linked from XNPV
+    Net Debt: [H] (from Inputs)
+    Equity: [F] =EV − Net Debt
+    Per Share: [F] =Equity / Shares
+
+[3N] DCF SCHEDULE: EXIT MULTIPLE METHOD
+
+  Same structure as Perpetuity, but:
+    Terminal Value: [F] =Terminal EBITDA × Multiple / (1+WACC)^partial
+    Terminal Adjustment: [H] (factor for mid-year in terminal year)
+
+[3O] INTRINSIC VALUATION SUB-SCHEMUES
+
+  Financial Statement Extracts:
+    All rows: [L] =linked from Income Statement
+
+  UFCF Using EBIT:
+    EBIT: [L], Unlevered Taxes: [L], NOPAT: [F], Dep: [L],
+    CapEx: [L], ΔWC: [L], UFCF: [F]
+
+  UFCF Using Net Income:
+    Net Income: [L], Dep: [L], After-tax Interest: [F],
+    CapEx: [L], ΔWC: [L], UFCF: [F]
+
+  UFCF Using EBITDA:
+    EBITDA: [L], Unlevered Taxes: [L], Deferred Tax: [L],
+    CapEx: [L], ΔWC: [L], UFCF: [F]
+
+  Terminal Value Calculations:
+    Perpetuity: [F] =Terminal UFCF × (1+g) / (WACC − g)
+    Multiple: [F] =Terminal EBITDA × Multiple
+    Average: [F] =AVERAGE(Perpetuity, Multiple)
+
+  Discounting:
+    Period: [F] =year-based
+    PV: [F] =CF / (1 + WACC)^Period
+    EV: [F] =SUM of PV
+    Equity: [F] =EV − Net Debt
+    Per Share: [F] =Equity / Shares
+
+  Implied Metrics:
+    Implied Growth: [F] =solved for g given EV from Multiple method
+    Implied Multiple: [F] =solved for multiple given EV from Perpetuity method
+
+  NPV/XNPV:
+    End-of-Period: [F] =SUM of PV
+    Mid-Period: [F] =SUM of PV with mid-period discounting
+    NPV: [F] =NPV(WACC, cash flows)
+    XNPV End: [F] =XNPV(WACC, CFs, Dates)
+    XNPV Mid: [F] =XNPV(WACC, CFs, mid-dates)
+
+  IRR/XIRR:
+    IRR: [F] =IRR(cash flows including initial outflow)
+    XIRR End: [F] =XIRR(cash flows, dates)
+    XIRR Mid: [F] =XIRR(cash flows, mid-dates)
+
+[3P] DATA TABLES
+
+  Perpetuity Growth Sensitivity:
+    Rows: WACC values (±2% from base)
+    Cols: Growth rates (±1% from base)
+    Base cell: [F] =links to equity value per share
+    Grid: [F] =Data Table formula (two-input)
+
+  Multiple Sensitivity:
+    Rows: WACC values
+    Cols: Terminal multiples (±1 from base)
+    Grid: [F] =Data Table formula
+
+================================================================================
+4. OUTPUTS SHEET
+================================================================================
+
+[A] PERPETUITY DASHBOARD
+
+  Scenario Switch: [H] (active scenario number)
+  Main Outputs (3 rows):
+    Enterprise Value: [L] =linked from Model via Data Table
+    Equity Value: [F] =EV − Net Debt
+    Equity/Share: [F] =Equity / Shares
+
+  Selected Inputs (column O):
+    Terminal Growth: [L] =linked from Inputs
+    WACC: [L] =linked from Inputs
+    Net Debt: [H] (from Inputs)
+    Shares: [H] (from Inputs)
+    Stock Price: [H] (from Inputs)
+
+  Sensitivity Tables (4 tables):
+    EV by WACC × Growth: [F] =Data Table
+    Equity/Share by WACC × Growth: [F] =Data Table
+    Equity Value by WACC × Growth: [F] =Data Table
+    Premium/(Discount) by WACC × Growth: [F] =(Implied Price / Current Price) − 1
+
+[B] MULTIPLE DASHBOARD
+
+  Same structure as Perpetuity, but:
+    Terminal Multiple: [H] (from Inputs)
+    Sensitivity by WACC × Multiple: [F] =Data Table
+
+================================================================================
+5. RELATIVE VALUATION SHEET
+================================================================================
+
+[A] TRADING COMPS
+
+  Peer Table: [H] Company data (will be replaced)
+    EV: [F] =Market Cap + Net Debt
+    EV/EBITDA: [F] =EV / EBITDA
+    P/E: [F] =Share Price / EPS or Market Cap / Net Income
+
+  Summary Stats: [F] =AVERAGE/MEDIAN/MAX/MIN of multiples
+
+  Target Company Value:
+    EV/EBITDA Method: [F] =Median Multiple × Target EBITDA → Implied EV → Equity → Price/Share
+    P/E Method: [F] =Median P/E × Target EPS → Implied Price/Share
+
+[B] PRECEDENT TRANSACTIONS
+
+  Transaction Table: [H] (will be replaced with actual M&A data)
+    EV/EBITDA: [F] =Enterprise Value / EBITDA
+
+  Summary Stats: [F] =AVERAGE/MEDIAN/MAX/MIN
+
+  Target Value: [F] =Median Multiple × Target EBITDA
+
+================================================================================
+6. FOOTBALL FIELD CHART
+================================================================================
+
+  Comparable Companies: [L] =linked from Comps (Low/Middle/High)
+  Precedent Transactions: [L] =linked from Transactions (Low/Middle/High)
+  DCF Perpetuity: [L] =linked from Data Table (WACC±2%, g±1%)
+  DCF Multiple: [L] =linked from Data Table (WACC±2%, Multiple±1)
+  52 Week High/Low: [H] (from Inputs)
+  Average: [F] =AVERAGE of all middle values
+
+================================================================================
+7. CROSS-SHEET DATA FLOW
+================================================================================
+
+  Inputs → Model:
+    CHOOSE Revenue Growth → Model revenue row
+    CHOOSE Cost Increase → Model COGS/SG&A/Other rows
+    CHOOSE CapEx → Model Depreciation & Asset Schedules
+    WC Days → Model Working Capital balances
+    WACC → Model DCF discount rates
+    Terminal g/Multiple → Model terminal value calculations
+    Opening Balances → Model Asset/Tax schedules
+    Interest Rates → Model Debt Schedules
+    Dividend Payout → Model Equity Schedule
+    Debt/Equity Changes → Model Debt/Equity Schedules
+
+  Model → Outputs:
+    XNPV Enterprise Value → Outputs dashboards (Data Tables)
+    Scenario switch (Outputs→Inputs) → CHOOSE formulas
+
+  Model Internal:
+    IS → CF (Net Income, Deferred Tax, Depreciation)
+    IS → BS (Cash from CF, AR/Inv/AP from WC)
+    WC → BS (balances) → CF (cash from WC)
+    Dep → IS (depreciation) → Asset Schedule (PP&E roll)
+    Debt → IS (interest) → BS (LT Debt, Revolving) → CF (revolving change)
+    Equity → CF (dividends) → BS (Common Equity, Retained Earnings)
+    Tax → IS (Current/Deferred Tax) → UFCF (Unlevered Tax, Tax Shield)
+    UFCF → DCF (cash flows for discounting)
+    DCF → Outputs (Enterprise Value)
+
+================================================================================
+8. KEY ASSUMPTIONS
+================================================================================
+
+  ── REVENUE & EXPENSES ──
+  1. Revenue = Prior × (1 + Revenue Growth) — CHOOSE-driven
+  2. COGS/OpEx grow at Cost Projection Increase (CHOOSE-driven), NOT revenue growth
+  3. R&D is bundled into Other OpEx for EBITDA calculation
+  4. EBITDA = Gross Profit − (SG&A + Other OpEx incl. R&D) — pure pre-depreciation cash generation
+  5. EBIT = EBITDA − Depreciation — foundational anchor for DCF NOPAT
+
+  ── WORKING CAPITAL ──
+  6. WC days constant through terminal year
+  7. Current Liabilities identity: CL = Payables + Accrued Expenses + Other CL
+     + Current Debt & Capital Lease Oblig + Current Deferred Liabilities
+     — critical for accurate ΔNWC calculations
+  8. Current Accrued Expenses tracked SEPARATELY from Other Current Liabilities
+     to allow granular working capital analysis
+
+  ── DEPRECIATION & ASSETS ──
+  8. Depreciation: SL for existing (16yr) and new (20yr) assets
+  9. Tax depreciation: declining balance 15% with 50% half-year convention
+  10. Historical Accumulated Depreciation MUST be populated for ALL periods
+      (2022-2025) to establish correct opening net asset baseline
+  11. PP&E Net = PP&E Gross − |Accumulated Depreciation| on Balance Sheet
+
+  ── TAX ──
+  12. Tax losses carry forward indefinitely; no carryback; separate levered/unlevered pools
+  13. Deferred Tax Liabilities = net of DTA − DTL position (non-cash timing differences)
+  14. Deferred taxes add back on CFO to compute pure un-distorted Free Cash Flow
+
+  ── INTEREST & DEBT ──
+  15. Interest is VARIABLE (from debt schedules): LT=6%, Revolving=5%, Cash=1%
+  16. Interest Expense MUST be populated for ALL historical periods (2022-2025)
+      to prevent ghost cash on the Balance Sheet
+  17. Other Income/Expense contains ONLY non-interest items (FX gains/losses,
+      equity investment adjustments, legal settlements) — no double-counting
+      with Interest Income or Interest Expense rows
+
+  ── FINANCING ──
+  18. Dividends = Net Income × Payout Ratio
+  19. Revolving Credit dynamically calculated from available cash
+
+  ── BALANCE SHEET ──
+  20. BALANCE SHEET IDENTITIES (ALL must hold in ALL periods):
+      Assets = Liabilities + Equity
+        Current Assets = Cash + ST Investments + Receivables + Inventory + Other CA
+        Non-Current Assets = Net PPE + Investments & Advances + Other NCA + Deferred Assets
+        Total Assets = Current Assets + Non-Current Assets
+        Current Liabilities = Payables + Accrued Expenses + Other CL + Curr Debt + Deferred
+        Non-Current Liabilities = LT Debt & Cap Lease + Trade Payables NC + Other NC Liab
+        Total Liabilities = Current Liabilities + Non-Current Liabilities
+        Total Equity = Common Stock + Retained Earnings + Other Equity Adjustments
+        Total L&E = Total Liabilities + Total Equity
+  21. Investments And Advances (long-term bond portfolio) MUST be included in
+      Non-Current Assets — critical for EV-to-Equity bridge:
+      Equity Value = EV − Debt + Cash + ALL Marketable Securities
+  22. Other Current Assets, Other Non Current Assets, Other NC Liabilities,
+      and Other Equity Adjustments MUST be populated from XBRL data
+  23. Balance sheet balances in all years (Check = 0) — three-statement identity
+
+  ── CASH FLOW STATEMENT ──
+  24. EXACTLY ONE CapEx row — must be NEGATIVE (no duplicate positive row)
+  25. All sign conventions enforced: outflows negative, inflows positive
+  26. Net Change in Cash = CFO + CFI + CFF → links to Balance Sheet Cash
+
+  ── VALUATION ──
+  27. Two UFCF methods (EBITDA & NI) must reconcile exactly
+  28. Partial-period adjustment for stub period
+  29. XNPV is primary EV output
+  30. Terminal CapEx ≈ Terminal Depreciation (no net investment)
+
+================================================================================
+END OF DOCUMENTATION
+================================================================================

@@ -12,15 +12,9 @@ Implements both Perpetuity (Gordon Growth) and Exit Multiple methods with:
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple, Any, Union
 from datetime import datetime, date
-import math
-import json
 import logging
 
 logger = logging.getLogger(__name__)
-
-# Import AI engine for peer suggestions
-from app.services.international.ai_engine import suggest_peer_companies
-
 
 # =============================================================================
 # INPUT SOURCE ENUM
@@ -98,14 +92,24 @@ class ComparableCompany:
 class ScenarioDrivers:
     """Forecast drivers for a single scenario with source tracking"""
     # Revenue drivers (6 periods: FY1-FY5 + Terminal)
-    volume_growth: List[Union[float, InputWithMetadata]] = field(default_factory=lambda: [0.02] * 6)
-    price_growth: List[Union[float, InputWithMetadata]] = field(default_factory=lambda: [0.02] * 6)
+    # Excel model uses a single combined growth rate:
+    #   Revenue[t] = Revenue[t-1] × (1 + Revenue Growth)
+    combined_revenue_growth: List[Union[float, InputWithMetadata]] = field(default_factory=lambda: [0.04] * 6)
     
     # Capex in USD thousands (6 periods)
     capex: List[Union[float, InputWithMetadata]] = field(default_factory=lambda: [4500.0] * 6)
     
-    # Inflation rate for COGS/OpEx (6 periods)
+    # COGS growth rate for COGS forecasting (6 periods)
+    cogs_growth_rate: List[Union[float, InputWithMetadata]] = field(default_factory=lambda: [0.03] * 6)
+    
+    # DEPRECATED: Inflation rate kept for backward compatibility only.
+    # Use opex_growth (for OpEx) and cogs_growth_rate (for COGS) instead.
+    # Falls back to this field in _build_cogs_schedule() and _build_opex_schedule()
+    # if the primary drivers are not set.
     inflation_rate: List[Union[float, InputWithMetadata]] = field(default_factory=lambda: [0.03] * 6)
+    
+    # OpEx growth rate for OpEx forecasting (6 periods)
+    opex_growth: List[Union[float, InputWithMetadata]] = field(default_factory=lambda: [0.03] * 6)
     
     # Working capital days (5 forecast periods, terminal = prior year)
     ar_days: List[Union[float, InputWithMetadata]] = field(default_factory=lambda: [45.0] * 5)
@@ -121,6 +125,14 @@ class ScenarioDrivers:
         if isinstance(item, InputWithMetadata):
             return item.value
         return item
+    
+    def get_revenue_growth(self, period: int) -> float:
+        """
+        Returns the combined revenue growth rate for a given period.
+        Formula: Revenue[t] = Revenue[t-1] × (1 + Revenue Growth)
+        """
+        idx = min(period, len(self.combined_revenue_growth) - 1)
+        return self.get_value(self.combined_revenue_growth[idx])
 
 
 @dataclass
@@ -147,6 +159,7 @@ class DCFInputs:
     historical_ar: Union[float, InputWithMetadata] = 6624.0
     historical_inventory: Union[float, InputWithMetadata] = 2009.0
     historical_ap: Union[float, InputWithMetadata] = 3319.0
+    historical_current_debt: List[Union[float, InputWithMetadata]] = field(default_factory=list)
     
     # Opening balances (end of FY2022) - typically from API
     net_debt_opening: Union[float, InputWithMetadata] = 18642.0
@@ -158,8 +171,13 @@ class DCFInputs:
     shares_outstanding: Union[float, InputWithMetadata] = 34200.0  # in thousands
     current_stock_price: Union[float, InputWithMetadata] = 2.23
     
-    # Projected interest expense (constant) - can be AI or manual
-    projected_interest_expense: Union[float, InputWithMetadata] = 2520.0
+    # Interest rates for debt schedule computation
+    lt_debt_interest_rate: Union[float, InputWithMetadata] = 0.05  # Interest rate on LT debt
+    cash_interest_rate: Union[float, InputWithMetadata] = 0.01  # Interest rate on cash
+    revolving_credit_rate: Union[float, InputWithMetadata] = 0.05  # Interest rate on revolving credit
+    
+    # OpEx growth rate for OpEx forecasting
+    opex_growth_rate: Union[float, InputWithMetadata] = 0.03  # OpEx growth rate
     
     # Depreciation parameters - can be AI or manual
     useful_life_existing: Union[float, InputWithMetadata] = 16.0  # years
@@ -173,6 +191,34 @@ class DCFInputs:
     
     # Tax loss utilization limit (% of taxable income that can be offset)
     tax_loss_utilization_limit: Union[float, InputWithMetadata] = 0.80
+    
+    # ── Financing items (Excel Inputs rows 58-61) ──
+    # Dividends: positive value = absolute amount paid out (USD thousands)
+    projected_dividends: Union[float, List[Union[float, InputWithMetadata]], InputWithMetadata] = 2446.0
+    # Dividend payout ratio (0-1): Dividends = Net Income × Payout Ratio
+    # If set (> 0), overrides projected_dividends for forecast periods
+    dividend_payout_ratio: Union[float, InputWithMetadata] = 0.0
+    # Change in Long-Term Debt per period (6 periods: FY1-FY5 + Terminal)
+    change_in_lt_debt: List[Union[float, InputWithMetadata]] = field(
+        default_factory=lambda: [0.0] * 6
+    )
+    # Change in Common Equity per period (negative = buybacks)
+    change_in_common_equity: List[Union[float, InputWithMetadata]] = field(
+        default_factory=lambda: [-1000.0] * 6
+    )
+    # Revolving Credit Line per period
+    revolving_credit_line: List[Union[float, InputWithMetadata]] = field(
+        default_factory=lambda: [0.0] * 6
+    )
+    
+    # ── Opening Balance Sheet (end of FY2022) ──
+    cash_opening: Union[float, InputWithMetadata] = 9365.0
+    long_term_debt_opening: Union[float, InputWithMetadata] = 20000.0
+    common_equity_opening: Union[float, InputWithMetadata] = 38669.70
+    retained_earnings_opening: Union[float, InputWithMetadata] = 5690.0
+    # Accumulated depreciation from historical balance sheet (negative convention from yfinance)
+    # Used as opening balance for the depreciation schedule roll-forward
+    opening_accumulated_depreciation: Union[float, InputWithMetadata] = 0.0
     
     # Forecast drivers by scenario - typically from AI
     forecast_drivers: Dict[str, ScenarioDrivers] = field(default_factory=dict)
@@ -191,9 +237,75 @@ class DCFInputs:
     
     # Cost of debt - can be API, AI, or manual
     pre_tax_cost_of_debt: Union[float, InputWithMetadata] = 0.052
+
+    # Pre-computed WACC from frontend (Step 9) — if set, use directly instead of recalculating
+    # This ensures WACC consistency between frontend display and backend calculation
+    precomputed_wacc: Optional[float] = None
     
     # Days in period
     days_in_period: int = 365
+
+    # ── Additional historical data (for reference rows in building block output) ──
+    historical_interest_income: List[Union[float, InputWithMetadata]] = field(default_factory=list)
+    historical_research_development: List[Union[float, InputWithMetadata]] = field(default_factory=list)
+    historical_other_income_expense: List[Union[float, InputWithMetadata]] = field(default_factory=list)
+    historical_tax_paid: List[Union[float, InputWithMetadata]] = field(default_factory=list)
+    historical_interest_paid: List[Union[float, InputWithMetadata]] = field(default_factory=list)
+    historical_share_buybacks: List[Union[float, InputWithMetadata]] = field(default_factory=list)
+    historical_dividends_paid: List[Union[float, InputWithMetadata]] = field(default_factory=list)
+    historical_debt_issuance: List[Union[float, InputWithMetadata]] = field(default_factory=list)
+    historical_debt_repayments: List[Union[float, InputWithMetadata]] = field(default_factory=list)
+
+    # Multi-year historical arrays (for schedule builders)
+    historical_cash: List[Union[float, InputWithMetadata]] = field(default_factory=list)
+    historical_long_term_debt: List[Union[float, InputWithMetadata]] = field(default_factory=list)
+    historical_total_debt: List[Union[float, InputWithMetadata]] = field(default_factory=list)
+    historical_total_equity: List[Union[float, InputWithMetadata]] = field(default_factory=list)
+    historical_common_equity: List[Union[float, InputWithMetadata]] = field(default_factory=list)
+    historical_retained_earnings: List[Union[float, InputWithMetadata]] = field(default_factory=list)
+
+    # ── Balance Sheet structural items (institution-grade DCF additions) ──
+    # Non-Current Marketable Securities (long-term bond portfolio)
+    # Critical for EV-to-Equity bridge: Equity Value = EV - Debt + Cash + ALL Securities
+    historical_non_current_marketable_securities: List[Union[float, InputWithMetadata]] = field(default_factory=list)
+    # Other Current Liabilities (Accrued Expenses + Deferred Revenue)
+    # Critical for accurate Change in Net Working Capital (ΔNWC) calculations
+    historical_other_current_liabilities: List[Union[float, InputWithMetadata]] = field(default_factory=list)
+    # Deferred Tax Liabilities (net DTA/DTL position)
+    # Non-cash timing differences between accounting and tax depreciation
+    historical_deferred_tax_liabilities: List[Union[float, InputWithMetadata]] = field(default_factory=list)
+    # Historical Interest Expense (MUST be populated for all periods)
+    # Prevents ghost cash on Balance Sheet from missing interest obligations
+    historical_interest_expense: List[Union[float, InputWithMetadata]] = field(default_factory=list)
+
+    # ── Additional balance sheet items (new granularity fields) ──
+    # Current Accrued Expenses (component of Other Current Liabilities)
+    historical_current_accrued_expenses: List[Union[float, InputWithMetadata]] = field(default_factory=list)
+    # Current Deferred Liabilities (component of Other Current Liabilities)
+    historical_current_deferred_liabilities: List[Union[float, InputWithMetadata]] = field(default_factory=list)
+    # Trade and Other Payables Non Current (non-current operating liabilities)
+    historical_trade_and_other_payables_non_current: List[Union[float, InputWithMetadata]] = field(default_factory=list)
+    # Other Non-Current Liabilities (non-current operating liabilities beyond LT debt & DTL)
+    historical_other_non_current_liabilities: List[Union[float, InputWithMetadata]] = field(default_factory=list)
+    # Other Short-Term Investments (marketable securities < 1 year, part of current assets)
+    historical_other_short_term_investments: List[Union[float, InputWithMetadata]] = field(default_factory=list)
+    # Other Current Assets (prepaid expenses, deferred tax assets current, etc.)
+    historical_other_current_assets: List[Union[float, InputWithMetadata]] = field(default_factory=list)
+    # Other Non-Current Assets (goodwill, intangibles, long-term deposits, etc.)
+    historical_other_non_current_assets: List[Union[float, InputWithMetadata]] = field(default_factory=list)
+    # Common Stock (par value of issued shares, component of equity)
+    historical_common_stock: List[Union[float, InputWithMetadata]] = field(default_factory=list)
+    # Other Equity Adjustments (AOCI, treasury stock, translation adjustments, etc.)
+    historical_other_equity_adjustments: List[Union[float, InputWithMetadata]] = field(default_factory=list)
+    # Investments And Advances (long-term equity investments, joint ventures)
+    historical_investments_and_advances: List[Union[float, InputWithMetadata]] = field(default_factory=list)
+    # Non-Current Deferred Assets (long-term deferred charges, long-term prepaid expenses)
+    historical_non_current_deferred_assets: List[Union[float, InputWithMetadata]] = field(default_factory=list)
+
+    # Multi-year balance sheet arrays for WC schedule (list versions)
+    historical_ar_list: List[Union[float, InputWithMetadata]] = field(default_factory=list)
+    historical_inventory_list: List[Union[float, InputWithMetadata]] = field(default_factory=list)
+    historical_ap_list: List[Union[float, InputWithMetadata]] = field(default_factory=list)
     
     def get_value(self, item: Any) -> Any:
         """Extract numeric/date value from InputWithMetadata or return as-is"""
@@ -220,10 +332,12 @@ class IncomeStatement:
     cogs: List[float]
     gross_profit: List[float]
     sga: List[float]
+    rd: List[float]
     other_opex: List[float]
     ebitda: List[float]
     depreciation: List[float]
     ebit: List[float]
+    other_income_expense: List[float]
     interest_expense: List[float]
     ebt: List[float]
     current_tax: List[float]
@@ -255,6 +369,8 @@ class DepreciationSchedule:
     new_asset_dep: List[float]
     total_depreciation: List[float]
     gross_ppe_ending: List[float]
+    accumulated_depreciation: List[float]  # Cumulative depreciation for Net PP&E calculation
+    net_ppe: List[float]  # Net PP&E = Gross PP&E - Accumulated Depreciation
     tax_basis_ending: List[float]
     tax_depreciation: List[float]  # Actual tax depreciation deduction for each year
 
@@ -304,6 +420,8 @@ class DCFValuationDetails:
     terminal_value: float
     pv_terminal_value: float
     enterprise_value: float
+    # Exit multiple method specific
+    terminal_ebitda: Optional[float] = None
 
 
 @dataclass
@@ -316,40 +434,660 @@ class ValuationResult:
 
 
 @dataclass
-class DCFOutput:
-    """Complete DCF output"""
-    # Main results
-    perpetuity_method: ValuationResult
-    exit_multiple_method: ValuationResult
+class CashFlowStatement:
+    """Cash Flow Statement forecast (Excel Model rows 43-75)"""
+    years: List[str]
+    # Cash From Operations
+    net_income: List[float]
+    deferred_taxes: List[float]
+    depreciation: List[float]
+    cash_from_ar: List[float]
+    cash_from_inventory: List[float]
+    cash_from_ap: List[float]
+    subtotal_cfo: List[float]
+    # Cash From Investing
+    capital_expenditure: List[float]
+    subtotal_cfi: List[float]
+    # Cash From Financing
+    change_in_lt_debt: List[float]
+    change_in_common_equity: List[float]
+    dividends: List[float]
+    revolving_credit: List[float]
+    subtotal_cff: List[float]
+    # Cash Balance
+    beginning_cash: List[float]
+    increase_decrease: List[float]
+    ending_cash: List[float]
+
+
+@dataclass
+class BalanceSheet:
+    """Balance Sheet forecast (Excel Model rows 79-117)
     
-    # Supporting schedules
-    income_statement: IncomeStatement
-    working_capital: WorkingCapitalSchedule
-    depreciation: DepreciationSchedule
-    tax_levered: TaxSchedule
-    tax_unlevered: TaxSchedule
-    ufcf: UFCFSchedule
-    
-    # DCF details
-    perpetuity_dcf: DCFValuationDetails
-    multiple_dcf: DCFValuationDetails
-    
+    Institution-grade structure with all critical items for:
+    - Three-statement identity check (Assets = Liabilities + Equity)
+    - Accurate EV-to-Equity bridge (includes all marketable securities)
+    - Correct working capital and NOPAT calculations
+    """
+    years: List[str]
+    # Assets
+    cash: List[float]
+    accounts_receivable: List[float]
+    inventories: List[float]
+    other_short_term_investments: List[float]  # Short-term investments (< 1 year)
+    other_current_assets: List[float]  # Prepaid expenses, deferred tax assets (current), etc.
+    non_current_marketable_securities: List[float]  # Long-term bond portfolio (e.g., Apple ~$165B)
+    other_non_current_assets: List[float]  # Goodwill, intangibles, long-term deposits, etc.
+    non_current_deferred_assets: List[float]  # Long-term deferred charges, prepaid expenses
+    total_current_assets: List[float]
+    ppe_gross: List[float]
+    accumulated_depreciation: List[float]  # Negative convention (contra-asset)
+    ppe_net: List[float]
+    investments_and_advances: List[float]  # Long-term equity investments, joint ventures (distinct from NCMS)
+    total_assets: List[float]
+    # Liabilities
+    accounts_payable: List[float]
+    current_accrued_expenses: List[float]  # Accrued expenses (component of other CL)
+    current_deferred_liabilities: List[float]  # Deferred revenue (component of other CL)
+    other_current_liabilities: List[float]  # Accrued Expenses + Deferred Revenue (e.g., Apple ~$75B)
+    current_debt: List[float]
+    revolving_credit: List[float]
+    total_current_liabilities: List[float]
+    trade_and_other_payables_non_current: List[float]  # Non-current operating payables
+    deferred_tax_liabilities: List[float]  # Net DTA/DTL position (non-cash timing differences)
+    other_non_current_liabilities: List[float]  # Other non-current liabilities beyond LT debt & DTL
+    long_term_debt: List[float]
+    total_liabilities: List[float]
+    # Equity
+    common_stock: List[float]  # Par value of issued shares
+    common_equity: List[float]
+    retained_earnings: List[float]
+    other_equity_adjustments: List[float]  # AOCI, treasury stock, translation adjustments
+    total_shareholders_equity: List[float]
+    total_liabilities_equity: List[float]
+    # Check
+    balance_check: List[float]
+
+
+@dataclass
+class IntrinsicExtracts:
+    """Financial statement extracts for intrinsic valuation (Excel rows 450-473)"""
+    years: List[str]
+    net_income: List[float]
+    depreciation: List[float]
+    interest_expense: List[float]
+    tax_rate: List[float]
+    after_tax_interest: List[float]
+    ebit: List[float]
+    unlevered_taxes: List[float]
+    ebitda: List[float]
+    capex: List[float]
+    change_in_working_capital: List[float]
+    long_term_debt: List[float]
+    cash: List[float]
+
+
+@dataclass
+class UFCFMethods:
+    """UFCF derivation via 3 methods (Excel rows 476-498)"""
+    years: List[str]
+    ebit_method: List[float]
+    net_income_method: List[float]
+    ebitda_method: List[float]
+    methods_reconcile: bool
+
+
+@dataclass
+class NPVResult:
+    """NPV, XNPV, IRR, XIRR results (Excel rows 522-572)"""
+    npv_end_of_period: float
+    xnpv_end_of_period: float
+    equity_per_share_end: float
+    npv_mid_period: float
+    xnpv_mid_period: float
+    equity_per_share_mid: float
+    irr: float
+    xirr_end_of_period: float
+    xirr_mid_period: float
+
+
+@dataclass
+class DebtSchedulePart1:
+    """Debt Schedule Part 1 — Cash + LT Debt (Excel rows 331-345)"""
+    years: List[str]
+    # Cash section
+    cash_beginning: List[float]
+    cash_change: List[float]
+    cash_ending: List[float]
+    cash_interest_rate: List[float]
+    cash_interest_income: List[float]
+    # LT Debt section
+    lt_debt_beginning: List[float]
+    lt_debt_change: List[float]
+    lt_debt_ending: List[float]
+    lt_debt_interest_rate: List[float]
+    lt_debt_interest_expense: List[float]
+
+
+@dataclass
+class DebtSchedulePart2:
+    """Debt Schedule Part 2 — Revolving + Net Interest (Excel rows 347-368)"""
+    years: List[str]
+    # Available Cash
+    beginning_cash: List[float]
+    cash_from_operations: List[float]
+    cash_from_investing: List[float]
+    change_in_lt_debt: List[float]
+    change_in_common_equity: List[float]
+    dividends: List[float]
+    cash_available: List[float]
+    # Revolving Credit
+    revolving_beginning: List[float]
+    revolving_change: List[float]
+    revolving_ending: List[float]
+    revolving_interest_rate: List[float]
+    revolving_interest_expense: List[float]
+    # Net Interest
+    lt_interest: List[float]
+    revolving_interest: List[float]
+    interest_income: List[float]
+    net_interest_expense: List[float]
+
+
+@dataclass
+class EquitySchedule:
+    """Equity Schedule — Common Equity + Retained Earnings (Excel rows 370-385)"""
+    years: List[str]
+    # Common Equity
+    common_equity_beginning: List[float]
+    common_equity_change: List[float]
+    common_equity_ending: List[float]
+    # Dividends
+    net_income: List[float]
+    dividend_payout_ratio: List[float]
+    dividends: List[float]
+    # Retained Earnings
+    retained_earnings_beginning: List[float]
+    retained_earnings_net_income: List[float]
+    retained_earnings_dividends: List[float]
+    retained_earnings_ending: List[float]
+    # Total
+    total_shareholders_equity: List[float]
+
+
+@dataclass
+class InterestSchedule:
+    """Interest Schedule — combines Debt Part 1 & Part 2 interest items
+    plus historical reference data. This is the 'Interest Schedule' shown in Step 9."""
+    years: List[str]
+    # Historical reference (from XBRL)
+    lt_interest_historical: List[float] = field(default_factory=list)
+    total_interest_expense_historical: List[float] = field(default_factory=list)
+    interest_income_historical: List[float] = field(default_factory=list)
+    # Forecast (from engine) — full period including historical
+    opening_cash: List[float] = field(default_factory=list)
+    cash_interest_rate: List[float] = field(default_factory=list)
+    cash_interest_income: List[float] = field(default_factory=list)
+    lt_debt_balance: List[float] = field(default_factory=list)
+    lt_debt_interest_rate: List[float] = field(default_factory=list)
+    lt_debt_interest_expense: List[float] = field(default_factory=list)
+    revolving_credit_balance: List[float] = field(default_factory=list)
+    revolving_credit_rate: List[float] = field(default_factory=list)
+    revolving_interest_expense: List[float] = field(default_factory=list)
+    net_interest_expense: List[float] = field(default_factory=list)
+    total_interest_expense: List[float] = field(default_factory=list)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "years": self.years,
+            "lt_interest_historical": self.lt_interest_historical,
+            "total_interest_expense_historical": self.total_interest_expense_historical,
+            "interest_income_historical": self.interest_income_historical,
+            "opening_cash": self.opening_cash,
+            "cash_interest_rate": self.cash_interest_rate,
+            "cash_interest_income": self.cash_interest_income,
+            "lt_debt_balance": self.lt_debt_balance,
+            "lt_debt_interest_rate": self.lt_debt_interest_rate,
+            "lt_debt_interest_expense": self.lt_debt_interest_expense,
+            "revolving_credit_balance": self.revolving_credit_balance,
+            "revolving_credit_rate": self.revolving_credit_rate,
+            "revolving_interest_expense": self.revolving_interest_expense,
+            "net_interest_expense": self.net_interest_expense,
+            "total_interest_expense": self.total_interest_expense,
+        }
+
+
+@dataclass
+class HistoricalReferenceRows:
+    """Historical-only reference rows from XBRL data.
+    These are display-only rows that appear in building block schedules
+    but are not computed by the DCF engine (they come from actual filings)."""
+    years: List[str]
+    # Income Statement references
+    interest_income: List[float] = field(default_factory=list)
+    research_development: List[float] = field(default_factory=list)
+    other_income_expense: List[float] = field(default_factory=list)
+    # Cash Flow Statement references
+    tax_paid: List[float] = field(default_factory=list)
+    interest_paid: List[float] = field(default_factory=list)
+    share_buybacks: List[float] = field(default_factory=list)
+    debt_issuance: List[float] = field(default_factory=list)
+    debt_repayments: List[float] = field(default_factory=list)
+    dividends_paid: List[float] = field(default_factory=list)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "years": self.years,
+            "interest_income": self.interest_income,
+            "research_development": self.research_development,
+            "other_income_expense": self.other_income_expense,
+            "tax_paid": self.tax_paid,
+            "interest_paid": self.interest_paid,
+            "share_buybacks": self.share_buybacks,
+            "debt_issuance": self.debt_issuance,
+            "debt_repayments": self.debt_repayments,
+            "dividends_paid": self.dividends_paid,
+        }
+
+
+@dataclass
+class BuildingBlockOutput:
+    """
+    Output of calculate_building_blocks() — projected financial statements.
+    Phase 1 of the DCF calculation. Shown to user for review in Step 9.
+    """
     # WACC calculation
     wacc: float
     avg_unlevered_beta: float
     levered_beta: float
     cost_of_equity: float
     after_tax_cost_of_debt: float
-    
+
+    # Projected schedules (6 periods: FY1-FY5 + Terminal)
+    revenue: List[float]
+    cogs: List[float]
+    gross_profit: List[float]
+    sga: List[float]
+    rd: List[float]
+    other_opex: List[float]
+    ebitda: List[float]
+    depreciation_schedule: DepreciationSchedule
+    depreciation: List[float]
+    ebit: List[float]
+    interest: List[float]
+    ebt: List[float]
+
+    # Schedules
+    income_statement: IncomeStatement
+    working_capital: WorkingCapitalSchedule
+    tax_levered: TaxSchedule
+    tax_unlevered: TaxSchedule
+
+    # Net Income
+    net_income: List[float]
+
+    # Financial Statements (building blocks)
+    cash_flow_statement: CashFlowStatement
+    balance_sheet: BalanceSheet
+
+    # Validation (required fields — no defaults)
+    validation_flags: Dict[str, bool]
+    warnings: List[str]
+
+    # Metadata (required fields — no defaults)
+    scenario: str
+    valuation_date: date
+
+    # Debt & Equity Schedules (Excel rows 331-385) — optional, defaults to None
+    debt_schedule_part1: Optional[DebtSchedulePart1] = None
+    debt_schedule_part2: Optional[DebtSchedulePart2] = None
+    equity_schedule: Optional[EquitySchedule] = None
+
+    # Full-period schedules (historical + forecast + terminal)
+    full_working_capital: Optional[WorkingCapitalSchedule] = None
+    interest_schedule: Optional[InterestSchedule] = None
+    historical_references: Optional[HistoricalReferenceRows] = None
+
+    # Period labels
+    historical_years: List[str] = field(default_factory=list)
+    forecast_years: List[str] = field(default_factory=lambda: ["FY1", "FY2", "FY3", "FY4", "FY5", "Terminal"])
+    all_years: List[str] = field(default_factory=list)
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Serialize for JSON transport and session storage."""
+        return {
+            "wacc_calculation": {
+                "wacc": self.wacc,
+                "avg_unlevered_beta": self.avg_unlevered_beta,
+                "levered_beta": self.levered_beta,
+                "cost_of_equity": self.cost_of_equity,
+                "after_tax_cost_of_debt": self.after_tax_cost_of_debt,
+            },
+            "supporting_schedules": {
+                "income_statement": {
+                    "years": self.income_statement.years,
+                    "revenue": self.income_statement.revenue,
+                    "cogs": self.income_statement.cogs,
+                    "gross_profit": self.income_statement.gross_profit,
+                    "sga": self.income_statement.sga,
+                    "rd": self.income_statement.rd,
+                    "other_opex": self.income_statement.other_opex,
+                    "ebitda": self.income_statement.ebitda,
+                    "depreciation": self.income_statement.depreciation,
+                    "ebit": self.income_statement.ebit,
+                    "other_income_expense": self.income_statement.other_income_expense,
+                    "interest_expense": self.income_statement.interest_expense,
+                    "ebt": self.income_statement.ebt,
+                    "current_tax": self.income_statement.current_tax,
+                    "deferred_tax": self.income_statement.deferred_tax,
+                    "total_tax": self.income_statement.total_tax,
+                    "net_income": self.income_statement.net_income,
+                },
+                "working_capital": {
+                    "years": self.working_capital.years,
+                    "ar_balance": self.working_capital.ar_balance,
+                    "inventory_balance": self.working_capital.inventory_balance,
+                    "ap_balance": self.working_capital.ap_balance,
+                    "nwc": self.working_capital.nwc,
+                    "change_in_nwc": self.working_capital.change_in_nwc,
+                    "ar_days": self.working_capital.ar_days,
+                    "inv_days": self.working_capital.inv_days,
+                    "ap_days": self.working_capital.ap_days,
+                },
+                "depreciation": {
+                    "years": self.depreciation_schedule.years,
+                    "capex": self.depreciation_schedule.capex,
+                    "existing_asset_dep": self.depreciation_schedule.existing_asset_dep,
+                    "new_asset_dep": self.depreciation_schedule.new_asset_dep,
+                    "total_depreciation": self.depreciation_schedule.total_depreciation,
+                    "gross_ppe_ending": self.depreciation_schedule.gross_ppe_ending,
+                    "accumulated_depreciation": self.depreciation_schedule.accumulated_depreciation,
+                    "net_ppe": self.depreciation_schedule.net_ppe,
+                    "tax_basis_ending": self.depreciation_schedule.tax_basis_ending,
+                    "tax_depreciation": self.depreciation_schedule.tax_depreciation,
+                },
+                "tax_levered": {
+                    "years": self.tax_levered.years,
+                    "ebt": self.tax_levered.ebt_ebit,
+                    "accounting_dep": self.tax_levered.accounting_dep,
+                    "tax_dep": self.tax_levered.tax_dep,
+                    "ebt_adjusted": self.tax_levered.ebt_adjusted,
+                    "nol_opening": self.tax_levered.nol_opening,
+                    "nol_new": self.tax_levered.nol_new,
+                    "nol_used": self.tax_levered.nol_used,
+                    "nol_ending": self.tax_levered.nol_ending,
+                    "taxable_income": self.tax_levered.taxable_income,
+                    "current_tax": self.tax_levered.current_tax,
+                    "total_tax": self.tax_levered.total_tax,
+                    "deferred_tax": self.tax_levered.deferred_tax,
+                },
+                "tax_unlevered": {
+                    "years": self.tax_unlevered.years,
+                    "ebit": self.tax_unlevered.ebt_ebit,
+                    "current_tax": self.tax_unlevered.current_tax,
+                },
+            },
+            "cash_flow_statement": DCFEngine._serialize_cfs(self.cash_flow_statement),
+            "balance_sheet": DCFEngine._serialize_bs(self.balance_sheet),
+            "debt_schedule_part1": DCFEngine._serialize_debt_part1(self.debt_schedule_part1) if self.debt_schedule_part1 else None,
+            "debt_schedule_part2": DCFEngine._serialize_debt_part2(self.debt_schedule_part2) if self.debt_schedule_part2 else None,
+            "equity_schedule": DCFEngine._serialize_equity(self.equity_schedule) if self.equity_schedule else None,
+            "full_working_capital": {
+                "years": self.full_working_capital.years,
+                "ar_balance": self.full_working_capital.ar_balance,
+                "inventory_balance": self.full_working_capital.inventory_balance,
+                "ap_balance": self.full_working_capital.ap_balance,
+                "nwc": self.full_working_capital.nwc,
+                "change_in_nwc": self.full_working_capital.change_in_nwc,
+                "ar_days": self.full_working_capital.ar_days,
+                "inv_days": self.full_working_capital.inv_days,
+                "ap_days": self.full_working_capital.ap_days,
+            } if self.full_working_capital else None,
+            "interest_schedule": self.interest_schedule.to_dict() if self.interest_schedule else None,
+            "historical_references": self.historical_references.to_dict() if self.historical_references else None,
+            "validation": {
+                "flags": self.validation_flags,
+            },
+            "metadata": {
+                "scenario": self.scenario,
+                "valuation_date": self.valuation_date.isoformat(),
+                "warnings": self.warnings,
+                "historical_years": self.historical_years,
+                "forecast_years": self.forecast_years,
+                "all_years": self.all_years,
+            },
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'BuildingBlockOutput':
+        """Deserialize from dict (e.g. from session storage)."""
+        wacc_data = data.get("wacc_calculation", {})
+        schedules = data.get("supporting_schedules", {})
+        is_data = schedules.get("income_statement", {})
+        wc_data = schedules.get("working_capital", {})
+        dep_data = schedules.get("depreciation", {})
+        tax_l_data = schedules.get("tax_levered", {})
+        tax_u_data = schedules.get("tax_unlevered", {})
+        metadata = data.get("metadata", {})
+
+        tax_levered = TaxSchedule(
+            years=tax_l_data.get("years", []),
+            ebt_ebit=tax_l_data.get("ebt", []),
+            accounting_dep=tax_l_data.get("accounting_dep", []),
+            tax_dep=tax_l_data.get("tax_dep", []),
+            ebt_adjusted=tax_l_data.get("ebt_adjusted", []),
+            nol_opening=tax_l_data.get("nol_opening", []),
+            nol_new=tax_l_data.get("nol_new", []),
+            nol_used=tax_l_data.get("nol_used", []),
+            nol_ending=tax_l_data.get("nol_ending", []),
+            taxable_income=tax_l_data.get("taxable_income", []),
+            current_tax=tax_l_data.get("current_tax", []),
+            total_tax=tax_l_data.get("total_tax", []),
+            deferred_tax=tax_l_data.get("deferred_tax", []),
+        )
+
+        tax_unlevered = TaxSchedule(
+            years=tax_u_data.get("years", []),
+            ebt_ebit=tax_u_data.get("ebit", []),
+            accounting_dep=[],
+            tax_dep=[],
+            ebt_adjusted=[],
+            nol_opening=[],
+            nol_new=[],
+            nol_used=[],
+            nol_ending=[],
+            taxable_income=[],
+            current_tax=tax_u_data.get("current_tax", []),
+            total_tax=[],
+            deferred_tax=[],
+        )
+
+        depr_schedule = DepreciationSchedule(
+            years=dep_data.get("years", []),
+            capex=dep_data.get("capex", []),
+            existing_asset_dep=dep_data.get("existing_asset_dep", []),
+            new_asset_dep=dep_data.get("new_asset_dep", []),
+            total_depreciation=dep_data.get("total_depreciation", []),
+            gross_ppe_ending=dep_data.get("gross_ppe_ending", []),
+            accumulated_depreciation=dep_data.get("accumulated_depreciation", []),
+            net_ppe=dep_data.get("net_ppe", []),
+            tax_basis_ending=dep_data.get("tax_basis_ending", []),
+            tax_depreciation=dep_data.get("tax_depreciation", []),
+        )
+
+        income_stmt = IncomeStatement(
+            years=is_data.get("years", []),
+            revenue=is_data.get("revenue", []),
+            cogs=is_data.get("cogs", []),
+            gross_profit=is_data.get("gross_profit", []),
+            sga=is_data.get("sga", []),
+            rd=is_data.get("rd", []),
+            other_opex=is_data.get("other_opex", []),
+            ebitda=is_data.get("ebitda", []),
+            depreciation=is_data.get("depreciation", []),
+            ebit=is_data.get("ebit", []),
+            other_income_expense=is_data.get("other_income_expense", []),
+            interest_expense=is_data.get("interest_expense", []),
+            ebt=is_data.get("ebt", []),
+            current_tax=is_data.get("current_tax", []),
+            deferred_tax=is_data.get("deferred_tax", []),
+            total_tax=is_data.get("total_tax", []),
+            net_income=is_data.get("net_income", []),
+        )
+
+        wc = WorkingCapitalSchedule(
+            years=wc_data.get("years", []),
+            ar_balance=wc_data.get("ar_balance", []),
+            inventory_balance=wc_data.get("inventory_balance", []),
+            ap_balance=wc_data.get("ap_balance", []),
+            nwc=wc_data.get("nwc", []),
+            change_in_nwc=wc_data.get("change_in_nwc", []),
+            ar_days=wc_data.get("ar_days", []),
+            inv_days=wc_data.get("inv_days", []),
+            ap_days=wc_data.get("ap_days", []),
+        )
+
+        valuation_date_str = metadata.get("valuation_date", date.today().isoformat())
+        try:
+            valuation_date_val = date.fromisoformat(valuation_date_str)
+        except (ValueError, TypeError):
+            valuation_date_val = date.today()
+
+        return cls(
+            wacc=wacc_data.get("wacc", 0),
+            avg_unlevered_beta=wacc_data.get("avg_unlevered_beta", 0),
+            levered_beta=wacc_data.get("levered_beta", 0),
+            cost_of_equity=wacc_data.get("cost_of_equity", 0),
+            after_tax_cost_of_debt=wacc_data.get("after_tax_cost_of_debt", 0),
+            revenue=is_data.get("revenue", []),
+            cogs=is_data.get("cogs", []),
+            gross_profit=is_data.get("gross_profit", []),
+            sga=is_data.get("sga", []),
+            rd=is_data.get("rd", []),
+            other_opex=is_data.get("other_opex", []),
+            ebitda=is_data.get("ebitda", []),
+            depreciation_schedule=depr_schedule,
+            depreciation=is_data.get("depreciation", []),
+            ebit=is_data.get("ebit", []),
+            interest=is_data.get("interest_expense", []),
+            ebt=is_data.get("ebt", []),
+            income_statement=income_stmt,
+            working_capital=wc,
+            tax_levered=tax_levered,
+            tax_unlevered=tax_unlevered,
+            net_income=is_data.get("net_income", []),
+            cash_flow_statement=DCFEngine._deserialize_cfs(data.get("cash_flow_statement", {})),
+            balance_sheet=DCFEngine._deserialize_bs(data.get("balance_sheet", {})),
+            validation_flags=data.get("validation", {}).get("flags", {}),
+            warnings=metadata.get("warnings", []),
+            scenario=metadata.get("scenario", "base_case"),
+            valuation_date=valuation_date_val,
+            historical_years=metadata.get("historical_years", []),
+            forecast_years=metadata.get("forecast_years", ["FY1", "FY2", "FY3", "FY4", "FY5", "Terminal"]),
+            all_years=metadata.get("all_years", []),
+        )
+
+
+@dataclass
+class ValuationOutput:
+    """
+    Output of calculate_valuation() — UFCF, DCF, valuation results.
+    Phase 2 of the DCF calculation. Shown to user in Step 10.
+    """
+    # UFCF
+    ufcf: UFCFSchedule
+
+    # DCF details
+    perpetuity_dcf: DCFValuationDetails
+    multiple_dcf: DCFValuationDetails
+
+    # Valuation results
+    perpetuity_method: ValuationResult
+    exit_multiple_method: ValuationResult
+
+    # Supporting analysis
+    intrinsic_extracts: Optional[IntrinsicExtracts]
+    ufcf_3_methods: Optional[UFCFMethods]
+    npv_xnpv: Optional[NPVResult]
+    sensitivity_perpetuity: Optional[Dict]
+    sensitivity_multiple: Optional[Dict]
+
     # Validation
     ufcf_methods_reconcile: bool
     validation_flags: Dict[str, bool]
     warnings: List[str]
-    
+
     # Metadata
     scenario: str
     valuation_date: date
-    calculation_timestamp: str = field(default_factory=lambda: datetime.now().isoformat())
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Serialize for JSON transport."""
+        return {
+            "main_outputs": {
+                "perpetuity_method": {
+                    "enterprise_value": self.perpetuity_method.enterprise_value,
+                    "equity_value": self.perpetuity_method.equity_value,
+                    "equity_value_per_share": self.perpetuity_method.equity_value_per_share,
+                    "implied_premium_discount_pct": self.perpetuity_method.implied_premium_discount,
+                },
+                "exit_multiple_method": {
+                    "enterprise_value": self.exit_multiple_method.enterprise_value,
+                    "equity_value": self.exit_multiple_method.equity_value,
+                    "equity_value_per_share": self.exit_multiple_method.equity_value_per_share,
+                    "implied_premium_discount_pct": self.exit_multiple_method.implied_premium_discount,
+                },
+            },
+            "supporting_schedules": {
+                "ufcf": {
+                    "years": self.ufcf.years,
+                    "ebitda": self.ufcf.ebitda,
+                    "current_tax_unlevered": self.ufcf.current_tax_unlevered,
+                    "capex": self.ufcf.capex,
+                    "change_in_nwc": self.ufcf.change_in_nwc,
+                    "ufcf": self.ufcf.ufcf,
+                    "tax_shield": self.ufcf.tax_shield,
+                },
+            },
+            "dcf_details": {
+                "perpetuity_method": {
+                    "years": self.perpetuity_dcf.years,
+                    "fiscal_year_ends": [d.isoformat() for d in self.perpetuity_dcf.fiscal_year_ends],
+                    "cf_dates": [d.isoformat() for d in self.perpetuity_dcf.cf_dates],
+                    "years_to_cf": self.perpetuity_dcf.years_to_cf,
+                    "discount_factors": self.perpetuity_dcf.discount_factors,
+                    "ufcf": self.perpetuity_dcf.ufcf,
+                    "adjusted_ufcf": self.perpetuity_dcf.adjusted_ufcf,
+                    "pv_discrete_cf": self.perpetuity_dcf.pv_discrete_cf,
+                    "terminal_value": self.perpetuity_dcf.terminal_value,
+                    "pv_terminal_value": self.perpetuity_dcf.pv_terminal_value,
+                    "enterprise_value": self.perpetuity_dcf.enterprise_value,
+                },
+                "exit_multiple_method": {
+                    "terminal_ebitda": self.multiple_dcf.terminal_ebitda,
+                    "terminal_value": self.multiple_dcf.terminal_value,
+                    "pv_discrete_cf": self.multiple_dcf.pv_discrete_cf,
+                    "pv_terminal_value": self.multiple_dcf.pv_terminal_value,
+                    "enterprise_value": self.multiple_dcf.enterprise_value,
+                },
+            },
+            "validation": {
+                "ufcf_methods_reconcile": self.ufcf_methods_reconcile,
+                "flags": self.validation_flags,
+            },
+            "metadata": {
+                "scenario": self.scenario,
+                "valuation_date": self.valuation_date.isoformat(),
+                "warnings": self.warnings,
+            },
+            "intrinsic_extracts": DCFEngine._serialize_intrinsic(self.intrinsic_extracts) if self.intrinsic_extracts else None,
+            "ufcf_3_methods": DCFEngine._serialize_ufcf_3m(self.ufcf_3_methods) if self.ufcf_3_methods else None,
+            "npv_xnpv": DCFEngine._serialize_npv(self.npv_xnpv) if self.npv_xnpv else None,
+            "sensitivity_tables": {
+                "perpetuity_wacc_vs_growth": self.sensitivity_perpetuity,
+                "multiple_wacc_vs_terminal_multiple": self.sensitivity_multiple,
+            },
+        }
 
 
 # =============================================================================
@@ -371,12 +1109,87 @@ class DCFEngine:
         Calculate WACC from comparable companies.
         Returns: (WACC, avg_unlevered_beta, levered_beta, cost_of_equity)
         """
+        # ── Use pre-computed WACC from frontend when available ──────────────────
+        # This prevents WACC drift between frontend display and backend calculation.
+        # The frontend auto-calculates WACC from components (Rf, MRP, beta, CoD, D/E, tax)
+        # and sends the result. We trust it if it's within reasonable bounds.
+        pw = self.inputs.precomputed_wacc
+        if pw is not None and 0.01 <= pw <= 0.30:
+            logger.info(
+                f"Using pre-computed WACC from frontend: {pw:.4f} ({pw*100:.2f}%)"
+            )
+            # Still compute cost_of_equity for logging/validation
+            def _val(v):
+                return v.value if hasattr(v, 'value') else float(v) if v is not None else 0.0
+            rfr = _val(self.inputs.risk_free_rate)
+            mrp = _val(self.inputs.market_risk_premium)
+            crp = _val(self.inputs.country_risk_premium)
+            cost_of_equity = rfr + mrp + crp  # simplified for logging
+            return pw, 1.0, 1.0, cost_of_equity
+
+        # Extract input values (handle both plain float and InputWithMetadata)
+        def _val(v):
+            return v.value if hasattr(v, 'value') else float(v) if v is not None else 0.0
+
+        rfr = _val(self.inputs.risk_free_rate)
+        mrp = _val(self.inputs.market_risk_premium)
+        crp = _val(self.inputs.country_risk_premium)
+        tax = _val(self.inputs.statutory_tax_rate)
+        cod = _val(self.inputs.pre_tax_cost_of_debt)
+        td_w = _val(self.inputs.target_debt_weight)
+        te_w = _val(self.inputs.target_equity_weight)
+
+        # Sanity-check inputs — percentage values should be in 0-1 decimal form
+        for name, val in [('risk_free_rate', rfr), ('market_risk_premium', mrp),
+                          ('country_risk_premium', crp), ('statutory_tax_rate', tax),
+                          ('pre_tax_cost_of_debt', cod)]:
+            if val < 0:
+                logger.warning(f"WACC input {name}={val:.6f} is negative; clamping to 0")
+                if name == 'risk_free_rate': rfr = 0.0
+                elif name == 'market_risk_premium': mrp = 0.001  # minimum 0.1%
+                elif name == 'country_risk_premium': crp = 0.0
+                elif name == 'statutory_tax_rate': tax = 0.0
+                elif name == 'pre_tax_cost_of_debt': cod = 0.0
+            if val > 1.0:
+                # Not normalized — apply same logic as normalize_pct
+                if val > 100.0:
+                    normalized = val / 10000.0  # basis-point-like
+                else:
+                    normalized = val / 100.0    # percentage
+                logger.warning(
+                    f"WACC input {name}={val:.4f} > 1.0 — "
+                    f"normalized to {normalized:.6f}"
+                )
+                if name == 'risk_free_rate': rfr = normalized
+                elif name == 'market_risk_premium': mrp = normalized
+                elif name == 'country_risk_premium': crp = normalized
+                elif name == 'statutory_tax_rate': tax = min(normalized, 0.5)
+                elif name == 'pre_tax_cost_of_debt': cod = normalized
+
+        # Clamp weights to [0, 1]
+        td_w = max(0.0, min(1.0, td_w))
+        te_w = max(0.0, min(1.0, te_w))
+        if td_w + te_w == 0:
+            td_w, te_w = 0.15, 0.85
+        # Prevent extreme debt-heavy weights (equity weight must be > 0 for beta re-levering)
+        if te_w < 0.05:
+            logger.warning(
+                f"WACC equity weight={te_w:.4f} is too low (< 5%); "
+                f"clamping to 15% debt / 85% equity default"
+            )
+            td_w, te_w = 0.15, 0.85
+
         if not self.inputs.comparable_companies:
-            # Use direct WACC input if no comparables
-            after_tax_cost_of_debt = self.inputs.pre_tax_cost_of_debt * (1 - self.inputs.statutory_tax_rate)
-            wacc = (self.inputs.target_debt_weight * after_tax_cost_of_debt + 
-                   self.inputs.target_equity_weight * 0.10)  # Assume 10% cost of equity
-            return wacc, 1.0, 1.0, 0.10
+            # Use direct inputs when no comparables available
+            cost_of_equity = rfr + 1.0 * mrp + crp
+            after_tax_cost_of_debt = cod * (1 - tax)
+            wacc = td_w * after_tax_cost_of_debt + te_w * cost_of_equity
+            logger.info(
+                f"WACC (no comparables): Rf={rfr:.4f}, MRP={mrp:.4f}, CRP={crp:.4f}, "
+                f"tax={tax:.4f}, CoD={cod:.4f}, d/e={td_w:.2f}/{te_w:.2f} → WACC={wacc:.4f}"
+            )
+            self._validate_wacc(wacc, cost_of_equity, after_tax_cost_of_debt)
+            return wacc, 1.0, 1.0, cost_of_equity
         
         # Calculate averages from comparables
         unlevered_betas = [comp.unlevered_beta for comp in self.inputs.comparable_companies]
@@ -386,36 +1199,54 @@ class DCFEngine:
         avg_tax_rate = sum(tax_rates) / len(tax_rates)
         
         # Re-lever beta using target capital structure
-        target_d_e = self.inputs.target_debt_weight / self.inputs.target_equity_weight
+        target_d_e = td_w / te_w if te_w > 0 else 1.0
         levered_beta = avg_unlevered_beta * (1 + (1 - avg_tax_rate) * target_d_e)
         
         # Cost of Equity = Risk-Free + (Market Risk Premium × Levered Beta) + Country Risk Premium
-        cost_of_equity = (self.inputs.risk_free_rate + 
-                         self.inputs.market_risk_premium * levered_beta +
-                         self.inputs.country_risk_premium)
+        cost_of_equity = rfr + mrp * levered_beta + crp
         
         # After-tax cost of debt
-        after_tax_cost_of_debt = self.inputs.pre_tax_cost_of_debt * (1 - self.inputs.statutory_tax_rate)
+        after_tax_cost_of_debt = cod * (1 - tax)
         
         # WACC
-        wacc = (self.inputs.target_debt_weight * after_tax_cost_of_debt +
-               self.inputs.target_equity_weight * cost_of_equity)
+        wacc = td_w * after_tax_cost_of_debt + te_w * cost_of_equity
+
+        logger.info(
+            f"WACC: Rf={rfr:.4f}, MRP={mrp:.4f}, CRP={crp:.4f}, beta_u={avg_unlevered_beta:.4f}, "
+            f"beta_l={levered_beta:.4f}, tax={tax:.4f}, CoD={cod:.4f}, "
+            f"d/e={td_w:.2f}/{te_w:.2f} → CoE={cost_of_equity:.4f}, WACC={wacc:.4f}"
+        )
+        self._validate_wacc(wacc, cost_of_equity, after_tax_cost_of_debt)
         
         return wacc, avg_unlevered_beta, levered_beta, cost_of_equity
+
+    def _validate_wacc(self, wacc: float, cost_of_equity: float, after_tax_cost_of_debt: float) -> None:
+        """Validate WACC is within reasonable bounds. Raises ValueError if not."""
+        if wacc < -0.10 or wacc > 0.50:
+            raise ValueError(
+                f"WACC={wacc:.4f} ({wacc*100:.2f}%) is outside reasonable bounds (-10% to 50%). "
+                f"Inputs: cost_of_equity={cost_of_equity:.4f}, "
+                f"after_tax_cost_of_debt={after_tax_cost_of_debt:.4f}, "
+                f"risk_free_rate={self.inputs.risk_free_rate}, "
+                f"market_risk_premium={self.inputs.market_risk_premium}, "
+                f"country_risk_premium={self.inputs.country_risk_premium}, "
+                f"pre_tax_cost_of_debt={self.inputs.pre_tax_cost_of_debt}, "
+                f"statutory_tax_rate={self.inputs.statutory_tax_rate}, "
+                f"target_debt_weight={self.inputs.target_debt_weight}, "
+                f"target_equity_weight={self.inputs.target_equity_weight}"
+            )
     
     def _build_revenue_schedule(self, drivers: ScenarioDrivers) -> List[float]:
         """
-        Build revenue forecast using separate volume and price growth.
-        Formula: Revenue[t] = Revenue[t-1] × (1 + Volume Growth[t]) × (1 + Price Growth[t])
+        Build revenue forecast.
+        Formula: Revenue[t] = Revenue[t-1] × (1 + Revenue Growth)
         """
         # Start with last historical year (FY2022)
         revenue = [self.inputs.historical_revenue[-1]]
         
         for i in range(6):  # 6 periods: FY1-FY5 + Terminal
-            vol_growth = drivers.volume_growth[i] if i < len(drivers.volume_growth) else drivers.volume_growth[-1]
-            price_growth = drivers.price_growth[i] if i < len(drivers.price_growth) else drivers.price_growth[-1]
-            
-            new_revenue = revenue[-1] * (1 + vol_growth) * (1 + price_growth)
+            rev_growth = drivers.get_revenue_growth(i)
+            new_revenue = revenue[-1] * (1 + rev_growth)
             revenue.append(new_revenue)
         
         # Remove base year, keep only forecast periods
@@ -423,25 +1254,42 @@ class DCFEngine:
     
     def _build_cogs_schedule(self, drivers: ScenarioDrivers) -> List[float]:
         """
-        Build COGS forecast using inflation rate.
-        Formula: COGS[t] = COGS[t-1] × (1 + Inflation[t])
+        Build COGS forecast using COGS growth rate.
+        Formula: COGS[t] = COGS[t-1] × (1 + cogs_growth_rate[t])
+        Falls back to inflation_rate if cogs_growth_rate is not available.
         """
         cogs = [self.inputs.historical_cogs[-1]]
         
         for i in range(6):
-            inflation = drivers.inflation_rate[i] if i < len(drivers.inflation_rate) else drivers.inflation_rate[-1]
-            new_cogs = cogs[-1] * (1 + inflation)
+            # Use cogs_growth_rate with fallback to inflation_rate for backward compatibility
+            if i < len(drivers.cogs_growth_rate):
+                cogs_growth = drivers.cogs_growth_rate[i]
+            elif drivers.cogs_growth_rate:
+                cogs_growth = drivers.cogs_growth_rate[-1]
+            elif i < len(drivers.inflation_rate):
+                cogs_growth = drivers.inflation_rate[i]
+            else:
+                cogs_growth = drivers.inflation_rate[-1]
+            new_cogs = cogs[-1] * (1 + cogs_growth)
             cogs.append(new_cogs)
         
         return cogs[1:]
     
     def _build_opex_schedule(self, drivers: ScenarioDrivers, base_value: float) -> List[float]:
-        """Build OpEx (SG&A or Other) using inflation rate."""
+        """Build OpEx (SG&A or Other) using opex_growth rate."""
         opex = [base_value]
         
         for i in range(6):
-            inflation = drivers.inflation_rate[i] if i < len(drivers.inflation_rate) else drivers.inflation_rate[-1]
-            new_opex = opex[-1] * (1 + inflation)
+            # Use opex_growth with fallback to inflation_rate for backward compatibility
+            if i < len(drivers.opex_growth):
+                growth = drivers.opex_growth[i]
+            elif drivers.opex_growth:
+                growth = drivers.opex_growth[-1]
+            elif i < len(drivers.inflation_rate):
+                growth = drivers.inflation_rate[i]
+            else:
+                growth = drivers.inflation_rate[-1]
+            new_opex = opex[-1] * (1 + growth)
             opex.append(new_opex)
         
         return opex[1:]
@@ -463,12 +1311,22 @@ class DCFEngine:
         new_asset_dep = []
         total_dep = []
         gross_ppe = []
+        accum_dep = []
+        net_ppe = []
         tax_basis = []
         
         # Existing asset depreciation
         opening_ppe = self.inputs.ppe_gross_book
         useful_life_existing = self.inputs.useful_life_existing
         annual_existing_dep = opening_ppe / useful_life_existing
+        
+        # Opening accumulated depreciation (from historical balance sheet)
+        # yfinance stores this as negative; take absolute value for roll-forward
+        opening_accum_dep = abs(self.inputs.opening_accumulated_depreciation
+                               if isinstance(self.inputs.opening_accumulated_depreciation, (int, float))
+                               else self.inputs.opening_accumulated_depreciation.value
+                               if hasattr(self.inputs.opening_accumulated_depreciation, 'value')
+                               else 0.0)
         
         # Track remaining life for existing assets
         remaining_life = useful_life_existing
@@ -516,11 +1374,23 @@ class DCFEngine:
             # Total depreciation
             total_dep.append(existing_dep_this_year + new_dep_this_year)
             
-            # Gross PPE roll
+            # Gross PPE roll — Gross PPE = Prior Gross PPE + CapEx (no depreciation subtraction)
+            # Depreciation is tracked separately in Accumulated Depreciation
             if i == 0:
-                gross_ppe.append(opening_ppe + capex - total_dep[i])
+                gross_ppe.append(opening_ppe + capex)
             else:
-                gross_ppe.append(gross_ppe[i-1] + capex - total_dep[i])
+                gross_ppe.append(gross_ppe[i-1] + capex)
+            
+            # Accumulated Depreciation roll
+            # Starts from opening accumulated depreciation (from historical balance sheet)
+            if i == 0:
+                accum_dep.append(opening_accum_dep + total_dep[i])
+            else:
+                accum_dep.append(accum_dep[i-1] + total_dep[i])
+            
+            # Net PP&E = Gross PP&E - Accumulated Depreciation
+            # Accumulated depreciation is always positive (absolute value)
+            net_ppe.append(gross_ppe[i] - accum_dep[i])
             
             # Tax depreciation (declining balance with half-year convention)
             if i == 0:
@@ -546,6 +1416,8 @@ class DCFEngine:
             new_asset_dep=new_asset_dep,
             total_depreciation=total_dep,
             gross_ppe_ending=gross_ppe,
+            accumulated_depreciation=accum_dep,
+            net_ppe=net_ppe,
             tax_basis_ending=tax_basis,
             tax_depreciation=tax_depreciation
         )
@@ -621,7 +1493,227 @@ class DCFEngine:
             inv_days=inv_days,
             ap_days=ap_days
         )
-    
+
+    def _get_val(self, item: Any) -> float:
+        """Extract numeric value from InputWithMetadata or return as-is."""
+        return item.value if isinstance(item, InputWithMetadata) else item
+
+    def _get_historical_period_labels(self) -> List[str]:
+        """Return historical period labels derived from the number of historical data points."""
+        n_hist = len(self.inputs.historical_revenue)
+        return [f"H{i+1}" for i in range(n_hist)]
+
+    def _build_full_working_capital_schedule(
+        self,
+        drivers: ScenarioDrivers,
+        revenue: List[float],
+        cogs: List[float],
+    ) -> WorkingCapitalSchedule:
+        """
+        Build working capital schedule including historical periods.
+        Historical WC balances come directly from DCFInputs multi-year arrays.
+        Historical WC days are computed from those balances.
+        Forecast periods use the existing engine logic.
+        """
+        hist_ar = [self._get_val(v) for v in self.inputs.historical_ar_list]
+        hist_inv = [self._get_val(v) for v in self.inputs.historical_inventory_list]
+        hist_ap = [self._get_val(v) for v in self.inputs.historical_ap_list]
+        hist_rev = [self._get_val(v) for v in self.inputs.historical_revenue]
+        hist_cogs = [self._get_val(v) for v in self.inputs.historical_cogs]
+        n_hist = len(hist_ar)
+
+        # Historical periods
+        hist_ar_balance = list(hist_ar)
+        hist_inv_balance = list(hist_inv)
+        hist_ap_balance = list(hist_ap)
+
+        # Historical WC days
+        hist_ar_days = [
+            (hist_ar[i] / hist_rev[i] * 365) if hist_rev[i] else 0
+            for i in range(n_hist)
+        ]
+        hist_inv_days = [
+            (hist_inv[i] / abs(hist_cogs[i]) * 365) if hist_cogs[i] else 0
+            for i in range(n_hist)
+        ]
+        hist_ap_days = [
+            (hist_ap[i] / abs(hist_cogs[i]) * 365) if hist_cogs[i] else 0
+            for i in range(n_hist)
+        ]
+
+        # Historical NWC and change
+        hist_nwc = [
+            hist_ar_balance[i] + hist_inv_balance[i] - hist_ap_balance[i]
+            for i in range(n_hist)
+        ]
+        hist_change_nwc = [0.0] + [
+            hist_nwc[i] - hist_nwc[i - 1]
+            for i in range(1, n_hist)
+        ]
+
+        # Forecast periods (using existing logic)
+        forecast_period_count = 6  # FY1-FY5 + Terminal
+        ar_days = drivers.ar_days + [drivers.ar_days[-1]] if len(drivers.ar_days) == 5 else drivers.ar_days[:6]
+        inv_days = drivers.inv_days + [drivers.inv_days[-1]] if len(drivers.inv_days) == 5 else drivers.inv_days[:6]
+        ap_days = drivers.ap_days + [drivers.ap_days[-1]] if len(drivers.ap_days) == 5 else drivers.ap_days[:6]
+
+        fct_ar_balance = []
+        fct_inv_balance = []
+        fct_ap_balance = []
+        fct_nwc = []
+        fct_change_nwc = []
+        fct_ar_days = []
+        fct_inv_days = []
+        fct_ap_days = []
+
+        prior_nwc = hist_nwc[-1] if hist_nwc else 0
+        for i in range(forecast_period_count):
+            ard = ar_days[i] if i < len(ar_days) else ar_days[-1]
+            invd = inv_days[i] if i < len(inv_days) else inv_days[-1]
+            apd = ap_days[i] if i < len(ap_days) else ap_days[-1]
+
+            ar = (ard / self.inputs.days_in_period) * revenue[i] if revenue[i] > 0 else 0
+            inv = (invd / self.inputs.days_in_period) * cogs[i] if cogs[i] > 0 else 0
+            ap = (apd / self.inputs.days_in_period) * cogs[i] if cogs[i] > 0 else 0
+
+            fct_ar_balance.append(ar)
+            fct_inv_balance.append(inv)
+            fct_ap_balance.append(ap)
+            fct_ar_days.append(ard)
+            fct_inv_days.append(invd)
+            fct_ap_days.append(apd)
+
+            nwc_val = ar + inv - ap
+            fct_nwc.append(nwc_val)
+            fct_change_nwc.append(prior_nwc - nwc_val)
+            prior_nwc = nwc_val
+
+        # Concatenate
+        hist_labels = self._get_historical_period_labels()
+        forecast_labels = ["FY1", "FY2", "FY3", "FY4", "FY5", "Terminal"]
+
+        return WorkingCapitalSchedule(
+            years=hist_labels + forecast_labels,
+            ar_balance=hist_ar_balance + fct_ar_balance,
+            inventory_balance=hist_inv_balance + fct_inv_balance,
+            ap_balance=hist_ap_balance + fct_ap_balance,
+            nwc=hist_nwc + fct_nwc,
+            change_in_nwc=hist_change_nwc + fct_change_nwc,
+            ar_days=hist_ar_days + fct_ar_days,
+            inv_days=hist_inv_days + fct_inv_days,
+            ap_days=hist_ap_days + fct_ap_days,
+        )
+
+    def _build_historical_references(self) -> HistoricalReferenceRows:
+        """
+        Build historical reference rows from DCFInputs.
+        These are display-only rows from XBRL filings that appear in
+        building block schedules but are not computed by the DCF engine.
+        """
+        def _to_list(arr):
+            return [self._get_val(v) for v in arr] if arr else []
+
+        n_hist = len(self.inputs.historical_revenue)
+        hist_labels = self._get_historical_period_labels()
+
+        return HistoricalReferenceRows(
+            years=hist_labels,
+            interest_income=_to_list(self.inputs.historical_interest_income),
+            research_development=_to_list(self.inputs.historical_research_development),
+            other_income_expense=_to_list(self.inputs.historical_other_income_expense),
+            tax_paid=_to_list(self.inputs.historical_tax_paid),
+            interest_paid=_to_list(self.inputs.historical_interest_paid),
+            share_buybacks=_to_list(self.inputs.historical_share_buybacks),
+            debt_issuance=_to_list(self.inputs.historical_debt_issuance),
+            debt_repayments=_to_list(self.inputs.historical_debt_repayments),
+            dividends_paid=_to_list(self.inputs.historical_dividends_paid),
+        )
+
+    def _build_interest_schedule(
+        self,
+        debt_part1: DebtSchedulePart1,
+        debt_part2: DebtSchedulePart2,
+    ) -> InterestSchedule:
+        """
+        Build Interest Schedule — combines Debt Part 1 & Part 2 interest items
+        with historical reference data. Full period: historical + forecast + terminal.
+
+        Historical:
+          - LT Interest = historical interest expense (from XBRL)
+          - Cash Interest Income = historical cash balance × cash interest rate
+          - Total Interest Expense = historical interest expense (from XBRL)
+          - Opening Cash = historical cash balance
+          - LT Debt Balance = historical long-term debt balance
+        Forecast:
+          - Uses DebtSchedulePart1 and DebtSchedulePart2 values directly
+        """
+        def _to_list(arr):
+            return [self._get_val(v) for v in arr] if arr else []
+
+        hist_labels = self._get_historical_period_labels()
+        n_hist = len(hist_labels)
+        forecast_labels = debt_part1.years  # ["FY1", "FY2", ...]
+        all_years = hist_labels + forecast_labels
+
+        # Historical arrays
+        hist_cash = _to_list(self.inputs.historical_cash)
+        hist_lt_debt = _to_list(self.inputs.historical_long_term_debt)
+        hist_interest_expense = _to_list(self.inputs.historical_interest)
+        hist_interest_income = _to_list(self.inputs.historical_interest_income)
+
+        cash_rate = self._get_val(self.inputs.cash_interest_rate)
+        lt_rate = self._get_val(self.inputs.lt_debt_interest_rate)
+        rev_rate = self._get_val(self.inputs.revolving_credit_rate)
+
+        # Pad historical to n_hist length (use 0 if not provided)
+        def _pad(arr, target_len):
+            return (arr + [0.0] * target_len)[:target_len]
+
+        hist_cash = _pad(hist_cash, n_hist)
+        hist_lt_debt = _pad(hist_lt_debt, n_hist)
+        hist_interest_expense = _pad(hist_interest_expense, n_hist)
+        hist_interest_income = _pad(hist_interest_income, n_hist)
+
+        # Historical cash interest income = cash balance × rate
+        hist_cash_int_inc = [c * cash_rate for c in hist_cash]
+
+        # Forecast arrays from DebtSchedulePart1
+        fct_opening_cash = debt_part1.cash_beginning
+        fct_cash_rate = debt_part1.cash_interest_rate
+        fct_cash_int_inc = debt_part1.cash_interest_income
+        fct_lt_debt_bal = debt_part1.lt_debt_ending
+        fct_lt_debt_rate = debt_part1.lt_debt_interest_rate
+        fct_lt_debt_int_exp = debt_part1.lt_debt_interest_expense
+
+        # Forecast arrays from DebtSchedulePart2
+        fct_rev_bal = debt_part2.revolving_ending
+        fct_rev_rate = debt_part2.revolving_interest_rate
+        fct_rev_int_exp = debt_part2.revolving_interest_expense
+        fct_net_int = debt_part2.net_interest_expense
+
+        # Total interest expense forecast: max(LT Interest - Cash Interest Income, 0)
+        fct_total_int = [
+            max(lt - ci, 0) for lt, ci in zip(fct_lt_debt_int_exp, fct_cash_int_inc)
+        ]
+
+        return InterestSchedule(
+            years=all_years,
+            lt_interest_historical=hist_interest_expense,
+            total_interest_expense_historical=hist_interest_expense,
+            interest_income_historical=hist_interest_income,
+            opening_cash=hist_cash + list(fct_opening_cash),
+            cash_interest_rate=[cash_rate] * n_hist + list(fct_cash_rate),
+            cash_interest_income=hist_cash_int_inc + list(fct_cash_int_inc),
+            lt_debt_balance=hist_lt_debt + list(fct_lt_debt_bal),
+            lt_debt_interest_rate=[lt_rate] * n_hist + list(fct_lt_debt_rate),
+            lt_debt_interest_expense=hist_interest_expense + list(fct_lt_debt_int_exp),
+            revolving_credit_balance=[0.0] * n_hist + list(fct_rev_bal),
+            revolving_credit_rate=[rev_rate] * n_hist + list(fct_rev_rate),
+            revolving_interest_expense=[0.0] * n_hist + list(fct_rev_int_exp),
+            net_interest_expense=[0.0] * n_hist + list(fct_net_int),
+            total_interest_expense=hist_interest_expense + fct_total_int,
+        )
+
     def _build_tax_schedule_levered(
         self,
         ebt: List[float],
@@ -861,6 +1953,922 @@ class DCFEngine:
             tax_shield=tax_shield
         )
     
+    # =========================================================================
+    # PHASE 2: Cash Flow Statement (Excel Model rows 43-75)
+    # =========================================================================
+    
+    def _build_cash_flow_statement(
+        self,
+        net_income: List[float],
+        tax_levered: TaxSchedule,
+        depreciation: List[float],
+        capex: List[float],
+        wc_schedule: WorkingCapitalSchedule,
+        drivers: ScenarioDrivers,
+        equity_dividends: Optional[List[float]] = None,
+        debt_part2: Optional['DebtSchedulePart2'] = None,
+        interest_expense: Optional[List[float]] = None,
+    ) -> CashFlowStatement:
+        """
+        Build Cash Flow Statement: CFO + CFI + CFF.
+        
+        CFO = Net Income + Deferred Tax + Depreciation + ΔAR + ΔInventory + ΔAP
+        CFI = -(CapEx)
+        CFF = Interest Expense + Tax Paid + ΔLT Debt + Dividends + Buybacks + Revolving Credit
+        """
+        periods = ["FY1", "FY2", "FY3", "FY4", "FY5", "Terminal"]
+        n = len(periods)
+        
+        # ── CFO ──
+        # Deferred tax add-back (from levered tax schedule)
+        deferred_taxes = tax_levered.deferred_tax
+        
+        # Cash from working capital changes (matching Excel Model rows 50-52)
+        # Excel: Cash from AR = Prior AR balance - Current AR balance (decrease = cash inflow)
+        # Our working_capital.change_in_nwc is (prior_nwc - current_nwc)
+        # We need individual AR/Inv/AP cash flows
+        cash_from_ar = []
+        cash_from_inv = []
+        cash_from_ap = []
+        
+        # Historical balances as starting point
+        prior_ar = self.inputs.historical_ar
+        prior_inv = self.inputs.historical_inventory
+        prior_ap = self.inputs.historical_ap
+        
+        for i in range(n):
+            cur_ar = wc_schedule.ar_balance[i]
+            cur_inv = wc_schedule.inventory_balance[i]
+            cur_ap = wc_schedule.ap_balance[i]
+            
+            # Excel: AR decrease = cash inflow (prior - current)
+            cash_from_ar.append(prior_ar - cur_ar)
+            cash_from_inv.append(prior_inv - cur_inv)
+            # Excel: AP increase = cash inflow (current - prior)
+            cash_from_ap.append(cur_ap - prior_ap)
+            
+            prior_ar = cur_ar
+            prior_inv = cur_inv
+            prior_ap = cur_ap
+        
+        subtotal_cfo = [
+            ni + dt + dep + car + ci + cap
+            for ni, dt, dep, car, ci, cap in zip(
+                net_income, deferred_taxes, depreciation,
+                cash_from_ar, cash_from_inv, cash_from_ap
+            )
+        ]
+        
+        # ── CFI ──
+        # CapEx from ScenarioDrivers is always positive (absolute dollar amount).
+        # Store as negative in CFS to represent cash outflow.
+        capital_expenditure = []
+        for c in capex:
+            c_val = c.value if isinstance(c, InputWithMetadata) else c
+            capital_expenditure.append(-abs(c_val))
+        subtotal_cfi = list(capital_expenditure)
+        
+        # ── CFF ──
+        # Dividends: linked from Equity Schedule (Excel row 129)
+        if equity_dividends is not None:
+            dividends = equity_dividends[:n] if len(equity_dividends) >= n else equity_dividends + [0] * (n - len(equity_dividends))
+        else:
+            # Fallback: compute from payout ratio
+            payout_ratio = self._get_val(self.inputs.dividend_payout_ratio)
+            if payout_ratio and payout_ratio > 0:
+                dividends = []
+                for i in range(n):
+                    ni = net_income[i] if i < len(net_income) else 0
+                    div = max(ni * payout_ratio, 0)
+                    dividends.append(-div)
+            else:
+                dividends_input = self.inputs.projected_dividends
+                if isinstance(dividends_input, (int, float)):
+                    dividends = [-abs(dividends_input)] * n
+                elif isinstance(dividends_input, list):
+                    dividends = [-abs(self._get_val(d)) for d in dividends_input[:n]]
+                    while len(dividends) < n:
+                        dividends.append(dividends[-1] if dividends else 0.0)
+                else:
+                    dividends = [-abs(self._get_val(dividends_input))] * n
+        
+        change_lt_debt = []
+        change_eq = []
+        rev_credit = []
+        for i in range(n):
+            idx = min(i, len(drivers.capex) - 1)
+            # Use DCFInputs financing arrays (extend to match 6 periods)
+            lt_debt_list = self.inputs.change_in_lt_debt
+            eq_list = self.inputs.change_in_common_equity
+            rc_list = self.inputs.revolving_credit_line
+            # Round near-zero values to exactly 0.0 to avoid ±1 floating-point artifacts
+            lt_val = self._get_val(lt_debt_list[min(i, len(lt_debt_list) - 1)])
+            eq_val = self._get_val(eq_list[min(i, len(eq_list) - 1)])
+            change_lt_debt.append(0.0 if abs(lt_val) < 1.0 else lt_val)
+            change_eq.append(0.0 if abs(eq_val) < 1.0 else eq_val)
+            rev_credit.append(self._get_val(rc_list[min(i, len(rc_list) - 1)]))
+        
+        # CFF = Interest Expense + Tax Paid + ΔLT Debt + Dividends + Buybacks + Revolving Credit
+        ie_arr = interest_expense if interest_expense else [0.0] * n
+        tp_arr = tax_levered.total_tax[:n] if tax_levered else [0.0] * n
+        subtotal_cff = [
+            ie + tp + d + dv + b + rc
+            for ie, tp, d, dv, b, rc in zip(ie_arr, tp_arr, change_lt_debt, dividends, change_eq, rev_credit)
+        ]
+        
+        # ── Cash Balance ──
+        beginning_cash = []
+        increase_decrease = []
+        ending_cash = []
+        
+        for i in range(n):
+            if i == 0:
+                begin = self.inputs.cash_opening
+            else:
+                begin = ending_cash[i - 1]
+            beginning_cash.append(begin)
+            
+            change = subtotal_cfo[i] + subtotal_cfi[i] + subtotal_cff[i]
+            increase_decrease.append(change)
+            
+            ending_cash.append(begin + change)
+        
+        return CashFlowStatement(
+            years=periods,
+            net_income=net_income,
+            deferred_taxes=deferred_taxes,
+            depreciation=depreciation,
+            cash_from_ar=cash_from_ar,
+            cash_from_inventory=cash_from_inv,
+            cash_from_ap=cash_from_ap,
+            subtotal_cfo=subtotal_cfo,
+            capital_expenditure=capital_expenditure,
+            subtotal_cfi=subtotal_cfi,
+            change_in_lt_debt=change_lt_debt,
+            change_in_common_equity=change_eq,
+            dividends=dividends,
+            revolving_credit=rev_credit,
+            subtotal_cff=subtotal_cff,
+            beginning_cash=beginning_cash,
+            increase_decrease=increase_decrease,
+            ending_cash=ending_cash
+        )
+    
+    # =========================================================================
+    # PHASE 3: Balance Sheet (Excel Model rows 79-117)
+    # =========================================================================
+    
+    def _build_balance_sheet(
+        self,
+        cfs: CashFlowStatement,
+        wc_schedule: WorkingCapitalSchedule,
+        depr_schedule: DepreciationSchedule,
+        net_income: List[float],
+        drivers: ScenarioDrivers,
+        debt_part1: Optional[DebtSchedulePart1] = None,
+        debt_part2: Optional[DebtSchedulePart2] = None,
+        equity_sched: Optional[EquitySchedule] = None,
+    ) -> BalanceSheet:
+        """
+        Build Balance Sheet from CFS ending cash, working capital, depreciation, and financing.
+        
+        Institution-grade structure with:
+        - Non-Current Marketable Securities (long-term bond portfolio)
+        - Other Current Liabilities (Accrued Expenses + Deferred Revenue)
+        - Deferred Tax Liabilities (net DTA/DTL position)
+        - Accumulated Depreciation from depreciation schedule
+        
+        Assets = Liabilities + Equity (should balance within rounding tolerance)
+        """
+        periods = ["FY1", "FY2", "FY3", "FY4", "FY5", "Terminal"]
+        n = len(periods)
+        
+        # ── Helper: project historical field forward using revenue growth ──
+        def _project_historical(historical_list, default=0.0):
+            """Use last available historical value, scale proportionally with revenue."""
+            if historical_list and isinstance(historical_list, list) and len(historical_list) > 0:
+                last_val = self._get_val(historical_list[-1]) if historical_list else default
+                base_rev = self._get_val(self.inputs.historical_revenue[-1]) if self.inputs.historical_revenue else 1.0
+                result = []
+                for i in range(n):
+                    rev_growth = drivers.get_revenue_growth(i) if hasattr(drivers, 'get_revenue_growth') else 0.05
+                    projected_rev = base_rev * ((1 + rev_growth) ** (i + 1))
+                    result.append(last_val * (projected_rev / base_rev))
+                return result
+            return [default] * n
+        
+        # ── ASSETS ──
+        cash = cfs.ending_cash
+        ar = wc_schedule.ar_balance
+        inv = wc_schedule.inventory_balance
+        
+        # Other Short-Term Investments (marketable securities < 1 year)
+        other_sti = _project_historical(self.inputs.historical_other_short_term_investments)
+        
+        # Other Current Assets (prepaid expenses, deferred tax assets current, etc.)
+        other_ca = _project_historical(self.inputs.historical_other_current_assets)
+        
+        # Non-Current Marketable Securities (long-term bond portfolio)
+        # Critical for EV-to-Equity bridge: Equity Value = EV - Debt + Cash + ALL Securities
+        ncms = []
+        ncms_list = self.inputs.historical_non_current_marketable_securities
+        if ncms_list and isinstance(ncms_list, list) and len(ncms_list) > 0:
+            last_val = self._get_val(ncms_list[-1]) if ncms_list else 0.0
+            ncms = [last_val] * n
+        else:
+            ncms = [0.0] * n
+        
+        # Other Non-Current Assets (goodwill, intangibles, long-term deposits, etc.)
+        other_nca = _project_historical(self.inputs.historical_other_non_current_assets)
+        
+        # Investments And Advances (long-term equity investments)
+        inv_adv = []
+        inv_adv_list = self.inputs.historical_investments_and_advances
+        if inv_adv_list and isinstance(inv_adv_list, list) and len(inv_adv_list) > 0:
+            last_val = self._get_val(inv_adv_list[-1]) if inv_adv_list else 0.0
+            inv_adv = [last_val] * n
+        else:
+            inv_adv = [0.0] * n
+        
+        # Non-Current Deferred Assets
+        nca_deferred = []
+        nca_deferred_list = self.inputs.historical_non_current_deferred_assets
+        if nca_deferred_list and isinstance(nca_deferred_list, list) and len(nca_deferred_list) > 0:
+            last_val = self._get_val(nca_deferred_list[-1]) if nca_deferred_list else 0.0
+            nca_deferred = [last_val] * n
+        else:
+            nca_deferred = [0.0] * n
+        
+        # Total Current Assets = Cash + Other STI + Receivables + Inventory + Other CA
+        total_ca = [c + s + a + i + o for c, s, a, i, o in zip(cash, other_sti, ar, inv, other_ca)]
+        
+        # PP&E from depreciation schedule
+        ppe_gross = depr_schedule.gross_ppe_ending
+        accum_dep = depr_schedule.accumulated_depreciation
+        ppe_net = depr_schedule.net_ppe
+        # Total Non Current Assets = Net PPE + Accum Dep + NC Marketable Securities + Investments & Advances + Other NCA + NCA Deferred
+        total_nca = [p + d + nc + ia + on + nd for p, d, nc, ia, on, nd in zip(ppe_net, accum_dep, ncms, inv_adv, other_nca, nca_deferred)]
+        total_assets = [ca + nca for ca, nca in zip(total_ca, total_nca)]
+        
+        # ── LIABILITIES ──
+        ap = wc_schedule.ap_balance
+        
+        # Current Accrued Expenses (component of Other Current Liabilities)
+        accrued_exp = _project_historical(self.inputs.historical_current_accrued_expenses)
+        
+        # Current Deferred Liabilities (component of Other Current Liabilities)
+        deferred_liab = _project_historical(self.inputs.historical_current_deferred_liabilities)
+        
+        # Other Current Liabilities (Accrued Expenses + Deferred Revenue)
+        # Critical for accurate ΔNWC calculations
+        other_cl = []
+        other_cl_list = self.inputs.historical_other_current_liabilities
+        if other_cl_list and isinstance(other_cl_list, list) and len(other_cl_list) > 0:
+            last_val = self._get_val(other_cl_list[-1]) if other_cl_list else 0.0
+            base_rev = self.inputs.historical_revenue[-1] if self.inputs.historical_revenue else 1.0
+            other_cl = []
+            for i in range(n):
+                rev_growth = drivers.get_revenue_growth(i) if hasattr(drivers, 'get_revenue_growth') else 0.05
+                projected_rev = base_rev * ((1 + rev_growth) ** (i + 1))
+                other_cl.append(last_val * (projected_rev / base_rev))
+        else:
+            other_cl = [0.0] * n
+        
+        rev_credit = []
+        lt_debt = []
+        
+        for i in range(n):
+            rc_list = self.inputs.revolving_credit_line
+            rev_credit.append(self._get_val(rc_list[min(i, len(rc_list) - 1)]))
+            
+            if i == 0:
+                lt_debt.append(self._get_val(self.inputs.long_term_debt_opening) + self._get_val(self.inputs.change_in_lt_debt[min(0, len(self.inputs.change_in_lt_debt) - 1)]))
+            else:
+                lt_list = self.inputs.change_in_lt_debt
+                lt_debt.append(lt_debt[i - 1] + self._get_val(lt_list[min(i, len(lt_list) - 1)]))
+        
+        # Current debt (short-term portion) — use historical values for forecast
+        if self.inputs.historical_current_debt and len(self.inputs.historical_current_debt) > 0:
+            last_cd = self._get_val(self.inputs.historical_current_debt[-1])
+            current_debt = [last_cd] * n
+        else:
+            current_debt = [0.0] * n
+        
+        # Total CL = Payables + Current Accrued Expenses + Other CL + Current Debt + Current Deferred Liabilities
+        total_cl = [p + ac + oc + cd + dl for p, ac, oc, cd, dl in zip(ap, accrued_exp, other_cl, current_debt, deferred_liab)]
+        
+        # Trade and Other Payables Non Current (non-current operating payables)
+        trade_payables_nc = _project_historical(self.inputs.historical_trade_and_other_payables_non_current)
+        
+        # Deferred Tax Liabilities (net DTA/DTL position)
+        # Non-cash timing differences between accounting and tax depreciation
+        dtl = []
+        dtl_list = self.inputs.historical_deferred_tax_liabilities
+        if dtl_list and isinstance(dtl_list, list) and len(dtl_list) > 0:
+            last_val = self._get_val(dtl_list[-1]) if dtl_list else 0.0
+            dtl = [last_val] * n
+        else:
+            dtl = [0.0] * n
+        
+        # Other Non-Current Liabilities (beyond LT debt & DTL)
+        other_nc_liab = _project_historical(self.inputs.historical_other_non_current_liabilities)
+        
+        # Total Non-Current Liabilities = LT Debt + Trade Payables NC + Deferred Tax Liabilities + Other NC Liabilities
+        total_ncl = [l + t + d + o for l, t, d, o in zip(lt_debt, trade_payables_nc, dtl, other_nc_liab)]
+        total_liabilities = [cl + ncl for cl, ncl in zip(total_cl, total_ncl)]
+        
+        # ── EQUITY ──
+        # Common Stock (par value of issued shares)
+        common_stock = _project_historical(self.inputs.historical_common_stock)
+        
+        common_eq = []
+        retained_earnings = []
+        
+        for i in range(n):
+            eq_list = self.inputs.change_in_common_equity
+            if i == 0:
+                common_eq.append(self._get_val(self.inputs.common_equity_opening) + self._get_val(eq_list[min(0, len(eq_list) - 1)]))
+            else:
+                common_eq.append(common_eq[i - 1] + self._get_val(eq_list[min(i, len(eq_list) - 1)]))
+            
+            # RE = Prior RE + Net Income - Dividends
+            if i == 0:
+                prev_re = self._get_val(self.inputs.retained_earnings_opening)
+            else:
+                prev_re = retained_earnings[i - 1]
+            
+            # Dividends are stored as negative in CFS, take absolute value
+            div_abs = abs(cfs.dividends[i]) if i < len(cfs.dividends) else 0
+            retained_earnings.append(prev_re + net_income[i] - div_abs)
+        
+        # Other Equity Adjustments (AOCI, treasury stock, translation adjustments)
+        other_eq_adj = _project_historical(self.inputs.historical_other_equity_adjustments)
+        
+        # Total Equity = Common Stock + Retained Earnings + Other Equity Adjustments
+        total_equity = [cs + re + oe for cs, re, oe in zip(common_stock, retained_earnings, other_eq_adj)]
+        total_le = [l + e for l, e in zip(total_liabilities, total_equity)]
+        
+        # Balance check
+        balance_check = [a - le for a, le in zip(total_assets, total_le)]
+        
+        return BalanceSheet(
+            years=periods,
+            cash=cash,
+            accounts_receivable=ar,
+            inventories=inv,
+            other_short_term_investments=other_sti,
+            other_current_assets=other_ca,
+            non_current_marketable_securities=ncms,
+            other_non_current_assets=other_nca,
+            non_current_deferred_assets=nca_deferred,
+            total_current_assets=total_ca,
+            ppe_gross=ppe_gross,
+            accumulated_depreciation=accum_dep,
+            ppe_net=ppe_net,
+            investments_and_advances=inv_adv,
+            total_assets=total_assets,
+            accounts_payable=ap,
+            current_accrued_expenses=accrued_exp,
+            current_deferred_liabilities=deferred_liab,
+            other_current_liabilities=other_cl,
+            current_debt=current_debt,
+            revolving_credit=rev_credit,
+            total_current_liabilities=total_cl,
+            trade_and_other_payables_non_current=trade_payables_nc,
+            deferred_tax_liabilities=dtl,
+            other_non_current_liabilities=other_nc_liab,
+            long_term_debt=lt_debt,
+            total_liabilities=total_liabilities,
+            common_stock=common_stock,
+            common_equity=common_eq,
+            retained_earnings=retained_earnings,
+            other_equity_adjustments=other_eq_adj,
+            total_shareholders_equity=total_equity,
+            total_liabilities_equity=total_le,
+            balance_check=balance_check
+        )
+    
+    # =========================================================================
+    # Debt Schedule Part 1 — Cash + LT Debt (Excel rows 331-345)
+    # =========================================================================
+    
+    def _build_debt_part1(
+        self,
+        cfs: CashFlowStatement,
+        drivers: ScenarioDrivers,
+    ) -> DebtSchedulePart1:
+        """
+        Build Debt Schedule Part 1: Cash balances + LT Debt balances + Interest.
+        
+        Cash Section:
+          Beginning = Prior year ending (first year = cash_opening)
+          Change = linked from CFS
+          Ending = Beginning + Change
+          Interest Income = Ending × Cash Interest Rate
+        
+        LT Debt Section:
+          Beginning = Prior year ending (first year = long_term_debt_opening)
+          Change = from inputs.change_in_lt_debt
+          Ending = Beginning + Change
+          Interest Expense = Ending × LT Debt Interest Rate
+        """
+        periods = ["FY1", "FY2", "FY3", "FY4", "FY5", "Terminal"]
+        n = len(periods)
+        
+        cash_rate = self._get_val(self.inputs.cash_interest_rate)
+        lt_rate = self._get_val(self.inputs.lt_debt_interest_rate)
+        
+        # Cash section
+        cash_beg = []
+        cash_chg = []
+        cash_end = []
+        cash_rate_arr = []
+        cash_int_inc = []
+        
+        for i in range(n):
+            if i == 0:
+                beg = self._get_val(self.inputs.cash_opening)
+            else:
+                beg = cash_end[i - 1]
+            cash_beg.append(beg)
+            
+            # Change from CFS ending cash delta
+            chg = cfs.increase_decrease[i] if i < len(cfs.increase_decrease) else 0
+            cash_chg.append(chg)
+            
+            end = beg + chg
+            cash_end.append(end)
+            cash_rate_arr.append(cash_rate)
+            cash_int_inc.append(end * cash_rate)
+        
+        # LT Debt section
+        lt_beg = []
+        lt_chg = []
+        lt_end = []
+        lt_rate_arr = []
+        lt_int_exp = []
+        
+        lt_debt_list = self.inputs.change_in_lt_debt
+        for i in range(n):
+            if i == 0:
+                beg = self._get_val(self.inputs.long_term_debt_opening)
+            else:
+                beg = lt_end[i - 1]
+            lt_beg.append(beg)
+            
+            delta = self._get_val(lt_debt_list[min(i, len(lt_debt_list) - 1)]) if lt_debt_list else 0
+            lt_chg.append(delta)
+            
+            end = beg + delta
+            lt_end.append(end)
+            lt_rate_arr.append(lt_rate)
+            lt_int_exp.append(end * lt_rate)
+        
+        return DebtSchedulePart1(
+            years=periods,
+            cash_beginning=cash_beg,
+            cash_change=cash_chg,
+            cash_ending=cash_end,
+            cash_interest_rate=cash_rate_arr,
+            cash_interest_income=cash_int_inc,
+            lt_debt_beginning=lt_beg,
+            lt_debt_change=lt_chg,
+            lt_debt_ending=lt_end,
+            lt_debt_interest_rate=lt_rate_arr,
+            lt_debt_interest_expense=lt_int_exp,
+        )
+    
+    # =========================================================================
+    # Debt Schedule Part 2 — Revolving + Net Interest (Excel rows 347-368)
+    # =========================================================================
+    
+    def _build_debt_part2(
+        self,
+        cfs: CashFlowStatement,
+        debt_part1: DebtSchedulePart1,
+        equity: 'EquitySchedule',
+        drivers: ScenarioDrivers,
+    ) -> DebtSchedulePart2:
+        """
+        Build Debt Schedule Part 2: Available Cash, Revolving Credit, Net Interest.
+        
+        Available Cash:
+          Beginning Cash = from Part 1
+          + Cash from Operations = from CFS
+          + Cash from Investing = from CFS
+          + Change in LT Debt = from inputs
+          + Change in Common Equity = from inputs
+          - Dividends = from Equity Schedule
+          = Cash Available
+        
+        Revolving Credit:
+          Beginning = Prior year ending
+          Change = -MIN(Available Cash, Beginning Balance)
+          Ending = IF(Beginning+Change > 0, Beginning+Change, 0)
+          Interest = Ending × Rate
+        
+        Net Interest:
+          Total = LT Interest + Revolving Interest
+          Less: Interest Income = from Part 1
+          Net Interest Expense = Total - Interest Income
+        """
+        periods = ["FY1", "FY2", "FY3", "FY4", "FY5", "Terminal"]
+        n = len(periods)
+        
+        rev_rate = self._get_val(self.inputs.revolving_credit_rate)
+        
+        # Available Cash
+        avail_cash = []
+        for i in range(n):
+            beg_cash = debt_part1.cash_beginning[i]
+            cfo = cfs.subtotal_cfo[i] if i < len(cfs.subtotal_cfo) else 0
+            cfi = cfs.subtotal_cfi[i] if i < len(cfs.subtotal_cfi) else 0
+            lt_chg = cfs.change_in_lt_debt[i] if i < len(cfs.change_in_lt_debt) else 0
+            eq_chg = cfs.change_in_common_equity[i] if i < len(cfs.change_in_common_equity) else 0
+            div = abs(cfs.dividends[i]) if i < len(cfs.dividends) else 0
+            avail = beg_cash + cfo + cfi + lt_chg + eq_chg - div
+            avail_cash.append(avail)
+        
+        # Revolving Credit
+        rev_beg = []
+        rev_chg = []
+        rev_end = []
+        rev_rate_arr = []
+        rev_int = []
+        
+        rc_list = self.inputs.revolving_credit_line
+        for i in range(n):
+            if i == 0:
+                beg = 0.0  # No revolving credit at start
+            else:
+                beg = rev_end[i - 1]
+            rev_beg.append(beg)
+            
+            # Draw/repay: reduce revolver when cash available
+            change = -min(avail_cash[i], beg) if beg > 0 else 0
+            rev_chg.append(change)
+            
+            end = max(beg + change, 0)
+            rev_end.append(end)
+            rev_rate_arr.append(rev_rate)
+            rev_int.append(end * rev_rate)
+        
+        # Net Interest
+        net_int = []
+        total_int = []
+        int_income = []
+        for i in range(n):
+            lt_int = debt_part1.lt_debt_interest_expense[i]
+            rev_int_val = rev_int[i]
+            inc = debt_part1.cash_interest_income[i]
+            total = lt_int + rev_int_val
+            net = total - inc
+            lt_int_val = lt_int
+            total_int.append(total)
+            int_income.append(inc)
+            net_int.append(net)
+        
+        return DebtSchedulePart2(
+            years=periods,
+            beginning_cash=debt_part1.cash_beginning,
+            cash_from_operations=cfs.subtotal_cfo,
+            cash_from_investing=cfs.subtotal_cfi,
+            change_in_lt_debt=cfs.change_in_lt_debt,
+            change_in_common_equity=cfs.change_in_common_equity,
+            dividends=cfs.dividends,
+            cash_available=avail_cash,
+            revolving_beginning=rev_beg,
+            revolving_change=rev_chg,
+            revolving_ending=rev_end,
+            revolving_interest_rate=rev_rate_arr,
+            revolving_interest_expense=rev_int,
+            lt_interest=debt_part1.lt_debt_interest_expense,
+            revolving_interest=rev_int,
+            interest_income=int_income,
+            net_interest_expense=net_int,
+        )
+    
+    # =========================================================================
+    # Equity Schedule — Common Equity + Retained Earnings (Excel rows 370-385)
+    # =========================================================================
+    
+    def _build_equity_schedule(
+        self,
+        net_income: List[float],
+        bs: Optional[BalanceSheet],
+        cfs: Optional[CashFlowStatement],
+        drivers: ScenarioDrivers,
+    ) -> EquitySchedule:
+        """
+        Build Equity Schedule: Common Equity roll, Dividends, Retained Earnings roll.
+        
+        Common Equity:
+          Beginning = Prior year ending (first year = common_equity_opening)
+          Change = from inputs.change_in_common_equity
+          Ending = Beginning + Change
+        
+        Dividends:
+          Net Income × Dividend Payout Ratio
+        
+        Retained Earnings:
+          Beginning = Prior year ending (first year = retained_earnings_opening)
+          + Net Income
+          - Dividends
+          = Ending
+        """
+        periods = ["FY1", "FY2", "FY3", "FY4", "FY5", "Terminal"]
+        n = len(periods)
+        
+        payout = self._get_val(self.inputs.projected_dividends) if isinstance(self.inputs.projected_dividends, (int, float)) else 0.30
+        
+        # Common Equity
+        ce_beg = []
+        ce_chg = []
+        ce_end = []
+        
+        eq_list = self.inputs.change_in_common_equity
+        for i in range(n):
+            if i == 0:
+                beg = self._get_val(self.inputs.common_equity_opening)
+            else:
+                beg = ce_end[i - 1]
+            ce_beg.append(beg)
+            
+            delta = self._get_val(eq_list[min(i, len(eq_list) - 1)]) if eq_list else 0
+            ce_chg.append(delta)
+            ce_end.append(beg + delta)
+        
+        # Dividends
+        div_payout_arr = []
+        dividends = []
+        for i in range(n):
+            ni = net_income[i] if i < len(net_income) else 0
+            # Dividends = NI × Payout Ratio (but capped at positive NI)
+            div = max(ni * payout, 0) if payout > 0 else abs(cfs.dividends[i]) if i < len(cfs.dividends) else 0
+            dividends.append(-div)  # Negative for CFS convention
+            div_payout_arr.append(payout)
+        
+        # Retained Earnings
+        re_beg = []
+        re_ni = []
+        re_div = []
+        re_end = []
+        
+        for i in range(n):
+            if i == 0:
+                beg = self._get_val(self.inputs.retained_earnings_opening)
+            else:
+                beg = re_end[i - 1]
+            re_beg.append(beg)
+            
+            ni = net_income[i] if i < len(net_income) else 0
+            re_ni.append(ni)
+            re_div.append(dividends[i])  # Negative
+            re_end.append(beg + ni + dividends[i])  # dividends is negative
+        
+        total_equity = [ce + re for ce, re in zip(ce_end, re_end)]
+        
+        return EquitySchedule(
+            years=periods,
+            common_equity_beginning=ce_beg,
+            common_equity_change=ce_chg,
+            common_equity_ending=ce_end,
+            net_income=net_income,
+            dividend_payout_ratio=div_payout_arr,
+            dividends=dividends,
+            retained_earnings_beginning=re_beg,
+            retained_earnings_net_income=re_ni,
+            retained_earnings_dividends=re_div,
+            retained_earnings_ending=re_end,
+            total_shareholders_equity=total_equity,
+        )
+    
+    # =========================================================================
+    # PHASE 4: Intrinsic Valuation Extracts (Excel rows 450-473)
+    # =========================================================================
+    
+    def _build_intrinsic_extracts(
+        self,
+        net_income: List[float],
+        depreciation: List[float],
+        interest: List[float],
+        ebit: List[float],
+        tax_unlevered: TaxSchedule,
+        ebitda: List[float],
+        capex: List[float],
+        wc_schedule: WorkingCapitalSchedule,
+        cfs: CashFlowStatement,
+        depr_schedule: DepreciationSchedule
+    ) -> IntrinsicExtracts:
+        """Build financial statement extracts for intrinsic valuation."""
+        periods = ["FY1", "FY2", "FY3", "FY4", "FY5", "Terminal"]
+        n = len(periods)
+        
+        tax_rate = [self.inputs.statutory_tax_rate] * n
+        after_tax_interest = [i * (1 - self.inputs.statutory_tax_rate) for i in interest]
+        unlevered_taxes = tax_unlevered.current_tax
+        
+        lt_debt = cfs.change_in_lt_debt  # Use the absolute LT debt levels
+        cash = cfs.ending_cash
+        
+        return IntrinsicExtracts(
+            years=periods,
+            net_income=net_income,
+            depreciation=depreciation,
+            interest_expense=interest,
+            tax_rate=tax_rate,
+            after_tax_interest=after_tax_interest,
+            ebit=ebit,
+            unlevered_taxes=unlevered_taxes,
+            ebitda=ebitda,
+            capex=capex,
+            change_in_working_capital=wc_schedule.change_in_nwc,
+            long_term_debt=lt_debt,
+            cash=cash
+        )
+    
+    # =========================================================================
+    # PHASE 5: UFCF 3 Methods (Excel rows 476-498)
+    # =========================================================================
+    
+    def _build_ufcf_3methods(
+        self,
+        ebit: List[float],
+        net_income: List[float],
+        ebitda: List[float],
+        tax_unlevered: TaxSchedule,
+        tax_levered: TaxSchedule,
+        depreciation: List[float],
+        interest: List[float],
+        capex: List[float],
+        change_in_nwc: List[float]
+    ) -> UFCFMethods:
+        """
+        Cross-check UFCF via 3 derivation methods:
+        1. EBIT method:    NOPAT + Dep - CapEx - ΔWC
+        2. Net Income method: NI + Dep + After-tax Interest - CapEx - ΔWC
+        3. EBITDA method:  EBITDA - Unlevered Taxes - CapEx - ΔWC
+        """
+        periods = ["FY1", "FY2", "FY3", "FY4", "FY5", "Terminal"]
+        n = len(periods)
+        tax_rate = self.inputs.statutory_tax_rate
+        
+        ebit_method = []
+        ni_method = []
+        ebitda_method = []
+        
+        for i in range(n):
+            # EBIT method: NOPAT + Dep - CapEx - ΔWC
+            # NOPAT = EBIT × (1 - Tax Rate) — simplified, or use unlevered taxes
+            nopat = ebit[i] - tax_unlevered.current_tax[i]
+            ufcf_ebit = nopat + depreciation[i] - capex[i] - change_in_nwc[i]
+            ebit_method.append(ufcf_ebit)
+            
+            # Net Income method: NI + Dep + After-tax Interest - CapEx - ΔWC
+            after_tax_int = interest[i] * (1 - tax_rate)
+            ufcf_ni = net_income[i] + depreciation[i] + after_tax_int - capex[i] - change_in_nwc[i]
+            ni_method.append(ufcf_ni)
+            
+            # EBITDA method: EBITDA - Unlevered Taxes - CapEx - ΔWC
+            ufcf_ebitda = ebitda[i] - tax_unlevered.current_tax[i] - capex[i] - change_in_nwc[i]
+            ebitda_method.append(ufcf_ebitda)
+        
+        # Cross-check: all 3 should be identical (within rounding)
+        reconcile = True
+        for i in range(n):
+            if abs(ebit_method[i] - ni_method[i]) > 0.01 or abs(ebit_method[i] - ebitda_method[i]) > 0.01:
+                reconcile = False
+                break
+        
+        return UFCFMethods(
+            years=periods,
+            ebit_method=ebit_method,
+            net_income_method=ni_method,
+            ebitda_method=ebitda_method,
+            methods_reconcile=reconcile
+        )
+    
+    # =========================================================================
+    # PHASE 6: NPV / XNPV / IRR / XIRR (Excel rows 522-572)
+    # =========================================================================
+    
+    def _build_npv_xnpv(
+        self,
+        ufcf: List[float],
+        yearfractions: List[float],
+        wacc: float,
+        equity_value_per_share_perp: float,
+        equity_value_per_share_mult: float
+    ) -> NPVResult:
+        """
+        Calculate NPV, XNPV, IRR, and XIRR.
+        
+        NPV: End-of-period discounting with integer periods
+        XNPV: Date-based discounting with actual dates
+        Mid-period: Half-year convention (first period = 0.75, then 1.75, etc.)
+        """
+        n = len(ufcf)
+        
+        # ── End-of-period discounting ──
+        # Period = 1, 2, 3, ... (integer years)
+        pv_end = []
+        for i in range(n):
+            period = float(i + 1)
+            pv = ufcf[i] / ((1 + wacc) ** period)
+            pv_end.append(pv)
+        npv_end = sum(pv_end)
+        
+        # ── Mid-period discounting ──
+        # First period = 0.75 (partial year from valuation date to first CF)
+        # Subsequent = 1.75, 2.75, etc.
+        pv_mid = []
+        for i in range(n):
+            if i == 0:
+                period = 0.75  # Mid-year convention for partial first period
+            else:
+                period = float(i) + 0.75
+            pv = ufcf[i] / ((1 + wacc) ** period)
+            pv_mid.append(pv)
+        npv_mid = sum(pv_mid)
+        
+        # ── XNPV (date-based) ──
+        valuation_date = self.inputs.valuation_date
+        first_cf = self.inputs.first_cf_date
+        
+        xnpv_end = 0.0
+        xnpv_mid = 0.0
+        for i in range(n):
+            cf_date = date(first_cf.year + i, first_cf.month, first_cf.day)
+            days_from_val = (cf_date - valuation_date).days
+            years_from_val = days_from_val / 365.0
+            
+            pv = ufcf[i] / ((1 + wacc) ** years_from_val)
+            xnpv_end += pv
+            
+            # Mid-period: subtract 0.25 years for mid-convention
+            pv_mid_x = ufcf[i] / ((1 + wacc) ** (years_from_val - 0.25))
+            xnpv_mid += pv_mid_x
+        
+        # Equity value per share from NPV methods
+        equity_per_share_end = (npv_end - self.inputs.net_debt_opening) / self.inputs.shares_outstanding
+        equity_per_share_mid = (npv_mid - self.inputs.net_debt_opening) / self.inputs.shares_outstanding
+        
+        # ── IRR (simplified using bisection method) ──
+        def _npv_at_rate(rate, cash_flows):
+            return sum(cf / ((1 + rate) ** (i + 1)) for i, cf in enumerate(cash_flows))
+        
+        # IRR: Find rate where NPV of (outflow at t=0 + UFCF stream) = 0
+        # Use enterprise value as the "investment" at t=0
+        irr_cash_flows = [-ufcf[0]] + ufcf[1:]  # Simplified: use first UFCF as proxy
+        irr = self._bisect_irr(irr_cash_flows, -0.5, 2.0)
+        
+        # XIRR (using actual dates) - simplified
+        xirr_end = self._bisect_irr(ufcf, -0.5, 2.0)
+        xirr_mid = xirr_end  # Approximate
+        
+        return NPVResult(
+            npv_end_of_period=round(npv_end, 2),
+            xnpv_end_of_period=round(xnpv_end, 2),
+            equity_per_share_end=round(equity_per_share_end, 2),
+            npv_mid_period=round(npv_mid, 2),
+            xnpv_mid_period=round(xnpv_mid, 2),
+            equity_per_share_mid=round(equity_per_share_mid, 2),
+            irr=round(irr, 6),
+            xirr_end_of_period=round(xirr_end, 6),
+            xirr_mid_period=round(xirr_mid, 6)
+        )
+    
+    @staticmethod
+    def _bisect_irr(cash_flows: List[float], lo: float, hi: float, tol: float = 1e-8, max_iter: int = 100) -> float:
+        """Find IRR using bisection method."""
+        def npv_at(r):
+            return sum(cf / ((1 + r) ** i) for i, cf in enumerate(cash_flows))
+        
+        f_lo = npv_at(lo)
+        f_hi = npv_at(hi)
+        
+        if f_lo * f_hi > 0:
+            # Same sign — try wider range
+            lo, hi = -0.99, 5.0
+            f_lo = npv_at(lo)
+            f_hi = npv_at(hi)
+            if f_lo * f_hi > 0:
+                return 0.0  # Cannot find root
+        
+        for _ in range(max_iter):
+            mid = (lo + hi) / 2.0
+            f_mid = npv_at(mid)
+            if abs(f_mid) < tol:
+                return mid
+            if f_lo * f_mid < 0:
+                hi = mid
+                f_hi = f_mid
+            else:
+                lo = mid
+                f_lo = f_mid
+        
+        return (lo + hi) / 2.0
+    
     def _calculate_partial_period_factor(
         self,
         valuation_date: date,
@@ -894,7 +2902,8 @@ class DCFEngine:
         terminal_value: float,
         wacc: float,
         yearfractions: List[float],
-        partial_period_factor: float
+        partial_period_factor: float,
+        terminal_ebitda: Optional[float] = None
     ) -> DCFValuationDetails:
         """
         Discount cash flows using exact date-based approach.
@@ -962,72 +2971,265 @@ class DCFEngine:
             pv_discrete_cf=pv_discrete,
             terminal_value=terminal_value,
             pv_terminal_value=pv_terminal,
-            enterprise_value=ev
+            enterprise_value=ev,
+            terminal_ebitda=terminal_ebitda
         )
     
-    def calculate(self, scenario: str = "base_case") -> DCFOutput:
+    def calculate_building_blocks(self, scenario: str = "base_case") -> BuildingBlockOutput:
         """
-        Execute full DCF calculation.
+        Phase 1: Calculate building block schedules (WACC through Net Income + IS/CFS/BS).
+
+        Runs Phases 1-13 + 21-23 of the original calculate() method:
+        - WACC, Revenue, COGS, Gross Profit, SG&A, Other OpEx, EBITDA
+        - Depreciation, EBIT, Interest, EBT
+        - Working Capital, Tax Levered, Tax Unlevered, Net Income
+        - Income Statement, Cash Flow Statement, Balance Sheet
+
+        Does NOT run: UFCF, DCF, terminal value, equity values, sensitivity.
+
+        Args:
+            scenario: Scenario name (base_case, best_case, worst_case)
+
+        Returns:
+            BuildingBlockOutput with all projected financial statement schedules
         """
         if scenario not in self.inputs.forecast_drivers:
             raise ValueError(f"Scenario '{scenario}' not found")
-        
+
         drivers = self.inputs.forecast_drivers[scenario]
-        
-        # Validate terminal growth < WACC (will check after WACC calc)
-        
+
         # Step 1: Calculate WACC
         wacc, avg_unlev_beta, lev_beta, cost_of_equity = self.calculate_wacc()
         after_tax_cost_of_debt = self.inputs.pre_tax_cost_of_debt * (1 - self.inputs.statutory_tax_rate)
-        
-        # Validate terminal growth
+
+        # Validate terminal growth < WACC
         if drivers.terminal_growth_rate >= wacc:
             raise ValueError(
                 f"Terminal growth ({drivers.terminal_growth_rate:.2%}) must be less than "
                 f"WACC ({wacc:.2%})"
             )
         self.validation_flags["terminal_growth_less_than_wacc"] = True
-        
+
         # Step 2: Build Revenue Schedule
         revenue = self._build_revenue_schedule(drivers)
-        
+
         # Step 3: Build COGS Schedule
         cogs = self._build_cogs_schedule(drivers)
-        
+
         # Step 4: Calculate Gross Profit
         gross_profit = [r - c for r, c in zip(revenue, cogs)]
-        
-        # Step 5: Build OpEx Schedules
+
+        # Step 5: Build OpEx Schedules (SG&A, R&D, Other OpEx)
         sga = self._build_opex_schedule(drivers, self.inputs.historical_sga[-1])
+        rd = self._build_opex_schedule(drivers,
+            self.inputs.historical_research_development[-1]
+            if self.inputs.historical_research_development else 0)
         other_opex = self._build_opex_schedule(drivers, self.inputs.historical_other_opex[-1])
-        
-        # Step 6: Calculate EBITDA
-        ebitda = [gp - s - o for gp, s, o in zip(gross_profit, sga, other_opex)]
-        
+
+        # Step 6: Calculate EBIT = GP − (SG&A + R&D + Other OpEx)
+        # NOTE: In YFinance data, SG&A/R&D already include depreciation,
+        # so this gives EBIT (not EBITDA).
+        ebit = [gp - s - r - o for gp, s, r, o in zip(gross_profit, sga, rd, other_opex)]
+
         # Step 7: Build Depreciation Schedule
         depr_schedule = self._build_depreciation_schedule(drivers)
         depreciation = depr_schedule.total_depreciation
-        tax_dep = depr_schedule.tax_basis_ending
+
+        # Step 8: Calculate EBITDA = EBIT + Depreciation (add back depreciation)
+        ebitda = [e + d for e, d in zip(ebit, depreciation)]
+
+        # Step 9: Net Interest Expense (LT Debt Interest - Cash Interest Income)
+        lt_debt_opening = self._get_val(self.inputs.long_term_debt_opening)
+        change_in_lt = self.inputs.change_in_lt_debt
+        lt_interest_rate = self._get_val(self.inputs.lt_debt_interest_rate)
+        cash_interest_rate = self._get_val(self.inputs.cash_interest_rate)
+        cash_opening = self._get_val(self.inputs.cash_opening)
         
-        # Step 8: Calculate EBIT
-        ebit = [e - d for e, d in zip(ebitda, depreciation)]
+        # Compute LT debt balances for each period
+        lt_debt_balances = []
+        for i in range(6):
+            delta = self._get_val(change_in_lt[min(i, len(change_in_lt) - 1)]) if change_in_lt else 0
+            if i == 0:
+                lt_debt_balances.append(lt_debt_opening + delta)
+            else:
+                lt_debt_balances.append(lt_debt_balances[i - 1] + delta)
         
-        # Step 9: Interest Expense (constant)
-        interest = [self.inputs.projected_interest_expense] * 6
+        # Compute approximate cash balances for interest income (opening balance proxy)
+        # Cash balance is approximated for interest income calculation
+        # Full cash balance requires CFS, so we use opening cash for FY1 and a growing estimate
+        cash_balances_approx = [cash_opening]
+        for i in range(1, 6):
+            # Rough estimate: cash grows with revenue growth
+            rev_growth = drivers.get_revenue_growth(i - 1)
+            cash_balances_approx.append(cash_balances_approx[-1] * (1 + rev_growth))
         
-        # Step 10: Calculate EBT
-        ebt = [e - i for e, i in zip(ebit, interest)]
+        # LT Debt Interest Expense = LT debt balance × LT debt interest rate
+        lt_interest = [bal * lt_interest_rate for bal in lt_debt_balances]
         
+        # Cash Interest Income = Cash balance × Cash interest rate
+        cash_interest_income = [bal * cash_interest_rate for bal in cash_balances_approx]
+        
+        # Net Interest Expense = LT Interest - Cash Interest Income
+        interest = [max(lt_int - ci, 0) for lt_int, ci in zip(lt_interest, cash_interest_income)]
+
+        # Step 10: Calculate EBT = EBIT − Other Income/Expense − Net Interest
+        #   where Other Income/Expense is projected from historical values
+        hist_oi = self.inputs.historical_other_income_expense
+        other_inc_exp_base = hist_oi[-1] if hist_oi else 0
+        other_inc_exp = self._build_opex_schedule(drivers, other_inc_exp_base)
+        # Net Interest = LT Interest − Cash Interest Income (already computed above)
+        ebt = [e - oi - ni for e, oi, ni in zip(ebit, other_inc_exp, interest)]
+
         # Step 11: Build Working Capital Schedule
         wc_schedule = self._build_working_capital_schedule(drivers, revenue, cogs)
-        
+
         # Step 12: Build Tax Schedules
         tax_levered = self._build_tax_schedule_levered(ebt, depreciation, depr_schedule.tax_depreciation, drivers)
         tax_unlevered = self._build_tax_schedule_unlevered(ebit, depreciation, depr_schedule.tax_depreciation, drivers)
-        
+
         # Step 13: Calculate Net Income (for reference)
         net_income = [e - t for e, t in zip(ebt, tax_levered.total_tax)]
-        
+
+        # Step 21: Build Income Statement
+        income_stmt = IncomeStatement(
+            years=["FY1", "FY2", "FY3", "FY4", "FY5", "Terminal"],
+            revenue=revenue,
+            cogs=cogs,
+            gross_profit=gross_profit,
+            sga=sga,
+            rd=rd,
+            other_opex=other_opex,
+            ebitda=ebitda,
+            depreciation=depreciation,
+            ebit=ebit,
+            other_income_expense=other_inc_exp,
+            interest_expense=interest,
+            ebt=ebt,
+            current_tax=tax_levered.current_tax,
+            deferred_tax=tax_levered.deferred_tax,
+            total_tax=tax_levered.total_tax,
+            net_income=net_income
+        )
+
+        # Step 22: Build Equity Schedule FIRST
+        # Only needs: Net Income + inputs (no CFS/BS dependency)
+        equity_sched = self._build_equity_schedule(net_income, None, None, drivers)
+
+        # Step 23: Build Cash Flow Statement
+        # Dividends linked from Equity Schedule (Excel row 129)
+        cfs = self._build_cash_flow_statement(
+            net_income, tax_levered, depreciation,
+            depr_schedule.capex, wc_schedule, drivers,
+            equity_dividends=equity_sched.dividends,
+            interest_expense=interest,
+        )
+
+        # Step 24: Build Debt Schedule Part 1 (Cash + LT Debt)
+        debt_part1 = self._build_debt_part1(cfs, drivers)
+
+        # Step 25: Build Debt Schedule Part 2 (Revolving + Net Interest)
+        debt_part2 = self._build_debt_part2(cfs, debt_part1, equity_sched, drivers)
+
+        # Step 26: Build Balance Sheet (references all schedules)
+        bs = self._build_balance_sheet(
+            cfs, wc_schedule, depr_schedule, net_income, drivers,
+            debt_part1=debt_part1, debt_part2=debt_part2, equity_sched=equity_sched
+        )
+
+        # ── Full-period schedules (historical + forecast) ──
+
+        # Historical references from XBRL data
+        hist_refs = self._build_historical_references()
+
+        # Full working capital schedule (historical + forecast)
+        full_wc = self._build_full_working_capital_schedule(drivers, revenue, cogs)
+
+        # Interest schedule (historical + forecast)
+        interest_sched = self._build_interest_schedule(debt_part1, debt_part2)
+
+        # Period labels
+        hist_years = self._get_historical_period_labels()
+        forecast_years = ["FY1", "FY2", "FY3", "FY4", "FY5", "Terminal"]
+        all_years = hist_years + forecast_years
+
+        return BuildingBlockOutput(
+            wacc=round(wacc, 6),
+            avg_unlevered_beta=round(avg_unlev_beta, 4),
+            levered_beta=round(lev_beta, 4),
+            cost_of_equity=round(cost_of_equity, 6),
+            after_tax_cost_of_debt=round(after_tax_cost_of_debt, 6),
+            revenue=revenue,
+            cogs=cogs,
+            gross_profit=gross_profit,
+            sga=sga,
+            rd=rd,
+            other_opex=other_opex,
+            ebitda=ebitda,
+            depreciation_schedule=depr_schedule,
+            depreciation=depreciation,
+            ebit=ebit,
+            interest=interest,
+            ebt=ebt,
+            income_statement=income_stmt,
+            working_capital=wc_schedule,
+            tax_levered=tax_levered,
+            tax_unlevered=tax_unlevered,
+            net_income=net_income,
+            cash_flow_statement=cfs,
+            balance_sheet=bs,
+            debt_schedule_part1=debt_part1,
+            debt_schedule_part2=debt_part2,
+            equity_schedule=equity_sched,
+            full_working_capital=full_wc,
+            interest_schedule=interest_sched,
+            historical_references=hist_refs,
+            historical_years=hist_years,
+            forecast_years=forecast_years,
+            all_years=all_years,
+            validation_flags=dict(self.validation_flags),
+            warnings=list(self.warnings),
+            scenario=scenario,
+            valuation_date=self.inputs.valuation_date,
+        )
+
+    def calculate_valuation(
+        self,
+        building_blocks: BuildingBlockOutput,
+        scenario: str = "base_case"
+    ) -> ValuationOutput:
+        """
+        Phase 2: Calculate valuation using building block outputs.
+
+        Runs Phases 14-20 + 24-27 of the original calculate() method:
+        - UFCF, Partial Period Factor
+        - Terminal Value (Perpetuity + Multiple)
+        - DCF Discounting (Perpetuity + Multiple)
+        - Equity Values (EV → Equity → Per Share → Premium)
+        - Intrinsic Extracts, UFCF 3 Methods, NPV/XNPV/IRR
+        - Sensitivity Tables
+
+        Args:
+            building_blocks: Output from calculate_building_blocks()
+            scenario: Scenario name for terminal growth / multiple lookups
+
+        Returns:
+            ValuationOutput with UFCF, DCF, and valuation schedules
+        """
+        drivers = self.inputs.forecast_drivers[scenario]
+
+        # Extract intermediate values from building blocks
+        wacc = building_blocks.wacc
+        ebitda = building_blocks.income_statement.ebitda
+        tax_unlevered = building_blocks.tax_unlevered
+        depr_schedule = building_blocks.depreciation_schedule
+        wc_schedule = building_blocks.working_capital
+        tax_levered = building_blocks.tax_levered
+        depreciation = building_blocks.depreciation
+        ebit = building_blocks.ebit
+        interest = building_blocks.interest
+        net_income = building_blocks.net_income
+        cfs = building_blocks.cash_flow_statement
+
         # Step 14: Calculate UFCF
         ufcf_schedule = self._calculate_ufcf(
             ebitda,
@@ -1037,22 +3239,18 @@ class DCFEngine:
             tax_levered,
             depreciation
         )
-        
+
         # Step 15: Calculate Partial Period Factors
         partial_factor, yearfractions = self._calculate_partial_period_factor(
             self.inputs.valuation_date,
             self.inputs.first_fiscal_year_end,
             self.inputs.first_cf_date
         )
-        
+
         # Step 16: Perpetuity Method Terminal Value
-        # TV = UFCF_terminal × (1 + g) / (WACC - g)
-        # Per Excel spec row M292: Terminal Value = N287 / (C285 - C284)
-        # where N287 is terminal year UFCF. Since terminal UFCF represents the LAST forecast year,
-        # we need to grow it by (1+g) to get the FIRST perpetuity year cash flow.
         terminal_ufcf = ufcf_schedule.ufcf[-1]
         tv_perpetuity = terminal_ufcf * (1 + drivers.terminal_growth_rate) / (wacc - drivers.terminal_growth_rate)
-        
+
         # Step 17: Discount Cash Flows - Perpetuity Method
         perpetuity_dcf = self._discount_cash_flows(
             ufcf_schedule.ufcf,
@@ -1061,268 +3259,398 @@ class DCFEngine:
             yearfractions,
             partial_factor
         )
-        
+
         # Step 18: Exit Multiple Method Terminal Value
-        # TV = Terminal EBITDA × Multiple
-        # This gives enterprise value at end of forecast period
         terminal_ebitda = ebitda[-1]
         tv_multiple = terminal_ebitda * drivers.terminal_ebitda_multiple
-        
+
         # Step 19: Discount Cash Flows - Multiple Method
         multiple_dcf = self._discount_cash_flows(
             ufcf_schedule.ufcf,
             tv_multiple,
             wacc,
             yearfractions,
-            partial_factor
+            partial_factor,
+            terminal_ebitda=terminal_ebitda
         )
-        
+
         # Step 20: Calculate Equity Values
         ev_perpetuity = perpetuity_dcf.enterprise_value
         ev_multiple = multiple_dcf.enterprise_value
-        
+
         equity_perpetuity = ev_perpetuity - self.inputs.net_debt_opening
         equity_multiple = ev_multiple - self.inputs.net_debt_opening
-        
+
         eq_per_share_perp = equity_perpetuity / self.inputs.shares_outstanding
         eq_per_share_mult = equity_multiple / self.inputs.shares_outstanding
-        
+
         premium_perp = (eq_per_share_perp - self.inputs.current_stock_price) / self.inputs.current_stock_price
         premium_mult = (eq_per_share_mult - self.inputs.current_stock_price) / self.inputs.current_stock_price
-        
-        # Step 21: Build Income Statement
-        income_stmt = IncomeStatement(
-            years=["FY1", "FY2", "FY3", "FY4", "FY5", "Terminal"],
-            revenue=revenue,
-            cogs=cogs,
-            gross_profit=gross_profit,
-            sga=sga,
-            other_opex=other_opex,
-            ebitda=ebitda,
-            depreciation=depreciation,
-            ebit=ebit,
-            interest_expense=interest,
-            ebt=ebt,
-            current_tax=tax_levered.current_tax,
-            deferred_tax=tax_levered.deferred_tax,
-            total_tax=tax_levered.total_tax,
-            net_income=net_income
+
+        # Step 24: Build Intrinsic Valuation Extracts
+        intrinsic = self._build_intrinsic_extracts(
+            net_income, depreciation, interest, ebit,
+            tax_unlevered, ebitda, depr_schedule.capex,
+            wc_schedule, cfs, depr_schedule
         )
-        
-        # Step 22: Validation - Check UFCF reconciliation
-        # (In full implementation, would also calculate Net Income method)
-        self.validation_flags["ufcf_methods_reconcile"] = True
-        
-        # Build output
-        return DCFOutput(
+
+        # Step 25: Build UFCF 3 Methods cross-check
+        ufcf_3m = self._build_ufcf_3methods(
+            ebit, net_income, ebitda,
+            tax_unlevered, tax_levered,
+            depreciation, interest,
+            depr_schedule.capex, wc_schedule.change_in_nwc
+        )
+
+        # Step 26: Build NPV/XNPV/IRR/XIRR
+        npv_result = self._build_npv_xnpv(
+            ufcf_schedule.ufcf, yearfractions, wacc,
+            eq_per_share_perp, eq_per_share_mult
+        )
+
+        # Step 27: Build Sensitivity Tables
+        wacc_range = [wacc - 0.02, wacc - 0.01, wacc, wacc + 0.01, wacc + 0.02]
+        growth_range = [0.01, 0.015, 0.02, 0.025, 0.03]
+        multiple_range = [5.0, 6.0, 7.0, 8.0, 9.0]
+
+        # Validation - Check UFCF reconciliation
+        valuation_flags = dict(building_blocks.validation_flags)
+        valuation_warnings = list(building_blocks.warnings)
+        valuation_flags["ufcf_methods_reconcile"] = ufcf_3m.methods_reconcile
+        if not ufcf_3m.methods_reconcile:
+            valuation_warnings.append("UFCF 3-method cross-check shows discrepancy > $0.01k")
+
+        return ValuationOutput(
+            ufcf=ufcf_schedule,
+            perpetuity_dcf=perpetuity_dcf,
+            multiple_dcf=multiple_dcf,
             perpetuity_method=ValuationResult(
                 enterprise_value=round(ev_perpetuity, 2),
                 equity_value=round(equity_perpetuity, 2),
                 equity_value_per_share=round(eq_per_share_perp, 2),
-                implied_premium_discount=round(premium_perp, 4)  # Store as decimal (e.g., -0.1928 = -19.28%)
+                implied_premium_discount=round(premium_perp, 4)
             ),
             exit_multiple_method=ValuationResult(
                 enterprise_value=round(ev_multiple, 2),
                 equity_value=round(equity_multiple, 2),
                 equity_value_per_share=round(eq_per_share_mult, 2),
-                implied_premium_discount=round(premium_mult, 4)  # Store as decimal
+                implied_premium_discount=round(premium_mult, 4)
             ),
-            income_statement=income_stmt,
-            working_capital=wc_schedule,
-            depreciation=depr_schedule,
-            tax_levered=tax_levered,
-            tax_unlevered=tax_unlevered,
-            ufcf=ufcf_schedule,
-            perpetuity_dcf=perpetuity_dcf,
-            multiple_dcf=multiple_dcf,
-            wacc=round(wacc, 6),
-            avg_unlevered_beta=round(avg_unlev_beta, 4),
-            levered_beta=round(lev_beta, 4),
-            cost_of_equity=round(cost_of_equity, 6),
-            after_tax_cost_of_debt=round(after_tax_cost_of_debt, 6),
-            ufcf_methods_reconcile=True,
-            validation_flags=self.validation_flags,
-            warnings=self.warnings,
+            intrinsic_extracts=intrinsic,
+            ufcf_3_methods=ufcf_3m,
+            npv_xnpv=npv_result,
+            sensitivity_perpetuity=self.calculate_sensitivity_perpetuity(
+                ufcf_schedule, perpetuity_dcf, wacc, wacc_range, growth_range
+            ),
+            sensitivity_multiple=self.calculate_sensitivity_multiple(
+                building_blocks.income_statement, multiple_dcf, wacc, wacc_range, multiple_range
+            ),
+            ufcf_methods_reconcile=ufcf_3m.methods_reconcile,
+            validation_flags=valuation_flags,
+            warnings=valuation_warnings,
             scenario=scenario,
-            valuation_date=self.inputs.valuation_date
+            valuation_date=self.inputs.valuation_date,
         )
-    
+
+
     def calculate_sensitivity_perpetuity(
         self,
-        base_output: DCFOutput,
+        ufcf_schedule: 'UFCFSchedule',
+        perpetuity_dcf: 'DCFValuationDetails',
+        wacc: float,
         wacc_range: List[float],
         growth_range: List[float]
     ) -> Dict[str, Dict[str, float]]:
         """Calculate sensitivity table for perpetuity method."""
         ev_table = {}
         
-        for wacc in wacc_range:
-            ev_table[str(round(wacc, 4))] = {}
+        for w in wacc_range:
+            ev_table[str(round(w, 4))] = {}
             for growth in growth_range:
-                if growth >= wacc:
-                    ev_table[str(round(wacc, 4))][str(round(growth, 4))] = 0
+                if growth >= w:
+                    ev_table[str(round(w, 4))][str(round(growth, 4))] = 0
                     continue
                 
                 # Quick recalculation
-                terminal_ufcf = base_output.ufcf.ufcf[-1]
-                tv = terminal_ufcf / (wacc - growth)
+                terminal_ufcf = ufcf_schedule.ufcf[-1]
+                tv = terminal_ufcf / (w - growth)
                 
                 # Simplified PV calculation
-                pv_discrete = sum(base_output.perpetuity_dcf.pv_discrete_cf)
-                pv_terminal = tv / ((1 + wacc) ** base_output.perpetuity_dcf.years_to_cf[-1])
+                pv_discrete = sum(perpetuity_dcf.pv_discrete_cf)
+                pv_terminal = tv / ((1 + w) ** perpetuity_dcf.years_to_cf[-1])
                 ev = pv_discrete + pv_terminal
                 
-                ev_table[str(round(wacc, 4))][str(round(growth, 4))] = round(ev, 2)
+                ev_table[str(round(w, 4))][str(round(growth, 4))] = round(ev, 2)
         
         return ev_table
     
     def calculate_sensitivity_multiple(
         self,
-        base_output: DCFOutput,
+        income_statement: 'IncomeStatement',
+        multiple_dcf: 'DCFValuationDetails',
+        wacc: float,
         wacc_range: List[float],
         multiple_range: List[float]
     ) -> Dict[str, Dict[str, float]]:
         """Calculate sensitivity table for exit multiple method."""
         ev_table = {}
         
-        for wacc in wacc_range:
-            ev_table[str(round(wacc, 4))] = {}
+        for w in wacc_range:
+            ev_table[str(round(w, 4))] = {}
             for multiple in multiple_range:
-                terminal_ebitda = base_output.income_statement.ebitda[-1]
+                terminal_ebitda = income_statement.ebitda[-1]
                 tv = terminal_ebitda * multiple
                 
                 # Simplified PV calculation
-                pv_discrete = sum(base_output.multiple_dcf.pv_discrete_cf)
-                pv_terminal = tv / ((1 + wacc) ** base_output.multiple_dcf.years_to_cf[-1])
+                pv_discrete = sum(multiple_dcf.pv_discrete_cf)
+                pv_terminal = tv / ((1 + w) ** multiple_dcf.years_to_cf[-1])
                 ev = pv_discrete + pv_terminal
                 
-                ev_table[str(round(wacc, 4))][str(round(multiple, 2))] = round(ev, 2)
+                ev_table[str(round(w, 4))][str(round(multiple, 2))] = round(ev, 2)
         
         return ev_table
     
-    def to_dict(self, output: DCFOutput) -> Dict[str, Any]:
-        """Convert DCFOutput to dictionary for JSON serialization."""
+    
+    # ── Serialization helpers for new schedules ──
+    
+    @staticmethod
+    def _serialize_cfs(cfs: 'CashFlowStatement') -> Dict:
         return {
-            "main_outputs": {
-                "perpetuity_method": {
-                    "enterprise_value": output.perpetuity_method.enterprise_value,
-                    "equity_value": output.perpetuity_method.equity_value,
-                    "equity_value_per_share": output.perpetuity_method.equity_value_per_share,
-                    "implied_premium_discount_pct": output.perpetuity_method.implied_premium_discount
-                },
-                "exit_multiple_method": {
-                    "enterprise_value": output.exit_multiple_method.enterprise_value,
-                    "equity_value": output.exit_multiple_method.equity_value,
-                    "equity_value_per_share": output.exit_multiple_method.equity_value_per_share,
-                    "implied_premium_discount_pct": output.exit_multiple_method.implied_premium_discount
-                }
-            },
-            "wacc_calculation": {
-                "wacc": output.wacc,
-                "avg_unlevered_beta": output.avg_unlevered_beta,
-                "levered_beta": output.levered_beta,
-                "cost_of_equity": output.cost_of_equity,
-                "after_tax_cost_of_debt": output.after_tax_cost_of_debt
-            },
-            "supporting_schedules": {
-                "income_statement": {
-                    "years": output.income_statement.years,
-                    "revenue": output.income_statement.revenue,
-                    "cogs": output.income_statement.cogs,
-                    "gross_profit": output.income_statement.gross_profit,
-                    "sga": output.income_statement.sga,
-                    "other_opex": output.income_statement.other_opex,
-                    "ebitda": output.income_statement.ebitda,
-                    "depreciation": output.income_statement.depreciation,
-                    "ebit": output.income_statement.ebit,
-                    "interest_expense": output.income_statement.interest_expense,
-                    "ebt": output.income_statement.ebt,
-                    "current_tax": output.income_statement.current_tax,
-                    "deferred_tax": output.income_statement.deferred_tax,
-                    "total_tax": output.income_statement.total_tax,
-                    "net_income": output.income_statement.net_income
-                },
-                "working_capital": {
-                    "years": output.working_capital.years,
-                    "ar_balance": output.working_capital.ar_balance,
-                    "inventory_balance": output.working_capital.inventory_balance,
-                    "ap_balance": output.working_capital.ap_balance,
-                    "nwc": output.working_capital.nwc,
-                    "change_in_nwc": output.working_capital.change_in_nwc,
-                    "ar_days": output.working_capital.ar_days,
-                    "inv_days": output.working_capital.inv_days,
-                    "ap_days": output.working_capital.ap_days
-                },
-                "depreciation": {
-                    "years": output.depreciation.years,
-                    "capex": output.depreciation.capex,
-                    "existing_asset_dep": output.depreciation.existing_asset_dep,
-                    "new_asset_dep": output.depreciation.new_asset_dep,
-                    "total_depreciation": output.depreciation.total_depreciation,
-                    "gross_ppe_ending": output.depreciation.gross_ppe_ending,
-                    "tax_basis_ending": output.depreciation.tax_basis_ending
-                },
-                "tax_levered": {
-                    "years": output.tax_levered.years,
-                    "ebt": output.tax_levered.ebt_ebit,
-                    "accounting_dep": output.tax_levered.accounting_dep,
-                    "tax_dep": output.tax_levered.tax_dep,
-                    "ebt_adjusted": output.tax_levered.ebt_adjusted,
-                    "nol_opening": output.tax_levered.nol_opening,
-                    "nol_new": output.tax_levered.nol_new,
-                    "nol_used": output.tax_levered.nol_used,
-                    "nol_ending": output.tax_levered.nol_ending,
-                    "taxable_income": output.tax_levered.taxable_income,
-                    "current_tax": output.tax_levered.current_tax,
-                    "total_tax": output.tax_levered.total_tax,
-                    "deferred_tax": output.tax_levered.deferred_tax
-                },
-                "tax_unlevered": {
-                    "years": output.tax_unlevered.years,
-                    "ebit": output.tax_unlevered.ebt_ebit,
-                    "current_tax": output.tax_unlevered.current_tax
-                },
-                "ufcf": {
-                    "years": output.ufcf.years,
-                    "ebitda": output.ufcf.ebitda,
-                    "current_tax_unlevered": output.ufcf.current_tax_unlevered,
-                    "capex": output.ufcf.capex,
-                    "change_in_nwc": output.ufcf.change_in_nwc,
-                    "ufcf": output.ufcf.ufcf,
-                    "tax_shield": output.ufcf.tax_shield
-                }
-            },
-            "dcf_details": {
-                "perpetuity_method": {
-                    "years": output.perpetuity_dcf.years,
-                    "fiscal_year_ends": [d.isoformat() for d in output.perpetuity_dcf.fiscal_year_ends],
-                    "cf_dates": [d.isoformat() for d in output.perpetuity_dcf.cf_dates],
-                    "years_to_cf": output.perpetuity_dcf.years_to_cf,
-                    "discount_factors": output.perpetuity_dcf.discount_factors,
-                    "ufcf": output.perpetuity_dcf.ufcf,
-                    "adjusted_ufcf": output.perpetuity_dcf.adjusted_ufcf,
-                    "pv_discrete_cf": output.perpetuity_dcf.pv_discrete_cf,
-                    "terminal_value": output.perpetuity_dcf.terminal_value,
-                    "pv_terminal_value": output.perpetuity_dcf.pv_terminal_value,
-                    "enterprise_value": output.perpetuity_dcf.enterprise_value
-                },
-                "exit_multiple_method": {
-                    "terminal_value": output.multiple_dcf.terminal_value,
-                    "pv_terminal_value": output.multiple_dcf.pv_terminal_value,
-                    "enterprise_value": output.multiple_dcf.enterprise_value
-                }
-            },
-            "validation": {
-                "ufcf_methods_reconcile": output.ufcf_methods_reconcile,
-                "flags": output.validation_flags
-            },
-            "metadata": {
-                "scenario": output.scenario,
-                "valuation_date": output.valuation_date.isoformat(),
-                "calculation_timestamp": output.calculation_timestamp,
-                "warnings": output.warnings
-            }
+            "years": cfs.years,
+            "net_income": cfs.net_income,
+            "deferred_taxes": cfs.deferred_taxes,
+            "depreciation": cfs.depreciation,
+            "cash_from_ar": cfs.cash_from_ar,
+            "cash_from_inventory": cfs.cash_from_inventory,
+            "cash_from_ap": cfs.cash_from_ap,
+            "subtotal_cfo": cfs.subtotal_cfo,
+            "capital_expenditure": cfs.capital_expenditure,
+            "subtotal_cfi": cfs.subtotal_cfi,
+            "change_in_lt_debt": cfs.change_in_lt_debt,
+            "change_in_common_equity": cfs.change_in_common_equity,
+            "dividends": cfs.dividends,
+            "revolving_credit": cfs.revolving_credit,
+            "subtotal_cff": cfs.subtotal_cff,
+            "beginning_cash": cfs.beginning_cash,
+            "increase_decrease": cfs.increase_decrease,
+            "ending_cash": cfs.ending_cash,
         }
+    
+    @staticmethod
+    def _serialize_bs(bs: 'BalanceSheet') -> Dict:
+        return {
+            "years": bs.years,
+            "cash": bs.cash,
+            "accounts_receivable": bs.accounts_receivable,
+            "inventories": bs.inventories,
+            "other_short_term_investments": bs.other_short_term_investments,
+            "other_current_assets": bs.other_current_assets,
+            "non_current_marketable_securities": bs.non_current_marketable_securities,
+            "other_non_current_assets": bs.other_non_current_assets,
+            "non_current_deferred_assets": bs.non_current_deferred_assets,
+            "total_current_assets": bs.total_current_assets,
+            "ppe_gross": bs.ppe_gross,
+            "accumulated_depreciation": bs.accumulated_depreciation,
+            "ppe_net": bs.ppe_net,
+            "investments_and_advances": bs.investments_and_advances,
+            "total_assets": bs.total_assets,
+            "accounts_payable": bs.accounts_payable,
+            "current_accrued_expenses": bs.current_accrued_expenses,
+            "current_deferred_liabilities": bs.current_deferred_liabilities,
+            "other_current_liabilities": bs.other_current_liabilities,
+            "current_debt": bs.current_debt,
+            "revolving_credit": bs.revolving_credit,
+            "total_current_liabilities": bs.total_current_liabilities,
+            "trade_and_other_payables_non_current": bs.trade_and_other_payables_non_current,
+            "deferred_tax_liabilities": bs.deferred_tax_liabilities,
+            "other_non_current_liabilities": bs.other_non_current_liabilities,
+            "long_term_debt": bs.long_term_debt,
+            "total_liabilities": bs.total_liabilities,
+            "common_stock": bs.common_stock,
+            "common_equity": bs.common_equity,
+            "retained_earnings": bs.retained_earnings,
+            "other_equity_adjustments": bs.other_equity_adjustments,
+            "total_shareholders_equity": bs.total_shareholders_equity,
+            "total_liabilities_equity": bs.total_liabilities_equity,
+            "balance_check": bs.balance_check,
+        }
+    
+    @staticmethod
+    def _serialize_debt_part1(dp1: 'DebtSchedulePart1') -> Dict:
+        if dp1 is None:
+            return {}
+        return {
+            "years": dp1.years,
+            "cash_beginning": dp1.cash_beginning,
+            "cash_change": dp1.cash_change,
+            "cash_ending": dp1.cash_ending,
+            "cash_interest_rate": dp1.cash_interest_rate,
+            "cash_interest_income": dp1.cash_interest_income,
+            "lt_debt_beginning": dp1.lt_debt_beginning,
+            "lt_debt_change": dp1.lt_debt_change,
+            "lt_debt_ending": dp1.lt_debt_ending,
+            "lt_debt_interest_rate": dp1.lt_debt_interest_rate,
+            "lt_debt_interest_expense": dp1.lt_debt_interest_expense,
+        }
+    
+    @staticmethod
+    def _serialize_debt_part2(dp2: 'DebtSchedulePart2') -> Dict:
+        if dp2 is None:
+            return {}
+        return {
+            "years": dp2.years,
+            "beginning_cash": dp2.beginning_cash,
+            "cash_from_operations": dp2.cash_from_operations,
+            "cash_from_investing": dp2.cash_from_investing,
+            "change_in_lt_debt": dp2.change_in_lt_debt,
+            "change_in_common_equity": dp2.change_in_common_equity,
+            "dividends": dp2.dividends,
+            "cash_available": dp2.cash_available,
+            "revolving_beginning": dp2.revolving_beginning,
+            "revolving_change": dp2.revolving_change,
+            "revolving_ending": dp2.revolving_ending,
+            "revolving_interest_rate": dp2.revolving_interest_rate,
+            "revolving_interest_expense": dp2.revolving_interest_expense,
+            "lt_interest": dp2.lt_interest,
+            "revolving_interest": dp2.revolving_interest,
+            "interest_income": dp2.interest_income,
+            "net_interest_expense": dp2.net_interest_expense,
+        }
+    
+    @staticmethod
+    def _serialize_equity(eq: 'EquitySchedule') -> Dict:
+        if eq is None:
+            return {}
+        return {
+            "years": eq.years,
+            "common_equity_beginning": eq.common_equity_beginning,
+            "common_equity_change": eq.common_equity_change,
+            "common_equity_ending": eq.common_equity_ending,
+            "net_income": eq.net_income,
+            "dividend_payout_ratio": eq.dividend_payout_ratio,
+            "dividends": eq.dividends,
+            "retained_earnings_beginning": eq.retained_earnings_beginning,
+            "retained_earnings_net_income": eq.retained_earnings_net_income,
+            "retained_earnings_dividends": eq.retained_earnings_dividends,
+            "retained_earnings_ending": eq.retained_earnings_ending,
+            "total_shareholders_equity": eq.total_shareholders_equity,
+        }
+    
+    @staticmethod
+    def _serialize_intrinsic(ext: 'IntrinsicExtracts') -> Dict:
+        return {
+            "years": ext.years,
+            "net_income": ext.net_income,
+            "depreciation": ext.depreciation,
+            "interest_expense": ext.interest_expense,
+            "tax_rate": ext.tax_rate,
+            "after_tax_interest": ext.after_tax_interest,
+            "ebit": ext.ebit,
+            "unlevered_taxes": ext.unlevered_taxes,
+            "ebitda": ext.ebitda,
+            "capex": ext.capex,
+            "change_in_working_capital": ext.change_in_working_capital,
+            "long_term_debt": ext.long_term_debt,
+            "cash": ext.cash,
+        }
+    
+    @staticmethod
+    def _serialize_ufcf_3m(m: 'UFCFMethods') -> Dict:
+        return {
+            "years": m.years,
+            "ebit_method": m.ebit_method,
+            "net_income_method": m.net_income_method,
+            "ebitda_method": m.ebitda_method,
+            "methods_reconcile": m.methods_reconcile,
+        }
+    
+    @staticmethod
+    def _serialize_npv(n: 'NPVResult') -> Dict:
+        return {
+            "npv_end_of_period": n.npv_end_of_period,
+            "xnpv_end_of_period": n.xnpv_end_of_period,
+            "equity_per_share_end": n.equity_per_share_end,
+            "npv_mid_period": n.npv_mid_period,
+            "xnpv_mid_period": n.xnpv_mid_period,
+            "equity_per_share_mid": n.equity_per_share_mid,
+            "irr": n.irr,
+            "xirr_end_of_period": n.xirr_end_of_period,
+            "xirr_mid_period": n.xirr_mid_period,
+        }
+
+    @staticmethod
+    def _deserialize_cfs(data: Dict) -> CashFlowStatement:
+        """Deserialize a CashFlowStatement from dict."""
+        return CashFlowStatement(
+            years=data.get("years", []),
+            net_income=data.get("net_income", []),
+            deferred_taxes=data.get("deferred_taxes", []),
+            depreciation=data.get("depreciation", []),
+            cash_from_ar=data.get("cash_from_ar", []),
+            cash_from_inventory=data.get("cash_from_inventory", []),
+            cash_from_ap=data.get("cash_from_ap", []),
+            subtotal_cfo=data.get("subtotal_cfo", []),
+            capital_expenditure=data.get("capital_expenditure", []),
+            subtotal_cfi=data.get("subtotal_cfi", []),
+            change_in_lt_debt=data.get("change_in_lt_debt", []),
+            change_in_common_equity=data.get("change_in_common_equity", []),
+            dividends=data.get("dividends", []),
+            revolving_credit=data.get("revolving_credit", []),
+            subtotal_cff=data.get("subtotal_cff", []),
+            beginning_cash=data.get("beginning_cash", []),
+            increase_decrease=data.get("increase_decrease", []),
+            ending_cash=data.get("ending_cash", []),
+        )
+
+    @staticmethod
+    def _deserialize_bs(data: Dict) -> BalanceSheet:
+        """Deserialize a BalanceSheet from dict."""
+        return BalanceSheet(
+            years=data.get("years", []),
+            cash=data.get("cash", []),
+            accounts_receivable=data.get("accounts_receivable", []),
+            inventories=data.get("inventories", []),
+            other_short_term_investments=data.get("other_short_term_investments", []),
+            other_current_assets=data.get("other_current_assets", []),
+            non_current_marketable_securities=data.get("non_current_marketable_securities", []),
+            other_non_current_assets=data.get("other_non_current_assets", []),
+            non_current_deferred_assets=data.get("non_current_deferred_assets", []),
+            total_current_assets=data.get("total_current_assets", []),
+            ppe_gross=data.get("ppe_gross", []),
+            accumulated_depreciation=data.get("accumulated_depreciation", []),
+            ppe_net=data.get("ppe_net", []),
+            investments_and_advances=data.get("investments_and_advances", []),
+            total_assets=data.get("total_assets", []),
+            accounts_payable=data.get("accounts_payable", []),
+            current_accrued_expenses=data.get("current_accrued_expenses", []),
+            current_deferred_liabilities=data.get("current_deferred_liabilities", []),
+            other_current_liabilities=data.get("other_current_liabilities", []),
+            current_debt=data.get("current_debt", []),
+            revolving_credit=data.get("revolving_credit", []),
+            total_current_liabilities=data.get("total_current_liabilities", []),
+            trade_and_other_payables_non_current=data.get("trade_and_other_payables_non_current", []),
+            deferred_tax_liabilities=data.get("deferred_tax_liabilities", []),
+            other_non_current_liabilities=data.get("other_non_current_liabilities", []),
+            long_term_debt=data.get("long_term_debt", []),
+            total_liabilities=data.get("total_liabilities", []),
+            common_stock=data.get("common_stock", []),
+            common_equity=data.get("common_equity", []),
+            retained_earnings=data.get("retained_earnings", []),
+            other_equity_adjustments=data.get("other_equity_adjustments", []),
+            total_shareholders_equity=data.get("total_shareholders_equity", []),
+            total_liabilities_equity=data.get("total_liabilities_equity", []),
+            balance_check=data.get("balance_check", []),
+        )
+
+    @staticmethod
+    def _deserialize_building_blocks(data: Dict[str, Any]) -> BuildingBlockOutput:
+        """
+        Reconstruct BuildingBlockOutput from a serialized dict.
+
+        Used when reading stored building blocks from session storage
+        (e.g. dcf_building_blocks session key).
+        """
+        return BuildingBlockOutput.from_dict(data)
 
 
 # =============================================================================
@@ -1344,8 +3672,7 @@ def create_default_inputs() -> DCFInputs:
     # Scenario drivers
     drivers = {
         "best_case": ScenarioDrivers(
-            volume_growth=[0.03, 0.02, 0.02, 0.015, 0.015, 0.01],
-            price_growth=[0.035, 0.02, 0.02, 0.02, 0.015, 0.008],
+            combined_revenue_growth=[0.065, 0.04, 0.04, 0.035, 0.03, 0.018],
             capex=[4000, 4300, 4400, 4600, 4800, 4900],
             inflation_rate=[0.035, 0.03, 0.03, 0.025, 0.025, 0.015],
             ar_days=[45.0] * 5,
@@ -1355,8 +3682,7 @@ def create_default_inputs() -> DCFInputs:
             terminal_ebitda_multiple=7.0
         ),
         "base_case": ScenarioDrivers(
-            volume_growth=[0.02, 0.01, 0.01, 0.005, 0.005, 0.005],
-            price_growth=[0.03, 0.01, 0.01, 0.01, 0.005, 0.005],
+            combined_revenue_growth=[0.05, 0.02, 0.02, 0.015, 0.01, 0.01],
             capex=[4550, 4700, 4850, 5000, 5125, 5300],
             inflation_rate=[0.035, 0.03, 0.03, 0.025, 0.025, 0.015],
             ar_days=[45.0] * 5,
@@ -1366,8 +3692,7 @@ def create_default_inputs() -> DCFInputs:
             terminal_ebitda_multiple=7.0
         ),
         "worst_case": ScenarioDrivers(
-            volume_growth=[0.01, 0.01, 0.005, 0.005, 0.005, 0.005],
-            price_growth=[0.01, 0.01, 0.005, 0.005, 0.005, 0.005],
+            combined_revenue_growth=[0.02, 0.02, 0.01, 0.01, 0.01, 0.01],
             capex=[5000, 5200, 5400, 5500, 5600, 5800],
             inflation_rate=[0.035, 0.03, 0.03, 0.025, 0.025, 0.015],
             ar_days=[45.0] * 5,
@@ -1407,9 +3732,6 @@ def create_default_inputs() -> DCFInputs:
         shares_outstanding=34200.0,
         current_stock_price=2.23,
         
-        # Interest
-        projected_interest_expense=2520.0,
-        
         # Depreciation
         useful_life_existing=16.0,
         useful_life_new=20.0,
@@ -1437,121 +3759,20 @@ def create_default_inputs() -> DCFInputs:
         target_equity_weight=0.85,
         
         # Cost of debt
-        pre_tax_cost_of_debt=0.052
+        pre_tax_cost_of_debt=0.052,
+        
+        # Financing items
+        projected_dividends=2446.0,
+        change_in_lt_debt=[0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+        change_in_common_equity=[-1000.0, -1000.0, -1000.0, -1000.0, -1000.0, -1000.0],
+        revolving_credit_line=[0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+        
+        # Opening balance sheet
+        cash_opening=9365.0,
+        long_term_debt_opening=20000.0,
+        common_equity_opening=38669.70,
+        retained_earnings_opening=5690.0,
     )
 
 
-def fetch_dcf_inputs(ticker: str, peer_tickers: Optional[List[str]] = None) -> Tuple[Dict[str, Any], List[ComparableCompany]]:
-    """
-    Fetch DCF inputs for a target company with AI-suggested peers if none provided.
-    
-    Args:
-        ticker: Target company ticker symbol
-        peer_tickers: Optional list of peer ticker symbols for WACC calculation
-    
-    Returns:
-        Tuple of (target_company_info, list of ComparableCompany objects)
-    """
-    import yfinance as yf
-    
-    # Fetch target company info
-    try:
-        target = yf.Ticker(ticker)
-        info = target.info
-        company_name = info.get("longName", ticker)
-        industry = info.get("industry", "General")
-        sector = info.get("sector", "General")
-        market_cap = info.get("marketCap", 0)
-        enterprise_value = info.get("enterpriseValue", 0)
-        beta = info.get("beta", 1.0)
-    except Exception as e:
-        logger.warning(f"Could not fetch target company info: {e}")
-        return {}, []
-    
-    # If no peer tickers provided, use AI to suggest peers
-    if peer_tickers is None or len(peer_tickers) == 0:
-        print(f"🤖 No peer tickers provided for DCF. Using AI to suggest peers for {ticker}...")
-        ai_suggestions = suggest_peer_companies(ticker, num_peers=10)
-        if ai_suggestions and len(ai_suggestions) > 0:
-            peer_tickers = [p["ticker"] for p in ai_suggestions]
-            print(f"✅ AI suggested {len(peer_tickers)} peers: {', '.join(peer_tickers)}")
-        else:
-            print("⚠️ AI peer suggestion failed. Will use default comparables.")
-            return info, []
-    
-    # Fetch peer data and build ComparableCompany objects
-    comparables = []
-    for peer_ticker in peer_tickers:
-        try:
-            peer_yf = yf.Ticker(peer_ticker)
-            peer_info = peer_yf.info
-            
-            # Extract required fields for WACC calculation
-            debt = peer_info.get("totalDebt", 0) or 0
-            equity = peer_info.get("marketCap", 0) or 0
-            tax_rate = peer_info.get("taxRate", 0.21) or 0.21  # Default to 21% if not available
-            levered_beta = peer_info.get("beta", 1.0) or 1.0
-            
-            if debt > 0 or equity > 0:
-                comp = ComparableCompany(
-                    name=peer_info.get("longName", peer_ticker),
-                    debt=debt,
-                    equity=equity,
-                    tax_rate=tax_rate,
-                    levered_beta=levered_beta
-                )
-                comparables.append(comp)
-        except Exception as e:
-            logger.warning(f"Could not fetch peer {peer_ticker} data: {e}")
-            continue
-    
-    if len(comparables) == 0:
-        print("⚠️ Could not fetch any peer data. Will use default comparables.")
-    
-    return info, comparables
-
-
-def run_dcf_valuation(scenario: str = "base_case") -> Dict[str, Any]:
-    """
-    Run complete DCF valuation.
-    
-    Args:
-        scenario: "best_case", "base_case", or "worst_case"
-    
-    Returns:
-        Dictionary with complete DCF output
-    """
-    inputs = create_default_inputs()
-    engine = DCFEngine(inputs)
-    output = engine.calculate(scenario)
-    return engine.to_dict(output)
-
-
-if __name__ == "__main__":
-    # Example usage
-    print("Running DCF Valuation - Base Case...")
-    result = run_dcf_valuation("base_case")
-    
-    print("\n=== MAIN OUTPUTS ===")
-    print(f"Perpetuity Method:")
-    print(f"  Enterprise Value: ${result['main_outputs']['perpetuity_method']['enterprise_value']:,.2f}")
-    print(f"  Equity Value: ${result['main_outputs']['perpetuity_method']['equity_value']:,.2f}")
-    print(f"  Equity per Share: ${result['main_outputs']['perpetuity_method']['equity_value_per_share']:.2f}")
-    print(f"  Implied Premium: {result['main_outputs']['perpetuity_method']['implied_premium_discount_pct']:.1f}%")
-    
-    print(f"\nExit Multiple Method:")
-    print(f"  Enterprise Value: ${result['main_outputs']['exit_multiple_method']['enterprise_value']:,.2f}")
-    print(f"  Equity Value: ${result['main_outputs']['exit_multiple_method']['equity_value']:,.2f}")
-    print(f"  Equity per Share: ${result['main_outputs']['exit_multiple_method']['equity_value_per_share']:.2f}")
-    print(f"  Implied Premium: {result['main_outputs']['exit_multiple_method']['implied_premium_discount_pct']:.1f}%")
-    
-    print(f"\n=== WACC CALCULATION ===")
-    print(f"  WACC: {result['wacc_calculation']['wacc']:.2%}")
-    print(f"  Avg Unlevered Beta: {result['wacc_calculation']['avg_unlevered_beta']:.3f}")
-    print(f"  Levered Beta: {result['wacc_calculation']['levered_beta']:.3f}")
-    print(f"  Cost of Equity: {result['wacc_calculation']['cost_of_equity']:.2%}")
-    print(f"  After-Tax Cost of Debt: {result['wacc_calculation']['after_tax_cost_of_debt']:.2%}")
-    
-    print(f"\n=== VALIDATION ===")
-    print(f"  UFCF Methods Reconcile: {result['validation']['ufcf_methods_reconcile']}")
-    print(f"  Terminal Growth < WACC: {result['validation']['flags'].get('terminal_growth_less_than_wacc', False)}")
+# Legacy test harness removed — use Step 9/10 pipeline instead

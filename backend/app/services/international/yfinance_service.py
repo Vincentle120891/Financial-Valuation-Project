@@ -93,6 +93,13 @@ class InternationalDataStrategy:
         """
         Fetch data using yfinance primary + AlphaVantage fallback.
 
+        OPTIMIZATION (Option C): AlphaVantage is only called when:
+        1. enable_alphavantage_fallback is True (default for target company)
+        2. yfinance data has critical gaps (checked via _has_data_gaps)
+
+        When yfinance data is complete, AlphaVantage is skipped entirely.
+        This saves API calls and avoids rate limiting (AV free tier: 25 req/day).
+
         Args:
             ticker_symbol: Stock ticker symbol
             yf: yfinance module
@@ -106,9 +113,13 @@ class InternationalDataStrategy:
         data_package = self._fetch_yfinance_primary(ticker_symbol, yf)
 
         if data_package and self._validate_data_quality(data_package):
-            # Optionally enhance with AlphaVantage data
+            # Only enhance with AlphaVantage if there are actual data gaps
             if self.enable_alphavantage_fallback:
-                data_package = self._enhance_with_alphavantage(data_package, ticker_symbol)
+                if self._has_data_gaps(data_package):
+                    logger.info(f"[InternationalStrategy] yfinance has gaps for {ticker_symbol}, enhancing with AlphaVantage")
+                    data_package = self._enhance_with_alphavantage(data_package, ticker_symbol)
+                else:
+                    logger.info(f"[InternationalStrategy] yfinance data complete for {ticker_symbol}, skipping AlphaVantage")
 
             logger.info(f"[InternationalStrategy] Successfully fetched data for ticker='{ticker_symbol}'")
             return data_package
@@ -166,6 +177,109 @@ class InternationalDataStrategy:
         has_price = key_stats.get('current_price') is not None
 
         return has_revenue or has_price
+
+    def _has_data_gaps(self, data_package: Dict[str, Any]) -> bool:
+        """
+        Check if yfinance data has critical gaps that AlphaVantage could fill.
+        
+        Returns True if ANY critical field is missing (None or empty list),
+        indicating AlphaVantage enhancement would be valuable.
+        Returns False if data is complete — no need to call AlphaVantage.
+        """
+        key_stats = data_package.get('key_stats', {})
+        income_stmt = data_package.get('income_statement', {})
+        balance_sheet = data_package.get('balance_sheet', {})
+
+        # Critical fields for valuation (DCF, DuPont, Comps)
+        critical_fields = [
+            # Key stats (single-period)
+            ('key_stats', 'marketCap'),
+            ('key_stats', 'beta'),
+            ('key_stats', 'totalDebt'),
+            ('key_stats', 'cash'),
+            ('key_stats', 'effectiveTaxRate'),
+            # Income statement (multi-year lists)
+            ('income_statement', 'total_revenue'),
+            ('income_statement', 'ebitda'),
+            ('income_statement', 'net_income'),
+            ('income_statement', 'interest_expense'),
+            ('income_statement', 'tax_provision'),
+            # Balance sheet (multi-year lists)
+            ('balance_sheet', 'total_debt'),
+            ('balance_sheet', 'cash_and_equivalents'),
+            ('balance_sheet', 'total_equity'),
+            ('balance_sheet', 'accounts_receivable'),
+            ('balance_sheet', 'inventory'),
+            ('balance_sheet', 'accounts_payable'),
+            ('balance_sheet', 'ppe_gross'),
+            ('balance_sheet', 'long_term_debt'),
+        ]
+
+        sections = {
+            'key_stats': key_stats,
+            'income_statement': income_stmt,
+            'balance_sheet': balance_sheet,
+        }
+
+        gap_count = 0
+        for section_name, field_name in critical_fields:
+            section = sections.get(section_name, {})
+            value = section.get(field_name)
+
+            # Check for missing: None, empty dict, or empty list
+            if value is None or (isinstance(value, (dict, list)) and len(value) == 0):
+                gap_count += 1
+
+        if gap_count > 0:
+            logger.info(
+                f"[InternationalStrategy] yfinance data has {gap_count} gap(s) "
+                f"out of {len(critical_fields)} critical fields — AlphaVantage enhancement warranted"
+            )
+            return True
+
+        return False
+
+    @staticmethod
+    def _forward_fill_missing_tail(values: List) -> List:
+        """Forward-fill trailing None values with the last known non-None value.
+
+        yfinance often omits income-statement rows (e.g. InterestExpense,
+        InterestIncome) for fiscal periods that haven't been filed yet.
+        The resulting list has None entries at the *start* (oldest periods)
+        or *end* (newest periods) depending on the yfinance version.
+
+        This helper fills only **trailing** Nones — i.e. the newest periods
+        that are still missing — with the most recent known value so that
+        downstream consumers (DCF model, merger) have an estimate.
+
+        Example:
+            [None, -1.2e9, -1.1e9, None, None]
+            → [None, -1.2e9, -1.1e9, -1.1e9, -1.1e9]
+
+        If the entire list is None/empty, it is returned as-is.
+        """
+        if not values or not isinstance(values, list):
+            return values
+
+        # Walk backwards to find the last non-None value
+        last_known = None
+        for v in reversed(values):
+            if v is not None:
+                last_known = v
+                break
+
+        if last_known is None:
+            return values  # nothing to forward-fill
+
+        # Fill trailing Nones
+        result = list(values)
+        for i in range(len(result) - 1, -1, -1):
+            if result[i] is None:
+                result[i] = last_known
+            else:
+                break  # stop at first non-None from the right
+
+        return result
 
     def _enhance_with_alphavantage(self, data_package: Dict[str, Any], ticker_symbol: str) -> Dict[str, Any]:
         """Enhance yfinance data with supplementary AlphaVantage data."""
@@ -326,14 +440,41 @@ class InternationalDataStrategy:
                 'cost_of_revenue': self._get_series_values(financials, 'CostOfRevenue', num_periods) or
                                    self._get_series_values(financials, 'ReconciledCostOfRevenue', num_periods),
                 'gross_profit': self._get_series_values(financials, 'GrossProfit', num_periods),
+                'operating_expenses': self._get_series_values(financials, 'OperatingExpense', num_periods) or
+                                      self._get_series_values(financials, 'TotalOperatingExpenses', num_periods),
                 'ebitda': self._get_series_values(financials, 'EBITDA', num_periods) or
                           self._get_series_values(financials, 'NormalizedEBITDA', num_periods),
                 'ebit': self._get_series_values(financials, 'OperatingIncome', num_periods) or
                         self._get_series_values(financials, 'EBIT', num_periods),
+                'interest_expense': self._get_series_values(financials, 'InterestExpense', num_periods) or
+                                    self._get_series_values(financials, 'InterestAndDebtExpense', num_periods) or
+                                    self._get_series_values(financials, 'InterestExpenseDebt', num_periods),
+                'pretax_income': self._get_series_values(financials, 'PretaxIncome', num_periods),
+                'tax_provision': self._get_series_values(financials, 'IncomeTaxExpense', num_periods) or
+                                 self._get_series_values(financials, 'TaxProvision', num_periods),
                 'net_income': self._get_series_values(financials, 'NetIncome', num_periods) or
                               self._get_series_values(financials, 'NetIncomeCommonStockholders', num_periods),
                 'depreciation_amortization': self._get_series_values(financials, 'ReconciledDepreciation', num_periods),
+                # SG&A: Selling, General & Administrative expenses (needed for DCF income statement)
+                'sg_and_a': self._get_series_values(financials, 'SellingGeneralAndAdministration', num_periods),
+                # Interest Income: earned on cash/investments (separate from interest expense)
+                'interest_income': self._get_series_values(financials, 'InterestIncome', num_periods),
+                # Other Income/Expense: non-operating items (FX, investment gains/losses, etc.)
+                'other_income_expense': self._get_series_values(financials, 'OtherIncomeExpense', num_periods),
+                # Deferred Tax: deferred income tax expense/benefit (needed for tax schedule split)
+                # Defensive: if unavailable, default to 0 (tax_provision = current tax)
+                'deferred_tax': self._get_series_values(financials, 'DeferredIncomeTax', num_periods)
+                               or self._get_series_values(financials, 'DeferredTaxExpense', num_periods)
+                               or [0.0] * num_periods,
+                # Research & Development (needed for DCF income statement)
+                'research_development': self._get_series_values(financials, 'ResearchAndDevelopment', num_periods),
             }
+
+            # NOTE: interest_expense and interest_income are intentionally NOT forward-filled here.
+            # Step 7 will enrich these fields using SEC EDGAR XBRL (primary) and AI web search
+            # (fallback) to get actual 2024/2025 values. Forward-fill is only applied as a last
+            # resort in Step 7 if both SEC EDGAR and AI web search fail.
+            # See: step7_historical_data_processor.py -> _enrich_interest_data()
 
             return result
         except Exception as e:
@@ -358,7 +499,14 @@ class InternationalDataStrategy:
             result = {
                 'periods': periods,
                 'total_debt': self._get_series_values(balance_sheet, 'TotalDebt', num_periods),
-                'cash_and_equivalents': self._get_series_values(balance_sheet, 'CashAndCashEquivalents', num_periods),
+                # Cash: yfinance v1.3.0+ uses CamelCase WITHOUT spaces (e.g., 'CashAndCashEquivalents')
+                # Legacy versions used space-separated names (e.g., 'Cash Cash Equivalents...')
+                'cash_and_equivalents': self._get_series_values(balance_sheet, 'CashCashEquivalentsAndShortTermInvestments', num_periods) or
+                                        self._get_series_values(balance_sheet, 'CashAndCashEquivalents', num_periods) or
+                                        self._get_series_values(balance_sheet, 'Cash Cash Equivalents And Short Term Investments', num_periods) or
+                                        self._get_series_values(balance_sheet, 'Cash And Cash Equivalents', num_periods) or
+                                        self._get_series_values(balance_sheet, 'Cash And Short Term Investments', num_periods) or
+                                        self._get_series_values_fuzzy(balance_sheet, 'cash', num_periods),
                 'total_equity': self._get_series_values(balance_sheet, 'TotalEquityGrossMinorityInterest', num_periods) or
                                 self._get_series_values(balance_sheet, 'StockholdersEquity', num_periods),
                 'total_assets': self._get_series_values(balance_sheet, 'TotalAssets', num_periods),
@@ -367,6 +515,82 @@ class InternationalDataStrategy:
                 'accounts_receivable': self._get_series_values(balance_sheet, 'AccountsReceivable', num_periods),
                 'inventory': self._get_series_values(balance_sheet, 'Inventory', num_periods),
                 'accounts_payable': self._get_series_values(balance_sheet, 'AccountsPayable', num_periods),
+                'retained_earnings': self._get_series_values(balance_sheet, 'RetainedEarnings', num_periods),
+                # PP&E Gross: yfinance v1.3.0+ uses 'GrossPPE' (CamelCase no spaces)
+                'ppe_gross': self._get_series_values(balance_sheet, 'GrossPPE', num_periods) or
+                             self._get_series_values(balance_sheet, 'Gross PPE', num_periods) or
+                             self._get_series_values(balance_sheet, 'PropertyPlantAndEquipmentGross', num_periods) or
+                             self._get_series_values(balance_sheet, 'Properties', num_periods) or
+                             self._get_series_values_fuzzy(balance_sheet, 'ppe', num_periods),
+                # Accumulated Depreciation: yfinance v1.3.0+ uses 'AccumulatedDepreciation' (CamelCase no spaces)
+                'accumulated_depreciation': self._get_series_values(balance_sheet, 'AccumulatedDepreciation', num_periods) or
+                                            self._get_series_values(balance_sheet, 'Accumulated Depreciation', num_periods) or
+                                            self._get_series_values_fuzzy(balance_sheet, 'accumulated', num_periods),
+                # Net PPE
+                'net_ppe': self._get_series_values(balance_sheet, 'Net PPE', num_periods) or
+                           self._get_series_values(balance_sheet, 'PropertyPlantAndEquipmentNet', num_periods),
+                # Long-term Debt: yfinance v1.3.0+ uses 'LongTermDebt' (CamelCase no spaces)
+                'long_term_debt': self._get_series_values(balance_sheet, 'LongTermDebt', num_periods) or
+                                   self._get_series_values(balance_sheet, 'Long Term Debt', num_periods) or
+                                   self._get_series_values(balance_sheet, 'LongTermDebtAndCapitalLeaseObligation', num_periods),
+                # Current Debt: yfinance v1.3.0+ uses 'CurrentDebt' (CamelCase no spaces)
+                'current_debt': self._get_series_values(balance_sheet, 'CurrentDebt', num_periods) or
+                                 self._get_series_values(balance_sheet, 'Current Debt', num_periods) or
+                                 self._get_series_values(balance_sheet, 'CurrentDebtAndCapitalLeaseObligation', num_periods) or
+                                 self._get_series_values(balance_sheet, 'ShortLongTermDebt', num_periods) or
+                                 self._get_series_values(balance_sheet, 'Short Long Term Debt', num_periods),
+                # Interest Income: from balance sheet (some companies report here)
+                'interest_income': self._get_series_values(balance_sheet, 'Interest Income', num_periods) or
+                                   self._get_series_values(balance_sheet, 'InterestIncome', num_periods),
+                # Total Liabilities: needed for DuPont equity multiplier calculation
+                'total_liabilities': self._get_series_values(balance_sheet, 'Total Liabilities Net Minority Interest', num_periods) or
+                                     self._get_series_values(balance_sheet, 'TotalLiabilitiesNetMinorityInterest', num_periods) or
+                                     self._get_series_values(balance_sheet, 'Total Liabilities', num_periods) or
+                                     self._get_series_values(balance_sheet, 'TotalLiabilities', num_periods),
+                # Net Debt: Total Debt - Cash (needed for opening balance equity bridge)
+                'net_debt': self._get_series_values(balance_sheet, 'NetDebt', num_periods),
+                # Total Current Assets: needed for projected Balance Sheet structure
+                'total_current_assets': self._get_series_values(balance_sheet, 'CurrentAssets', num_periods) or
+                                        self._get_series_values(balance_sheet, 'Current Assets', num_periods),
+                # Total Current Liabilities: needed for projected Balance Sheet structure
+                'total_current_liabilities': self._get_series_values(balance_sheet, 'CurrentLiabilities', num_periods) or
+                                             self._get_series_values(balance_sheet, 'Current Liabilities', num_periods),
+                # Non-Current Marketable Securities: long-term investments (available-for-sale, held-to-maturity)
+                'non_current_marketable_securities': self._get_series_values(balance_sheet, 'NonCurrentMarketableSecurities', num_periods) or
+                                                    self._get_series_values(balance_sheet, 'LongTermInvestments', num_periods) or
+                                                    self._get_series_values(balance_sheet, 'Other Long Term Investments', num_periods) or
+                                                    self._get_series_values(balance_sheet, 'AvailableForSaleSecurities', num_periods),
+                # Other Current Liabilities: miscellaneous short-term obligations
+                'other_current_liabilities': self._get_series_values(balance_sheet, 'OtherCurrentLiabilities', num_periods),
+                # Deferred Tax Liabilities: non-current deferred taxes owed
+                'deferred_tax_liabilities': self._get_series_values(balance_sheet, 'NonCurrentDeferredTaxesLiabilities', num_periods) or
+                                            self._get_series_values(balance_sheet, 'Non Current Deferred Taxes Liabilities', num_periods) or
+                                            self._get_series_values(balance_sheet, 'DeferredTaxLiabilities', num_periods),
+                # Current Accrued Expenses: short-term accrued liabilities
+                'current_accrued_expenses': self._get_series_values(balance_sheet, 'CurrentAccruedExpenses', num_periods) or
+                                            self._get_series_values(balance_sheet, 'PayablesAndAccruedExpenses', num_periods),
+                # Current Deferred Liabilities: short-term deferred revenue
+                'current_deferred_liabilities': self._get_series_values(balance_sheet, 'CurrentDeferredRevenue', num_periods) or
+                                                self._get_series_values(balance_sheet, 'DeferredRevenueCurrent', num_periods),
+                # Trade and Other Payables (Non-Current): long-term payables
+                'trade_and_other_payables_non_current': self._get_series_values(balance_sheet, 'NonCurrentPayables', num_periods) or
+                                                       self._get_series_values(balance_sheet, 'Non Current Payables', num_periods),
+                # Other Non-Current Liabilities: miscellaneous long-term obligations
+                'other_non_current_liabilities': self._get_series_values(balance_sheet, 'OtherNonCurrentLiabilities', num_periods),
+                # Other Short-Term Investments: marketable securities (current)
+                'other_short_term_investments': self._get_series_values(balance_sheet, 'OtherShortTermInvestments', num_periods) or
+                                                self._get_series_values(balance_sheet, 'AvailableForSaleSecurities', num_periods) or
+                                                self._get_series_values(balance_sheet, 'ShortTermInvestments', num_periods),
+                # Other Current Assets: miscellaneous short-term assets
+                'other_current_assets': self._get_series_values(balance_sheet, 'OtherCurrentAssets', num_periods),
+                # Other Non-Current Assets: miscellaneous long-term assets
+                'other_non_current_assets': self._get_series_values(balance_sheet, 'OtherNonCurrentAssets', num_periods),
+                # Common Stock: par value of issued shares
+                'common_stock': self._get_series_values(balance_sheet, 'CommonStockEquity', num_periods) or
+                                self._get_series_values(balance_sheet, 'CommonStock', num_periods),
+                # Other Equity Adjustments: AOCI, treasury stock, etc.
+                'other_equity_adjustments': self._get_series_values(balance_sheet, 'AccumulatedOtherComprehensiveIncome', num_periods) or
+                                            self._get_series_values(balance_sheet, 'GainsLossesNotAffectingRetainedEarnings', num_periods),
             }
 
             return result
@@ -392,6 +616,14 @@ class InternationalDataStrategy:
                 'operating_cash_flow': self._get_series_values(cashflow, 'OperatingCashFlow', num_periods),
                 'capital_expenditure': self._get_series_values(cashflow, 'CapitalExpenditure', num_periods),
                 'dividends_paid': self._get_series_values(cashflow, 'DividendsPaid', num_periods),
+                # Additional cash flow items needed for DCF
+                'interest_paid': self._get_series_values(cashflow, 'InterestPaidSupplementalData', num_periods),
+                'tax_paid': self._get_series_values(cashflow, 'IncomeTaxPaidSupplementalData', num_periods),
+                'share_buybacks': self._get_series_values(cashflow, 'RepurchaseOfCapitalStock', num_periods),
+                'debt_repayments': self._get_series_values(cashflow, 'RepaymentOfDebt', num_periods),
+                'debt_issuance': self._get_series_values(cashflow, 'IssuanceOfDebt', num_periods),
+                # Working Capital Change: change in net working capital (needed for DCF UFCF)
+                'working_capital_change': self._get_series_values(cashflow, 'ChangeInWorkingCapital', num_periods),
             }
 
             return result
@@ -477,6 +709,37 @@ class InternationalDataStrategy:
                 values.extend([None] * (num_periods - len(values)))
 
             return values
+        except Exception:
+            return []
+
+    def _get_series_values_fuzzy(self, df, search_term: str, num_periods: int = 0) -> List[Optional[float]]:
+        """Extract values from a DataFrame row using fuzzy matching on index keys.
+        
+        Searches for any index key containing the search_term (case-insensitive).
+        Useful when yfinance uses inconsistent key names across companies.
+        
+        Args:
+            df: The DataFrame to extract values from
+            search_term: Substring to search for in DataFrame index (case-insensitive)
+            num_periods: If provided, ensures the returned list has this length
+            
+        Returns:
+            List of values from the first matching key, or empty list if no match
+        """
+        try:
+            if df is None or df.empty:
+                return []
+            
+            search_lower = search_term.lower()
+            for idx in df.index:
+                if search_lower in str(idx).lower():
+                    series = df.loc[idx]
+                    values = [None if (isinstance(v, float) and v != v) else v for v in series.values]
+                    if values and any(v is not None for v in values):
+                        if num_periods > 0 and len(values) < num_periods:
+                            values.extend([None] * (num_periods - len(values)))
+                        return values
+            return []
         except Exception:
             return []
 
@@ -1139,9 +1402,11 @@ class YFinanceService:
                 # Non-Current Assets
                 "property_plant_equipment": get_series_raw('NetPPE', ['Net PPE']),
                 "ppe_net": get_series_raw('NetPPE', ['Net PPE']),  # Alias
+                "accumulated_depreciation": get_series_raw('AccumulatedDepreciation', ['Accumulated Depreciation']),
                 "goodwill": get_series_raw('Goodwill'),
                 "intangible_assets": get_series_raw('OtherIntangibleAssets', ['Other Intangible Assets', 'IntangibleAssets']),
                 "long_term_investments": get_series_raw('InvestmentsAndAdvances', ['Investments And Advances', 'Long Term Equity Investment']),
+                "other_non_current_assets": get_series_raw('OtherNonCurrentAssets', ['Other Non Current Assets']),
 
                 # Liabilities
                 "total_liabilities": get_series_raw('TotalLiabilitiesNetMinorityInterest', ['Total Liabilities Net Minority Interest']),
@@ -1152,12 +1417,17 @@ class YFinanceService:
                 "accounts_payable": get_series_raw('AccountsPayable', ['PayablesAndAccruedExpenses', 'Payables And Accrued Expenses', 'Payables']),
                 "ap": get_series_raw('AccountsPayable', ['Payables']),  # Alias
                 "short_term_debt": get_series_raw('CurrentDebt', ['Current Debt']),
+                "current_debt": get_series_raw('CurrentDebtAndCapitalLeaseObligation', ['Current Debt And Capital Lease Obligation', 'CurrentDebt']),
                 "other_current_liabilities": get_series_raw('OtherCurrentLiabilities', ['Other Current Liabilities']),
+                "current_accrued_expenses": get_series_raw('CurrentAccruedExpenses', ['Current Accrued Expenses']),
+                "current_deferred_liabilities": get_series_raw('CurrentDeferredRevenue', ['Current Deferred Revenue', 'DeferredRevenueCurrent']),
+                "other_short_term_investments": get_series_raw('AvailableForSaleSecurities', ['Available For Sale Securities', 'OtherShortTermInvestments']),
 
                 # Non-Current Liabilities
                 "long_term_debt": get_series_raw('LongTermDebt', ['Long Term Debt']),
                 "deferred_tax_liabilities": get_series_raw('NonCurrentDeferredTaxesLiabilities', ['Non Current Deferred Taxes Liabilities', 'Non Current Deferred Liabilities']),
                 "other_non_current_liabilities": get_series_raw('OtherNonCurrentLiabilities', ['Other Non Current Liabilities']),
+                "trade_and_other_payables_non_current": get_series_raw('NonCurrentPayables', ['Non Current Payables']),
 
                 # Total Debt
                 "total_debt": get_series_raw('TotalDebt', ['Total Debt']),
@@ -1168,6 +1438,7 @@ class YFinanceService:
                 "stockholders_equity": get_series_raw('StockholdersEquity', ['Stockholders Equity']),
                 "retained_earnings": get_series_raw('RetainedEarnings'),
                 "common_stock": get_series_raw('CommonStockEquity', ['Common Stock Equity']),
+                "other_equity_adjustments": None,  # Calculated: Total Equity - Common Stock - Retained Earnings
 
                 # Working Capital (calculated)
                 "working_capital": None,  # Will be calculated
@@ -1474,6 +1745,19 @@ class YFinanceService:
                 'enterpriseToEbitda': info.get('enterpriseToEbitda'),
                 'enterpriseToRevenue': info.get('enterpriseToRevenue'),
                 'priceToSalesTrailing12Months': info.get('priceToSalesTrailing12Months'),
+                'totalCash': info.get('totalCash'),
+                'totalDebt': info.get('totalDebt'),
+                'freeCashflow': info.get('freeCashflow'),
+                'operatingCashflow': info.get('operatingCashflow'),
+                'returnOnEquity': info.get('returnOnEquity'),
+                'returnOnAssets': info.get('returnOnAssets'),
+                'debtToEquity': info.get('debtToEquity'),
+                'revenueGrowth': info.get('revenueGrowth'),
+                'earningsGrowth': info.get('earningsGrowth'),
+                'profitMargins': info.get('profitMargins'),
+                'operatingMargins': info.get('operatingMargins'),
+                'grossMargins': info.get('grossMargins'),
+                'effectiveTaxRate': info.get('effectiveTaxRate'),
             }
             
             # Store in cache

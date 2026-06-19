@@ -14,7 +14,7 @@ AI Usage: ZERO AI involvement in generating forward-looking inputs.
 AI is ONLY used as a data extraction tool for historical information.
 
 Note: For DuPont and Comps models, this step may be bypassed if all historical data
-is available from APIs. For DCF models, ensures complete 3-5 year historical data.
+is available from APIs. For DCF models, ensures complete 3-4 year historical data.
 """
 import logging
 import os
@@ -75,7 +75,7 @@ class Step7HistoricalDataProcessor:
 
     Uses AI to retrieve historical financial data that APIs cannot provide:
     - Extracts data from PDF annual reports, filings, prospectuses
-    - Fills gaps in 3-5 year historical financial statements
+    - Fills gaps in 3-4 year historical financial statements
     - Ensures complete dataset before moving to assumption generation (Step 8)
 
     AI Usage: STRICTLY for historical data extraction. NO forward-looking inputs.
@@ -113,23 +113,53 @@ class Step7HistoricalDataProcessor:
             market: Market/country (e.g., "US", "International")
             step6_financial_data: Historical data already fetched from APIs (Step 6 response)
             missing_metrics: Specific metrics that need to be filled (optional)
-            fiscal_years_needed: List of fiscal years requiring data (default: last 5 years)
+            fiscal_years_needed: List of fiscal years requiring data (default: last 4 years)
 
         Returns:
             HistoricalDataRetrievalResponse with AI-extracted historical data
         """
         logger.info(f"Step 7: Starting historical data gap filling for {ticker}")
+        logger.info(f"Step 7: step6_financial_data type={type(step6_financial_data).__name__}, is_none={step6_financial_data is None}")
+        if step6_financial_data:
+            logger.info(f"Step 7: step6_financial_data keys: {list(step6_financial_data.keys())[:15]}")
+            hist = step6_financial_data.get('historical_financials', {})
+            logger.info(f"Step 7: historical_financials type={type(hist).__name__}, keys={list(hist.keys())[:15] if isinstance(hist, dict) else 'N/A'}")
+            if isinstance(hist, dict):
+                cash = hist.get('cash_and_equivalents')
+                logger.info(f"Step 7: cash_and_equivalents type={type(cash).__name__}, value={cash}")
 
         model_enum = ValuationModel(valuation_model.upper())
 
-        # Determine which years need data
-        current_year = datetime.now().year
+        # Determine which years need data — use actual years from yfinance data, not hardcoded range
         if fiscal_years_needed is None:
-            fiscal_years_needed = list(range(current_year - 5, current_year))
+            fiscal_years_needed = self._extract_years_from_step6(step6_financial_data)
+            if not fiscal_years_needed:
+                # Fallback: use last 4 years if extraction fails
+                current_year = datetime.now().year
+                fiscal_years_needed = list(range(current_year - 4, current_year))
+            logger.info(f"Step 7: Using fiscal years from yfinance data: {fiscal_years_needed}")
         
         # Extract missing metrics from Step 6 response format
         # Step 6 returns Step6DataReviewResponse with nested structures
         extracted_missing = await self._extract_missing_metrics_from_step6(step6_financial_data)
+        logger.info(f"Step 7: Extracted {len(extracted_missing)} missing metrics from Step 6: {extracted_missing}")
+        
+        # Debug: Log what Step 6 data looks like
+        if step6_financial_data:
+            hist = step6_financial_data.get('historical_financials', {})
+            if hist:
+                # Check a few key fields
+                for check_field in ['cash_and_equivalents', 'ppe_gross', 'accumulated_depreciation']:
+                    field_val = hist.get(check_field)
+                    if field_val:
+                        logger.info(f"Step 7 DEBUG: {check_field} = status={field_val.get('status')}, is_missing={field_val.get('is_missing')}, value={field_val.get('value')}")
+                    else:
+                        logger.info(f"Step 7 DEBUG: {check_field} = None/not found in historical_financials")
+                # Check if data_fields format exists
+                data_fields = hist.get('data_fields', [])
+                logger.info(f"Step 7 DEBUG: historical_financials has {len(data_fields)} data_fields entries")
+                # Check top-level keys
+                logger.info(f"Step 7 DEBUG: historical_financials keys: {list(hist.keys())[:20]}")
         
         # Use provided missing_metrics or extract from Step 6 data
         if missing_metrics is None:
@@ -214,6 +244,25 @@ class Step7HistoricalDataProcessor:
                 logger.warning(f"Failed to extract {gap['metric']} for {gap['fiscal_year']}: {e}")
                 # Continue with other gaps even if some fail
 
+        # ======================================================================
+        # Priority 0: Enrich interest_expense and interest_income via SEC EDGAR XBRL
+        #             then AI web search, then forward-fill as last resort.
+        # This runs BEFORE general gap-filling because XBRL is the most reliable
+        # source for these specific fields and avoids expensive AI calls.
+        # ======================================================================
+        interest_enrichment_result = await self._enrich_interest_data(
+            ticker=ticker,
+            company_name=company_name,
+            market=market,
+            step6_data=step6_financial_data,
+            fiscal_years=fiscal_years_needed,
+        )
+        if interest_enrichment_result:
+            for ie_gap in interest_enrichment_result:
+                filled_gaps.append(ie_gap)
+                if ie_gap.data_source not in sources_used:
+                    sources_used.append(ie_gap.data_source)
+
         # Calculate completeness score
         completeness = len(filled_gaps) / len(gaps_to_fill) if gaps_to_fill else 1.0
 
@@ -231,6 +280,455 @@ class Step7HistoricalDataProcessor:
             ready_for_assumptions=completeness > 0.7  # Ready if >70% gaps filled
         )
     
+    # ======================================================================
+    # Interest Data Enrichment: SEC EDGAR XBRL → AI Web Search → Forward-fill
+    # ======================================================================
+
+    # Interest fields that may be forward-filled by yfinance for recent periods
+    _INTEREST_FIELDS = ("interest_expense", "interest_income")
+
+    async def _enrich_interest_data(
+        self,
+        ticker: str,
+        company_name: str,
+        market: str,
+        step6_data: Dict[str, Any],
+        fiscal_years: List[int],
+    ) -> List[HistoricalDataGap]:
+        """
+        Enrich missing interest_expense and interest_income using a 3-tier strategy:
+
+        1. **SEC EDGAR XBRL** (most reliable, fastest, free):
+           Fetches structured XBRL data from SEC EDGAR Company Facts API.
+           XBRL tags: us-gaap/InterestExpense, us-gaap/InterestIncome.
+
+        2. **AI Web Search** (fallback):
+           Uses LLM to search SEC filings and extract interest data.
+
+        3. **Forward-fill** (last resort):
+           Uses the last known non-None value from an older period.
+
+        Args:
+            ticker: Stock ticker symbol
+            company_name: Full company name
+            market: Market type (US, International, Vietnam)
+            step6_data: Step 6 historical financials data
+            fiscal_years: List of fiscal years to check (newest first)
+
+        Returns:
+            List of HistoricalDataGap objects for successfully filled interest data
+        """
+        if not step6_data or not fiscal_years:
+            return []
+
+        hist = step6_data.get("historical_financials", {})
+        if not isinstance(hist, dict):
+            return []
+
+        # Identify which interest fields are missing for which years
+        missing_by_field: Dict[str, List[int]] = {}
+        for field_name in self._INTEREST_FIELDS:
+            field = hist.get(field_name)
+            missing_years = []
+
+            if field is None:
+                # Field doesn't exist at all — all years are missing
+                missing_years = list(fiscal_years)
+            elif isinstance(field, dict):
+                status = field.get("status", "RETRIEVED")
+                value = field.get("value")
+                is_missing = field.get("is_missing", False)
+
+                if status == "MISSING" or is_missing:
+                    missing_years = list(fiscal_years)
+                elif isinstance(value, list):
+                    # Check each period for None values
+                    for i, v in enumerate(value):
+                        year = fiscal_years[i] if i < len(fiscal_years) else None
+                        if year and v is None:
+                            missing_years.append(year)
+
+            if missing_years:
+                missing_by_field[field_name] = missing_years
+
+        if not missing_by_field:
+            logger.debug(f"No missing interest data for {ticker} — all fields populated")
+            return []
+
+        logger.info(
+            f"Interest data gaps for {ticker}: "
+            + "; ".join(f"{f} missing for {yrs}" for f, yrs in missing_by_field.items())
+        )
+
+        filled_gaps: List[HistoricalDataGap] = []
+
+        # ── Tier 1: SEC EDGAR XBRL ──────────────────────────────────────────
+        xbrl_filled = await self._enrich_interest_from_sec_edgar(
+            ticker=ticker,
+            company_name=company_name,
+            market=market,
+            missing_by_field=missing_by_field,
+            fiscal_years=fiscal_years,
+        )
+        filled_gaps.extend(xbrl_filled)
+
+        # Update missing_by_field after SEC EDGAR fill
+        for gap in xbrl_filled:
+            if gap.metric in missing_by_field:
+                missing_by_field[gap.metric] = [
+                    y for y in missing_by_field[gap.metric] if y != gap.fiscal_year
+                ]
+                if not missing_by_field[gap.metric]:
+                    del missing_by_field[gap.metric]
+
+        # ── Tier 2: AI Web Search ────────────────────────────────────────────
+        if missing_by_field:
+            ai_filled = await self._enrich_interest_with_ai(
+                ticker=ticker,
+                company_name=company_name,
+                market=market,
+                missing_by_field=missing_by_field,
+                fiscal_years=fiscal_years,
+            )
+            filled_gaps.extend(ai_filled)
+
+            # Update missing_by_field after AI fill
+            for gap in ai_filled:
+                if gap.metric in missing_by_field:
+                    missing_by_field[gap.metric] = [
+                        y for y in missing_by_field[gap.metric] if y != gap.fiscal_year
+                    ]
+                    if not missing_by_field[gap.metric]:
+                        del missing_by_field[gap.metric]
+
+        # ── Tier 3: Forward-fill (last resort) ───────────────────────────────
+        if missing_by_field:
+            ff_filled = self._enrich_interest_with_forward_fill(
+                step6_data=step6_data,
+                missing_by_field=missing_by_field,
+                fiscal_years=fiscal_years,
+            )
+            filled_gaps.extend(ff_filled)
+
+        logger.info(
+            f"Interest enrichment complete for {ticker}: "
+            f"{len(filled_gaps)} values filled "
+            f"(SEC EDGAR: {sum(1 for g in filled_gaps if 'sec_edgar' in g.data_source.lower())}, "
+            f"AI: {sum(1 for g in filled_gaps if 'AI' in g.data_source)}, "
+            f"Forward-fill: {sum(1 for g in filled_gaps if 'Forward' in g.data_source)})"
+        )
+        return filled_gaps
+
+    async def _enrich_interest_from_sec_edgar(
+        self,
+        ticker: str,
+        company_name: str,
+        market: str,
+        missing_by_field: Dict[str, List[int]],
+        fiscal_years: List[int],
+    ) -> List[HistoricalDataGap]:
+        """
+        Tier 1: Fetch interest_expense and interest_income from SEC EDGAR XBRL.
+
+        Uses the Company Facts API which provides structured XBRL data directly,
+        making it the most reliable source for financial statement line items.
+        """
+        if market in ("Vietnam",):
+            logger.debug(f"SEC EDGAR not applicable for {market} market")
+            return []
+
+        from app.services.international.sec_edgar_service import get_sec_edgar_service
+
+        sec_service = get_sec_edgar_service()
+        email = sec_service.get_email()
+        if not email:
+            logger.warning("SEC EDGAR email not configured — skipping XBRL interest enrichment")
+            return []
+
+        try:
+            xbrl_result = await sec_service.fetch_company_facts_xbrl(
+                ticker=ticker,
+                email=email,
+                company_name=company_name,
+            )
+        except Exception as e:
+            logger.warning(f"SEC EDGAR XBRL fetch failed for {ticker}: {e}")
+            return []
+
+        if not xbrl_result or not xbrl_result.get("success"):
+            logger.info(f"SEC EDGAR XBRL returned no data for {ticker}: {xbrl_result}")
+            return []
+
+        # Extract interest data from the nested income_statement section
+        income_stmt = xbrl_result.get("income_statement", {})
+        filled_gaps: List[HistoricalDataGap] = []
+
+        for field_name in self._INTEREST_FIELDS:
+            missing_years = missing_by_field.get(field_name, [])
+            if not missing_years:
+                continue
+
+            # Try nested section first, then flat key
+            year_data = income_stmt.get(field_name, {})
+            if not year_data:
+                year_data = xbrl_result.get(field_name, {})
+
+            if not year_data:
+                logger.debug(f"SEC EDGAR XBRL: No {field_name} data for {ticker}")
+                continue
+
+            for fiscal_year in missing_years:
+                # SEC EDGAR XBRL keys are year strings (e.g., "2024")
+                year_str = str(fiscal_year)
+                value = year_data.get(year_str)
+
+                if value is not None:
+                    filled_gaps.append(HistoricalDataGap(
+                        metric=field_name,
+                        fiscal_year=fiscal_year,
+                        data_source="SEC_EDGAR_XBRL",
+                        confidence_score=0.95,  # XBRL is highly reliable
+                        extracted_value=float(value),
+                        extraction_notes=f"Fetched from SEC EDGAR XBRL (us-gaap) for {ticker} FY{fiscal_year}",
+                    ))
+                    logger.info(
+                        f"SEC EDGAR XBRL: {field_name}={value:,.0f} for {ticker} FY{fiscal_year}"
+                    )
+
+        return filled_gaps
+
+    async def _enrich_interest_with_ai(
+        self,
+        ticker: str,
+        company_name: str,
+        market: str,
+        missing_by_field: Dict[str, List[int]],
+        fiscal_years: List[int],
+    ) -> List[HistoricalDataGap]:
+        """
+        Tier 2: Use AI web search to extract interest data from SEC filings.
+
+        Builds a targeted prompt asking only for the specific missing interest
+        fields and years, then parses the AI response.
+        """
+        # Build the list of missing items for the prompt
+        missing_items = []
+        for field_name, years in missing_by_field.items():
+            display_name = field_name.replace("_", " ").title()
+            for year in years:
+                missing_items.append(f"{display_name} for fiscal year {year}")
+
+        if not missing_items:
+            return []
+
+        prompt = (
+            f"You are a financial data extraction expert. "
+            f"Extract the following interest-related financial data for {company_name} ({ticker}):\n\n"
+            f"Metrics needed:\n"
+            + "\n".join(f"- {item}" for item in missing_items)
+            + f"\n\nRules:\n"
+            f"- Use your knowledge of {company_name}'s actual SEC filings (10-K, 10-Q)\n"
+            f"- Provide actual numeric values in USD\n"
+            f"- Only use null if you genuinely don't know the value\n"
+            f"- Return JSON format:\n"
+            f'{{"fiscal_years": [{{"year": YYYY, "interest_expense": value_or_null, "interest_income": value_or_null}}, ...]}}\n'
+        )
+
+        filled_gaps: List[HistoricalDataGap] = []
+
+        try:
+            from app.services.international.ai_engine import AIFallbackEngine
+
+            ai_engine = AIFallbackEngine()
+            result = ai_engine.execute_with_fallback(
+                prompt=prompt,
+                timeout=60,
+                max_retries=2,
+                operation_name=f"interest_enrichment_{ticker}",
+            )
+
+            if not result or not result.get("success"):
+                logger.warning(f"AI interest enrichment failed for {ticker}")
+                return []
+
+            # Parse the AI response
+            response_text = result.get("response", "")
+            parsed = self._parse_ai_interest_response(response_text)
+
+            if not parsed:
+                logger.warning(f"Could not parse AI interest response for {ticker}")
+                return []
+
+            # Map AI results to gaps
+            for field_name, years in missing_by_field.items():
+                for fiscal_year in years:
+                    # Find matching year in AI response
+                    for year_data in parsed:
+                        if year_data.get("year") == fiscal_year:
+                            value = year_data.get(field_name)
+                            if value is not None:
+                                try:
+                                    filled_gaps.append(HistoricalDataGap(
+                                        metric=field_name,
+                                        fiscal_year=fiscal_year,
+                                        data_source="AI_Web_Search",
+                                        confidence_score=0.75,
+                                        extracted_value=float(value),
+                                        extraction_notes=(
+                                            f"Extracted via AI web search from SEC filing data "
+                                            f"for {ticker} FY{fiscal_year}"
+                                        ),
+                                    ))
+                                    logger.info(
+                                        f"AI web search: {field_name}={value:,.0f} "
+                                        f"for {ticker} FY{fiscal_year}"
+                                    )
+                                except (ValueError, TypeError):
+                                    pass
+
+        except Exception as e:
+            logger.warning(f"AI interest enrichment error for {ticker}: {e}")
+
+        return filled_gaps
+
+    @staticmethod
+    def _parse_ai_interest_response(response_text: str) -> Optional[List[Dict]]:
+        """Parse the AI response for interest data, extracting fiscal_years array."""
+        import json
+        import re
+
+        if not response_text:
+            return None
+
+        # Try to extract JSON from the response
+        # Look for ```json ... ``` blocks first
+        json_match = re.search(r'```json\s*(.*?)\s*```', response_text, re.DOTALL)
+        if json_match:
+            try:
+                parsed = json.loads(json_match.group(1))
+                return parsed.get("fiscal_years", [])
+            except json.JSONDecodeError:
+                pass
+
+        # Try to find the first { and last }
+        start = response_text.find('{')
+        end = response_text.rfind('}')
+        if start != -1 and end != -1 and end > start:
+            try:
+                parsed = json.loads(response_text[start:end + 1])
+                return parsed.get("fiscal_years", [])
+            except json.JSONDecodeError:
+                pass
+
+        return None
+
+    def _enrich_interest_with_forward_fill(
+        self,
+        step6_data: Dict[str, Any],
+        missing_by_field: Dict[str, List[int]],
+        fiscal_years: List[int],
+    ) -> List[HistoricalDataGap]:
+        """
+        Tier 3: Forward-fill interest data as a last resort.
+
+        Uses the last known non-None value from an older period to fill
+        remaining gaps. This is the lowest-confidence method and should
+        only be used when SEC EDGAR and AI web search both fail.
+        """
+        hist = step6_data.get("historical_financials", {})
+        filled_gaps: List[HistoricalDataGap] = []
+
+        for field_name, missing_years in missing_by_field.items():
+            field = hist.get(field_name)
+            if not isinstance(field, dict):
+                continue
+
+            value = field.get("value")
+            if not isinstance(value, list):
+                continue
+
+            # Find the last known non-None value (most recent period with data)
+            last_known_value = None
+            last_known_year = None
+            for i, v in enumerate(value):
+                if v is not None:
+                    year = fiscal_years[i] if i < len(fiscal_years) else None
+                    if year:
+                        last_known_value = v
+                        last_known_year = year
+
+            if last_known_value is None:
+                continue
+
+            for fiscal_year in missing_years:
+                filled_gaps.append(HistoricalDataGap(
+                    metric=field_name,
+                    fiscal_year=fiscal_year,
+                    data_source="Forward_Fill_Last_Known_Value",
+                    confidence_score=0.50,  # Low confidence — last resort
+                    extracted_value=float(last_known_value),
+                    extraction_notes=(
+                        f"Forward-filled from {field_name} FY{last_known_year} "
+                        f"({last_known_value:,.0f}) — SEC EDGAR and AI web search unavailable"
+                    ),
+                ))
+                logger.info(
+                    f"Forward-fill: {field_name}={last_known_value:,.0f} for "
+                    f"FY{fiscal_year} (from FY{last_known_year})"
+                )
+
+        return filled_gaps
+
+    def _extract_years_from_step6(self, step6_data: Dict[str, Any]) -> List[int]:
+        """
+        Extract actual fiscal years from Step 6 historical_financials data.
+        Uses the period keys from DataField.value lists (which come from yfinance columns).
+        
+        Returns sorted list of years (newest first), e.g. [2025, 2024, 2023, 2022, 2021]
+        
+        NOTE: This returns year integers for backward compatibility.
+        Use _extract_periods_from_step6() for full period strings (e.g., "2025-05-31").
+        """
+        if not step6_data:
+            return []
+        
+        hist = step6_data.get("historical_financials", {})
+        if not isinstance(hist, dict):
+            return []
+        
+        years = set()
+        for field_name, field_data in hist.items():
+            if not isinstance(field_data, dict):
+                continue
+            value = field_data.get("value")
+            if isinstance(value, list):
+                for item in value:
+                    if isinstance(item, dict):
+                        period = item.get("period", "")
+                        # Extract year from period string (e.g., "2025-05-31" → 2025)
+                        if period and len(period) >= 4:
+                            try:
+                                year = int(period[:4])
+                                if 2000 <= year <= 2100:
+                                    years.add(year)
+                            except ValueError:
+                                pass
+                if years:
+                    break  # Use first field that has period data
+        
+        if not years:
+            # Fallback: try plain list of numbers — infer from length
+            for field_name, field_data in hist.items():
+                if not isinstance(field_data, dict):
+                    continue
+                value = field_data.get("value")
+                if isinstance(value, list) and len(value) > 0 and isinstance(value[0], (int, float)):
+                    count = len(value)
+                    current_year = datetime.now().year
+                    return list(range(current_year - count + 1, current_year + 1))
+        
+        return sorted(years, reverse=True)
+
     async def _extract_missing_metrics_from_step6(self, step6_data: Dict[str, Any]) -> List[str]:
         """
         Extract missing metric names from Step 6 response format.
@@ -252,28 +750,71 @@ class Step7HistoricalDataProcessor:
         else:
             step6_dict = step6_data
         
+        # Helper to check if a field dict is MISSING
+        def _is_missing(field):
+            if isinstance(field, dict):
+                return field.get('status') == 'MISSING' or field.get('is_missing') is True
+            return False
+        
         # Extract from historical_financials
+        # Supports BOTH formats:
+        # 1. Unified format: {revenue: {value, status}, cogs: {value, status}, ...}
+        # 2. Legacy format: {data_fields: [{field_name, status}, ...]}
         historical = step6_dict.get('historical_financials', {})
         if historical:
-            data_fields = historical.get('data_fields', [])
-            for field in data_fields:
-                if isinstance(field, dict):
-                    if field.get('status') == 'MISSING':
-                        # Extract base metric name (remove year suffix)
+            # Check for unified format (individual field attributes)
+            unified_field_names = [
+                # Income Statement
+                'revenue', 'cogs', 'gross_profit', 'operating_expenses',
+                'ebitda', 'ebit', 'interest_expense', 'pretax_income',
+                'tax_provision', 'net_income', 'depreciation_amortization', 'capex',
+                'operating_cash_flow', 'free_cash_flow', 'working_capital_changes',
+                'sg_and_a', 'deferred_tax', 'research_development', 'other_income',
+                # Cash Flow
+                'interest_paid', 'tax_paid', 'share_buybacks', 'debt_repayments',
+                'debt_issuance', 'dividends_paid',
+                # Balance Sheet
+                'total_assets', 'total_debt', 'cash_and_equivalents',
+                'accounts_receivable', 'inventory', 'accounts_payable',
+                'shareholders_equity', 'retained_earnings', 'shares_outstanding',
+                'long_term_debt', 'current_debt', 'interest_income', 'working_capital',
+                # Opening Balance fields
+                'net_ppe', 'net_debt', 'total_current_assets', 'total_current_liabilities',
+                'total_liabilities',
+            ]
+            found_unified = False
+            for field_name in unified_field_names:
+                field = historical.get(field_name)
+                if field is not None and _is_missing(field):
+                    if field_name not in missing_metrics:
+                        missing_metrics.append(field_name)
+                    found_unified = True
+            
+            # Also check legacy data_fields format
+            if not found_unified:
+                data_fields = historical.get('data_fields', [])
+                for field in data_fields:
+                    if _is_missing(field):
                         field_name = field.get('field_name', '')
                         if field_name and field_name not in missing_metrics:
-                            # Remove year suffix to get base metric name
-                            base_name = '_'.join(field_name.split('_')[:-1]) if '_' in field_name else field_name
-                            if base_name not in missing_metrics:
-                                missing_metrics.append(base_name)
+                            missing_metrics.append(field_name)
         
         # Extract from market_data
         market = step6_dict.get('market_data', {})
         if market:
-            data_fields = market.get('data_fields', [])
-            for field in data_fields:
-                if isinstance(field, dict):
-                    if field.get('status') == 'MISSING':
+            market_field_names = ['current_stock_price', 'shares_outstanding', 'market_cap',
+                                  'beta', 'total_debt', 'cash', 'currency']
+            found_unified = False
+            for field_name in market_field_names:
+                field = market.get(field_name)
+                if field is not None and _is_missing(field):
+                    if field_name not in missing_metrics:
+                        missing_metrics.append(field_name)
+                    found_unified = True
+            if not found_unified:
+                data_fields = market.get('data_fields', [])
+                for field in data_fields:
+                    if _is_missing(field):
                         field_name = field.get('field_name', '')
                         if field_name and field_name not in missing_metrics:
                             missing_metrics.append(field_name)
@@ -281,17 +822,26 @@ class Step7HistoricalDataProcessor:
         # Extract from forecast_drivers
         drivers = step6_dict.get('forecast_drivers', {})
         if drivers:
-            data_fields = drivers.get('data_fields', [])
-            for field in data_fields:
-                if isinstance(field, dict):
-                    if field.get('status') == 'MISSING':
+            driver_field_names = ['revenue_growth_forecast', 'ebitda_margin_forecast', 'tax_rate',
+                                  'ar_days', 'inv_days', 'ap_days', 'capex_pct_of_revenue',
+                                  'risk_free_rate', 'equity_risk_premium', 'beta', 'cost_of_debt',
+                                  'wacc', 'terminal_growth_rate', 'terminal_ebitda_multiple']
+            found_unified = False
+            for field_name in driver_field_names:
+                field = drivers.get(field_name)
+                if field is not None and _is_missing(field):
+                    if field_name not in missing_metrics:
+                        missing_metrics.append(field_name)
+                    found_unified = True
+            if not found_unified:
+                data_fields = drivers.get('data_fields', [])
+                for field in data_fields:
+                    if _is_missing(field):
                         field_name = field.get('field_name', '')
                         if field_name and field_name not in missing_metrics:
-                            base_name = '_'.join(field_name.split('_')[:-1]) if '_' in field_name else field_name
-                            if base_name not in missing_metrics:
-                                missing_metrics.append(base_name)
+                            missing_metrics.append(field_name)
         
-        logger.info(f"Extracted {len(missing_metrics)} missing metrics from Step 6 data")
+        logger.info(f"Extracted {len(missing_metrics)} missing metrics from Step 6 data: {missing_metrics}")
         return missing_metrics
     
     async def _identify_data_gaps(
@@ -322,36 +872,87 @@ class Step7HistoricalDataProcessor:
             "Working_Capital_Change"
         ]
         
-        # Convert existing_data to check for missing values by parsing data_fields
-        # Step 6 format: {historical_financials: {data_fields: [{field_name, value, status}, ...]}}
+        # Convert existing_data to check for missing values
+        # Supports TWO formats:
+        # 1. Unified schema: {historical_financials: {revenue: {status, value}, cash_and_equivalents: {status}, ...}}
+        # 2. Legacy format: {historical_financials: {data_fields: [{field_name, value, status}, ...]}}
         available_metrics_by_year = {}
         
-        # Parse historical_financials data_fields
+        # Parse historical_financials
         historical = existing_data.get('historical_financials', {})
         if historical:
-            data_fields = historical.get('data_fields', [])
-            for field in data_fields:
+            # Format 1: Unified schema — named fields with status attributes
+            unified_field_names = [
+                'revenue', 'cogs', 'gross_profit', 'ebitda', 'ebit', 'net_income',
+                'depreciation', 'capex', 'operating_cash_flow', 'free_cash_flow',
+                'total_assets', 'total_debt', 'cash_and_equivalents', 'inventory',
+                'accounts_receivable', 'accounts_payable', 'shareholders_equity',
+                'retained_earnings', 'shares_outstanding', 'research_development',
+                'operating_expenses', 'interest_expense', 'pretax_income', 'tax_provision',
+                'working_capital_changes', 'interest_paid', 'tax_paid', 'dividends_paid'
+            ]
+            for field_name in unified_field_names:
+                field = historical.get(field_name)
                 if isinstance(field, dict):
-                    field_name = field.get('field_name', '')
-                    value = field.get('value')
                     status = field.get('status', 'RETRIEVED')
+                    value = field.get('value')
+                    is_missing = field.get('is_missing', False)
                     
-                    # Extract year from field_name (e.g., "Revenue_2023" -> 2023)
-                    if '_' in field_name:
-                        parts = field_name.rsplit('_', 1)
-                        if len(parts) == 2 and parts[1].isdigit():
-                            metric_name = parts[0]
-                            year = int(parts[1])
-                            
-                            if year not in available_metrics_by_year:
-                                available_metrics_by_year[year] = {}
-                            
-                            # Mark as available only if has value and status is not MISSING
-                            if value is not None and status != 'MISSING':
-                                available_metrics_by_year[year][metric_name] = value
+                    if status != 'MISSING' and not is_missing and value is not None:
+                        # Mark as available for all years in the data
+                        if isinstance(value, list):
+                            for i, v in enumerate(value):
+                                year = fiscal_years[i] if i < len(fiscal_years) else None
+                                if year and v is not None:
+                                    if year not in available_metrics_by_year:
+                                        available_metrics_by_year[year] = {}
+                                    available_metrics_by_year[year][field_name] = v
+                        elif value is not None:
+                            # Single value — mark available for latest year
+                            if fiscal_years:
+                                latest = fiscal_years[0]
+                                if latest not in available_metrics_by_year:
+                                    available_metrics_by_year[latest] = {}
+                                available_metrics_by_year[latest][field_name] = value
+            
+            # Format 2: Legacy data_fields array
+            if not available_metrics_by_year:
+                data_fields = historical.get('data_fields', [])
+                for field in data_fields:
+                    if isinstance(field, dict):
+                        fn = field.get('field_name', '')
+                        value = field.get('value')
+                        status = field.get('status', 'RETRIEVED')
+                        
+                        if '_' in fn:
+                            parts = fn.rsplit('_', 1)
+                            if len(parts) == 2 and parts[1].isdigit():
+                                metric_name = parts[0]
+                                year = int(parts[1])
+                                if year not in available_metrics_by_year:
+                                    available_metrics_by_year[year] = {}
+                                if value is not None and status != 'MISSING':
+                                    available_metrics_by_year[year][metric_name] = value
         
         # If no metrics found in structured format, fall back to original logic
         if not available_metrics_by_year:
+            # Check if we're in unified schema format (fields are named attributes, not year-keyed)
+            historical = existing_data.get('historical_financials', {})
+            is_unified_format = isinstance(historical, dict) and 'revenue' in historical and 'data_fields' not in historical
+            
+            if is_unified_format and missing_metrics:
+                # Unified schema: all missing_metrics are gaps for all fiscal years
+                logger.info(f"Unified schema detected with {len(missing_metrics)} missing metrics: {missing_metrics}")
+                for year in fiscal_years:
+                    for metric in missing_metrics:
+                        gaps.append({
+                            "metric": metric,
+                            "fiscal_year": year,
+                            "priority": "high"
+                        })
+                logger.info(f"Created {len(gaps)} gaps from unified schema missing metrics")
+                return gaps
+            
             logger.warning("No structured data found in Step 6 format, using fallback logic")
             for year in fiscal_years:
                 year_key = str(year)
